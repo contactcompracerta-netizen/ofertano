@@ -34,3 +34,27 @@ model Product {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+
+enum Marketplace {
+  MERCADO_LIVRE
+  AMAZON
+  SHOPEE
+}
+
+model MarketplaceConnection {
+  id             String       @id @default(cuid())
+
+  marketplace    Marketplace  @unique
+
+  sellerId       String
+
+  accessToken    String       @db.Text
+
+  refreshToken   String       @db.Text
+
+  expiresAt      DateTime
+
+  createdAt      DateTime     @default(now())
+
+  updatedAt      DateTime     @updatedAt
+}
