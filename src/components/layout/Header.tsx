@@ -11,7 +11,7 @@ export default function Header() {
         <Link href="/" className="shrink-0">
 
           <h1 className="text-3xl font-extrabold text-green-600">
-            Compra Certa
+            Ofertano
           </h1>
 
           <p className="text-sm text-gray-500">
@@ -29,7 +29,7 @@ export default function Header() {
         <nav className="hidden items-center gap-8 font-semibold text-gray-700 lg:flex">
 
           <Link href="/" className="transition hover:text-green-600">
-            Início
+            InÃ­cio
           </Link>
 
           <Link href="/categoria" className="transition hover:text-green-600">

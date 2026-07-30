@@ -44,7 +44,7 @@ export default async function HomePage() {
             </h2>
 
             <p className="mt-2 text-gray-600">
-              Produtos cadastrados no Compra Certa.
+              Produtos cadastrados no Ofertano.
             </p>
           </div>
 
