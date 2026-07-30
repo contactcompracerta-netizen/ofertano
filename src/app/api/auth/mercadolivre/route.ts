@@ -1,7 +1,10 @@
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 
-function base64UrlEncode(buffer: Buffer): string {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function base64Url(buffer: Buffer): string {
   return buffer
     .toString("base64")
     .replace(/\+/g, "-")
@@ -23,11 +26,13 @@ export async function GET() {
     );
   }
 
-  const codeVerifier = base64UrlEncode(randomBytes(32));
+  const codeVerifier = base64Url(randomBytes(64));
 
-  const codeChallenge = base64UrlEncode(
+  const codeChallenge = base64Url(
     createHash("sha256").update(codeVerifier).digest()
   );
+
+  const state = base64Url(randomBytes(32));
 
   const authorizationUrl = new URL(
     "https://auth.mercadolivre.com.br/authorization"
@@ -36,14 +41,23 @@ export async function GET() {
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("client_id", clientId);
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
+  authorizationUrl.searchParams.set("state", state);
   authorizationUrl.searchParams.set("code_challenge", codeChallenge);
   authorizationUrl.searchParams.set("code_challenge_method", "S256");
 
   const response = NextResponse.redirect(authorizationUrl);
 
-  response.cookies.set("mercadolivre_code_verifier", codeVerifier, {
+  response.cookies.set("ml_code_verifier", codeVerifier, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
+  });
+
+  response.cookies.set("ml_oauth_state", state, {
+    httpOnly: true,
+    secure: true,
     sameSite: "lax",
     maxAge: 600,
     path: "/",

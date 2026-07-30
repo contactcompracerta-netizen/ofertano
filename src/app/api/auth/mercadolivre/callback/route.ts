@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
+  const returnedState = request.nextUrl.searchParams.get("state");
   const oauthError = request.nextUrl.searchParams.get("error");
+  const oauthErrorDescription =
+    request.nextUrl.searchParams.get("error_description");
 
   if (oauthError) {
     return NextResponse.json(
       {
         error: oauthError,
         description:
-          request.nextUrl.searchParams.get("error_description") ??
-          "Autorização cancelada ou recusada.",
+          oauthErrorDescription ?? "Autorização cancelada ou recusada.",
       },
       { status: 400 }
     );
@@ -32,25 +37,42 @@ export async function GET(request: NextRequest) {
   if (!clientId || !clientSecret || !redirectUri) {
     return NextResponse.json(
       {
-        error: "Variáveis do Mercado Livre não configuradas.",
+        error: "Variáveis de ambiente do Mercado Livre não configuradas.",
       },
       { status: 500 }
     );
   }
 
-  const codeVerifier = request.cookies.get(
-    "mercadolivre_code_verifier"
-  )?.value;
+  const codeVerifier = request.cookies.get("ml_code_verifier")?.value;
+  const savedState = request.cookies.get("ml_oauth_state")?.value;
 
   if (!codeVerifier) {
     return NextResponse.json(
       {
         error:
-          "code_verifier não encontrado. Inicie novamente a autorização.",
+          "O cookie ml_code_verifier não foi encontrado. Inicie novamente pela rota /api/auth/mercadolivre.",
       },
       { status: 400 }
     );
   }
+
+  if (!savedState || !returnedState || savedState !== returnedState) {
+    return NextResponse.json(
+      {
+        error: "O parâmetro state da autenticação é inválido ou expirou.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const body = new URLSearchParams();
+
+  body.set("grant_type", "authorization_code");
+  body.set("client_id", clientId);
+  body.set("client_secret", clientSecret);
+  body.set("code", code);
+  body.set("redirect_uri", redirectUri);
+  body.set("code_verifier", codeVerifier);
 
   try {
     const tokenResponse = await fetch(
@@ -61,44 +83,59 @@ export async function GET(request: NextRequest) {
           "Content-Type": "application/x-www-form-urlencoded",
           Accept: "application/json",
         },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          client_id: clientId,
-          client_secret: clientSecret,
-          code,
-          redirect_uri: redirectUri,
-          code_verifier: codeVerifier,
-        }),
+        body: body.toString(),
         cache: "no-store",
       }
     );
 
-    const data = await tokenResponse.json();
+    const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      return NextResponse.json(data, {
-        status: tokenResponse.status,
-      });
+      return NextResponse.json(
+        {
+          error: "Erro retornado pelo Mercado Livre.",
+          mercadoLivreResponse: tokenData,
+          verifierSent: true,
+          verifierLength: codeVerifier.length,
+        },
+        {
+          status: tokenResponse.status,
+        }
+      );
     }
 
     const response = NextResponse.json({
       message: "Mercado Livre conectado com sucesso.",
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_in: data.expires_in,
-      user_id: data.user_id,
-      token_type: data.token_type,
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expires_in: tokenData.expires_in,
+      user_id: tokenData.user_id,
+      token_type: tokenData.token_type,
     });
 
-    response.cookies.delete("mercadolivre_code_verifier");
+    response.cookies.set("ml_code_verifier", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      expires: new Date(0),
+      path: "/",
+    });
+
+    response.cookies.set("ml_oauth_state", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      expires: new Date(0),
+      path: "/",
+    });
 
     return response;
   } catch (error) {
-    console.error("Erro no OAuth do Mercado Livre:", error);
+    console.error("Erro no OAuth Mercado Livre:", error);
 
     return NextResponse.json(
       {
-        error: "Erro interno ao gerar o Access Token.",
+        error: "Erro interno ao solicitar o token do Mercado Livre.",
       },
       { status: 500 }
     );
