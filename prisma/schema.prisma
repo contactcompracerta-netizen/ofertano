@@ -9,52 +9,28 @@ datasource db {
 
 model Product {
   id             String   @id @default(uuid())
-
   mlId           String   @unique
-
   name           String
-
   slug           String?  @unique
-
   image          String
-
   images         String[]
-
   video          String?
-
   brand          String?
-
   description    String?
-
   specifications Json?
-
   category       String
-
   store          String
-
   affiliateLink  String
-
   price          Float
-
   oldPrice       Float?
-
   installments   String?
-
   discount       Int?
-
   rating         Float?
-
   reviews        Int?
-
   sales          Int?
-
   stock          Int?
-
   active         Boolean  @default(true)
-
   featured       Boolean  @default(false)
-
   createdAt      DateTime @default(now())
-
   updatedAt      DateTime @updatedAt
 }
