@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma/client"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -44,41 +43,41 @@ model Product {
 }
 
 model MarketplaceOffer {
-  id             String      @id @default(cuid())
+  id            String      @id @default(cuid())
 
-  productId      String
-  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  marketplace    Marketplace
+  marketplace   Marketplace
 
-  affiliateLink  String
+  affiliateLink String
 
-  price          Float
-  oldPrice       Float?
-  installments   String?
-  stock          Int?
+  price         Float
+  oldPrice      Float?
+  installments  String?
+  stock         Int?
 
-  active         Boolean     @default(true)
+  active        Boolean     @default(true)
 
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@unique([productId, marketplace])
 }
 
 model MarketplaceConnection {
-  id             String       @id @default(cuid())
+  id           String      @id @default(cuid())
 
-  marketplace    Marketplace  @unique
+  marketplace  Marketplace @unique
 
-  sellerId       String
+  sellerId     String
 
-  accessToken    String       @db.Text
+  accessToken  String      @db.Text
 
-  refreshToken   String       @db.Text
+  refreshToken String      @db.Text
 
-  expiresAt      DateTime
+  expiresAt    DateTime
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }

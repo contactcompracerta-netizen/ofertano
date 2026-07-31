@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { Marketplace } from "@/generated/prisma/client";
+import { Marketplace } from "@prisma/client";
 
 export async function getMercadoLivreAccessToken(): Promise<string> {
   const connection = await prisma.marketplaceConnection.findUnique({
