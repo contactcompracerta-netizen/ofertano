@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getMercadoLivreAccessToken } from "@/services/mercadolivre/auth";
 
 type MercadoLivrePicture = {
   id?: string;
@@ -162,30 +163,18 @@ function extrairMlbuDoLink(link: string): string | null {
   return `MLBU${resultado[1]}`;
 }
 
-function obterAccessToken(): string {
-  const token = process.env.MERCADO_LIVRE_ACCESS_TOKEN?.trim();
-
-  if (!token) {
-    throw new Error(
-      "MERCADO_LIVRE_ACCESS_TOKEN não foi configurado no arquivo .env.",
-    );
-  }
-
-  return token;
-}
-
 async function buscarJson<T>(
   endereco: string,
   obrigatorio = true,
 ): Promise<T | null> {
-  const token = obterAccessToken();
+  const token = await getMercadoLivreAccessToken();
 
   const resposta = await fetch(endereco, {
     method: "GET",
     headers: {
       Accept: "application/json",
       "Accept-Language": "pt-BR,pt;q=0.9",
-      Authorization: `Bearer ${token}`,
+     // Authorization: `Bearer ${token}`,
       "User-Agent": "Ofertano/1.0",
     },
     cache: "no-store",
@@ -517,7 +506,7 @@ export async function POST(request: Request) {
     /*
      * Verifica o token antes de iniciar a importação.
      */
-    obterAccessToken();
+    await getMercadoLivreAccessToken();
 
     const body = await request.json();
 

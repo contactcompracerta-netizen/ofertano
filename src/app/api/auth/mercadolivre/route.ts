@@ -49,7 +49,7 @@ export async function GET() {
 
   response.cookies.set("ml_code_verifier", codeVerifier, {
     httpOnly: true,
-    secure: true,
+    secure: false,
     sameSite: "lax",
     maxAge: 600,
     path: "/",
@@ -57,7 +57,7 @@ export async function GET() {
 
   response.cookies.set("ml_oauth_state", state, {
     httpOnly: true,
-    secure: true,
+    secure: false,
     sameSite: "lax",
     maxAge: 600,
     path: "/",

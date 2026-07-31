@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
   output   = "../src/generated/prisma/client"
 }
 
@@ -7,9 +7,15 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Marketplace {
+  MERCADO_LIVRE
+  AMAZON
+  SHOPEE
+}
+
 model Product {
   id             String   @id @default(uuid())
-  mlId           String   @unique
+  mlId           String?  @unique
   name           String
   slug           String?  @unique
   image          String
@@ -33,12 +39,31 @@ model Product {
   featured       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  offers MarketplaceOffer[]
 }
 
-enum Marketplace {
-  MERCADO_LIVRE
-  AMAZON
-  SHOPEE
+model MarketplaceOffer {
+  id             String      @id @default(cuid())
+
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  marketplace    Marketplace
+
+  affiliateLink  String
+
+  price          Float
+  oldPrice       Float?
+  installments   String?
+  stock          Int?
+
+  active         Boolean     @default(true)
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([productId, marketplace])
 }
 
 model MarketplaceConnection {
@@ -55,6 +80,5 @@ model MarketplaceConnection {
   expiresAt      DateTime
 
   createdAt      DateTime     @default(now())
-
   updatedAt      DateTime     @updatedAt
 }
