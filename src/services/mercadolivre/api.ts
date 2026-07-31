@@ -1,20 +1,35 @@
-import { getMercadoLivreAccessToken } from "./auth";
-
 const API = "https://api.mercadolibre.com";
 
-async function request<T>(url: string): Promise<T> {
-  const token = await getMercadoLivreAccessToken();
+async function request<T>(
+  url: string,
+  authenticated = false
+): Promise<T> {
+  const headers: HeadersInit = {};
+
+  if (authenticated) {
+    const { getMercadoLivreAccessToken } = await import("./auth");
+
+    const token = await getMercadoLivreAccessToken();
+
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const response = await fetch(`${API}${url}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     cache: "no-store",
   });
 
   if (!response.ok) {
+    const detail = await response.text();
+
+    console.error("Erro da API do Mercado Livre:", {
+      endereco: `${API}${url}`,
+      status: response.status,
+      detalhe: detail,
+    });
+
     throw new Error(
-      `Mercado Livre API ${response.status}: ${await response.text()}`
+      `Mercado Livre API ${response.status}: ${detail}`
     );
   }
 
@@ -22,23 +37,21 @@ async function request<T>(url: string): Promise<T> {
 }
 
 export async function getItem(itemId: string): Promise<any> {
-  return request<any>(`/items/${itemId}`);
+  return request(`/items/${itemId}`);
 }
 
 export async function getDescription(itemId: string): Promise<any> {
-  return request<any>(`/items/${itemId}/description`);
+  return request(`/items/${itemId}/description`);
 }
 
 export async function getCategory(
   categoryId: string
 ): Promise<{ name: string }> {
-  return request<{ name: string }>(`/categories/${categoryId}`);
+  return request(`/categories/${categoryId}`);
 }
 
 export async function getReviews(
   itemId: string
 ): Promise<{ rating_average?: number }> {
-  return request<{ rating_average?: number }>(
-    `/reviews/item/${itemId}`
-  );
+  return request(`/reviews/item/${itemId}`);
 }
