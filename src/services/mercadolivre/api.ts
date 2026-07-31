@@ -1,39 +1,23 @@
 const API = "https://api.mercadolibre.com";
 
-async function request<T>(
-  url: string,
-  authenticated = false
-): Promise<T> {
-  const headers: HeadersInit = {};
-
-  if (authenticated) {
-    const { getMercadoLivreAccessToken } = await import("./auth");
-
-    const token = await getMercadoLivreAccessToken();
-
-    headers.Authorization = `Bearer ${token}`;
-  }
-
+async function request<T>(url: string): Promise<T> {
   const response = await fetch(`${API}${url}`, {
-    headers,
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    const detail = await response.text();
+  const text = await response.text();
 
-    console.error("Erro da API do Mercado Livre:", {
-      endereco: `${API}${url}`,
+  if (!response.ok) {
+    console.error("Erro da API Mercado Livre:", {
+      url: `${API}${url}`,
       status: response.status,
-      detalhe: detail,
+      body: text,
     });
 
-    throw new Error(
-      `Mercado Livre API ${response.status}: ${detail}`
-    );
+    throw new Error(text);
   }
 
-  return response.json() as Promise<T>;
+  return JSON.parse(text) as T;
 }
 
 export async function getItem(itemId: string): Promise<any> {
@@ -44,14 +28,10 @@ export async function getDescription(itemId: string): Promise<any> {
   return request(`/items/${itemId}/description`);
 }
 
-export async function getCategory(
-  categoryId: string
-): Promise<{ name: string }> {
+export async function getCategory(categoryId: string): Promise<any> {
   return request(`/categories/${categoryId}`);
 }
 
-export async function getReviews(
-  itemId: string
-): Promise<{ rating_average?: number }> {
+export async function getReviews(itemId: string): Promise<any> {
   return request(`/reviews/item/${itemId}`);
 }
