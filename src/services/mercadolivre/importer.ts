@@ -10,17 +10,28 @@ import {
 import { parseMercadoLivreProduct } from "./parser";
 
 export async function importMercadoLivreProduct(itemId: string) {
-  // Busca o produto
+  console.log("1 - Buscando produto...");
   const item = await getItem(itemId);
 
-  // Busca informações complementares em paralelo
-  const [category, reviews] = await Promise.all([
-    getCategory(item.category_id),
-    getReviews(itemId).catch(() => null),
-  ]);
+  console.log("2 - Produto OK");
 
-  // Apenas para validar que o anúncio possui descrição
-  await getDescription(itemId).catch(() => null);
+  console.log("3 - Buscando categoria...");
+  const category = await getCategory(item.category_id);
+
+  console.log("4 - Categoria OK");
+
+  console.log("5 - Buscando descrição...");
+  await getDescription(itemId).catch((e) => {
+    console.error("Descrição:", e.message);
+  });
+
+  console.log("6 - Buscando reviews...");
+  const reviews = await getReviews(itemId).catch((e) => {
+    console.error("Reviews:", e.message);
+    return null;
+  });
+
+  console.log("7 - Salvando produto...");
 
   const product = parseMercadoLivreProduct(
     item,
@@ -32,13 +43,7 @@ export async function importMercadoLivreProduct(itemId: string) {
     where: {
       mlId: product.mlId,
     },
-
-    update: {
-      ...product,
-    },
-
-    create: {
-      ...product,
-    },
+    update: product,
+    create: product,
   });
 }
