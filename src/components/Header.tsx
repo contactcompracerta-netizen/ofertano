@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,7 +7,7 @@ import Logo from "@/components/Logo";
 
 const linksNavegacao = [
   {
-    nome: "InÃ­cio",
+    nome: "Início",
     href: "/",
   },
   {
