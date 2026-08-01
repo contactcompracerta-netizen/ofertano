@@ -1,4 +1,4 @@
-﻿import type { ProductImport } from "../core/types";
+import type { ProductImport } from "../core/types";
 
 import {
   getCatalogItems,
@@ -37,17 +37,8 @@ function extrairIds(link: string): {
   const decoded = decodificarLink(link);
   const url = new URL(link);
 
-  const itemParam = decoded.match(
-    /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
-  );
-
-  if (itemParam?.[1]) {
-    return {
-      itemId: normalizarId(itemParam[1]),
-      catalogId: null,
-    };
-  }
-
+  // Links de páginas de produto podem conter também um "wid".
+  // O catálogo deve ter prioridade porque o anúncio do wid pode estar restrito.
   const catalogPath = url.pathname.match(
     /\/p\/(MLB-?\d+)/i
   );
@@ -56,6 +47,17 @@ function extrairIds(link: string): {
     return {
       itemId: null,
       catalogId: normalizarId(catalogPath[1]),
+    };
+  }
+
+  const itemParam = decoded.match(
+    /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
+  );
+
+  if (itemParam?.[1]) {
+    return {
+      itemId: normalizarId(itemParam[1]),
+      catalogId: null,
     };
   }
 
@@ -74,7 +76,6 @@ function extrairIds(link: string): {
     "Não foi possível identificar o produto no link informado."
   );
 }
-
 async function resolverLinkCurto(
   rawUrl: string
 ): Promise<string> {

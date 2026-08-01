@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
   const authorization = request.headers.get("authorization");
@@ -16,7 +16,12 @@ export function proxy(request: NextRequest) {
       const usuarioCorreto = process.env.ADMIN_USER;
       const senhaCorreta = process.env.ADMIN_PASSWORD;
 
-      if (usuario === usuarioCorreto && senha === senhaCorreta) {
+      if (
+        usuarioCorreto &&
+        senhaCorreta &&
+        usuario === usuarioCorreto &&
+        senha === senhaCorreta
+      ) {
         return NextResponse.next();
       }
     }
@@ -26,10 +31,14 @@ export function proxy(request: NextRequest) {
     status: 401,
     headers: {
       "WWW-Authenticate": 'Basic realm="Painel Ofertano"',
+      "Cache-Control": "no-store",
     },
   });
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/import-product/v2/:path*",
+  ],
 };

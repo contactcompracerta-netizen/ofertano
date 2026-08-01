@@ -86,7 +86,10 @@ export async function mercadoLivreFetch(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(error);
+
+    throw new Error(
+      `Mercado Livre ${endpoint} retornou ${response.status}: ${error}`
+    );
   }
 
   return response.json();
