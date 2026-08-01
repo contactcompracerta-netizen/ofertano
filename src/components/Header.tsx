@@ -12,10 +12,13 @@ const textos = {
   blog: "Blog",
   avisoCompleto:
     "Compare pre\u00E7os e compre diretamente em lojas parceiras.",
-  avisoMobile: "Compare pre\u00E7os em lojas parceiras.",
+  avisoMobile:
+    "Compare pre\u00E7os em lojas parceiras.",
   buscar: "Buscar",
-  placeholderDesktop: "Busque por produto, marca ou categoria",
-  placeholderMobile: "Buscar produto, marca ou categoria",
+  placeholderDesktop:
+    "Busque por produto, marca ou categoria",
+  placeholderMobile:
+    "Buscar produto, marca ou categoria",
   sobre: "Sobre o Ofertano",
   seguranca: "Compra segura",
 };
