@@ -1,4 +1,4 @@
-﻿import prisma from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import type { ProductImport } from "@/services/importers/core/types";
 
 function criarSlug(
@@ -46,6 +46,7 @@ export async function saveProduct(
       installments: product.installments,
       rating: product.rating,
       reviews: product.reviews,
+      sales: product.sales,
       stock: product.stock,
       specifications: product.attributes,
       active: true,
@@ -70,6 +71,7 @@ export async function saveProduct(
       installments: product.installments,
       rating: product.rating,
       reviews: product.reviews,
+      sales: product.sales,
       stock: product.stock,
       specifications: product.attributes,
       active: true,

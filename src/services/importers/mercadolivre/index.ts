@@ -158,8 +158,7 @@ async function importarCatalogo(
     catalogItems.results ?? [],
     catalog.buy_box_winner?.item_id
   );
-
-  const itemId = oferta.item_id!;
+const itemId = oferta.item_id!;
 
   const [category, description, reviews] =
     await Promise.all([

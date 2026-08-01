@@ -1,4 +1,4 @@
-﻿import type { ProductImport } from "../core/types";
+import type { ProductImport } from "../core/types";
 
 import type {
   MercadoLivreAttribute,
@@ -162,6 +162,7 @@ export function parseMercadoLivre(
     installments: null,
     rating: source.rating,
     reviews: source.reviews,
+    sales: source.soldQuantity,
     stock: source.availableQuantity,
     seller:
       source.sellerId !== null

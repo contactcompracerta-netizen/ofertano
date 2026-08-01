@@ -1,4 +1,4 @@
-﻿export type MarketplaceName =
+export type MarketplaceName =
   | "Mercado Livre"
   | "Amazon"
   | "Shopee";
@@ -19,6 +19,7 @@ export interface ProductImport {
   installments: string | null;
   rating: number | null;
   reviews: number | null;
+  sales: number | null;
   stock: number | null;
   seller: string | null;
   attributes: Record<string, string>;
