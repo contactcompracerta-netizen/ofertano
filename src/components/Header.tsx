@@ -5,21 +5,36 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import Logo from "@/components/Logo";
 
+const textos = {
+  inicio: "In\u00EDcio",
+  ofertas: "Ofertas",
+  categorias: "Categorias",
+  blog: "Blog",
+  avisoCompleto:
+    "Compare pre\u00E7os e compre diretamente em lojas parceiras.",
+  avisoMobile: "Compare pre\u00E7os em lojas parceiras.",
+  buscar: "Buscar",
+  placeholderDesktop: "Busque por produto, marca ou categoria",
+  placeholderMobile: "Buscar produto, marca ou categoria",
+  sobre: "Sobre o Ofertano",
+  seguranca: "Compra segura",
+};
+
 const linksNavegacao = [
   {
-    nome: "Início",
+    nome: textos.inicio,
     href: "/",
   },
   {
-    nome: "Ofertas",
+    nome: textos.ofertas,
     href: "/ofertas",
   },
   {
-    nome: "Categorias",
+    nome: textos.categorias,
     href: "/categorias",
   },
   {
-    nome: "Blog",
+    nome: textos.blog,
     href: "/blog",
   },
 ];
@@ -42,10 +57,10 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50">
-      {/* Barra superior de confianÃ§a */}
+      {/* Barra superior compacta */}
       <div className="border-b border-emerald-900 bg-[#043B2C] text-white">
-        <div className="mx-auto flex min-h-9 max-w-7xl items-center justify-center px-4 text-center sm:justify-between">
-          <div className="flex items-center gap-2 text-[11px] font-semibold sm:text-xs">
+        <div className="mx-auto flex h-8 max-w-7xl items-center justify-center px-3 sm:justify-between sm:px-4">
+          <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold sm:text-xs">
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"
@@ -60,8 +75,12 @@ export default function Header() {
               <path d="M8.7 12L10.8 14.1L15.5 9.4" />
             </svg>
 
-            <span>
-              Compare preÃ§os e compre diretamente em lojas parceiras.
+            <span className="sm:hidden">
+              {textos.avisoMobile}
+            </span>
+
+            <span className="hidden sm:inline">
+              {textos.avisoCompleto}
             </span>
           </div>
 
@@ -70,26 +89,27 @@ export default function Header() {
               href="/sobre"
               className="transition hover:text-white"
             >
-              Sobre o Ofertano
+              {textos.sobre}
             </Link>
 
             <Link
               href="/seguranca"
               className="transition hover:text-white"
             >
-              Compra segura
+              {textos.seguranca}
             </Link>
           </div>
         </div>
       </div>
 
-      {/* CabeÃ§alho principal */}
-      <div className="border-b border-slate-200/80 bg-white/95 shadow-[0_10px_35px_rgba(15,23,42,0.05)] backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="flex min-h-[76px] items-center gap-4 lg:gap-6">
+      {/* Cabeçalho principal */}
+      <div className="border-b border-slate-200/80 bg-white/95 shadow-[0_8px_25px_rgba(15,23,42,0.05)] backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-3 sm:px-4">
+          {/* Linha da logo */}
+          <div className="flex h-16 items-center gap-3 lg:gap-5">
             <div
-              className="shrink-0"
               onClick={fecharMenu}
+              className="flex min-w-0 shrink-0 items-center [&_p]:hidden lg:[&_p]:block"
             >
               <Logo />
             </div>
@@ -107,39 +127,37 @@ export default function Header() {
                 Pesquisar produtos
               </label>
 
-              <div className="group relative">
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 transition group-focus-within:text-emerald-600"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M16.5 16.5L21 21" />
-                </svg>
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="M16.5 16.5L21 21" />
+              </svg>
 
-                <input
-                  id="busca-header"
-                  name="q"
-                  type="search"
-                  autoComplete="off"
-                  placeholder="Busque por produto, marca ou categoria"
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-28 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
-                />
+              <input
+                id="busca-header"
+                name="q"
+                type="search"
+                autoComplete="off"
+                placeholder={textos.placeholderDesktop}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-28 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+              />
 
-                <button
-                  type="submit"
-                  className="absolute right-1.5 top-1.5 h-9 rounded-xl bg-[#087A55] px-5 text-sm font-extrabold text-white transition hover:bg-[#066747] active:scale-[0.98]"
-                >
-                  Buscar
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="absolute right-1 top-1 h-9 rounded-xl bg-[#087A55] px-5 text-sm font-black text-white transition hover:bg-[#066747]"
+              >
+                {textos.buscar}
+              </button>
             </form>
 
-            {/* NavegaÃ§Ã£o desktop */}
+            {/* Navegação desktop */}
             <nav className="hidden items-center gap-1 xl:flex">
               {linksNavegacao.map((link) => {
                 const ativo = linkEstaAtivo(link.href);
@@ -165,7 +183,7 @@ export default function Header() {
               href="https://www.instagram.com/ofertano.br/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700 lg:flex"
+              className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700 lg:flex"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -184,11 +202,13 @@ export default function Header() {
                   height="18"
                   rx="5"
                 />
+
                 <circle
                   cx="12"
                   cy="12"
                   r="4"
                 />
+
                 <circle
                   cx="17.5"
                   cy="6.5"
@@ -201,20 +221,20 @@ export default function Header() {
               Instagram
             </a>
 
-            {/* BotÃ£o do menu mobile */}
+            {/* Menu mobile */}
             <button
               type="button"
-              onClick={() => setMenuAberto((estadoAtual) => !estadoAtual)}
+              onClick={() => setMenuAberto((estado) => !estado)}
               aria-label={menuAberto ? "Fechar menu" : "Abrir menu"}
               aria-expanded={menuAberto}
               aria-controls="menu-mobile"
-              className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 xl:hidden"
+              className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 transition hover:bg-emerald-50 hover:text-emerald-700 xl:hidden"
             >
               {menuAberto ? (
                 <svg
                   viewBox="0 0 24 24"
                   aria-hidden="true"
-                  className="h-6 w-6"
+                  className="h-5 w-5"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
@@ -241,11 +261,11 @@ export default function Header() {
             </button>
           </div>
 
-          {/* Busca mobile */}
+          {/* Busca mobile compacta */}
           <form
             action="/"
             method="GET"
-            className="pb-4 md:hidden"
+            className="-mt-1 pb-3 md:hidden"
           >
             <label
               htmlFor="busca-mobile"
@@ -273,14 +293,14 @@ export default function Header() {
                 name="q"
                 type="search"
                 autoComplete="off"
-                placeholder="O que vocÃª estÃ¡ procurando?"
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-20 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                placeholder={textos.placeholderMobile}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-14 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
               />
 
               <button
                 type="submit"
                 aria-label="Pesquisar"
-                className="absolute right-1.5 top-1.5 flex h-9 w-12 items-center justify-center rounded-xl bg-[#087A55] text-white transition hover:bg-[#066747]"
+                className="absolute right-1 top-1 flex h-9 w-11 items-center justify-center rounded-lg bg-[#087A55] text-white transition hover:bg-[#066747]"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -298,13 +318,13 @@ export default function Header() {
             </div>
           </form>
 
-          {/* Menu mobile e tablet */}
+          {/* Menu mobile aberto */}
           {menuAberto && (
             <div
               id="menu-mobile"
-              className="border-t border-slate-200 py-4 xl:hidden"
+              className="border-t border-slate-200 py-3 xl:hidden"
             >
-              <nav className="grid gap-2 sm:grid-cols-2">
+              <nav className="grid gap-1.5 sm:grid-cols-2">
                 {linksNavegacao.map((link) => {
                   const ativo = linkEstaAtivo(link.href);
 
@@ -325,13 +345,13 @@ export default function Header() {
                 })}
               </nav>
 
-              <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-2">
+              <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2">
                 <Link
                   href="/sobre"
                   onClick={fecharMenu}
-                  className="rounded-xl bg-slate-50 px-4 py-3 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  className="rounded-xl bg-slate-50 px-4 py-3 text-center text-sm font-bold text-slate-700"
                 >
-                  Sobre o Ofertano
+                  {textos.sobre}
                 </Link>
 
                 <a
@@ -339,7 +359,7 @@ export default function Header() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={fecharMenu}
-                  className="rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-center text-sm font-bold text-pink-700 transition hover:bg-pink-100"
+                  className="rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-center text-sm font-bold text-pink-700"
                 >
                   Seguir no Instagram
                 </a>
@@ -351,4 +371,3 @@ export default function Header() {
     </header>
   );
 }
-
