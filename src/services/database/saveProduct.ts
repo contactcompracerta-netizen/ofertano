@@ -24,58 +24,84 @@ export async function saveProduct(
     product.externalId
   );
 
-  return prisma.product.upsert({
-    where: {
-      mlId: product.externalId,
-    },
+  return prisma.$transaction(async (tx) => {
+    const saved = await tx.product.upsert({
+      where: {
+        mlId: product.externalId,
+      },
 
-    update: {
-      name: product.title,
-      slug,
-      image: product.image,
-      images: product.images,
-      brand: product.brand,
-      description: product.description,
-      category:
-        product.category ?? "Ofertas",
-      store: product.marketplace,
-      affiliateLink: product.url,
-      price: product.price,
-      oldPrice: product.oldPrice,
-      discount: product.discount,
-      installments: product.installments,
-      rating: product.rating,
-      reviews: product.reviews,
-      sales: product.sales,
-      stock: product.stock,
-      specifications: product.attributes,
-      active: true,
-    },
+      update: {
+        name: product.title,
+        slug,
+        image: product.image,
+        images: product.images,
+        brand: product.brand,
+        description: product.description,
+        category:
+          product.category ?? "Ofertas",
+        store: product.marketplace,
+        affiliateLink: product.url,
+        price: product.price,
+        oldPrice: product.oldPrice,
+        discount: product.discount,
+        installments: product.installments,
+        rating: product.rating,
+        reviews: product.reviews,
+        sales: product.sales,
+        stock: product.stock,
+        specifications: product.attributes,
+        active: true,
+      },
 
-    create: {
-      mlId: product.externalId,
-      name: product.title,
-      slug,
-      image: product.image,
-      images: product.images,
-      video: null,
-      brand: product.brand,
-      description: product.description,
-      category:
-        product.category ?? "Ofertas",
-      store: product.marketplace,
-      affiliateLink: product.url,
-      price: product.price,
-      oldPrice: product.oldPrice,
-      discount: product.discount,
-      installments: product.installments,
-      rating: product.rating,
-      reviews: product.reviews,
-      sales: product.sales,
-      stock: product.stock,
-      specifications: product.attributes,
-      active: true,
-      featured: false,
-    },
+      create: {
+        mlId: product.externalId,
+        name: product.title,
+        slug,
+        image: product.image,
+        images: product.images,
+        video: null,
+        brand: product.brand,
+        description: product.description,
+        category:
+          product.category ?? "Ofertas",
+        store: product.marketplace,
+        affiliateLink: product.url,
+        price: product.price,
+        oldPrice: product.oldPrice,
+        discount: product.discount,
+        installments: product.installments,
+        rating: product.rating,
+        reviews: product.reviews,
+        sales: product.sales,
+        stock: product.stock,
+        specifications: product.attributes,
+        active: true,
+        featured: false,
+      },
+    });
+
+    const ultimoRegistro =
+      await tx.priceHistory.findFirst({
+        where: {
+          productId: saved.id,
+        },
+        orderBy: {
+          recordedAt: "desc",
+        },
+      });
+
+    if (
+      !ultimoRegistro ||
+      ultimoRegistro.price !== product.price
+    ) {
+      await tx.priceHistory.create({
+        data: {
+          productId: saved.id,
+          price: product.price,
+        },
+      });
+    }
+
+    return saved;
   });
 }

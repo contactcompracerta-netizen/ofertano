@@ -39,7 +39,8 @@ model Product {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  offers MarketplaceOffer[]
+  offers        MarketplaceOffer[]
+  priceHistory  PriceHistory[]
 }
 
 model MarketplaceOffer {
@@ -80,4 +81,13 @@ model MarketplaceConnection {
 
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+}
+model PriceHistory {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price      Float
+  recordedAt DateTime @default(now())
+
+  @@index([productId, recordedAt])
 }
