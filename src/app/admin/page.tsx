@@ -15,7 +15,7 @@ export default function AdminPage() {
     try {
       setLoading(true);
 
-      const response = await fetch("/api/import-product", {
+      const response = await fetch("/api/import-product/v2", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
