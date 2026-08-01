@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+debug-mercadolivre.html
+log.txt
+src/components/Header.tsx.backup
