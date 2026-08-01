@@ -91,3 +91,25 @@ model PriceHistory {
 
   @@index([productId, recordedAt])
 }
+
+enum ImportQueueStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  ERROR
+}
+
+model ImportQueue {
+  id           String            @id @default(cuid())
+  url          String            @unique
+  marketplace  Marketplace
+  status       ImportQueueStatus @default(PENDING)
+  attempts     Int               @default(0)
+  errorMessage String?
+  productId    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  processedAt  DateTime?
+
+  @@index([status, createdAt])
+}

@@ -40,5 +40,6 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/api/import-product/v2/:path*",
+    "/api/import-queue/:path*",
   ],
 };
