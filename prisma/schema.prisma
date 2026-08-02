@@ -39,49 +39,50 @@ model Product {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  offers        MarketplaceOffer[]
-  priceHistory  PriceHistory[]
+  offers       MarketplaceOffer[]
+  priceHistory PriceHistory[]
 }
 
 model MarketplaceOffer {
-  id            String      @id @default(cuid())
+  id String @id @default(cuid())
 
-  productId     String
-  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  marketplace   Marketplace
+  marketplace Marketplace
 
   affiliateLink String
 
-  price         Float
-  oldPrice      Float?
-  installments  String?
-  stock         Int?
+  price        Float
+  oldPrice     Float?
+  installments String?
+  stock        Int?
 
-  active        Boolean     @default(true)
+  active Boolean @default(true)
 
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([productId, marketplace])
 }
 
 model MarketplaceConnection {
-  id           String      @id @default(cuid())
+  id String @id @default(cuid())
 
-  marketplace  Marketplace @unique
+  marketplace Marketplace @unique
 
-  sellerId     String
+  sellerId String
 
-  accessToken  String      @db.Text
+  accessToken String @db.Text
 
-  refreshToken String      @db.Text
+  refreshToken String @db.Text
 
-  expiresAt    DateTime
+  expiresAt DateTime
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
 model PriceHistory {
   id         String   @id @default(cuid())
   productId  String
@@ -112,4 +113,45 @@ model ImportQueue {
   processedAt  DateTime?
 
   @@index([status, createdAt])
+}
+
+enum OpportunitySourceType {
+  PRODUCT
+  ITEM
+  USER_PRODUCT
+}
+
+enum OpportunityStatus {
+  WAITING_AFFILIATE
+  READY_TO_QUEUE
+  QUEUED
+  PUBLISHED
+  DISMISSED
+  ERROR
+}
+
+model ProductOpportunity {
+  id            String                @id @default(cuid())
+  externalId    String                @unique
+  sourceType    OpportunitySourceType
+  sourceUrl     String                @db.Text
+  title         String
+  image         String?
+  categoryId    String?
+  categoryName  String?
+  price         Float?
+  oldPrice      Float?
+  discount      Int?
+  affiliateLink String?               @db.Text
+  status        OpportunityStatus     @default(WAITING_AFFILIATE)
+  attempts      Int                   @default(0)
+  errorMessage  String?               @db.Text
+  productId     String?
+  discoveredAt  DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  queuedAt      DateTime?
+  publishedAt   DateTime?
+
+  @@index([status, discoveredAt])
+  @@index([categoryId, discoveredAt])
 }
