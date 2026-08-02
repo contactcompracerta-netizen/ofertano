@@ -286,11 +286,42 @@ export async function discoverMercadoLivreOpportunities(
   const categoryName =
     category.name?.trim() || categoryId;
 
-  const productHighlights = shuffle(
+  const validHighlights =
     (highlights.content ?? []).filter(
       (entry) =>
         entry.type === "PRODUCT" &&
         typeof entry.id === "string"
+    );
+
+  const externalIds = validHighlights.map(
+    (entry) => entry.id!
+  );
+
+  const existingOpportunities =
+    externalIds.length > 0
+      ? await prisma.productOpportunity.findMany({
+          where: {
+            externalId: {
+              in: externalIds,
+            },
+          },
+          select: {
+            externalId: true,
+          },
+        })
+      : [];
+
+  const existingIds = new Set(
+    existingOpportunities.map(
+      (opportunity) =>
+        opportunity.externalId
+    )
+  );
+
+  const productHighlights = shuffle(
+    validHighlights.filter(
+      (entry) =>
+        !existingIds.has(entry.id!)
     )
   );
 
