@@ -1,106 +1,45 @@
 import { NextResponse } from "next/server";
 
-import prisma from "@/lib/prisma";
+import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type MercadoLivreCategory = {
+  id?: string;
+  name?: string;
+};
+
 export async function GET() {
   try {
-    const [
-      total,
-      waitingAffiliate,
-      readyToQueue,
-      queued,
-      published,
-      dismissed,
-      error,
-      items,
-    ] = await Promise.all([
-      prisma.productOpportunity.count(),
+    const response = (await mercadoLivreFetch(
+      "/sites/MLB/categories"
+    )) as MercadoLivreCategory[];
 
-      prisma.productOpportunity.count({
-        where: {
-          status: "WAITING_AFFILIATE",
-        },
-      }),
-
-      prisma.productOpportunity.count({
-        where: {
-          status: "READY_TO_QUEUE",
-        },
-      }),
-
-      prisma.productOpportunity.count({
-        where: {
-          status: "QUEUED",
-        },
-      }),
-
-      prisma.productOpportunity.count({
-        where: {
-          status: "PUBLISHED",
-        },
-      }),
-
-      prisma.productOpportunity.count({
-        where: {
-          status: "DISMISSED",
-        },
-      }),
-
-      prisma.productOpportunity.count({
-        where: {
-          status: "ERROR",
-        },
-      }),
-
-      prisma.productOpportunity.findMany({
-        orderBy: {
-          discoveredAt: "desc",
-        },
-        take: 100,
-        select: {
-          id: true,
-          externalId: true,
-          sourceType: true,
-          sourceUrl: true,
-          title: true,
-          image: true,
-          categoryId: true,
-          categoryName: true,
-          price: true,
-          oldPrice: true,
-          discount: true,
-          affiliateLink: true,
-          status: true,
-          attempts: true,
-          errorMessage: true,
-          productId: true,
-          discoveredAt: true,
-          updatedAt: true,
-          queuedAt: true,
-          publishedAt: true,
-        },
-      }),
-    ]);
+    const categories = response
+      .filter(
+        (category) =>
+          typeof category.id === "string" &&
+          typeof category.name === "string"
+      )
+      .map((category) => ({
+        id: category.id!,
+        name: category.name!.trim(),
+      }))
+      .sort((first, second) =>
+        first.name.localeCompare(
+          second.name,
+          "pt-BR"
+        )
+      );
 
     return NextResponse.json({
       success: true,
-      summary: {
-        total,
-        waitingAffiliate,
-        readyToQueue,
-        queued,
-        published,
-        dismissed,
-        error,
-      },
-      items,
+      categories,
     });
   } catch (error) {
     console.error(
-      "Erro ao consultar oportunidades:",
+      "Erro ao carregar categorias do Mercado Livre:",
       error
     );
 
@@ -110,7 +49,7 @@ export async function GET() {
         error:
           error instanceof Error
             ? error.message
-            : "Erro interno ao consultar oportunidades.",
+            : "Não foi possível carregar as categorias.",
       },
       {
         status: 500,

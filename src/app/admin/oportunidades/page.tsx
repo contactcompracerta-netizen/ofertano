@@ -81,6 +81,17 @@ type DiscoverResponse = {
   ignored?: number;
 };
 
+type MercadoLivreCategory = {
+  id: string;
+  name: string;
+};
+
+type CategoriesResponse = {
+  success: boolean;
+  categories?: MercadoLivreCategory[];
+  error?: string;
+};
+
 const initialSummary: OpportunitySummary = {
   total: 0,
   waitingAffiliate: 0,
@@ -169,7 +180,13 @@ export default function OpportunitiesPage() {
     useState("");
 
   const [categoryId, setCategoryId] =
-    useState("MLB1055");
+    useState("");
+
+  const [categories, setCategories] =
+    useState<MercadoLivreCategory[]>([]);
+
+  const [loadingCategories, setLoadingCategories] =
+    useState(true);
 
   const [quantity, setQuantity] =
     useState(5);
@@ -210,10 +227,73 @@ export default function OpportunitiesPage() {
       [items]
     );
 
+  const visibleItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.status !== "PUBLISHED" &&
+          item.status !== "DISMISSED"
+      ),
+    [items]
+  );
+
   const linksEmLote = useMemo(
     () => extrairLinks(batchLinks),
     [batchLinks]
   );
+
+  const loadCategories =
+    useCallback(async () => {
+      try {
+        setLoadingCategories(true);
+        setError("");
+
+        const response = await fetch(
+          "/api/opportunities/categories",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const data =
+          (await response.json()) as CategoriesResponse;
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              "Não foi possível carregar as categorias."
+          );
+        }
+
+        const loadedCategories =
+          data.categories ?? [];
+
+        setCategories(loadedCategories);
+
+        setCategoryId((current) => {
+          if (
+            current &&
+            loadedCategories.some(
+              (category) =>
+                category.id === current
+            )
+          ) {
+            return current;
+          }
+
+          return loadedCategories[0]?.id ?? "";
+        });
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Erro ao carregar categorias."
+        );
+      } finally {
+        setLoadingCategories(false);
+      }
+    }, []);
 
   const loadOpportunities =
     useCallback(async () => {
@@ -274,8 +354,9 @@ export default function OpportunitiesPage() {
     }, []);
 
   useEffect(() => {
+    void loadCategories();
     void loadOpportunities();
-  }, [loadOpportunities]);
+  }, [loadCategories, loadOpportunities]);
 
   async function discoverOpportunities() {
     const normalizedCategoryId =
@@ -724,18 +805,39 @@ export default function OpportunitiesPage() {
                 Categoria do Mercado Livre
               </label>
 
-              <input
+              <select
                 id="category-id"
-                type="text"
                 value={categoryId}
                 onChange={(event) =>
                   setCategoryId(
-                    event.target.value.toUpperCase()
+                    event.target.value
                   )
                 }
-                placeholder="Exemplo: MLB1055"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              />
+                disabled={
+                  loadingCategories ||
+                  categories.length === 0
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                {loadingCategories ? (
+                  <option value="">
+                    Carregando categorias...
+                  </option>
+                ) : categories.length === 0 ? (
+                  <option value="">
+                    Nenhuma categoria disponível
+                  </option>
+                ) : (
+                  categories.map((category) => (
+                    <option
+                      key={category.id}
+                      value={category.id}
+                    >
+                      {category.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
             <div>
@@ -775,7 +877,10 @@ export default function OpportunitiesPage() {
                 void discoverOpportunities()
               }
               disabled={
-                discovering || loading
+                discovering ||
+                loading ||
+                loadingCategories ||
+                !categoryId
               }
               className="rounded-xl bg-blue-600 px-6 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -954,30 +1059,30 @@ export default function OpportunitiesPage() {
           </div>
         ) : null}
 
-        {loading && items.length === 0 ? (
+        {loading && visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-600 shadow-sm">
             Carregando oportunidades...
           </div>
         ) : null}
 
         {!loading &&
-        items.length === 0 ? (
+        visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <h2 className="text-xl font-bold text-slate-900">
-              Nenhuma oportunidade
-              encontrada
+              Lista de oportunidades limpa
             </h2>
 
             <p className="mt-2 text-slate-600">
-              Execute a descoberta de
-              produtos para preencher esta
-              lista.
+              Os produtos publicados são removidos
+              automaticamente desta lista.
+              Execute uma nova descoberta para
+              buscar outros produtos.
             </p>
           </div>
         ) : null}
 
         <section className="space-y-5">
-          {items.map((opportunity) => {
+          {visibleItems.map((opportunity) => {
             const canEdit =
               opportunity.status ===
                 "WAITING_AFFILIATE" ||
