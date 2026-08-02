@@ -7,6 +7,9 @@ import AntiFraudNotice from "@/components/AntiFraudNotice";
 import Benefits from "@/components/Benefits";
 import Footer from "@/components/Footer";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type HomePageProps = {
   searchParams: Promise<{
     q?: string;
