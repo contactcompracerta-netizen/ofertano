@@ -6,14 +6,14 @@ import { useState } from "react";
 import Logo from "@/components/Logo";
 
 const textos = {
-  inicio: "In\u00EDcio",
+  inicio: "Início",
   ofertas: "Ofertas",
   categorias: "Categorias",
   blog: "Blog",
   avisoCompleto:
-    "Compare pre\u00E7os e compre diretamente em lojas parceiras.",
+    "Compare preços e compre diretamente em lojas parceiras.",
   avisoMobile:
-    "Compare pre\u00E7os em lojas parceiras.",
+    "Compare preços em lojas parceiras.",
   buscar: "Buscar",
   placeholderDesktop:
     "Busque por produto, marca ou categoria",
@@ -44,10 +44,37 @@ const linksNavegacao = [
 
 export default function Header() {
   const pathname = usePathname();
-  const [menuAberto, setMenuAberto] = useState(false);
 
-  function fecharMenu() {
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+
+  function fecharPaineis() {
     setMenuAberto(false);
+    setBuscaAberta(false);
+  }
+
+  function alternarBusca() {
+    setBuscaAberta((estadoAtual) => {
+      const novoEstado = !estadoAtual;
+
+      if (novoEstado) {
+        setMenuAberto(false);
+      }
+
+      return novoEstado;
+    });
+  }
+
+  function alternarMenu() {
+    setMenuAberto((estadoAtual) => {
+      const novoEstado = !estadoAtual;
+
+      if (novoEstado) {
+        setBuscaAberta(false);
+      }
+
+      return novoEstado;
+    });
   }
 
   function linkEstaAtivo(href: string) {
@@ -108,16 +135,16 @@ export default function Header() {
       {/* Cabeçalho principal */}
       <div className="border-b border-slate-200/80 bg-white/95 shadow-[0_6px_20px_rgba(15,23,42,0.05)] backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-3 sm:px-4">
-          {/* Logo, busca desktop e menu */}
           <div className="flex h-16 items-center gap-3 lg:gap-5">
+            {/* Logo */}
             <div
-              onClick={fecharMenu}
+              onClick={fecharPaineis}
               className="flex min-w-0 shrink-0 items-center [&_p]:hidden lg:[&_p]:block"
             >
               <Logo />
             </div>
 
-            {/* Busca desktop */}
+            {/* Pesquisa desktop */}
             <form
               action="/"
               method="GET"
@@ -224,91 +251,125 @@ export default function Header() {
               Instagram
             </a>
 
-            {/* Botão menu mobile */}
-            <button
-              type="button"
-              onClick={() => setMenuAberto((estado) => !estado)}
-              aria-label={menuAberto ? "Fechar menu" : "Abrir menu"}
-              aria-expanded={menuAberto}
-              aria-controls="menu-mobile"
-              className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 transition hover:bg-emerald-50 hover:text-emerald-700 xl:hidden"
-            >
-              {menuAberto ? (
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <path d="M6 6L18 18" />
-                  <path d="M18 6L6 18" />
-                </svg>
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className="h-6 w-6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <path d="M4 7H20" />
-                  <path d="M4 12H20" />
-                  <path d="M4 17H20" />
-                </svg>
-              )}
-            </button>
+            {/* Botões mobile */}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {/* Botão de pesquisa mobile */}
+              <button
+                type="button"
+                onClick={alternarBusca}
+                aria-label={
+                  buscaAberta
+                    ? "Fechar pesquisa"
+                    : "Abrir pesquisa"
+                }
+                aria-expanded={buscaAberta}
+                aria-controls="pesquisa-mobile"
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition md:hidden ${
+                  buscaAberta
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-slate-200 bg-white text-slate-800 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                {buscaAberta ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M6 6L18 18" />
+                    <path d="M18 6L6 18" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M16.5 16.5L21 21" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Botão menu mobile/tablet */}
+              <button
+                type="button"
+                onClick={alternarMenu}
+                aria-label={
+                  menuAberto
+                    ? "Fechar menu"
+                    : "Abrir menu"
+                }
+                aria-expanded={menuAberto}
+                aria-controls="menu-mobile"
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition xl:hidden ${
+                  menuAberto
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-slate-200 bg-white text-slate-800 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                {menuAberto ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M6 6L18 18" />
+                    <path d="M18 6L6 18" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M4 7H20" />
+                    <path d="M4 12H20" />
+                    <path d="M4 17H20" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Busca mobile */}
-          <form
-            action="/"
-            method="GET"
-            className="-mt-1 pb-2 md:hidden"
-          >
-            <label
-              htmlFor="busca-mobile"
-              className="sr-only"
+          {/* Pesquisa mobile aberta pela lupa */}
+          {buscaAberta && (
+            <div
+              id="pesquisa-mobile"
+              className="border-t border-slate-100 pb-3 pt-3 md:hidden"
             >
-              Pesquisar produtos
-            </label>
-
-            <div className="relative">
-              <svg
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
+              <form
+                action="/"
+                method="GET"
+                className="relative"
               >
-                <circle cx="11" cy="11" r="7" />
-                <path d="M16.5 16.5L21 21" />
-              </svg>
+                <label
+                  htmlFor="busca-mobile"
+                  className="sr-only"
+                >
+                  Pesquisar produtos
+                </label>
 
-              <input
-                id="busca-mobile"
-                name="q"
-                type="search"
-                autoComplete="off"
-                placeholder={textos.placeholderMobile}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-14 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
-              />
-
-              <button
-                type="submit"
-                aria-label="Pesquisar"
-                className="absolute right-1 top-1 flex h-9 w-11 items-center justify-center rounded-lg bg-[#087A55] text-white transition hover:bg-[#066747]"
-              >
                 <svg
                   viewBox="0 0 24 24"
                   aria-hidden="true"
-                  className="h-5 w-5"
+                  className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
@@ -317,9 +378,38 @@ export default function Header() {
                   <circle cx="11" cy="11" r="7" />
                   <path d="M16.5 16.5L21 21" />
                 </svg>
-              </button>
+
+                <input
+                  id="busca-mobile"
+                  name="q"
+                  type="search"
+                  autoComplete="off"
+                  autoFocus
+                  placeholder={textos.placeholderMobile}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-14 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                />
+
+                <button
+                  type="submit"
+                  aria-label="Pesquisar"
+                  className="absolute right-1 top-1 flex h-9 w-11 items-center justify-center rounded-lg bg-[#087A55] text-white transition hover:bg-[#066747]"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M16.5 16.5L21 21" />
+                  </svg>
+                </button>
+              </form>
             </div>
-          </form>
+          )}
 
           {/* Menu mobile aberto */}
           {menuAberto && (
@@ -335,7 +425,7 @@ export default function Header() {
                     <Link
                       key={link.href}
                       href={link.href}
-                      onClick={fecharMenu}
+                      onClick={fecharPaineis}
                       className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
                         ativo
                           ? "bg-emerald-50 text-emerald-700"
@@ -351,7 +441,7 @@ export default function Header() {
               <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2">
                 <Link
                   href="/sobre"
-                  onClick={fecharMenu}
+                  onClick={fecharPaineis}
                   className="rounded-xl bg-slate-50 px-4 py-3 text-center text-sm font-bold text-slate-700"
                 >
                   {textos.sobre}
@@ -361,7 +451,7 @@ export default function Header() {
                   href="https://www.instagram.com/ofertano.br/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={fecharMenu}
+                  onClick={fecharPaineis}
                   className="rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-center text-sm font-bold text-pink-700"
                 >
                   Seguir no Instagram
