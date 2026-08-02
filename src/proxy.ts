@@ -27,13 +27,17 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  return new NextResponse("Acesso restrito ao administrador.", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="Painel Ofertano"',
-      "Cache-Control": "no-store",
-    },
-  });
+  return new NextResponse(
+    "Acesso restrito ao administrador.",
+    {
+      status: 401,
+      headers: {
+        "WWW-Authenticate":
+          'Basic realm="Painel Ofertano"',
+        "Cache-Control": "no-store",
+      },
+    }
+  );
 }
 
 export const config = {
@@ -41,5 +45,6 @@ export const config = {
     "/admin/:path*",
     "/api/import-product/v2/:path*",
     "/api/import-queue/:path*",
+    "/api/opportunities/:path*",
   ],
 };
