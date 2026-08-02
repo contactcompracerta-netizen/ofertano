@@ -140,6 +140,9 @@ export default function FilaImportacaoPage() {
   const [retryingId, setRetryingId] =
     useState<string | null>(null);
 
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null);
+
   const [panelError, setPanelError] =
     useState<string | null>(null);
   const [addResult, setAddResult] =
@@ -332,6 +335,53 @@ export default function FilaImportacaoPage() {
       });
     } finally {
       setRetryingId(null);
+    }
+  }
+
+  async function deleteItem(id: string) {
+    const confirmed = window.confirm(
+      "Remover este registro da fila? O produto já importado continuará publicado no site."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingId(id);
+      setActionResult(null);
+
+      const response = await fetch(
+        "/api/import-queue/delete",
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id,
+          }),
+        }
+      );
+
+      const data =
+        (await response.json()) as ActionResponse;
+
+      setActionResult(data);
+
+      if (response.ok && data.success) {
+        await loadQueue();
+      }
+    } catch (error) {
+      console.error(error);
+
+      setActionResult({
+        success: false,
+        error: "Não foi possível remover o item da fila.",
+      });
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -720,13 +770,32 @@ https://meli.la/produto-3`}
                             void retryItem(item.id)
                           }
                           disabled={
-                            retryingId === item.id
+                            retryingId === item.id ||
+                            deletingId === item.id
                           }
                           className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {retryingId === item.id
                             ? "Enviando..."
                             : "Tentar novamente"}
+                        </button>
+                      )}
+
+                      {item.status !== "PROCESSING" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void deleteItem(item.id)
+                          }
+                          disabled={
+                            deletingId === item.id ||
+                            retryingId === item.id
+                          }
+                          className="rounded-xl border border-red-300 bg-white px-4 py-2.5 text-sm font-black text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deletingId === item.id
+                            ? "Removendo..."
+                            : "Remover da fila"}
                         </button>
                       )}
                     </div>
