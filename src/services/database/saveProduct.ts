@@ -17,12 +17,17 @@ function criarSlug(
 }
 
 export async function saveProduct(
-  product: ProductImport
+  product: ProductImport,
+  affiliateLinkOverride?: string | null
 ) {
   const slug = criarSlug(
     product.title,
     product.externalId
   );
+
+  const affiliateLink =
+    affiliateLinkOverride?.trim() ||
+    product.url;
 
   return prisma.$transaction(async (tx) => {
     const saved = await tx.product.upsert({
@@ -40,7 +45,7 @@ export async function saveProduct(
         category:
           product.category ?? "Ofertas",
         store: product.marketplace,
-        affiliateLink: product.url,
+        affiliateLink,
         price: product.price,
         oldPrice: product.oldPrice,
         discount: product.discount,
@@ -65,7 +70,7 @@ export async function saveProduct(
         category:
           product.category ?? "Ofertas",
         store: product.marketplace,
-        affiliateLink: product.url,
+        affiliateLink,
         price: product.price,
         oldPrice: product.oldPrice,
         discount: product.discount,

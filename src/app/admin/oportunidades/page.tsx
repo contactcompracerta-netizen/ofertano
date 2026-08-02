@@ -86,7 +86,7 @@ const statusClasses: Record<OpportunityStatus, string> = {
 
 function formatCurrency(value: number | null) {
   if (value === null) {
-    return "Preço não informado";
+    return "PreÃ§o nÃ£o informado";
   }
 
   return new Intl.NumberFormat("pt-BR", {
@@ -114,6 +114,9 @@ export default function OpportunitiesPage() {
   const [savingId, setSavingId] =
     useState<string | null>(null);
 
+  const [queueingId, setQueueingId] =
+    useState<string | null>(null);
+
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -136,7 +139,7 @@ export default function OpportunitiesPage() {
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "Não foi possível carregar as oportunidades."
+            "NÃ£o foi possÃ­vel carregar as oportunidades."
         );
       }
 
@@ -213,7 +216,7 @@ export default function OpportunitiesPage() {
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "Não foi possível salvar o link."
+            "NÃ£o foi possÃ­vel salvar o link."
         );
       }
 
@@ -231,6 +234,57 @@ export default function OpportunitiesPage() {
       );
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function sendToQueue(
+    opportunity: Opportunity
+  ) {
+    try {
+      setQueueingId(opportunity.id);
+      setError("");
+      setMessage("");
+
+      const response = await fetch(
+        "/api/opportunities/queue",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: opportunity.id,
+          }),
+        }
+      );
+
+      const data = (await response.json()) as {
+        success: boolean;
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Não foi possível enviar o produto para a fila."
+        );
+      }
+
+      setMessage(
+        data.message ||
+          "Oportunidade enviada para a fila."
+      );
+
+      await loadOpportunities();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Erro ao enviar oportunidade para a fila."
+      );
+    } finally {
+      setQueueingId(null);
     }
   }
 
@@ -276,7 +330,7 @@ export default function OpportunitiesPage() {
 
             <p className="mt-2 text-slate-600">
               Analise os produtos e adicione o link
-              oficial de afiliado antes da publicação.
+              oficial de afiliado antes da publicaÃ§Ã£o.
             </p>
           </div>
 
@@ -350,6 +404,9 @@ export default function OpportunitiesPage() {
             const isSaving =
               savingId === opportunity.id;
 
+            const isQueueing =
+              queueingId === opportunity.id;
+
             return (
               <article
                 key={opportunity.id}
@@ -365,7 +422,7 @@ export default function OpportunitiesPage() {
                       />
                     ) : (
                       <span className="px-4 text-center text-sm text-slate-500">
-                        Imagem não disponível
+                        Imagem nÃ£o disponÃ­vel
                       </span>
                     )}
                   </div>
@@ -399,13 +456,13 @@ export default function OpportunitiesPage() {
                     <p className="mt-2 text-sm text-slate-500">
                       {opportunity.categoryName ||
                         opportunity.categoryId ||
-                        "Categoria não informada"}
+                        "Categoria nÃ£o informada"}
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-end gap-4">
                       <div>
                         <p className="text-sm text-slate-500">
-                          Preço atual
+                          PreÃ§o atual
                         </p>
 
                         <p className="text-2xl font-bold text-emerald-600">
@@ -418,7 +475,7 @@ export default function OpportunitiesPage() {
                       {opportunity.oldPrice !== null ? (
                         <div>
                           <p className="text-sm text-slate-500">
-                            Preço anterior
+                            PreÃ§o anterior
                           </p>
 
                           <p className="text-base text-slate-500 line-through">
@@ -479,7 +536,11 @@ export default function OpportunitiesPage() {
                               opportunity
                             )
                           }
-                          disabled={!canEdit || isSaving}
+                          disabled={
+                            !canEdit ||
+                            isSaving ||
+                            isQueueing
+                          }
                           className="rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isSaving
@@ -489,6 +550,27 @@ export default function OpportunitiesPage() {
                               ? "Atualizar link"
                               : "Salvar link"}
                         </button>
+
+                        {opportunity.status ===
+                        "READY_TO_QUEUE" ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void sendToQueue(
+                                opportunity
+                              )
+                            }
+                            disabled={
+                              isQueueing ||
+                              isSaving
+                            }
+                            className="rounded-xl bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isQueueing
+                              ? "Enviando..."
+                              : "Enviar para fila"}
+                          </button>
+                        ) : null}
                       </div>
 
                       {opportunity.errorMessage ? (

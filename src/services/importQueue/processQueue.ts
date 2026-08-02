@@ -34,20 +34,22 @@ export async function processImportQueue(
 ): Promise<QueueProcessResult> {
   const limit = limitarQuantidade(quantidade);
 
-  const pendentes = await prisma.importQueue.findMany({
-    where: {
-      status: "PENDING",
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-    take: limit,
-  });
+  const pendentes =
+    await prisma.importQueue.findMany({
+      where: {
+        status: "PENDING",
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      take: limit,
+    });
 
   if (pendentes.length === 0) {
     return {
       success: true,
-      message: "Não há produtos pendentes na fila.",
+      message:
+        "Não há produtos pendentes na fila.",
       processed: 0,
       imported: 0,
       errors: 0,
@@ -81,19 +83,46 @@ export async function processImportQueue(
       const imported =
         await importarProduto(item.url);
 
-      const saved =
-        await saveProduct(imported);
+      const saved = await saveProduct(
+        imported,
+        item.affiliateLink
+      );
 
-      await prisma.importQueue.update({
-        where: {
-          id: item.id,
-        },
-        data: {
-          status: "SUCCESS",
-          productId: saved.id,
-          errorMessage: null,
-          processedAt: new Date(),
-        },
+      const processedAt = new Date();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.importQueue.update({
+          where: {
+            id: item.id,
+          },
+          data: {
+            status: "SUCCESS",
+            productId: saved.id,
+            errorMessage: null,
+            processedAt,
+          },
+        });
+
+        if (item.opportunityId) {
+          await tx.productOpportunity.updateMany({
+            where: {
+              id: item.opportunityId,
+              status: {
+                in: [
+                  "QUEUED",
+                  "READY_TO_QUEUE",
+                  "ERROR",
+                ],
+              },
+            },
+            data: {
+              status: "PUBLISHED",
+              productId: saved.id,
+              errorMessage: null,
+              publishedAt: processedAt,
+            },
+          });
+        }
       });
 
       results.push({
@@ -109,15 +138,42 @@ export async function processImportQueue(
           ? error.message
           : "Erro desconhecido ao importar.";
 
-      await prisma.importQueue.update({
-        where: {
-          id: item.id,
-        },
-        data: {
-          status: "ERROR",
-          errorMessage: mensagem.slice(0, 2000),
-          processedAt: new Date(),
-        },
+      const processedAt = new Date();
+      const errorMessage = mensagem.slice(0, 2000);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.importQueue.update({
+          where: {
+            id: item.id,
+          },
+          data: {
+            status: "ERROR",
+            errorMessage,
+            processedAt,
+          },
+        });
+
+        if (item.opportunityId) {
+          await tx.productOpportunity.updateMany({
+            where: {
+              id: item.opportunityId,
+              status: {
+                in: [
+                  "QUEUED",
+                  "READY_TO_QUEUE",
+                  "ERROR",
+                ],
+              },
+            },
+            data: {
+              status: "ERROR",
+              attempts: {
+                increment: 1,
+              },
+              errorMessage,
+            },
+          });
+        }
       });
 
       results.push({
