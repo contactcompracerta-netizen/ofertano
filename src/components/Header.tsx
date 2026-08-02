@@ -56,8 +56,8 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-      <div className="mx-auto max-w-7xl px-3 sm:px-4 lg:px-6">
-        <div className="flex h-16 items-center gap-3 lg:gap-4">
+      <div className="mx-auto w-full max-w-[1440px] px-3 sm:px-5 lg:px-8">
+        <div className="flex h-14 items-center gap-3 sm:h-16 lg:h-[72px] lg:gap-5">
           <div
             onClick={fecharPaineis}
             className="flex min-w-0 shrink-0 items-center [&_p]:hidden xl:[&_p]:block"
@@ -93,18 +93,18 @@ export default function Header() {
               type="search"
               autoComplete="off"
               placeholder="Busque por produto, marca ou categoria"
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-28 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-28 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 lg:h-12"
             />
 
             <button
               type="submit"
-              className="absolute right-1 top-1 h-9 rounded-xl bg-[#087A55] px-5 text-sm font-black text-white transition hover:bg-[#066747]"
+              className="absolute right-1 top-1 h-9 rounded-xl bg-[#087A55] px-5 text-sm font-black text-white transition hover:bg-[#066747] lg:h-10"
             >
               Buscar
             </button>
           </form>
 
-          <nav className="hidden items-center gap-1 xl:flex">
+          <nav className="hidden shrink-0 items-center gap-1 xl:flex">
             {linksNavegacao.map((link) => {
               const ativo = linkEstaAtivo(link.href);
 
@@ -128,7 +128,7 @@ export default function Header() {
             href="https://www.instagram.com/ofertano.br/"
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700 lg:flex"
+            className="hidden h-10 shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700 lg:flex"
           >
             <svg
               viewBox="0 0 24 24"
