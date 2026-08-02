@@ -253,6 +253,7 @@ export default function OpportunitiesPage() {
           {
             method: "GET",
             cache: "no-store",
+            credentials: "include",
           }
         );
 
@@ -306,6 +307,7 @@ export default function OpportunitiesPage() {
           {
             method: "GET",
             cache: "no-store",
+            credentials: "include",
           }
         );
 
@@ -389,6 +391,7 @@ export default function OpportunitiesPage() {
         "/api/opportunities/discover",
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type":
               "application/json",
@@ -562,6 +565,7 @@ export default function OpportunitiesPage() {
         "/api/opportunities/batch-publish",
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type":
               "application/json",
@@ -625,6 +629,7 @@ export default function OpportunitiesPage() {
         "/api/opportunities/affiliate",
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type":
               "application/json",
@@ -679,6 +684,7 @@ export default function OpportunitiesPage() {
         "/api/opportunities/queue",
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type":
               "application/json",
