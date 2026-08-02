@@ -54,31 +54,29 @@ export default function ProductCard({ produto }: ProductCardProps) {
     produto.stock <= 5;
 
   return (
-    <article className="group relative overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-[0_22px_55px_rgba(5,150,105,0.13)]">
-      {/* Brilho futurista no hover */}
+    <article className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_5px_18px_rgba(15,23,42,0.06)] transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-[0_18px_45px_rgba(5,150,105,0.13)] sm:rounded-[22px]">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent opacity-0 transition group-hover:opacity-100" />
 
-      {/* Imagem */}
       <Link
         href={`/produto/${produto.id}`}
-        className="relative flex h-52 items-center justify-center overflow-hidden bg-gradient-to-b from-white to-slate-50 p-4 sm:h-56"
+        className="relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-b from-white to-slate-50 p-2 sm:h-48 sm:p-4 lg:h-52"
       >
-        <div className="absolute left-3 top-3 z-10 flex flex-col items-start gap-1.5">
+        <div className="absolute left-1.5 top-1.5 z-10 flex flex-col items-start gap-1 sm:left-3 sm:top-3 sm:gap-1.5">
           {possuiDesconto && (
-            <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white shadow-lg shadow-red-600/20">
+            <span className="rounded-full bg-red-600 px-2 py-1 text-[9px] font-black text-white shadow-lg shadow-red-600/20 sm:px-3 sm:text-xs">
               {produto.discount}% OFF
             </span>
           )}
 
           {produto.featured && (
-            <span className="rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-800">
+            <span className="hidden rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-800 sm:inline-flex">
               Destaque
             </span>
           )}
         </div>
 
         {estoqueBaixo && (
-          <span className="absolute right-3 top-3 z-10 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-orange-700">
+          <span className="absolute right-1.5 top-1.5 z-10 hidden rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-orange-700 sm:inline-flex">
             Últimas unidades
           </span>
         )}
@@ -91,37 +89,30 @@ export default function ProductCard({ produto }: ProductCardProps) {
         />
       </Link>
 
-      {/* Conteúdo */}
-      <div className="border-t border-slate-100 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="truncate text-xs font-black text-emerald-700 sm:text-sm">
+      <div className="flex flex-1 flex-col border-t border-slate-100 p-2.5 sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-[10px] font-black text-emerald-700 sm:text-sm">
             {produto.store}
           </p>
 
           {produto.brand && (
-            <p className="max-w-24 truncate text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+            <p className="hidden max-w-24 truncate text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 sm:block">
               {produto.brand}
             </p>
           )}
         </div>
 
-        <Link
-          href={`/produto/${produto.id}`}
-          className="block"
-        >
-          <h2 className="mt-2 line-clamp-2 min-h-11 text-sm font-extrabold leading-[1.4] text-slate-950 transition group-hover:text-emerald-700 sm:text-[15px]">
+        <Link href={`/produto/${produto.id}`} className="block">
+          <h2 className="mt-1.5 line-clamp-2 min-h-[34px] text-[12px] font-extrabold leading-[1.35] text-slate-950 transition group-hover:text-emerald-700 sm:mt-2 sm:min-h-11 sm:text-[15px] sm:leading-[1.4]">
             {produto.name}
           </h2>
         </Link>
 
         {(possuiAvaliacao || possuiVendas) && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <div className="mt-2 hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:flex">
             {possuiAvaliacao && (
               <div className="flex items-center gap-1">
-                <span
-                  aria-hidden="true"
-                  className="text-amber-500"
-                >
+                <span aria-hidden="true" className="text-amber-500">
                   ★
                 </span>
 
@@ -147,20 +138,19 @@ export default function ProductCard({ produto }: ProductCardProps) {
           </div>
         )}
 
-        {/* Preço sem mt-auto */}
-        <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="mt-auto border-t border-slate-100 pt-2 sm:mt-3 sm:pt-3">
           {possuiPrecoAnterior && produto.oldPrice !== null && (
-            <p className="text-xs font-medium text-slate-400 line-through">
+            <p className="text-[9px] font-medium text-slate-400 line-through sm:text-xs">
               {formatarPreco(produto.oldPrice)}
             </p>
           )}
 
-          <div className="mt-0.5 flex items-end justify-between gap-2">
-            <p className="text-[22px] font-black tracking-[-0.03em] text-emerald-700">
+          <div className="mt-0.5 flex items-end justify-between gap-1">
+            <p className="truncate text-[17px] font-black tracking-[-0.03em] text-emerald-700 sm:text-[22px]">
               {formatarPreco(produto.price)}
             </p>
 
-            <span className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white">
+            <span className="mb-0.5 hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white sm:flex">
               <svg
                 viewBox="0 0 24 24"
                 aria-hidden="true"
@@ -178,21 +168,22 @@ export default function ProductCard({ produto }: ProductCardProps) {
           </div>
 
           {produto.installments && (
-            <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">
+            <p className="mt-0.5 hidden line-clamp-1 text-xs font-semibold text-slate-500 sm:block">
               {produto.installments}
             </p>
           )}
 
           <Link
             href={`/produto/${produto.id}`}
-            className="mt-3 flex h-11 items-center justify-center gap-2 rounded-xl bg-[#087A55] px-4 text-sm font-black text-white shadow-md shadow-emerald-900/10 transition hover:bg-[#066747] hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-200"
+            className="mt-2 flex h-9 items-center justify-center gap-1 rounded-lg bg-[#087A55] px-2 text-[11px] font-black text-white shadow-sm shadow-emerald-900/10 transition hover:bg-[#066747] focus:outline-none focus:ring-4 focus:ring-emerald-200 sm:mt-3 sm:h-11 sm:gap-2 sm:rounded-xl sm:px-4 sm:text-sm"
           >
-            Comparar oferta
+            <span className="sm:hidden">Comparar</span>
+            <span className="hidden sm:inline">Comparar oferta</span>
 
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"
-              className="h-4 w-4"
+              className="hidden h-4 w-4 sm:block"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -206,7 +197,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
             </svg>
           </Link>
 
-          <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-slate-400">
+          <div className="mt-2 hidden items-center justify-center gap-1.5 text-[10px] font-semibold text-slate-400 sm:flex">
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"

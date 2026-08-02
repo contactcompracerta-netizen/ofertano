@@ -9,6 +9,13 @@ type Produto = {
   oldPrice: number | null;
   discount: number | null;
   store: string;
+  brand?: string | null;
+  installments?: string | null;
+  rating?: number | null;
+  reviews?: number | null;
+  sales?: number | null;
+  stock?: number | null;
+  featured?: boolean;
 };
 
 type OffersSectionProps = {
@@ -25,35 +32,35 @@ export default function OffersSection({
   return (
     <section
       id="ofertas"
-      className="mx-auto max-w-7xl scroll-mt-24 px-4 py-16"
+      className="mx-auto w-full max-w-[1440px] scroll-mt-20 px-2.5 py-4 sm:px-5 sm:py-8 lg:px-8 lg:py-10"
     >
-      <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div>
-          <span className="text-sm font-black uppercase tracking-widest text-green-700">
+      <div className="mb-3 flex items-end justify-between gap-3 sm:mb-6">
+        <div className="min-w-0">
+          <span className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 sm:text-xs">
             {possuiBusca
               ? "Resultado da pesquisa"
               : "Produtos selecionados"}
           </span>
 
-          <h2 className="mt-2 text-3xl font-black tracking-tight text-gray-900 sm:text-4xl">
+          <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
             {possuiBusca
               ? `Resultados para “${busca}”`
               : "Ofertas recentes"}
           </h2>
 
-          <p className="mt-3 max-w-2xl text-gray-600">
+          <p className="mt-1 text-xs text-slate-600 sm:mt-2 sm:text-base">
             {possuiBusca
               ? `${produtos.length} produto${
                   produtos.length === 1 ? "" : "s"
                 } encontrado${produtos.length === 1 ? "" : "s"}.`
-              : "Confira os últimos produtos adicionados ao Ofertano."}
+              : "Confira os últimos produtos adicionados."}
           </p>
         </div>
 
         {possuiBusca ? (
           <Link
             href="/"
-            className="font-bold text-green-700 transition hover:text-green-900"
+            className="hidden shrink-0 text-sm font-bold text-emerald-700 transition hover:text-emerald-900 sm:block"
           >
             Limpar pesquisa
           </Link>
@@ -61,50 +68,41 @@ export default function OffersSection({
           produtos.length > 0 && (
             <Link
               href="/ofertas"
-              className="font-bold text-green-700 transition hover:text-green-900"
+              className="hidden shrink-0 text-sm font-bold text-emerald-700 transition hover:text-emerald-900 sm:block"
             >
-              Ver todas as ofertas →
+              Ver todas →
             </Link>
           )
         )}
       </div>
 
       {produtos.length === 0 ? (
-        <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-sm">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl sm:h-16 sm:w-16">
             🔍
           </div>
 
-          <h3 className="mt-6 text-2xl font-black text-gray-900">
+          <h3 className="mt-5 text-xl font-black text-slate-900 sm:text-2xl">
             {possuiBusca
               ? "Nenhum produto encontrado"
               : "Nenhum produto cadastrado"}
           </h3>
 
-          <p className="mx-auto mt-3 max-w-lg text-gray-600">
+          <p className="mx-auto mt-3 max-w-lg text-sm text-slate-600 sm:text-base">
             {possuiBusca
               ? `Não encontramos produtos relacionados a “${busca}”. Tente pesquisar usando outro termo.`
               : "Importe o primeiro produto pelo painel administrativo para começar a exibir ofertas."}
           </p>
 
-          {possuiBusca ? (
-            <Link
-              href="/"
-              className="mt-7 inline-flex rounded-xl bg-green-600 px-7 py-4 font-black text-white transition hover:bg-green-700"
-            >
-              Ver todas as ofertas
-            </Link>
-          ) : (
-            <Link
-              href="/admin"
-              className="mt-7 inline-flex rounded-xl bg-green-600 px-7 py-4 font-black text-white transition hover:bg-green-700"
-            >
-              Cadastrar produto
-            </Link>
-          )}
+          <Link
+            href={possuiBusca ? "/" : "/admin"}
+            className="mt-6 inline-flex rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
+          >
+            {possuiBusca ? "Ver todas as ofertas" : "Cadastrar produto"}
+          </Link>
         </div>
       ) : (
-        <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 lg:gap-5 xl:grid-cols-4 2xl:grid-cols-5">
           {produtos.map((produto) => (
             <ProductCard
               key={produto.id}
