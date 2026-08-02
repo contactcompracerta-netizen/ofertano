@@ -68,6 +68,19 @@ type BatchPublishResponse = {
   };
 };
 
+type DiscoverResponse = {
+  success: boolean;
+  message?: string;
+  error?: string;
+  categoryId?: string;
+  categoryName?: string;
+  requested?: number;
+  scanned?: number;
+  eligible?: number;
+  added?: number;
+  ignored?: number;
+};
+
 const initialSummary: OpportunitySummary = {
   total: 0,
   waitingAffiliate: 0,
@@ -154,6 +167,15 @@ export default function OpportunitiesPage() {
 
   const [batchLinks, setBatchLinks] =
     useState("");
+
+  const [categoryId, setCategoryId] =
+    useState("MLB1055");
+
+  const [quantity, setQuantity] =
+    useState(5);
+
+  const [discovering, setDiscovering] =
+    useState(false);
 
   const [loading, setLoading] =
     useState(true);
@@ -254,6 +276,76 @@ export default function OpportunitiesPage() {
   useEffect(() => {
     void loadOpportunities();
   }, [loadOpportunities]);
+
+  async function discoverOpportunities() {
+    const normalizedCategoryId =
+      categoryId.trim().toUpperCase();
+
+    if (!/^MLB\d+$/.test(normalizedCategoryId)) {
+      setError(
+        "Informe uma categoria válida no formato MLB seguido de números."
+      );
+      return;
+    }
+
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > 10
+    ) {
+      setError(
+        "A quantidade deve estar entre 1 e 10."
+      );
+      return;
+    }
+
+    try {
+      setDiscovering(true);
+      setError("");
+      setMessage("");
+
+      const response = await fetch(
+        "/api/opportunities/discover",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            categoryId:
+              normalizedCategoryId,
+            quantity,
+          }),
+        }
+      );
+
+      const data =
+        (await response.json()) as DiscoverResponse;
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Não foi possível descobrir novas oportunidades."
+        );
+      }
+
+      setMessage(
+        data.message ||
+          `${data.added ?? 0} oportunidade(s) nova(s) encontrada(s).`
+      );
+
+      await loadOpportunities();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Erro ao descobrir oportunidades."
+      );
+    } finally {
+      setDiscovering(false);
+    }
+  }
 
   async function copiarUrlsPendentes() {
     if (
@@ -607,6 +699,92 @@ export default function OpportunitiesPage() {
               : "Atualizar lista"}
           </button>
         </div>
+
+        <section className="mb-8 rounded-3xl border border-blue-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <p className="text-sm font-black uppercase tracking-[0.12em] text-blue-700">
+              Descoberta automática
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-slate-950">
+              Descobrir oportunidades
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Informe a categoria do Mercado Livre e escolha quantos produtos deseja buscar.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[1fr_180px_auto] md:items-end">
+            <div>
+              <label
+                htmlFor="category-id"
+                className="mb-2 block text-sm font-bold text-slate-900"
+              >
+                Categoria do Mercado Livre
+              </label>
+
+              <input
+                id="category-id"
+                type="text"
+                value={categoryId}
+                onChange={(event) =>
+                  setCategoryId(
+                    event.target.value.toUpperCase()
+                  )
+                }
+                placeholder="Exemplo: MLB1055"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="quantity"
+                className="mb-2 block text-sm font-bold text-slate-900"
+              >
+                Quantidade
+              </label>
+
+              <select
+                id="quantity"
+                value={quantity}
+                onChange={(event) =>
+                  setQuantity(
+                    Number(event.target.value)
+                  )
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
+                  (value) => (
+                    <option
+                      key={value}
+                      value={value}
+                    >
+                      {value}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                void discoverOpportunities()
+              }
+              disabled={
+                discovering || loading
+              }
+              className="rounded-xl bg-blue-600 px-6 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {discovering
+                ? "Descobrindo..."
+                : "Descobrir oportunidades"}
+            </button>
+          </div>
+        </section>
 
         <section className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           {summaryCards.map((card) => (
