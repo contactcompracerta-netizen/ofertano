@@ -1,14 +1,18 @@
 export default function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-slate-200 bg-[#F7FAF9]">
+      {/* Efeitos decorativos */}
       <div className="pointer-events-none absolute -left-24 top-0 h-64 w-64 rounded-full bg-emerald-200/35 blur-3xl" />
+
       <div className="pointer-events-none absolute -right-24 top-0 h-72 w-72 rounded-full bg-teal-200/35 blur-3xl" />
 
       <div className="relative mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:grid lg:grid-cols-[1fr_430px] lg:items-center lg:gap-12 lg:py-12">
+        {/* Coluna esquerda */}
         <div className="max-w-2xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1.5 shadow-sm backdrop-blur">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-600" />
             </span>
 
@@ -19,6 +23,7 @@ export default function Hero() {
 
           <h1 className="mt-4 text-3xl font-black leading-[1.02] tracking-[-0.04em] text-slate-950 sm:text-5xl lg:text-6xl">
             Compare antes.
+
             <span className="block bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-500 bg-clip-text text-transparent">
               Economize melhor.
             </span>
@@ -28,8 +33,79 @@ export default function Hero() {
             Pesquise produtos, encontre ofertas e descubra onde comprar com
             mais segurança.
           </p>
+
+          {/* Pesquisa principal — computador e tablet */}
+          <form
+            action="/"
+            method="GET"
+            className="mt-6 hidden max-w-2xl rounded-[18px] border border-slate-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.12)] md:block"
+          >
+            <label
+              htmlFor="busca-hero"
+              className="sr-only"
+            >
+              Pesquisar produtos
+            </label>
+
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="7"
+                  />
+
+                  <path d="M16.5 16.5L21 21" />
+                </svg>
+
+                <input
+                  id="busca-hero"
+                  name="q"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Busque por produto, marca ou categoria"
+                  className="h-12 w-full rounded-xl bg-slate-50 pl-12 pr-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#087A55] px-6 text-sm font-black text-white shadow-lg shadow-emerald-800/20 transition hover:bg-[#066747]"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="7"
+                  />
+
+                  <path d="M16.5 16.5L21 21" />
+                </svg>
+
+                Comparar agora
+              </button>
+            </div>
+          </form>
         </div>
 
+        {/* Comparador visual — apenas computador */}
         <div className="relative hidden lg:block">
           <div className="absolute -inset-3 rounded-[30px] bg-gradient-to-br from-emerald-300/45 via-teal-200/25 to-transparent blur-2xl" />
 
@@ -63,7 +139,14 @@ export default function Hero() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <rect x="4" y="4" width="56" height="35" rx="4" />
+                    <rect
+                      x="4"
+                      y="4"
+                      width="56"
+                      height="35"
+                      rx="4"
+                    />
+
                     <path d="M24 44H40" />
                     <path d="M32 39V44" />
                     <path d="M10 10H54V33H10Z" />
@@ -81,7 +164,10 @@ export default function Hero() {
 
                   <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-500">
                     <span>★★★★★</span>
-                    <span className="text-slate-500">4,8</span>
+
+                    <span className="text-slate-500">
+                      4,8
+                    </span>
                   </div>
                 </div>
               </div>
@@ -122,14 +208,20 @@ export default function Hero() {
 
               <div className="mt-2.5 grid grid-cols-2 gap-2.5">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-black text-slate-700">Amazon</p>
+                  <p className="text-xs font-black text-slate-700">
+                    Amazon
+                  </p>
+
                   <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
                     Em breve
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-black text-slate-700">Shopee</p>
+                  <p className="text-xs font-black text-slate-700">
+                    Shopee
+                  </p>
+
                   <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
                     Em breve
                   </p>
