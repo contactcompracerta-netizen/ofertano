@@ -72,7 +72,7 @@ export default async function HomePage({
     },
 
     orderBy: {
-      createdAt: "desc",
+      updatedAt: "desc",
     },
   });
 
@@ -107,12 +107,12 @@ export default async function HomePage({
 
     categoriasMap.set(
       categoria,
-      (categoriasMap.get(categoria) || 0) + 1,
+      (categoriasMap.get(categoria) || 0) + 1
     );
   });
 
   const categorias: CategoriaContagem[] = Array.from(
-    categoriasMap.entries(),
+    categoriasMap.entries()
   )
     .map(([nome, quantidade]) => ({
       nome,

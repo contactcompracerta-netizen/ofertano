@@ -1,247 +1,367 @@
+import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
+export const metadata = {
+  title: "Termos de Uso | Ofertano",
+  description:
+    "Consulte os Termos de Uso do Ofertano e entenda como funciona nossa plataforma de comparação de preços e ofertas.",
+};
 
 export default function TermosPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <Header />
 
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-16">
-          <p className="text-sm font-black uppercase tracking-widest text-green-700">
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-5xl px-4 py-14 sm:py-16">
+          <span className="text-sm font-black uppercase tracking-[0.14em] text-emerald-700">
             Informações legais
-          </p>
+          </span>
 
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
             Termos de Uso
           </h1>
 
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">
-            Estes termos estabelecem as condições para utilização do Ofertano,
-            incluindo o acesso a produtos, ofertas, links e conteúdos
-            disponibilizados na plataforma.
+          <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">
+            Estes Termos de Uso estabelecem as regras para acesso e
+            utilização do Ofertano, uma plataforma de comparação de
+            preços e divulgação de ofertas de lojas parceiras.
           </p>
 
-          <p className="mt-4 text-sm font-semibold text-gray-500">
-            Última atualização: 1º de agosto de 2026
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            Última atualização: 2 de agosto de 2026.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-4 py-16">
-        <div className="space-y-8 rounded-3xl border border-gray-200 bg-white p-7 shadow-sm sm:p-10">
-          <section>
-            <h2 className="text-2xl font-black text-gray-900">
+      <section className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
+        <div className="space-y-8">
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
               1. Aceitação dos termos
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Ao acessar ou utilizar o Ofertano, o usuário declara que leu,
-              compreendeu e concorda com estes Termos de Uso e com a Política de
-              Privacidade da plataforma.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                Ao acessar ou utilizar o Ofertano, você declara que
+                leu, compreendeu e concorda com estes Termos de Uso.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Caso não concorde com alguma condição, o usuário deverá
-              interromper o uso do site.
-            </p>
-          </section>
+              <p>
+                Caso não concorde com alguma condição apresentada
+                nesta página, não utilize os serviços disponibilizados
+                pelo Ofertano.
+              </p>
+            </div>
+          </article>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              2. Finalidade do Ofertano
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              2. Sobre o Ofertano
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano é uma plataforma de descoberta, organização e
-              comparação de ofertas disponibilizadas por lojas e marketplaces
-              parceiros.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                O Ofertano é uma plataforma informativa que organiza
+                produtos, preços, descontos e ofertas divulgadas por
+                marketplaces e lojas parceiras.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              A plataforma poderá apresentar preços, descontos, imagens,
-              descrições, avaliações, condições de parcelamento e outras
-              informações relacionadas aos produtos.
-            </p>
-          </section>
+              <p>
+                O objetivo da plataforma é ajudar o usuário a comparar
+                informações antes de realizar uma compra.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              3. O Ofertano não realiza vendas
-            </h2>
+              <p>
+                O Ofertano não fabrica, armazena, vende, entrega ou
+                garante os produtos apresentados no site.
+              </p>
+            </div>
+          </article>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano não fabrica, armazena, comercializa, envia ou entrega
-              produtos.
-            </p>
+          <article className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm sm:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
+                🛡️
+              </div>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O pagamento, a confirmação do pedido, a entrega, a troca, a
-              devolução, a garantia e o atendimento pós-venda são realizados
-              diretamente pela loja ou marketplace responsável pela oferta.
-            </p>
-          </section>
+              <div>
+                <h2 className="text-2xl font-black text-slate-950">
+                  3. O Ofertano não realiza vendas
+                </h2>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
+                <div className="mt-4 space-y-4 text-sm leading-7 text-slate-700 sm:text-base">
+                  <p>
+                    Todas as compras são concluídas diretamente nos
+                    sites ou aplicativos das lojas parceiras, como
+                    Mercado Livre, Amazon e Shopee.
+                  </p>
+
+                  <p>
+                    O Ofertano não recebe pagamentos, não solicita
+                    transferências, não processa cartões e não realiza
+                    cobranças por WhatsApp, redes sociais ou outros
+                    canais.
+                  </p>
+
+                  <p>
+                    Pagamento, entrega, troca, devolução, garantia,
+                    atendimento e suporte são de responsabilidade da
+                    loja onde a compra foi efetivamente realizada.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
               4. Preços e disponibilidade
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Os preços, descontos, estoques, prazos de entrega, condições de
-              parcelamento e demais informações poderão ser alterados pelas
-              lojas parceiras a qualquer momento.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                Os preços, descontos, condições de pagamento,
+                disponibilidade de estoque, frete e prazo de entrega
+                podem ser alterados pelas lojas parceiras a qualquer
+                momento.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O usuário deverá confirmar todas as condições diretamente na
-              página oficial da loja antes de concluir a compra.
-            </p>
-          </section>
+              <p>
+                Embora o Ofertano busque manter as informações
+                atualizadas, podem existir diferenças entre os dados
+                exibidos na plataforma e os dados apresentados pela
+                loja no momento da compra.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              5. Links externos
+              <p>
+                O preço válido será sempre aquele informado pela loja
+                parceira antes da conclusão do pedido.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              5. Links de afiliados
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano poderá direcionar o usuário para sites, aplicativos e
-              páginas de terceiros.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                Alguns links disponibilizados no Ofertano podem ser
+                links de afiliados.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O acesso a esses ambientes estará sujeito aos termos, políticas,
-              práticas de segurança e regras da respectiva loja ou serviço.
-            </p>
-          </section>
+              <p>
+                Isso significa que o Ofertano poderá receber uma
+                comissão quando o usuário acessar uma loja parceira e
+                realizar uma compra elegível.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              6. Links de afiliados
+              <p>
+                O uso de links de afiliados não gera cobrança adicional
+                ao usuário e não altera o preço definido pela loja.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              6. Responsabilidades do usuário
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Alguns links exibidos no Ofertano poderão ser links de afiliados.
-              Quando o usuário realiza uma compra por meio desses links, o
-              Ofertano poderá receber uma comissão.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>Ao utilizar o Ofertano, o usuário concorda em:</p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Essa comissão não representa cobrança adicional ao usuário e não
-              altera o preço definido pela loja parceira.
-            </p>
-          </section>
+              <ul className="list-disc space-y-2 pl-6">
+                <li>
+                  Verificar o preço e as condições diretamente na loja
+                  antes de finalizar a compra.
+                </li>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              7. Uso adequado da plataforma
+                <li>
+                  Conferir a reputação do vendedor, prazo de entrega,
+                  garantia e política de devolução.
+                </li>
+
+                <li>
+                  Não utilizar a plataforma para atividades ilegais,
+                  fraudulentas ou que prejudiquem terceiros.
+                </li>
+
+                <li>
+                  Não tentar invadir, prejudicar, sobrecarregar ou
+                  interferir no funcionamento do site.
+                </li>
+
+                <li>
+                  Manter seus dispositivos e dados de acesso
+                  protegidos.
+                </li>
+              </ul>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              7. Conteúdo e propriedade intelectual
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Ao utilizar o Ofertano, o usuário concorda em não:
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                A marca Ofertano, o layout, os textos institucionais, a
+                identidade visual e os elementos próprios da
+                plataforma são protegidos pela legislação aplicável.
+              </p>
 
-            <ul className="mt-4 list-disc space-y-3 pl-6 leading-7 text-gray-600">
-              <li>utilizar o site para atividades ilegais ou fraudulentas;</li>
-              <li>tentar acessar áreas restritas ou sistemas internos;</li>
-              <li>interferir no funcionamento, na segurança ou no desempenho;</li>
-              <li>copiar ou explorar conteúdo de forma não autorizada;</li>
-              <li>distribuir códigos maliciosos ou realizar ataques;</li>
-              <li>fornecer informações falsas em formulários.</li>
-            </ul>
-          </section>
+              <p>
+                Marcas, nomes, imagens, descrições e informações de
+                produtos pertencem aos respectivos fabricantes,
+                vendedores ou marketplaces.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              8. Conteúdo da plataforma
+              <p>
+                É proibida a reprodução, cópia, distribuição ou
+                exploração comercial do conteúdo próprio do Ofertano
+                sem autorização prévia.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              8. Sites de terceiros
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Textos, identidade visual, organização, componentes, marca e
-              demais elementos próprios do Ofertano não poderão ser
-              reproduzidos ou utilizados indevidamente.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                O Ofertano possui links que direcionam o usuário para
+                páginas externas administradas por terceiros.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Imagens, marcas, nomes e descrições de produtos poderão pertencer
-              aos respectivos fabricantes, vendedores ou marketplaces.
-            </p>
-          </section>
+              <p>
+                Após acessar uma loja parceira, o usuário estará sujeito
+                aos termos de uso, políticas de privacidade, regras de
+                pagamento e demais condições daquela empresa.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
+              <p>
+                O Ofertano não controla e não se responsabiliza pelo
+                funcionamento, conteúdo, segurança ou práticas dos
+                sites externos.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
               9. Limitação de responsabilidade
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano busca apresentar informações úteis e atualizadas, mas
-              não garante que todos os dados estejam permanentemente corretos,
-              completos ou disponíveis.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                O Ofertano não se responsabiliza por prejuízos causados
+                por alterações de preço, indisponibilidade de produtos,
+                cancelamentos, atrasos, defeitos, fraudes de terceiros
+                ou problemas ocorridos durante uma compra externa.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano não se responsabiliza por alterações de preços,
-              cancelamentos, indisponibilidade de estoque, atrasos, defeitos,
-              falhas de entrega ou problemas ocorridos no ambiente das lojas
-              parceiras.
-            </p>
-          </section>
+              <p>
+                A decisão de compra é de responsabilidade exclusiva do
+                usuário.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              10. Segurança
+              <p>
+                O usuário deve sempre verificar todas as informações na
+                página oficial da loja antes de efetuar o pagamento.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              10. Privacidade e dados pessoais
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano não solicita pagamentos por Pix, depósito,
-              transferência bancária, WhatsApp, Instagram, Facebook ou outros
-              canais externos.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                O tratamento de dados pessoais e o uso de cookies são
+                descritos na Política de Privacidade do Ofertano.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O usuário deverá concluir a compra apenas no site ou aplicativo
-              oficial da loja parceira.
-            </p>
-          </section>
+              <Link
+                href="/politica-de-privacidade"
+                className="inline-flex font-black text-emerald-700 transition hover:text-emerald-900"
+              >
+                Consultar a Política de Privacidade →
+              </Link>
+            </div>
+          </article>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              11. Suspensão ou alteração de recursos
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              11. Alterações nos termos
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              O Ofertano poderá modificar, suspender ou descontinuar recursos,
-              páginas, produtos, ofertas ou funcionalidades sem aviso prévio,
-              quando necessário.
-            </p>
-          </section>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                Estes Termos de Uso poderão ser atualizados sempre que
+                necessário para refletir mudanças na plataforma, nos
+                serviços ou na legislação.
+              </p>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              12. Alterações nos termos
+              <p>
+                A versão atualizada será publicada nesta página com a
+                respectiva data de revisão.
+              </p>
+
+              <p>
+                A continuidade do uso da plataforma após uma alteração
+                representa a aceitação das novas condições.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-black text-slate-950">
+              12. Contato
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Estes termos poderão ser atualizados para refletir mudanças na
-              plataforma, nos serviços utilizados ou na legislação aplicável.
-            </p>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+              <p>
+                Dúvidas relacionadas a estes Termos de Uso poderão ser
+                enviadas pela página de contato.
+              </p>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              A versão mais recente permanecerá disponível nesta página com a
-              respectiva data de atualização.
-            </p>
-          </section>
+              <Link
+                href="/contato"
+                className="inline-flex rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-4 focus:ring-emerald-200"
+              >
+                Entrar em contato
+              </Link>
+            </div>
+          </article>
+        </div>
 
-          <section className="border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-black text-gray-900">
-              13. Contato
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-slate-950 p-6 text-center sm:flex-row sm:text-left">
+          <div>
+            <h2 className="text-xl font-black text-white">
+              Continue comparando com segurança
             </h2>
 
-            <p className="mt-4 leading-7 text-gray-600">
-              Dúvidas relacionadas a estes Termos de Uso poderão ser enviadas
-              por meio da página de contato do Ofertano.
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Consulte as ofertas e finalize suas compras somente nas
+              lojas parceiras.
             </p>
-          </section>
+          </div>
+
+          <Link
+            href="/ofertas"
+            className="inline-flex shrink-0 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-400"
+          >
+            Ver ofertas
+          </Link>
         </div>
       </section>
 
