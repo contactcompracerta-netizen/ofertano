@@ -81,7 +81,11 @@ function limitQuantity(value: number): number {
 function shuffle<T>(items: T[]): T[] {
   const result = [...items];
 
-  for (let index = result.length - 1; index > 0; index -= 1) {
+  for (
+    let index = result.length - 1;
+    index > 0;
+    index -= 1
+  ) {
     const randomIndex = Math.floor(
       Math.random() * (index + 1)
     );
@@ -149,6 +153,34 @@ function getProductImage(
   );
 }
 
+function getDefaultAffiliateLink(): string {
+  const affiliateLink =
+    process.env.DEFAULT_ML_AFFILIATE_LINK?.trim();
+
+  if (!affiliateLink) {
+    throw new Error(
+      "A variável DEFAULT_ML_AFFILIATE_LINK não está configurada."
+    );
+  }
+
+  try {
+    const url = new URL(affiliateLink);
+
+    if (
+      url.protocol !== "http:" &&
+      url.protocol !== "https:"
+    ) {
+      throw new Error();
+    }
+
+    return url.toString();
+  } catch {
+    throw new Error(
+      "A variável DEFAULT_ML_AFFILIATE_LINK possui um link inválido."
+    );
+  }
+}
+
 async function resolveCandidate(
   highlight: HighlightEntry,
   categoryId: string,
@@ -162,15 +194,16 @@ async function resolveCandidate(
   }
 
   try {
-    const [catalog, catalogItems] = await Promise.all([
-      mercadoLivreFetch(
-        `/products/${highlight.id}`
-      ) as Promise<CatalogProduct>,
+    const [catalog, catalogItems] =
+      await Promise.all([
+        mercadoLivreFetch(
+          `/products/${highlight.id}`
+        ) as Promise<CatalogProduct>,
 
-      mercadoLivreFetch(
-        `/products/${highlight.id}/items`
-      ) as Promise<CatalogItemsResponse>,
-    ]);
+        mercadoLivreFetch(
+          `/products/${highlight.id}/items`
+        ) as Promise<CatalogItemsResponse>,
+      ]);
 
     const offer = chooseDiscountedOffer(
       catalogItems.results ?? []
@@ -205,7 +238,10 @@ async function resolveCandidate(
         offer.permalink ||
         `https://www.mercadolivre.com.br/p/${highlight.id}`,
       title,
-      image: getProductImage(catalog, offer),
+      image: getProductImage(
+        catalog,
+        offer
+      ),
       categoryId:
         offer.category_id || categoryId,
       categoryName,
@@ -230,17 +266,22 @@ export async function discoverMercadoLivreOpportunities(
   const categoryId =
     rawCategoryId.trim().toUpperCase();
 
-  const quantity = limitQuantity(rawQuantity);
+  const quantity =
+    limitQuantity(rawQuantity);
 
-  const [highlights, category] = await Promise.all([
-    mercadoLivreFetch(
-      `/highlights/MLB/category/${categoryId}`
-    ) as Promise<HighlightsResponse>,
+  const affiliateLink =
+    getDefaultAffiliateLink();
 
-    mercadoLivreFetch(
-      `/categories/${categoryId}`
-    ) as Promise<CategoryResponse>,
-  ]);
+  const [highlights, category] =
+    await Promise.all([
+      mercadoLivreFetch(
+        `/highlights/MLB/category/${categoryId}`
+      ) as Promise<HighlightsResponse>,
+
+      mercadoLivreFetch(
+        `/categories/${categoryId}`
+      ) as Promise<CategoryResponse>,
+    ]);
 
   const categoryName =
     category.name?.trim() || categoryId;
@@ -253,7 +294,9 @@ export async function discoverMercadoLivreOpportunities(
     )
   );
 
-  const opportunities: OpportunityCandidate[] = [];
+  const opportunities: OpportunityCandidate[] =
+    [];
+
   let scanned = 0;
 
   for (
@@ -262,10 +305,11 @@ export async function discoverMercadoLivreOpportunities(
     opportunities.length < quantity;
     index += 4
   ) {
-    const batch = productHighlights.slice(
-      index,
-      index + 4
-    );
+    const batch =
+      productHighlights.slice(
+        index,
+        index + 4
+      );
 
     scanned += batch.length;
 
@@ -292,18 +336,28 @@ export async function discoverMercadoLivreOpportunities(
   const creation =
     opportunities.length > 0
       ? await prisma.productOpportunity.createMany({
-          data: opportunities.map((opportunity) => ({
-            externalId: opportunity.externalId,
-            sourceType: "PRODUCT",
-            sourceUrl: opportunity.sourceUrl,
-            title: opportunity.title,
-            image: opportunity.image,
-            categoryId: opportunity.categoryId,
-            categoryName: opportunity.categoryName,
-            price: opportunity.price,
-            oldPrice: opportunity.oldPrice,
-            discount: opportunity.discount,
-          })),
+          data: opportunities.map(
+            (opportunity) => ({
+              externalId:
+                opportunity.externalId,
+              sourceType: "PRODUCT",
+              sourceUrl:
+                opportunity.sourceUrl,
+              title: opportunity.title,
+              image: opportunity.image,
+              categoryId:
+                opportunity.categoryId,
+              categoryName:
+                opportunity.categoryName,
+              price: opportunity.price,
+              oldPrice:
+                opportunity.oldPrice,
+              discount:
+                opportunity.discount,
+              affiliateLink,
+              status: "READY_TO_QUEUE",
+            })
+          ),
           skipDuplicates: true,
         })
       : {
@@ -315,9 +369,11 @@ export async function discoverMercadoLivreOpportunities(
     categoryName,
     requested: quantity,
     scanned,
-    eligible: opportunities.length,
+    eligible:
+      opportunities.length,
     added: creation.count,
     ignored:
-      opportunities.length - creation.count,
+      opportunities.length -
+      creation.count,
   };
 }

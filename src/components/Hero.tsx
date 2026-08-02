@@ -14,7 +14,7 @@ export default function Hero({ busca }: HeroProps) {
 
       <div className="pointer-events-none absolute bottom-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-green-100/60 blur-3xl" />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-14 sm:py-16 lg:py-20">
+      <div className="relative mx-auto max-w-7xl px-4 pb-10 pt-6 sm:py-14 lg:py-20">
         <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr]">
           {/* Conteúdo principal */}
           <div>
@@ -47,7 +47,7 @@ export default function Hero({ busca }: HeroProps) {
             <form
               action="/"
               method="GET"
-              className="mt-8 max-w-2xl rounded-[22px] border border-slate-200 bg-white p-2 shadow-[0_24px_70px_rgba(15,23,42,0.12)]"
+              className="mt-6 max-w-2xl rounded-[18px] sm:mt-8 sm:rounded-[22px] border border-slate-200 bg-white p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.12)]"
             >
               <label
                 htmlFor="busca-hero"
@@ -56,7 +56,7 @@ export default function Hero({ busca }: HeroProps) {
                 Pesquisar produtos
               </label>
 
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:gap-2">
                 <div className="relative min-w-0 flex-1">
                   <svg
                     viewBox="0 0 24 24"
@@ -83,13 +83,13 @@ export default function Hero({ busca }: HeroProps) {
                     defaultValue={busca}
                     autoComplete="off"
                     placeholder="Ex.: Smart TV, celular ou ferramenta"
-                    className="h-14 w-full rounded-2xl bg-slate-50 pl-12 pr-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 sm:text-base"
+                    className="h-12 w-full rounded-xl bg-slate-50 sm:h-14 sm:rounded-2xl pl-12 pr-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 sm:text-base"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#087A55] px-7 text-sm font-black text-white shadow-lg shadow-emerald-800/20 transition hover:-translate-y-0.5 hover:bg-[#066747] hover:shadow-xl active:translate-y-0 sm:text-base"
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl sm:h-14 sm:rounded-2xl bg-[#087A55] px-7 text-sm font-black text-white shadow-lg shadow-emerald-800/20 transition hover:-translate-y-0.5 hover:bg-[#066747] hover:shadow-xl active:translate-y-0 sm:text-base"
                 >
                   <svg
                     viewBox="0 0 24 24"

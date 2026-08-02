@@ -60,7 +60,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50">
-      {/* Barra superior compacta */}
+      {/* Barra superior */}
       <div className="border-b border-emerald-900 bg-[#043B2C] text-white">
         <div className="mx-auto flex h-8 max-w-7xl items-center justify-center px-3 sm:justify-between sm:px-4">
           <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold sm:text-xs">
@@ -106,9 +106,9 @@ export default function Header() {
       </div>
 
       {/* Cabeçalho principal */}
-      <div className="border-b border-slate-200/80 bg-white/95 shadow-[0_8px_25px_rgba(15,23,42,0.05)] backdrop-blur-xl">
+      <div className="border-b border-slate-200/80 bg-white/95 shadow-[0_6px_20px_rgba(15,23,42,0.05)] backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-3 sm:px-4">
-          {/* Linha da logo */}
+          {/* Logo, busca desktop e menu */}
           <div className="flex h-16 items-center gap-3 lg:gap-5">
             <div
               onClick={fecharMenu}
@@ -224,7 +224,7 @@ export default function Header() {
               Instagram
             </a>
 
-            {/* Menu mobile */}
+            {/* Botão menu mobile */}
             <button
               type="button"
               onClick={() => setMenuAberto((estado) => !estado)}
@@ -264,11 +264,11 @@ export default function Header() {
             </button>
           </div>
 
-          {/* Busca mobile compacta */}
+          {/* Busca mobile */}
           <form
             action="/"
             method="GET"
-            className="-mt-1 pb-3 md:hidden"
+            className="-mt-1 pb-2 md:hidden"
           >
             <label
               htmlFor="busca-mobile"
