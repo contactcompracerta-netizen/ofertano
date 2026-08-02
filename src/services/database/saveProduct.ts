@@ -16,6 +16,35 @@ function criarSlug(
   return `${base}-${externalId.toLowerCase()}`;
 }
 
+function normalizarLinkAfiliado(
+  valor: string
+): string {
+  let link = valor.trim();
+
+  /*
+   * Corrige links duplicados como:
+   *
+   * https://meli.la/https://meli.la/22dhEQL
+   *
+   * Resultado:
+   *
+   * https://meli.la/22dhEQL
+   */
+  while (true) {
+    const linkDuplicado = link.match(
+      /^https?:\/\/(?:www\.)?meli\.la\/(https?:\/\/.+)$/i
+    );
+
+    if (!linkDuplicado?.[1]) {
+      break;
+    }
+
+    link = linkDuplicado[1].trim();
+  }
+
+  return link;
+}
+
 export async function saveProduct(
   product: ProductImport,
   affiliateLinkOverride?: string | null
@@ -25,9 +54,12 @@ export async function saveProduct(
     product.externalId
   );
 
-  const affiliateLink =
+  const linkRecebido =
     affiliateLinkOverride?.trim() ||
     product.url;
+
+  const affiliateLink =
+    normalizarLinkAfiliado(linkRecebido);
 
   return prisma.$transaction(async (tx) => {
     const saved = await tx.product.upsert({
@@ -52,7 +84,6 @@ export async function saveProduct(
         installments: product.installments,
         rating: product.rating,
         reviews: product.reviews,
-        sales: product.sales,
         stock: product.stock,
         specifications: product.attributes,
         active: true,
@@ -77,13 +108,50 @@ export async function saveProduct(
         installments: product.installments,
         rating: product.rating,
         reviews: product.reviews,
-        sales: product.sales,
         stock: product.stock,
         specifications: product.attributes,
         active: true,
         featured: false,
       },
     });
+
+    if (
+      product.marketplace ===
+      "Mercado Livre"
+    ) {
+      await tx.marketplaceOffer.upsert({
+        where: {
+          productId_marketplace: {
+            productId: saved.id,
+            marketplace:
+              "MERCADO_LIVRE",
+          },
+        },
+
+        update: {
+          affiliateLink,
+          price: product.price,
+          oldPrice: product.oldPrice,
+          installments:
+            product.installments,
+          stock: product.stock,
+          active: true,
+        },
+
+        create: {
+          productId: saved.id,
+          marketplace:
+            "MERCADO_LIVRE",
+          affiliateLink,
+          price: product.price,
+          oldPrice: product.oldPrice,
+          installments:
+            product.installments,
+          stock: product.stock,
+          active: true,
+        },
+      });
+    }
 
     const ultimoRegistro =
       await tx.priceHistory.findFirst({
@@ -97,7 +165,8 @@ export async function saveProduct(
 
     if (
       !ultimoRegistro ||
-      ultimoRegistro.price !== product.price
+      ultimoRegistro.price !==
+        product.price
     ) {
       await tx.priceHistory.create({
         data: {
