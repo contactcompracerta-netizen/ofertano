@@ -1,9 +1,30 @@
 import prisma from "@/lib/prisma";
+
 import type { ProductImport } from "@/services/importers/core/types";
+
+type MarketplaceDatabase =
+  | "MERCADO_LIVRE"
+  | "AMAZON"
+  | "SHOPEE";
+
+type DiscoverySourceDatabase =
+  | "MANUAL"
+  | "OPPORTUNITY"
+  | "ON_DEMAND_SEARCH"
+  | "PRICE_MONITOR"
+  | "API";
+
+export type SaveProductOptions = {
+  targetProductId?: string | null;
+  discoverySource?: DiscoverySourceDatabase;
+  autoCreated?: boolean;
+  sourceQuery?: string | null;
+};
 
 function criarSlug(
   texto: string,
-  externalId: string
+  marketplace: MarketplaceDatabase,
+  externalId: string,
 ): string {
   const base = texto
     .normalize("NFD")
@@ -11,28 +32,31 @@ function criarSlug(
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 100);
+    .slice(0, 90);
 
-  return `${base}-${externalId.toLowerCase()}`;
+  const loja = marketplace
+    .toLowerCase()
+    .replaceAll("_", "-");
+
+  const codigo = externalId
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
+
+  return `${base}-${loja}-${codigo}`;
 }
 
 function normalizarLinkAfiliado(
-  valor: string
+  valor: string,
 ): string {
   let link = valor.trim();
 
-  /*
-   * Corrige links duplicados como:
-   *
-   * https://meli.la/https://meli.la/22dhEQL
-   *
-   * Resultado:
-   *
-   * https://meli.la/22dhEQL
-   */
   while (true) {
     const linkDuplicado = link.match(
-      /^https?:\/\/(?:www\.)?meli\.la\/(https?:\/\/.+)$/i
+      /^https?:\/\/(?:www\.)?meli\.la\/(https?:\/\/.+)$/i,
     );
 
     if (!linkDuplicado?.[1]) {
@@ -45,118 +69,796 @@ function normalizarLinkAfiliado(
   return link;
 }
 
-export async function saveProduct(
-  product: ProductImport,
-  affiliateLinkOverride?: string | null
-) {
-  const slug = criarSlug(
-    product.title,
-    product.externalId
+function converterMarketplace(
+  marketplace: ProductImport["marketplace"],
+): MarketplaceDatabase {
+  switch (marketplace) {
+    case "Mercado Livre":
+      return "MERCADO_LIVRE";
+
+    case "Amazon":
+      return "AMAZON";
+
+    case "Shopee":
+      return "SHOPEE";
+
+    default: {
+      const marketplaceNunca: never = marketplace;
+
+      throw new Error(
+        `Marketplace não suportado: ${String(
+          marketplaceNunca,
+        )}`,
+      );
+    }
+  }
+}
+
+function nomeMarketplace(
+  marketplace: MarketplaceDatabase,
+): string {
+  const nomes: Record<
+    MarketplaceDatabase,
+    string
+  > = {
+    MERCADO_LIVRE: "Mercado Livre",
+    AMAZON: "Amazon",
+    SHOPEE: "Shopee",
+  };
+
+  return nomes[marketplace];
+}
+
+function normalizarTextoIdentificador(
+  valor: string,
+): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+function normalizarChaveAtributo(
+  valor: string,
+): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function encontrarAtributo(
+  atributos: Record<string, string>,
+  nomes: readonly string[],
+): string | null {
+  const nomesNormalizados = nomes.map(
+    normalizarChaveAtributo,
   );
 
-  const linkRecebido =
-    affiliateLinkOverride?.trim() ||
-    product.url;
+  for (const [chave, valor] of Object.entries(
+    atributos,
+  )) {
+    const chaveNormalizada =
+      normalizarChaveAtributo(chave);
 
-  const affiliateLink =
-    normalizarLinkAfiliado(linkRecebido);
+    const encontrado = nomesNormalizados.some(
+      (nome) =>
+        chaveNormalizada === nome ||
+        chaveNormalizada.includes(nome),
+    );
+
+    if (encontrado && valor.trim()) {
+      return valor.trim();
+    }
+  }
+
+  return null;
+}
+
+function normalizarCodigoNumerico(
+  valor: string | null,
+): string | null {
+  if (!valor) {
+    return null;
+  }
+
+  const numeros = valor.replace(/\D/g, "");
+
+  if (
+    numeros.length < 8 ||
+    numeros.length > 14
+  ) {
+    return null;
+  }
+
+  return numeros;
+}
+
+function normalizarCodigoProduto(
+  valor: string | null,
+): string | null {
+  if (!valor) {
+    return null;
+  }
+
+  const codigo = normalizarTextoIdentificador(
+    valor,
+  )
+    .replace(/[^A-Z0-9._/-]+/g, "")
+    .slice(0, 100);
+
+  return codigo || null;
+}
+
+function extrairIdentificadores(
+  product: ProductImport,
+) {
+  const eanEncontrado = encontrarAtributo(
+    product.attributes,
+    [
+      "EAN",
+      "CODIGO_EAN",
+      "CODIGO_DE_BARRAS",
+      "BARCODE",
+    ],
+  );
+
+  const gtinEncontrado = encontrarAtributo(
+    product.attributes,
+    [
+      "GTIN",
+      "GTIN_8",
+      "GTIN_12",
+      "GTIN_13",
+      "GTIN_14",
+      "UPC",
+      "ISBN",
+    ],
+  );
+
+  const mpnEncontrado = encontrarAtributo(
+    product.attributes,
+    [
+      "MPN",
+      "PART_NUMBER",
+      "NUMERO_DA_PECA",
+      "CODIGO_DO_FABRICANTE",
+      "REFERENCIA_DO_FABRICANTE",
+    ],
+  );
+
+  const modeloEncontrado = encontrarAtributo(
+    product.attributes,
+    [
+      "MODELO",
+      "MODEL",
+      "MODEL_NUMBER",
+      "NUMERO_DO_MODELO",
+      "CODIGO_DO_MODELO",
+    ],
+  );
+
+  const ean = normalizarCodigoNumerico(
+    eanEncontrado,
+  );
+
+  const gtin = normalizarCodigoNumerico(
+    gtinEncontrado,
+  );
+
+  const mpn = normalizarCodigoProduto(
+    mpnEncontrado,
+  );
+
+  const modelNumber = normalizarCodigoProduto(
+    modeloEncontrado,
+  );
+
+  return {
+    ean,
+    gtin,
+    mpn,
+    modelNumber,
+  };
+}
+
+function criarCanonicalKey(
+  product: ProductImport,
+  identificadores: ReturnType<
+    typeof extrairIdentificadores
+  >,
+): string | null {
+  const codigoGlobal =
+    identificadores.gtin ||
+    identificadores.ean;
+
+  if (codigoGlobal) {
+    return `gtin:${codigoGlobal}`;
+  }
+
+  const codigoFabricante =
+    identificadores.mpn ||
+    identificadores.modelNumber;
+
+  const marca = product.brand
+    ? normalizarTextoIdentificador(
+        product.brand,
+      )
+    : null;
+
+  if (marca && codigoFabricante) {
+    return [
+      "brand-model",
+      marca,
+      codigoFabricante,
+    ].join(":");
+  }
+
+  return null;
+}
+
+function calcularDesconto(
+  oldPrice: number | null,
+  price: number,
+): number | null {
+  if (
+    oldPrice === null ||
+    oldPrice <= price ||
+    oldPrice <= 0
+  ) {
+    return null;
+  }
+
+  return Math.round(
+    ((oldPrice - price) / oldPrice) * 100,
+  );
+}
+
+function precoMudou(
+  precoAnterior: number | null | undefined,
+  precoAtual: number,
+): boolean {
+  if (
+    precoAnterior === null ||
+    precoAnterior === undefined
+  ) {
+    return true;
+  }
+
+  return (
+    Math.abs(precoAnterior - precoAtual) >
+    0.009
+  );
+}
+
+function unirImagens(
+  atuais: string[],
+  novas: string[],
+  imagemPrincipal: string,
+): string[] {
+  return Array.from(
+    new Set(
+      [
+        ...atuais,
+        imagemPrincipal,
+        ...novas,
+      ]
+        .map((imagem) => imagem.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+export async function saveProduct(
+  product: ProductImport,
+  affiliateLinkOverride?: string | null,
+  options: SaveProductOptions = {},
+) {
+  const externalId =
+    product.externalId.trim();
+
+  if (!externalId) {
+    throw new Error(
+      "O produto não possui identificador externo.",
+    );
+  }
+
+  if (
+    !Number.isFinite(product.price) ||
+    product.price <= 0
+  ) {
+    throw new Error(
+      "O produto não possui um preço válido.",
+    );
+  }
+
+  const marketplace = converterMarketplace(
+    product.marketplace,
+  );
+
+  const sourceUrl = product.url.trim();
+
+  if (!sourceUrl) {
+    throw new Error(
+      "O produto não possui uma URL de origem.",
+    );
+  }
+
+  const discoverySource =
+    options.discoverySource ?? "MANUAL";
+
+  /*
+   * Compatibilidade com o importador manual atual:
+   *
+   * - quando saveProduct é chamado sem o segundo argumento,
+   *   a URL colada pelo administrador continua sendo usada;
+   * - quando null é enviado explicitamente, a oferta fica sem
+   *   link e segue para revisão;
+   * - buscas sob demanda não transformam URL comum em afiliada.
+   */
+  const usarUrlComoLinkManual =
+    affiliateLinkOverride === undefined &&
+    discoverySource === "MANUAL";
+
+  const linkInformado =
+    typeof affiliateLinkOverride === "string" &&
+    affiliateLinkOverride.trim()
+      ? normalizarLinkAfiliado(
+          affiliateLinkOverride,
+        )
+      : usarUrlComoLinkManual
+        ? normalizarLinkAfiliado(sourceUrl)
+        : null;
+
+  const identificadores =
+    extrairIdentificadores(product);
+
+  const canonicalKey = criarCanonicalKey(
+    product,
+    identificadores,
+  );
+
+  const slug = criarSlug(
+    product.title,
+    marketplace,
+    externalId,
+  );
+
+  const agora = new Date();
 
   return prisma.$transaction(async (tx) => {
-    const saved = await tx.product.upsert({
-      where: {
-        mlId: product.externalId,
-      },
-
-      update: {
-        name: product.title,
-        slug,
-        image: product.image,
-        images: product.images,
-        brand: product.brand,
-        description: product.description,
-        category:
-          product.category ?? "Ofertas",
-        store: product.marketplace,
-        affiliateLink,
-        price: product.price,
-        oldPrice: product.oldPrice,
-        discount: product.discount,
-        installments: product.installments,
-        rating: product.rating,
-        reviews: product.reviews,
-        stock: product.stock,
-        specifications: product.attributes,
-        active: true,
-      },
-
-      create: {
-        mlId: product.externalId,
-        name: product.title,
-        slug,
-        image: product.image,
-        images: product.images,
-        video: null,
-        brand: product.brand,
-        description: product.description,
-        category:
-          product.category ?? "Ofertas",
-        store: product.marketplace,
-        affiliateLink,
-        price: product.price,
-        oldPrice: product.oldPrice,
-        discount: product.discount,
-        installments: product.installments,
-        rating: product.rating,
-        reviews: product.reviews,
-        stock: product.stock,
-        specifications: product.attributes,
-        active: true,
-        featured: false,
-      },
-    });
-
-    if (
-      product.marketplace ===
-      "Mercado Livre"
-    ) {
-      await tx.marketplaceOffer.upsert({
+    const ofertaPeloCodigo =
+      await tx.marketplaceOffer.findUnique({
         where: {
-          productId_marketplace: {
-            productId: saved.id,
-            marketplace:
-              "MERCADO_LIVRE",
+          marketplace_externalId: {
+            marketplace,
+            externalId,
           },
         },
-
-        update: {
-          affiliateLink,
-          price: product.price,
-          oldPrice: product.oldPrice,
-          installments:
-            product.installments,
-          stock: product.stock,
-          active: true,
+        include: {
+          product: true,
         },
+      });
 
-        create: {
-          productId: saved.id,
-          marketplace:
-            "MERCADO_LIVRE",
-          affiliateLink,
+    const produtoPeloCanonicalKey =
+      canonicalKey
+        ? await tx.product.findUnique({
+            where: {
+              canonicalKey,
+            },
+          })
+        : null;
+
+    let saved =
+      ofertaPeloCodigo?.product ?? null;
+
+    if (
+      !saved &&
+      marketplace === "MERCADO_LIVRE"
+    ) {
+      saved = await tx.product.findUnique({
+        where: {
+          mlId: externalId,
+        },
+      });
+    }
+
+    if (
+      !saved &&
+      options.targetProductId
+    ) {
+      saved = await tx.product.findUnique({
+        where: {
+          id: options.targetProductId,
+        },
+      });
+    }
+
+    if (
+      !saved &&
+      produtoPeloCanonicalKey
+    ) {
+      saved = produtoPeloCanonicalKey;
+    }
+
+    if (!saved) {
+      saved = await tx.product.create({
+        data: {
+          mlId:
+            marketplace ===
+            "MERCADO_LIVRE"
+              ? externalId
+              : null,
+
+          name: product.title,
+          slug,
+
+          canonicalName: product.title,
+          canonicalKey,
+
+          modelNumber:
+            identificadores.modelNumber,
+          ean: identificadores.ean,
+          gtin: identificadores.gtin,
+          mpn: identificadores.mpn,
+
+          image: product.image,
+          images: unirImagens(
+            [],
+            product.images,
+            product.image,
+          ),
+
+          video: null,
+          brand: product.brand,
+          description:
+            product.description,
+
+          specifications:
+            product.attributes,
+
+          category:
+            product.category ?? "Ofertas",
+
+          store: nomeMarketplace(
+            marketplace,
+          ),
+
+          affiliateLink:
+            linkInformado ?? "",
+
           price: product.price,
           oldPrice: product.oldPrice,
           installments:
             product.installments,
+          discount: calcularDesconto(
+            product.oldPrice,
+            product.price,
+          ),
+
+          rating: product.rating,
+          reviews: product.reviews,
+          sales: product.sales,
           stock: product.stock,
+
+          publicationStatus:
+            linkInformado
+              ? "LIVE_COMPLETE"
+              : "LIVE_PARTIAL",
+
+          autoCreated:
+            options.autoCreated ?? false,
+
+          sourceQuery:
+            options.sourceQuery?.trim() ||
+            null,
+
+          lastSearchedAt:
+            discoverySource ===
+            "ON_DEMAND_SEARCH"
+              ? agora
+              : null,
+
+          active: true,
+          featured: false,
+        },
+      });
+    } else {
+      const mesmaOferta =
+        ofertaPeloCodigo?.productId ===
+          saved.id ||
+        (marketplace ===
+          "MERCADO_LIVRE" &&
+          saved.mlId === externalId);
+
+      const atualizarDadosPrincipais =
+        mesmaOferta || saved.autoCreated;
+
+      const canonicalKeyPermitida =
+        !canonicalKey
+          ? saved.canonicalKey
+          : !produtoPeloCanonicalKey ||
+              produtoPeloCanonicalKey.id ===
+                saved.id
+            ? canonicalKey
+            : saved.canonicalKey;
+
+      saved = await tx.product.update({
+        where: {
+          id: saved.id,
+        },
+        data: {
+          mlId:
+            marketplace ===
+            "MERCADO_LIVRE"
+              ? externalId
+              : saved.mlId,
+
+          name: atualizarDadosPrincipais
+            ? product.title
+            : saved.name,
+
+          slug: saved.slug ?? slug,
+
+          canonicalName:
+            saved.canonicalName ??
+            product.title,
+
+          canonicalKey:
+            canonicalKeyPermitida,
+
+          modelNumber:
+            saved.modelNumber ??
+            identificadores.modelNumber,
+
+          ean:
+            saved.ean ??
+            identificadores.ean,
+
+          gtin:
+            saved.gtin ??
+            identificadores.gtin,
+
+          mpn:
+            saved.mpn ??
+            identificadores.mpn,
+
+          image: atualizarDadosPrincipais
+            ? product.image
+            : saved.image,
+
+          images: unirImagens(
+            saved.images,
+            product.images,
+            product.image,
+          ),
+
+          brand:
+            saved.brand ?? product.brand,
+
+          description:
+            atualizarDadosPrincipais
+              ? product.description
+              : saved.description ??
+                product.description,
+
+          specifications:
+            atualizarDadosPrincipais
+              ? product.attributes
+              : undefined,
+
+          category:
+            saved.category === "Ofertas"
+              ? product.category ??
+                saved.category
+              : saved.category,
+
+          rating:
+            atualizarDadosPrincipais
+              ? product.rating
+              : saved.rating,
+
+          reviews:
+            atualizarDadosPrincipais
+              ? product.reviews
+              : saved.reviews,
+
+          sales:
+            atualizarDadosPrincipais
+              ? product.sales
+              : saved.sales,
+
+          sourceQuery:
+            options.sourceQuery?.trim() ||
+            saved.sourceQuery,
+
+          lastSearchedAt:
+            discoverySource ===
+            "ON_DEMAND_SEARCH"
+              ? agora
+              : saved.lastSearchedAt,
+
+          autoCreated:
+            saved.autoCreated ||
+            Boolean(options.autoCreated),
+
           active: true,
         },
       });
     }
 
-    const ultimoRegistro =
+    const ofertaAtual =
+      ofertaPeloCodigo?.productId ===
+      saved.id
+        ? ofertaPeloCodigo
+        : await tx.marketplaceOffer.findUnique({
+            where: {
+              productId_marketplace: {
+                productId: saved.id,
+                marketplace,
+              },
+            },
+          });
+
+    const linkExistente =
+      ofertaAtual?.affiliateLink?.trim() ||
+      null;
+
+    const affiliateLink =
+      linkInformado ?? linkExistente;
+
+    const disponivel =
+      product.stock === null ||
+      product.stock > 0;
+
+    const status =
+      !disponivel
+        ? "UNAVAILABLE"
+        : affiliateLink
+          ? "ACTIVE"
+          : ofertaAtual?.status ===
+              "UNDER_REVIEW"
+            ? "UNDER_REVIEW"
+            : "PENDING_AFFILIATE";
+
+    const mudouPreco = precoMudou(
+      ofertaAtual?.price,
+      product.price,
+    );
+
+    const oferta =
+      await tx.marketplaceOffer.upsert({
+        where: {
+          productId_marketplace: {
+            productId: saved.id,
+            marketplace,
+          },
+        },
+
+        update: {
+          externalId,
+          sourceUrl,
+
+          affiliateLink,
+
+          title: product.title,
+          image: product.image,
+          seller: product.seller,
+
+          price: product.price,
+          oldPrice: product.oldPrice,
+          installments:
+            product.installments,
+          stock: product.stock,
+
+          status,
+
+          matchStatus:
+            ofertaPeloCodigo ||
+            produtoPeloCanonicalKey?.id ===
+              saved.id
+              ? "EXACT"
+              : "HIGH",
+
+          discoverySource,
+
+          active: true,
+          available: disponivel,
+
+          reviewReason: affiliateLink
+            ? null
+            : ofertaAtual?.reviewReason ??
+              "Aguardando link individual de afiliado.",
+
+          errorMessage: null,
+
+          affiliateValidatedAt:
+            linkInformado
+              ? agora
+              : ofertaAtual
+                  ?.affiliateValidatedAt ??
+                null,
+
+          reviewedAt:
+            linkInformado
+              ? agora
+              : ofertaAtual?.reviewedAt ??
+                null,
+
+          lastCheckedAt: agora,
+
+          lastPriceChangeAt:
+            mudouPreco
+              ? agora
+              : ofertaAtual
+                  ?.lastPriceChangeAt ??
+                null,
+
+          consecutiveErrors: 0,
+        },
+
+        create: {
+          productId: saved.id,
+          marketplace,
+
+          externalId,
+          sourceUrl,
+
+          affiliateLink,
+
+          title: product.title,
+          image: product.image,
+          seller: product.seller,
+
+          price: product.price,
+          oldPrice: product.oldPrice,
+          installments:
+            product.installments,
+          stock: product.stock,
+
+          status,
+
+          matchStatus:
+            produtoPeloCanonicalKey?.id ===
+            saved.id
+              ? "EXACT"
+              : "HIGH",
+
+          discoverySource,
+
+          active: true,
+          available: disponivel,
+          isBest: false,
+
+          reviewReason: affiliateLink
+            ? null
+            : "Aguardando link individual de afiliado.",
+
+          errorMessage: null,
+
+          affiliateValidatedAt:
+            linkInformado ? agora : null,
+
+          reviewedAt:
+            linkInformado ? agora : null,
+
+          lastCheckedAt: agora,
+
+          lastPriceChangeAt: agora,
+
+          consecutiveErrors: 0,
+        },
+      });
+
+    const ultimoHistorico =
       await tx.priceHistory.findFirst({
         where: {
-          productId: saved.id,
+          offerId: oferta.id,
         },
         orderBy: {
           recordedAt: "desc",
@@ -164,18 +866,131 @@ export async function saveProduct(
       });
 
     if (
-      !ultimoRegistro ||
-      ultimoRegistro.price !==
-        product.price
+      !ultimoHistorico ||
+      precoMudou(
+        ultimoHistorico.price,
+        product.price,
+      )
     ) {
       await tx.priceHistory.create({
         data: {
           productId: saved.id,
+          offerId: oferta.id,
+          marketplace,
+
           price: product.price,
+          oldPrice: product.oldPrice,
+
+          source: discoverySource,
         },
       });
     }
 
-    return saved;
+    const ofertasDoProduto =
+      await tx.marketplaceOffer.findMany({
+        where: {
+          productId: saved.id,
+          active: true,
+        },
+        orderBy: {
+          price: "asc",
+        },
+      });
+
+    const melhorOferta =
+      ofertasDoProduto.find(
+        (item) =>
+          item.available &&
+          item.status !== "UNAVAILABLE" &&
+          item.status !== "ERROR",
+      ) ?? ofertasDoProduto[0];
+
+    await tx.marketplaceOffer.updateMany({
+      where: {
+        productId: saved.id,
+        isBest: true,
+      },
+      data: {
+        isBest: false,
+      },
+    });
+
+    if (melhorOferta) {
+      await tx.marketplaceOffer.update({
+        where: {
+          id: melhorOferta.id,
+        },
+        data: {
+          isBest: true,
+        },
+      });
+    }
+
+    const possuiOfertaAtiva =
+      ofertasDoProduto.some(
+        (item) =>
+          item.status === "ACTIVE" &&
+          Boolean(
+            item.affiliateLink?.trim(),
+          ),
+      );
+
+    const possuiOfertaPendente =
+      ofertasDoProduto.some((item) =>
+        [
+          "DISCOVERED",
+          "PENDING_AFFILIATE",
+          "UNDER_REVIEW",
+        ].includes(item.status),
+      );
+
+    const publicationStatus =
+      possuiOfertaPendente ||
+      !possuiOfertaAtiva
+        ? "LIVE_PARTIAL"
+        : "LIVE_COMPLETE";
+
+    if (!melhorOferta) {
+      return tx.product.update({
+        where: {
+          id: saved.id,
+        },
+        data: {
+          publicationStatus,
+          active: true,
+        },
+      });
+    }
+
+    return tx.product.update({
+      where: {
+        id: saved.id,
+      },
+      data: {
+        store: nomeMarketplace(
+          melhorOferta.marketplace as MarketplaceDatabase,
+        ),
+
+        affiliateLink:
+          melhorOferta.affiliateLink?.trim() ||
+          "",
+
+        price: melhorOferta.price,
+        oldPrice: melhorOferta.oldPrice,
+
+        installments:
+          melhorOferta.installments,
+
+        stock: melhorOferta.stock,
+
+        discount: calcularDesconto(
+          melhorOferta.oldPrice,
+          melhorOferta.price,
+        ),
+
+        publicationStatus,
+        active: true,
+      },
+    });
   });
 }
