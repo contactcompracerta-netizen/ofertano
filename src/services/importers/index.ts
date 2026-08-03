@@ -1,30 +1,21 @@
 ﻿import { detectarMarketplace } from "./core/detector";
-
-import { importarMercadoLivre } from "./mercadolivre";
-import { importarAmazon } from "./amazon";
+import { obterMarketplaceAdapter } from "./core/registry";
 
 import type { ProductImport } from "./core/types";
 
 export async function importarProduto(
-  url: string
+  url: string,
 ): Promise<ProductImport> {
   const marketplace = detectarMarketplace(url);
 
-  switch (marketplace) {
-    case "mercadolivre":
-      return importarMercadoLivre(url);
+  const adapter =
+    obterMarketplaceAdapter(marketplace);
 
-    case "amazon":
-      return importarAmazon(url);
-
-    case "shopee":
-      throw new Error(
-        "O importador da Shopee ainda não foi implementado."
-      );
-
-    default:
-      throw new Error(
-        "Marketplace não suportado."
-      );
+  if (!adapter.importer) {
+    throw new Error(
+      `O importador da ${adapter.name} ainda não foi implementado.`,
+    );
   }
+
+  return adapter.importer(url);
 }
