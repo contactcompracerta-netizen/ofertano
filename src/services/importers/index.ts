@@ -1,5 +1,8 @@
 ﻿import { detectarMarketplace } from "./core/detector";
+
 import { importarMercadoLivre } from "./mercadolivre";
+import { importarAmazon } from "./amazon";
+
 import type { ProductImport } from "./core/types";
 
 export async function importarProduto(
@@ -12,13 +15,16 @@ export async function importarProduto(
       return importarMercadoLivre(url);
 
     case "amazon":
-      throw new Error(
-        "O importador da Amazon ainda não foi implementado."
-      );
+      return importarAmazon(url);
 
     case "shopee":
       throw new Error(
         "O importador da Shopee ainda não foi implementado."
+      );
+
+    default:
+      throw new Error(
+        "Marketplace não suportado."
       );
   }
 }

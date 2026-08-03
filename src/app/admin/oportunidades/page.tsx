@@ -107,11 +107,11 @@ const statusLabels: Record<
   string
 > = {
   WAITING_AFFILIATE: "Aguardando link",
-  READY_TO_QUEUE: "Pronto para fila",
+  READY_TO_QUEUE: "Link pronto",
   QUEUED: "Na fila",
   PUBLISHED: "Publicado",
   DISMISSED: "Descartado",
-  ERROR: "Erro",
+  ERROR: "Erro — tentar novamente",
 };
 
 const statusClasses: Record<
@@ -150,11 +150,11 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function extrairLinks(texto: string): string[] {
-  const encontrados =
-    texto.match(/https?:\/\/[^\s,;]+/gi) ?? [];
+function extractLinks(text: string): string[] {
+  const matches =
+    text.match(/https?:\/\/[^\s,;]+/gi) ?? [];
 
-  return encontrados
+  return matches
     .map((link) =>
       link
         .trim()
@@ -197,12 +197,6 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] =
     useState(true);
 
-  const [savingId, setSavingId] =
-    useState<string | null>(null);
-
-  const [queueingId, setQueueingId] =
-    useState<string | null>(null);
-
   const [publishingBatch, setPublishingBatch] =
     useState(false);
 
@@ -213,7 +207,7 @@ export default function OpportunitiesPage() {
   const [message, setMessage] =
     useState("");
 
-  const oportunidadesPendentes =
+  const pendingOpportunities =
     useMemo(
       () =>
         items.filter(
@@ -237,10 +231,34 @@ export default function OpportunitiesPage() {
     [items]
   );
 
-  const linksEmLote = useMemo(
-    () => extrairLinks(batchLinks),
+  const batchAffiliateLinks = useMemo(
+    () => extractLinks(batchLinks),
     [batchLinks]
   );
+
+  const opportunitiesWithoutLink =
+    useMemo(
+      () =>
+        pendingOpportunities.filter(
+          (opportunity) =>
+            !affiliateLinks[
+              opportunity.id
+            ]?.trim()
+        ),
+      [
+        affiliateLinks,
+        pendingOpportunities,
+      ]
+    );
+
+  const linksMissing =
+    opportunitiesWithoutLink.length;
+
+  const pastedLinksMatch =
+    linksMissing === 0
+      ? batchAffiliateLinks.length === 0
+      : batchAffiliateLinks.length ===
+        linksMissing;
 
   const loadCategories =
     useCallback(async () => {
@@ -330,20 +348,14 @@ export default function OpportunitiesPage() {
           data.summary ?? initialSummary
         );
 
-        setAffiliateLinks((current) => {
-          const next = { ...current };
-
-          for (const item of loadedItems) {
-            if (
-              next[item.id] === undefined
-            ) {
-              next[item.id] =
-                item.affiliateLink ?? "";
-            }
-          }
-
-          return next;
-        });
+        setAffiliateLinks(
+          Object.fromEntries(
+            loadedItems.map((item) => [
+              item.id,
+              item.affiliateLink ?? "",
+            ])
+          )
+        );
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -366,7 +378,7 @@ export default function OpportunitiesPage() {
 
     if (!/^MLB\d+$/.test(normalizedCategoryId)) {
       setError(
-        "Informe uma categoria válida no formato MLB seguido de números."
+        "Selecione uma categoria válida do Mercado Livre."
       );
       return;
     }
@@ -378,6 +390,13 @@ export default function OpportunitiesPage() {
     ) {
       setError(
         "A quantidade deve estar entre 1 e 10."
+      );
+      return;
+    }
+
+    if (pendingOpportunities.length > 0) {
+      setError(
+        "Publique ou corrija os produtos pendentes antes de fazer uma nova descoberta."
       );
       return;
     }
@@ -414,6 +433,8 @@ export default function OpportunitiesPage() {
         );
       }
 
+      setBatchLinks("");
+
       setMessage(
         data.message ||
           `${data.added ?? 0} oportunidade(s) nova(s) encontrada(s).`
@@ -431,12 +452,14 @@ export default function OpportunitiesPage() {
     }
   }
 
-  async function copiarUrlsPendentes() {
+  async function copyPendingUrls() {
     if (
-      oportunidadesPendentes.length === 0
+      opportunitiesWithoutLink.length === 0
     ) {
       setError(
-        "Não existem oportunidades pendentes."
+        pendingOpportunities.length === 0
+          ? "Não existem oportunidades pendentes."
+          : "Todos os produtos pendentes já possuem link de afiliado."
       );
       return;
     }
@@ -446,20 +469,20 @@ export default function OpportunitiesPage() {
       setError("");
       setMessage("");
 
-      const texto =
-        oportunidadesPendentes
+      const text =
+        opportunitiesWithoutLink
           .map(
-            (opportunity, index) =>
-              `${index + 1}. ${opportunity.sourceUrl}`
+            (opportunity) =>
+              opportunity.sourceUrl
           )
           .join("\n");
 
       await navigator.clipboard.writeText(
-        texto
+        text
       );
 
       setMessage(
-        `${oportunidadesPendentes.length} URL(s) copiada(s). Gere os links de afiliado mantendo a mesma ordem.`
+        `${opportunitiesWithoutLink.length} URL(s) copiada(s). Gere os links de afiliado e mantenha a mesma ordem.`
       );
     } catch {
       setError(
@@ -470,50 +493,9 @@ export default function OpportunitiesPage() {
     }
   }
 
-  function aplicarLinksNosCampos() {
-    if (linksEmLote.length === 0) {
-      setError(
-        "Cole pelo menos um link de afiliado válido."
-      );
-      return;
-    }
-
+  async function publishBatch() {
     if (
-      linksEmLote.length >
-      oportunidadesPendentes.length
-    ) {
-      setError(
-        `Foram encontrados ${linksEmLote.length} links, mas existem apenas ${oportunidadesPendentes.length} oportunidades pendentes.`
-      );
-      return;
-    }
-
-    setError("");
-    setMessage("");
-
-    setAffiliateLinks((current) => {
-      const next = { ...current };
-
-      oportunidadesPendentes
-        .slice(0, linksEmLote.length)
-        .forEach(
-          (opportunity, index) => {
-            next[opportunity.id] =
-              linksEmLote[index];
-          }
-        );
-
-      return next;
-    });
-
-    setMessage(
-      `${linksEmLote.length} link(s) associado(s) aos produtos na ordem exibida.`
-    );
-  }
-
-  async function publicarEmLote() {
-    if (
-      oportunidadesPendentes.length === 0
+      pendingOpportunities.length === 0
     ) {
       setError(
         "Não existem oportunidades pendentes para publicar."
@@ -521,37 +503,95 @@ export default function OpportunitiesPage() {
       return;
     }
 
-    const payload =
-      oportunidadesPendentes
-        .map((opportunity) => ({
-          id: opportunity.id,
-          affiliateLink:
-            affiliateLinks[
-              opportunity.id
-            ]?.trim() ?? "",
-        }))
-        .filter(
-          (item) => item.affiliateLink
-        );
-
-    if (payload.length === 0) {
+    if (
+      opportunitiesWithoutLink.length > 0 &&
+      batchAffiliateLinks.length !==
+        opportunitiesWithoutLink.length
+    ) {
       setError(
-        "Nenhum produto possui link de afiliado preenchido."
+        `Cole exatamente ${opportunitiesWithoutLink.length} link(s) de afiliado. Foram identificados ${batchAffiliateLinks.length}.`
       );
       return;
     }
 
-    const semLink =
-      oportunidadesPendentes.filter(
-        (opportunity) =>
-          !affiliateLinks[
-            opportunity.id
-          ]?.trim()
+    if (
+      opportunitiesWithoutLink.length === 0 &&
+      batchAffiliateLinks.length > 0
+    ) {
+      setError(
+        "Todos os produtos já possuem link salvo. Apague os links colados ou edite o campo do produto que deseja corrigir."
+      );
+      return;
+    }
+
+    const normalizedBatchLinks =
+      batchAffiliateLinks.map(
+        (link) => link.trim()
       );
 
-    if (semLink.length > 0) {
+    const uniqueBatchLinks = new Set(
+      normalizedBatchLinks.map(
+        (link) => link.toLowerCase()
+      )
+    );
+
+    if (
+      uniqueBatchLinks.size !==
+      normalizedBatchLinks.length
+    ) {
       setError(
-        `Ainda existem ${semLink.length} produto(s) sem link de afiliado. Preencha todos antes de publicar.`
+        "Existem links repetidos na lista colada."
+      );
+      return;
+    }
+
+    const resolvedLinks = {
+      ...affiliateLinks,
+    };
+
+    opportunitiesWithoutLink.forEach(
+      (opportunity, index) => {
+        resolvedLinks[opportunity.id] =
+          normalizedBatchLinks[index];
+      }
+    );
+
+    const payload =
+      pendingOpportunities.map(
+        (opportunity) => ({
+          id: opportunity.id,
+          affiliateLink:
+            resolvedLinks[
+              opportunity.id
+            ]?.trim() ?? "",
+        })
+      );
+
+    const missingAfterAssociation =
+      payload.filter(
+        (item) => !item.affiliateLink
+      );
+
+    if (
+      missingAfterAssociation.length > 0
+    ) {
+      setError(
+        `Ainda existem ${missingAfterAssociation.length} produto(s) sem link de afiliado.`
+      );
+      return;
+    }
+
+    const allLinks = payload.map(
+      (item) =>
+        item.affiliateLink.toLowerCase()
+    );
+
+    if (
+      new Set(allLinks).size !==
+      allLinks.length
+    ) {
+      setError(
+        "O mesmo link de afiliado está associado a mais de um produto."
       );
       return;
     }
@@ -579,16 +619,22 @@ export default function OpportunitiesPage() {
       const data =
         (await response.json()) as BatchPublishResponse;
 
-      if (!response.ok) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        await loadOpportunities();
+
         throw new Error(
           data.error ||
+            data.message ||
             "Não foi possível publicar os produtos em lote."
         );
       }
 
       setMessage(
         data.message ||
-          "Publicação em lote concluída."
+          "Publicação concluída com sucesso."
       );
 
       setBatchLinks("");
@@ -605,127 +651,6 @@ export default function OpportunitiesPage() {
     }
   }
 
-  async function saveAffiliateLink(
-    opportunity: Opportunity
-  ) {
-    const affiliateLink =
-      affiliateLinks[
-        opportunity.id
-      ]?.trim() ?? "";
-
-    if (!affiliateLink) {
-      setError(
-        "Cole o link oficial de afiliado antes de salvar."
-      );
-      return;
-    }
-
-    try {
-      setSavingId(opportunity.id);
-      setError("");
-      setMessage("");
-
-      const response = await fetch(
-        "/api/opportunities/affiliate",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            id: opportunity.id,
-            affiliateLink,
-          }),
-        }
-      );
-
-      const data =
-        (await response.json()) as {
-          success: boolean;
-          message?: string;
-          error?: string;
-        };
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            "Não foi possível salvar o link."
-        );
-      }
-
-      setMessage(
-        data.message ||
-          "Link de afiliado salvo com sucesso."
-      );
-
-      await loadOpportunities();
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Erro ao salvar o link de afiliado."
-      );
-    } finally {
-      setSavingId(null);
-    }
-  }
-
-  async function sendToQueue(
-    opportunity: Opportunity
-  ) {
-    try {
-      setQueueingId(opportunity.id);
-      setError("");
-      setMessage("");
-
-      const response = await fetch(
-        "/api/opportunities/queue",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            id: opportunity.id,
-          }),
-        }
-      );
-
-      const data =
-        (await response.json()) as {
-          success: boolean;
-          message?: string;
-          error?: string;
-        };
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            "Não foi possível enviar o produto para a fila."
-        );
-      }
-
-      setMessage(
-        data.message ||
-          "Oportunidade enviada para a fila."
-      );
-
-      await loadOpportunities();
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Erro ao enviar oportunidade para a fila."
-      );
-    } finally {
-      setQueueingId(null);
-    }
-  }
-
   const summaryCards = [
     {
       label: "Total",
@@ -736,7 +661,7 @@ export default function OpportunitiesPage() {
       value: summary.waitingAffiliate,
     },
     {
-      label: "Prontos",
+      label: "Links prontos",
       value: summary.readyToQueue,
     },
     {
@@ -763,13 +688,13 @@ export default function OpportunitiesPage() {
             </p>
 
             <h1 className="text-3xl font-bold text-slate-900">
-              Oportunidades encontradas
+              Importação rápida de produtos
             </h1>
 
             <p className="mt-2 text-slate-600">
-              Adicione os links oficiais de
-              afiliado e publique vários
-              produtos de uma só vez.
+              Descubra oportunidades, cole os
+              links de afiliado e publique tudo
+              em uma única operação.
             </p>
           </div>
 
@@ -778,7 +703,10 @@ export default function OpportunitiesPage() {
             onClick={() =>
               void loadOpportunities()
             }
-            disabled={loading}
+            disabled={
+              loading ||
+              publishingBatch
+            }
             className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading
@@ -790,7 +718,7 @@ export default function OpportunitiesPage() {
         <section className="mb-8 rounded-3xl border border-blue-200 bg-white p-6 shadow-sm">
           <div className="mb-5">
             <p className="text-sm font-black uppercase tracking-[0.12em] text-blue-700">
-              Descoberta automática
+              Etapa 1
             </p>
 
             <h2 className="mt-2 text-2xl font-black text-slate-950">
@@ -798,7 +726,8 @@ export default function OpportunitiesPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Informe a categoria do Mercado Livre e escolha quantos produtos deseja buscar.
+              Escolha a categoria e quantos
+              produtos deseja buscar.
             </p>
           </div>
 
@@ -821,7 +750,8 @@ export default function OpportunitiesPage() {
                 }
                 disabled={
                   loadingCategories ||
-                  categories.length === 0
+                  categories.length === 0 ||
+                  publishingBatch
                 }
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
@@ -862,18 +792,23 @@ export default function OpportunitiesPage() {
                     Number(event.target.value)
                   )
                 }
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                disabled={
+                  discovering ||
+                  publishingBatch
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
-                  (value) => (
-                    <option
-                      key={value}
-                      value={value}
-                    >
-                      {value}
-                    </option>
-                  )
-                )}
+                {[
+                  1, 2, 3, 4, 5,
+                  6, 7, 8, 9, 10,
+                ].map((value) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {value}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -886,13 +821,15 @@ export default function OpportunitiesPage() {
                 discovering ||
                 loading ||
                 loadingCategories ||
+                publishingBatch ||
+                pendingOpportunities.length > 0 ||
                 !categoryId
               }
               className="rounded-xl bg-blue-600 px-6 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {discovering
                 ? "Descobrindo..."
-                : "Descobrir oportunidades"}
+                : "Descobrir produtos"}
             </button>
           </div>
         </section>
@@ -917,65 +854,85 @@ export default function OpportunitiesPage() {
         <section className="mb-8 overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm">
           <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 p-6">
             <p className="text-sm font-black uppercase tracking-[0.12em] text-emerald-700">
-              Publicação em lote
+              Etapa 2
             </p>
 
             <h2 className="mt-2 text-2xl font-black text-slate-950">
-              Salvar e publicar todos
+              Gerar links e publicar
             </h2>
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Copie as URLs pendentes,
-              gere os links no programa de
-              afiliados e cole um link por
-              linha, mantendo a mesma
-              ordem dos produtos.
+              Copie as URLs, gere os links no
+              programa de afiliados, cole todos
+              abaixo e clique uma única vez para
+              validar, importar e publicar.
             </p>
           </div>
 
-          <div className="grid gap-6 p-6 lg:grid-cols-[1fr_1.25fr]">
-            <div>
+          <div className="grid gap-6 p-6 lg:grid-cols-[0.85fr_1.4fr]">
+            <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                 <p className="text-sm font-bold text-slate-900">
                   Produtos pendentes
                 </p>
 
                 <p className="mt-2 text-3xl font-black text-emerald-700">
-                  {
-                    oportunidadesPendentes.length
-                  }
+                  {pendingOpportunities.length}
                 </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-white p-3">
+                    <p className="text-xs font-semibold text-slate-500">
+                      Links necessários
+                    </p>
+
+                    <p className="mt-1 text-xl font-black text-slate-900">
+                      {linksMissing}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-white p-3">
+                    <p className="text-xs font-semibold text-slate-500">
+                      Links já preenchidos
+                    </p>
+
+                    <p className="mt-1 text-xl font-black text-slate-900">
+                      {pendingOpportunities.length -
+                        linksMissing}
+                    </p>
+                  </div>
+                </div>
 
                 <button
                   type="button"
                   onClick={() =>
-                    void copiarUrlsPendentes()
+                    void copyPendingUrls()
                   }
                   disabled={
                     copyingUrls ||
-                    oportunidadesPendentes.length ===
-                      0
+                    publishingBatch ||
+                    linksMissing === 0
                   }
                   className="mt-5 flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {copyingUrls
                     ? "Copiando..."
-                    : "Copiar URLs pendentes"}
+                    : linksMissing === 0
+                      ? "Nenhuma URL para copiar"
+                      : `Copiar ${linksMissing} URL(s)`}
                 </button>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
                 <p className="text-sm font-black text-amber-900">
-                  Atenção à ordem
+                  Mantenha a ordem
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-amber-800">
-                  O primeiro link colado
-                  será associado ao
-                  primeiro produto
-                  pendente, o segundo ao
-                  segundo produto e assim
-                  por diante.
+                  O primeiro link gerado será
+                  associado ao primeiro produto
+                  sem link, o segundo ao segundo
+                  produto e assim por diante.
                 </p>
               </div>
             </div>
@@ -985,7 +942,7 @@ export default function OpportunitiesPage() {
                 htmlFor="batch-affiliate-links"
                 className="block text-sm font-bold text-slate-900"
               >
-                Links de afiliado
+                Links de afiliado gerados
               </label>
 
               <textarea
@@ -997,58 +954,64 @@ export default function OpportunitiesPage() {
                   )
                 }
                 placeholder={
-                  "Cole um link por linha:\nhttps://meli.la/...\nhttps://meli.la/..."
+                  linksMissing > 0
+                    ? "Cole um link por linha:\nhttps://meli.la/...\nhttps://meli.la/..."
+                    : "Todos os produtos já possuem link. Clique em publicar."
                 }
-                rows={8}
-                className="mt-2 w-full resize-y rounded-2xl border border-slate-300 px-4 py-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                rows={9}
+                disabled={
+                  publishingBatch
+                }
+                className="mt-2 w-full resize-y rounded-2xl border border-slate-300 px-4 py-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
 
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
-                <span>
-                  {linksEmLote.length} link(s)
-                  identificado(s)
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
+                <span
+                  className={
+                    pastedLinksMatch
+                      ? "text-emerald-700"
+                      : "text-amber-700"
+                  }
+                >
+                  {batchAffiliateLinks.length} link(s)
+                  colado(s)
                 </span>
 
-                <span>
-                  {
-                    oportunidadesPendentes.length
-                  }{" "}
-                  produto(s) pendente(s)
+                <span className="text-slate-500">
+                  {linksMissing} link(s)
+                  necessário(s)
                 </span>
               </div>
 
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={
-                    aplicarLinksNosCampos
-                  }
-                  disabled={
-                    publishingBatch ||
-                    linksEmLote.length === 0
-                  }
-                  className="flex-1 rounded-xl border border-emerald-300 bg-emerald-50 px-5 py-3 font-bold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Aplicar links aos produtos
-                </button>
+              {!pastedLinksMatch ? (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                  Cole exatamente {linksMissing} link(s)
+                  para continuar.
+                </div>
+              ) : null}
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    void publicarEmLote()
-                  }
-                  disabled={
-                    publishingBatch ||
-                    oportunidadesPendentes.length ===
-                      0
-                  }
-                  className="flex-1 rounded-xl bg-emerald-600 px-5 py-3 font-black text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {publishingBatch
-                    ? "Publicando..."
-                    : "Salvar e publicar todos"}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  void publishBatch()
+                }
+                disabled={
+                  publishingBatch ||
+                  pendingOpportunities.length ===
+                    0
+                }
+                className="mt-5 flex w-full items-center justify-center rounded-xl bg-emerald-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {publishingBatch
+                  ? "Validando e publicando..."
+                  : "Validar, importar e publicar agora"}
+              </button>
+
+              <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+                O sistema salva os links, cria a
+                fila, importa os produtos e publica
+                no site automaticamente.
+              </p>
             </div>
           </div>
         </section>
@@ -1065,7 +1028,8 @@ export default function OpportunitiesPage() {
           </div>
         ) : null}
 
-        {loading && visibleItems.length === 0 ? (
+        {loading &&
+        visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-600 shadow-sm">
             Carregando oportunidades...
           </div>
@@ -1080,9 +1044,9 @@ export default function OpportunitiesPage() {
 
             <p className="mt-2 text-slate-600">
               Os produtos publicados são removidos
-              automaticamente desta lista.
-              Execute uma nova descoberta para
-              buscar outros produtos.
+              automaticamente desta lista. Faça
+              uma nova descoberta para buscar
+              outros produtos.
             </p>
           </div>
         ) : null}
@@ -1096,13 +1060,6 @@ export default function OpportunitiesPage() {
                 "READY_TO_QUEUE" ||
               opportunity.status ===
                 "ERROR";
-
-            const isSaving =
-              savingId === opportunity.id;
-
-            const isQueueing =
-              queueingId ===
-              opportunity.id;
 
             return (
               <article
@@ -1147,10 +1104,7 @@ export default function OpportunitiesPage() {
                       {opportunity.discount !==
                       null ? (
                         <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
-                          {
-                            opportunity.discount
-                          }
-                          % OFF
+                          {opportunity.discount}% OFF
                         </span>
                       ) : null}
 
@@ -1201,7 +1155,7 @@ export default function OpportunitiesPage() {
                       ) : null}
                     </div>
 
-                    <div className="mt-5">
+                    <div className="mt-5 flex flex-wrap gap-3">
                       <a
                         href={
                           opportunity.sourceUrl
@@ -1210,9 +1164,19 @@ export default function OpportunitiesPage() {
                         rel="noopener noreferrer"
                         className="inline-flex rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
-                        Abrir produto no Mercado
-                        Livre
+                        Abrir no Mercado Livre
                       </a>
+
+                      {opportunity.productId ? (
+                        <a
+                          href={`/produto/${opportunity.productId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                        >
+                          Abrir produto no Ofertano
+                        </a>
+                      ) : null}
                     </div>
 
                     <div className="mt-5 border-t border-slate-200 pt-5">
@@ -1223,82 +1187,37 @@ export default function OpportunitiesPage() {
                         Link oficial de afiliado
                       </label>
 
-                      <div className="flex flex-col gap-3 lg:flex-row">
-                        <input
-                          id={`affiliate-${opportunity.id}`}
-                          type="url"
-                          value={
-                            affiliateLinks[
-                              opportunity.id
-                            ] ?? ""
-                          }
-                          onChange={(
-                            event
-                          ) => {
-                            setAffiliateLinks(
-                              (current) => ({
-                                ...current,
-                                [opportunity.id]:
-                                  event
-                                    .target
-                                    .value,
-                              })
-                            );
-                          }}
-                          disabled={
-                            !canEdit ||
-                            isSaving ||
-                            publishingBatch
-                          }
-                          placeholder="Cole aqui o link gerado no programa de afiliados"
-                          className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        />
+                      <input
+                        id={`affiliate-${opportunity.id}`}
+                        type="url"
+                        value={
+                          affiliateLinks[
+                            opportunity.id
+                          ] ?? ""
+                        }
+                        onChange={(event) => {
+                          setAffiliateLinks(
+                            (current) => ({
+                              ...current,
+                              [opportunity.id]:
+                                event.target.value,
+                            })
+                          );
+                        }}
+                        disabled={
+                          !canEdit ||
+                          publishingBatch
+                        }
+                        placeholder="Preenchido automaticamente pelos links colados acima"
+                        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      />
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void saveAffiliateLink(
-                              opportunity
-                            )
-                          }
-                          disabled={
-                            !canEdit ||
-                            isSaving ||
-                            isQueueing ||
-                            publishingBatch
-                          }
-                          className="rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isSaving
-                            ? "Salvando..."
-                            : opportunity.status ===
-                                "READY_TO_QUEUE"
-                              ? "Atualizar link"
-                              : "Salvar link"}
-                        </button>
-
-                        {opportunity.status ===
-                        "READY_TO_QUEUE" ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void sendToQueue(
-                                opportunity
-                              )
-                            }
-                            disabled={
-                              isQueueing ||
-                              isSaving ||
-                              publishingBatch
-                            }
-                            className="rounded-xl bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isQueueing
-                              ? "Enviando..."
-                              : "Enviar para fila"}
-                          </button>
-                        ) : null}
-                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Use este campo apenas para
+                        corrigir manualmente um link.
+                        Não é necessário salvar
+                        separadamente.
+                      </p>
 
                       {opportunity.errorMessage ? (
                         <p className="mt-3 text-sm font-medium text-red-700">

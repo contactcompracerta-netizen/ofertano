@@ -153,34 +153,6 @@ function getProductImage(
   );
 }
 
-function getDefaultAffiliateLink(): string {
-  const affiliateLink =
-    process.env.DEFAULT_ML_AFFILIATE_LINK?.trim();
-
-  if (!affiliateLink) {
-    throw new Error(
-      "A variável DEFAULT_ML_AFFILIATE_LINK não está configurada."
-    );
-  }
-
-  try {
-    const url = new URL(affiliateLink);
-
-    if (
-      url.protocol !== "http:" &&
-      url.protocol !== "https:"
-    ) {
-      throw new Error();
-    }
-
-    return url.toString();
-  } catch {
-    throw new Error(
-      "A variável DEFAULT_ML_AFFILIATE_LINK possui um link inválido."
-    );
-  }
-}
-
 async function resolveCandidate(
   highlight: HighlightEntry,
   categoryId: string,
@@ -232,11 +204,13 @@ async function resolveCandidate(
       return null;
     }
 
+    const sourceUrl =
+      offer.permalink?.trim() ||
+      `https://www.mercadolivre.com.br/p/${highlight.id}`;
+
     return {
       externalId: highlight.id,
-      sourceUrl:
-        offer.permalink ||
-        `https://www.mercadolivre.com.br/p/${highlight.id}`,
+      sourceUrl,
       title,
       image: getProductImage(
         catalog,
@@ -268,9 +242,6 @@ export async function discoverMercadoLivreOpportunities(
 
   const quantity =
     limitQuantity(rawQuantity);
-
-  const affiliateLink =
-    getDefaultAffiliateLink();
 
   const [highlights, category] =
     await Promise.all([
@@ -385,8 +356,8 @@ export async function discoverMercadoLivreOpportunities(
                 opportunity.oldPrice,
               discount:
                 opportunity.discount,
-              affiliateLink,
-              status: "READY_TO_QUEUE",
+              affiliateLink: null,
+              status: "WAITING_AFFILIATE",
             })
           ),
           skipDuplicates: true,
@@ -400,8 +371,7 @@ export async function discoverMercadoLivreOpportunities(
     categoryName,
     requested: quantity,
     scanned,
-    eligible:
-      opportunities.length,
+    eligible: opportunities.length,
     added: creation.count,
     ignored:
       opportunities.length -

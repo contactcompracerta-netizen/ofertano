@@ -10,10 +10,58 @@ enum Marketplace {
   MERCADO_LIVRE
   AMAZON
   SHOPEE
+  MAGAZINE_LUIZA
+  CASAS_BAHIA
+  KABUM
+  TERABYTE
+  ALIEXPRESS
+  CARREFOUR
+}
+
+enum ProductPublicationStatus {
+  DRAFT
+  LIVE_PARTIAL
+  LIVE_COMPLETE
+  ARCHIVED
+}
+
+enum MarketplaceOfferStatus {
+  DISCOVERED
+  PENDING_AFFILIATE
+  UNDER_REVIEW
+  ACTIVE
+  UNAVAILABLE
+  ERROR
+}
+
+enum ProductMatchStatus {
+  EXACT
+  HIGH
+  REVIEW
+  REJECTED
+}
+
+enum DiscoverySource {
+  MANUAL
+  OPPORTUNITY
+  ON_DEMAND_SEARCH
+  PRICE_MONITOR
+  API
+}
+
+enum SearchRequestStatus {
+  PENDING
+  SEARCHING
+  PARTIAL
+  COMPLETED
+  NOT_FOUND
+  ERROR
 }
 
 model Product {
-  id             String   @id @default(uuid())
+  id String @id @default(uuid())
+
+  // Campos atuais mantidos para não quebrar o site.
   mlId           String?  @unique
   name           String
   slug           String?  @unique
@@ -36,11 +84,35 @@ model Product {
   stock          Int?
   active         Boolean  @default(true)
   featured       Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
 
-  offers       MarketplaceOffer[]
-  priceHistory PriceHistory[]
+  // Identificação canônica usada para agrupar ofertas do mesmo produto.
+  canonicalName String?
+  canonicalKey  String? @unique
+  modelNumber   String?
+  ean           String?
+  gtin          String?
+  mpn           String?
+  color         String?
+  voltage       String?
+  size          String?
+
+  publicationStatus ProductPublicationStatus @default(LIVE_COMPLETE)
+
+  autoCreated    Boolean   @default(false)
+  sourceQuery    String?
+  lastSearchedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  offers         MarketplaceOffer[]
+  priceHistory   PriceHistory[]     @relation("ProductPriceHistory")
+  searchRequests SearchRequest[]
+
+  @@index([active, updatedAt])
+  @@index([category, active])
+  @@index([brand, modelNumber])
+  @@index([publicationStatus, updatedAt])
 }
 
 model MarketplaceOffer {
@@ -51,19 +123,55 @@ model MarketplaceOffer {
 
   marketplace Marketplace
 
-  affiliateLink String
+  // Identificação da oferta dentro do marketplace.
+  externalId String?
+  sourceUrl  String? @db.Text
+
+  // Pode ficar vazio enquanto aguarda revisão.
+  affiliateLink String? @db.Text
+
+  title  String?
+  image  String?
+  seller String?
 
   price        Float
   oldPrice     Float?
   installments String?
   stock        Int?
 
-  active Boolean @default(true)
+  status MarketplaceOfferStatus @default(ACTIVE)
+
+  matchStatus ProductMatchStatus @default(HIGH)
+  matchScore  Float?
+
+  discoverySource DiscoverySource @default(MANUAL)
+
+  active    Boolean @default(true)
+  available Boolean @default(true)
+  isBest    Boolean @default(false)
+
+  reviewReason String? @db.Text
+  errorMessage String? @db.Text
+
+  affiliateValidatedAt DateTime?
+  reviewedAt           DateTime?
+  lastCheckedAt        DateTime?
+  nextCheckAt          DateTime?
+  lastPriceChangeAt    DateTime?
+
+  consecutiveErrors Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  priceHistory PriceHistory[] @relation("OfferPriceHistory")
+
   @@unique([productId, marketplace])
+  @@unique([marketplace, externalId])
+  @@index([status, updatedAt])
+  @@index([matchStatus, updatedAt])
+  @@index([nextCheckAt, active])
+  @@index([productId, price])
 }
 
 model MarketplaceConnection {
@@ -73,8 +181,7 @@ model MarketplaceConnection {
 
   sellerId String
 
-  accessToken String @db.Text
-
+  accessToken  String @db.Text
   refreshToken String @db.Text
 
   expiresAt DateTime
@@ -84,13 +191,58 @@ model MarketplaceConnection {
 }
 
 model PriceHistory {
-  id         String   @id @default(cuid())
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  price      Float
+  id String @id @default(cuid())
+
+  // Mantido para compatibilidade com o histórico atual.
+  productId String
+  product   Product @relation("ProductPriceHistory", fields: [productId], references: [id], onDelete: Cascade)
+
+  // Identifica a oferta específica de cada loja.
+  offerId String?
+  offer   MarketplaceOffer? @relation("OfferPriceHistory", fields: [offerId], references: [id], onDelete: SetNull)
+
+  marketplace Marketplace?
+
+  price    Float
+  oldPrice Float?
+
+  source DiscoverySource?
+
   recordedAt DateTime @default(now())
 
   @@index([productId, recordedAt])
+  @@index([offerId, recordedAt])
+  @@index([marketplace, recordedAt])
+}
+
+model SearchRequest {
+  id String @id @default(cuid())
+
+  query           String
+  normalizedQuery String
+
+  status SearchRequestStatus @default(PENDING)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  requesterKey String?
+
+  attempts    Int @default(0)
+  resultCount Int @default(0)
+
+  errorMessage String? @db.Text
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  opportunities ProductOpportunity[]
+
+  @@index([normalizedQuery, status])
+  @@index([status, createdAt])
+  @@index([productId, createdAt])
 }
 
 enum ImportQueueStatus {
@@ -101,26 +253,32 @@ enum ImportQueueStatus {
 }
 
 model ImportQueue {
-  id            String            @id @default(cuid())
-  url           String            @unique
-  marketplace   Marketplace
-  status        ImportQueueStatus @default(PENDING)
-  attempts      Int               @default(0)
-  errorMessage  String?
+  id String @id @default(cuid())
+
+  url         String            @unique
+  marketplace Marketplace
+  status      ImportQueueStatus @default(PENDING)
+
+  attempts     Int     @default(0)
+  errorMessage String?
+
   productId     String?
-  affiliateLink String?           @db.Text
-  opportunityId String?           @unique
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  processedAt   DateTime?
+  affiliateLink String? @db.Text
+  opportunityId String? @unique
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  processedAt DateTime?
 
   @@index([status, createdAt])
+  @@index([marketplace, status])
 }
 
 enum OpportunitySourceType {
   PRODUCT
   ITEM
   USER_PRODUCT
+  SEARCH_RESULT
 }
 
 enum OpportunityStatus {
@@ -133,27 +291,52 @@ enum OpportunityStatus {
 }
 
 model ProductOpportunity {
-  id            String                @id @default(cuid())
-  externalId    String                @unique
-  sourceType    OpportunitySourceType
-  sourceUrl     String                @db.Text
-  title         String
-  image         String?
-  categoryId    String?
-  categoryName  String?
-  price         Float?
-  oldPrice      Float?
-  discount      Int?
-  affiliateLink String?               @db.Text
-  status        OpportunityStatus     @default(WAITING_AFFILIATE)
-  attempts      Int                   @default(0)
-  errorMessage  String?               @db.Text
-  productId     String?
-  discoveredAt  DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  queuedAt      DateTime?
-  publishedAt   DateTime?
+  id String @id @default(cuid())
 
+  marketplace Marketplace @default(MERCADO_LIVRE)
+
+  // O código pode se repetir em marketplaces diferentes.
+  externalId String
+
+  sourceType OpportunitySourceType
+  sourceUrl  String                @db.Text
+
+  title String
+  image String?
+
+  categoryId   String?
+  categoryName String?
+
+  price    Float?
+  oldPrice Float?
+  discount Int?
+
+  affiliateLink String? @db.Text
+
+  status OpportunityStatus @default(WAITING_AFFILIATE)
+
+  matchStatus ProductMatchStatus @default(HIGH)
+  matchScore  Float?
+
+  reviewReason String? @db.Text
+
+  attempts     Int     @default(0)
+  errorMessage String? @db.Text
+
+  productId String?
+
+  searchRequestId String?
+  searchRequest   SearchRequest? @relation(fields: [searchRequestId], references: [id], onDelete: SetNull)
+
+  discoveredAt DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  queuedAt     DateTime?
+  publishedAt  DateTime?
+
+  @@unique([marketplace, externalId])
   @@index([status, discoveredAt])
   @@index([categoryId, discoveredAt])
+  @@index([marketplace, status, discoveredAt])
+  @@index([searchRequestId, discoveredAt])
+  @@index([matchStatus, discoveredAt])
 }

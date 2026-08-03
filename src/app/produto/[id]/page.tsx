@@ -1,10 +1,10 @@
-import Image from "next/image";
+﻿import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import prisma from "@/lib/prisma";
-import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import Header from "@/components/Header";
+import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
   params: Promise<{
@@ -21,6 +21,43 @@ function formatarPreco(valor: number) {
 
 function formatarQuantidade(valor: number) {
   return new Intl.NumberFormat("pt-BR").format(valor);
+}
+
+function formatarMarketplace(marketplace: string) {
+  const nomes: Record<string, string> = {
+    MERCADO_LIVRE: "Mercado Livre",
+    AMAZON: "Amazon",
+    SHOPEE: "Shopee",
+    MAGAZINE_LUIZA: "Magazine Luiza",
+    CASAS_BAHIA: "Casas Bahia",
+    KABUM: "KaBuM!",
+    TERABYTE: "Terabyte",
+    ALIEXPRESS: "AliExpress",
+    CARREFOUR: "Carrefour",
+  };
+
+  return (
+    nomes[marketplace] ||
+    marketplace
+      .replaceAll("_", " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (letra) => letra.toUpperCase())
+  );
+}
+
+function obterTextoOfertaPendente(
+  status: string,
+  available: boolean,
+) {
+  if (!available || status === "UNAVAILABLE") {
+    return "Oferta indisponÃ­vel";
+  }
+
+  if (status === "ERROR") {
+    return "Oferta em verificaÃ§Ã£o";
+  }
+
+  return "Link em revisÃ£o";
 }
 
 export default async function ProdutoPage({
@@ -73,7 +110,30 @@ export default async function ProdutoPage({
     produto.stock !== null &&
     produto.stock > 0;
 
-  const marketplacePrincipal = produto.store.trim() || "Loja parceira";
+  const linkLegadoPrincipal = produto.affiliateLink.trim();
+
+  const ofertaPrincipalComLink = produto.offers.find((oferta) => {
+    const link = oferta.affiliateLink?.trim();
+
+    return (
+      Boolean(link) &&
+      oferta.status === "ACTIVE" &&
+      oferta.available
+    );
+  });
+
+  const linkPrincipal =
+    linkLegadoPrincipal ||
+    ofertaPrincipalComLink?.affiliateLink?.trim() ||
+    "";
+
+  const marketplacePrincipal = linkLegadoPrincipal
+    ? produto.store.trim() || "Loja parceira"
+    : ofertaPrincipalComLink
+      ? formatarMarketplace(ofertaPrincipalComLink.marketplace)
+      : produto.store.trim() || "Loja parceira";
+
+  const possuiLinkPrincipal = linkPrincipal.length > 0;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -82,14 +142,14 @@ export default async function ProdutoPage({
       <section className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 py-4">
           <nav
-            aria-label="Navegação estrutural"
+            aria-label="NavegaÃ§Ã£o estrutural"
             className="flex flex-wrap items-center gap-2 text-sm text-gray-500"
           >
             <Link
               href="/"
               className="transition hover:text-green-700"
             >
-              Início
+              InÃ­cio
             </Link>
 
             <span aria-hidden="true">/</span>
@@ -142,20 +202,22 @@ export default async function ProdutoPage({
 
               {produto.images.length > 1 && (
                 <div className="mt-6 grid grid-cols-4 gap-3 sm:grid-cols-5">
-                  {produto.images.slice(0, 5).map((imagem, indice) => (
-                    <div
-                      key={`${imagem}-${indice}`}
-                      className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-2"
-                    >
-                      <Image
-                        src={imagem}
-                        alt={`${produto.name} - imagem ${indice + 1}`}
-                        width={140}
-                        height={140}
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                  ))}
+                  {produto.images
+                    .slice(0, 5)
+                    .map((imagem, indice) => (
+                      <div
+                        key={`${imagem}-${indice}`}
+                        className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-2"
+                      >
+                        <Image
+                          src={imagem}
+                          alt={`${produto.name} - imagem ${indice + 1}`}
+                          width={140}
+                          height={140}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
@@ -181,8 +243,11 @@ export default async function ProdutoPage({
                 <div className="mt-5 flex flex-wrap items-center gap-3 text-sm">
                   {possuiAvaliacao && (
                     <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
-                      <span aria-hidden="true" className="text-amber-500">
-                        ★
+                      <span
+                        aria-hidden="true"
+                        className="text-amber-500"
+                      >
+                        â˜…
                       </span>
 
                       <span className="font-black">
@@ -191,7 +256,11 @@ export default async function ProdutoPage({
 
                       {possuiAvaliacoes && (
                         <span className="text-amber-700">
-                          ({formatarQuantidade(produto.reviews!)} avaliações)
+                          (
+                          {formatarQuantidade(
+                            produto.reviews!,
+                          )}{" "}
+                          avaliaÃ§Ãµes)
                         </span>
                       )}
                     </div>
@@ -199,23 +268,25 @@ export default async function ProdutoPage({
 
                   {possuiVendas && (
                     <span className="rounded-xl bg-gray-100 px-3 py-2 font-semibold text-gray-600">
-                      {formatarQuantidade(produto.sales!)} vendidos
+                      {formatarQuantidade(produto.sales!)}{" "}
+                      vendidos
                     </span>
                   )}
 
                   {possuiEstoque && produto.stock! <= 5 && (
                     <span className="rounded-xl bg-orange-100 px-3 py-2 font-black text-orange-700">
-                      Últimas {produto.stock} unidades
+                      Ãšltimas {produto.stock} unidades
                     </span>
                   )}
                 </div>
 
                 <div className="mt-8 border-y border-gray-200 py-7">
-                  {possuiPrecoAnterior && produto.oldPrice !== null && (
-                    <p className="text-lg font-medium text-gray-400 line-through">
-                      {formatarPreco(produto.oldPrice)}
-                    </p>
-                  )}
+                  {possuiPrecoAnterior &&
+                    produto.oldPrice !== null && (
+                      <p className="text-lg font-medium text-gray-400 line-through">
+                        {formatarPreco(produto.oldPrice)}
+                      </p>
+                    )}
 
                   <p className="mt-1 text-4xl font-black tracking-tight text-green-700 sm:text-5xl">
                     {formatarPreco(produto.price)}
@@ -228,18 +299,33 @@ export default async function ProdutoPage({
                   )}
 
                   <p className="mt-3 text-sm text-gray-500">
-                    Preço e condições sujeitos a alteração na loja parceira.
+                    PreÃ§o e condiÃ§Ãµes sujeitos a alteraÃ§Ã£o na
+                    loja parceira.
                   </p>
                 </div>
 
-                <a
-                  href={produto.affiliateLink}
-                  target="_blank"
-                  rel="noopener noreferrer sponsored"
-                  className="mt-8 flex min-h-16 w-full items-center justify-center rounded-2xl bg-green-600 px-6 text-center text-lg font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-green-700 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-green-200"
-                >
-                  Ver oferta em {marketplacePrincipal}
-                </a>
+                {possuiLinkPrincipal ? (
+                  <a
+                    href={linkPrincipal}
+                    target="_blank"
+                    rel="noopener noreferrer sponsored"
+                    className="mt-8 flex min-h-16 w-full items-center justify-center rounded-2xl bg-green-600 px-6 text-center text-lg font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-green-700 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-green-200"
+                  >
+                    Ver oferta em {marketplacePrincipal}
+                  </a>
+                ) : (
+                  <div className="mt-8 rounded-2xl border border-amber-300 bg-amber-50 px-6 py-5 text-center">
+                    <p className="font-black text-amber-900">
+                      Link em revisÃ£o
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-amber-800">
+                      Esta oferta jÃ¡ foi encontrada, mas o link
+                      individual de afiliado ainda estÃ¡ sendo
+                      conferido.
+                    </p>
+                  </div>
+                )}
 
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5">
                   <p className="font-black text-gray-900">
@@ -247,8 +333,9 @@ export default async function ProdutoPage({
                   </p>
 
                   <p className="mt-2 text-sm leading-6 text-gray-700">
-                    Você será direcionado para a loja parceira, onde deverá
-                    confirmar preço, estoque, pagamento, entrega e garantia.
+                    VocÃª serÃ¡ direcionado para a loja parceira,
+                    onde deverÃ¡ confirmar preÃ§o, estoque,
+                    pagamento, entrega e garantia.
                   </p>
                 </div>
               </div>
@@ -310,30 +397,30 @@ export default async function ProdutoPage({
                 !Array.isArray(produto.specifications) && (
                   <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm sm:p-9">
                     <h2 className="text-2xl font-black text-gray-900">
-                      Especificações
+                      EspecificaÃ§Ãµes
                     </h2>
 
                     <dl className="mt-6 divide-y divide-gray-200">
-                      {Object.entries(produto.specifications).map(
-                        ([chave, valor]) => (
-                          <div
-                            key={chave}
-                            className="grid gap-2 py-4 sm:grid-cols-[0.8fr_1.2fr]"
-                          >
-                            <dt className="font-bold text-gray-800">
-                              {chave}
-                            </dt>
+                      {Object.entries(
+                        produto.specifications,
+                      ).map(([chave, valor]) => (
+                        <div
+                          key={chave}
+                          className="grid gap-2 py-4 sm:grid-cols-[0.8fr_1.2fr]"
+                        >
+                          <dt className="font-bold text-gray-800">
+                            {chave}
+                          </dt>
 
-                            <dd className="text-gray-600">
-                              {typeof valor === "string" ||
-                              typeof valor === "number" ||
-                              typeof valor === "boolean"
-                                ? String(valor)
-                                : JSON.stringify(valor)}
-                            </dd>
-                          </div>
-                        ),
-                      )}
+                          <dd className="text-gray-600">
+                            {typeof valor === "string" ||
+                            typeof valor === "number" ||
+                            typeof valor === "boolean"
+                              ? String(valor)
+                              : JSON.stringify(valor)}
+                          </dd>
+                        </div>
+                      ))}
                     </dl>
                   </section>
                 )}
@@ -343,60 +430,120 @@ export default async function ProdutoPage({
               {produto.offers.length > 0 && (
                 <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-black text-gray-900">
-                    Outras ofertas
+                    Compare preÃ§os
                   </h2>
 
                   <p className="mt-2 text-sm leading-6 text-gray-600">
-                    Compare opções disponíveis para este produto.
+                    Veja as ofertas encontradas para este
+                    produto.
                   </p>
 
                   <div className="mt-5 space-y-3">
-                    {produto.offers.map((oferta) => (
-                      <a
-                        key={oferta.id}
-                        href={oferta.affiliateLink}
-                        target="_blank"
-                        rel="noopener noreferrer sponsored"
-                        className="block rounded-2xl border border-gray-200 p-4 transition hover:border-green-300 hover:bg-green-50"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="font-black text-gray-900">
-                              {oferta.marketplace.replaceAll("_", " ")}
-                            </p>
+                    {produto.offers.map((oferta) => {
+                      const link =
+                        oferta.affiliateLink?.trim();
 
-                            {oferta.installments && (
-                              <p className="mt-1 text-xs text-gray-500">
-                                {oferta.installments}
+                      const linkAtivo =
+                        Boolean(link) &&
+                        oferta.status === "ACTIVE" &&
+                        oferta.available;
+
+                      const marketplace =
+                        formatarMarketplace(
+                          oferta.marketplace,
+                        );
+
+                      if (linkAtivo && link) {
+                        return (
+                          <a
+                            key={oferta.id}
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer sponsored"
+                            className="block rounded-2xl border border-gray-200 p-4 transition hover:border-green-300 hover:bg-green-50"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-black text-gray-900">
+                                  {marketplace}
+                                </p>
+
+                                {oferta.installments && (
+                                  <p className="mt-1 text-xs text-gray-500">
+                                    {
+                                      oferta.installments
+                                    }
+                                  </p>
+                                )}
+
+                                {oferta.isBest && (
+                                  <span className="mt-2 inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-black text-green-700">
+                                    Melhor preÃ§o
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="shrink-0 font-black text-green-700">
+                                {formatarPreco(
+                                  oferta.price,
+                                )}
                               </p>
-                            )}
-                          </div>
+                            </div>
+                          </a>
+                        );
+                      }
 
-                          <p className="shrink-0 font-black text-green-700">
-                            {formatarPreco(oferta.price)}
-                          </p>
+                      return (
+                        <div
+                          key={oferta.id}
+                          className="rounded-2xl border border-amber-200 bg-amber-50 p-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <p className="font-black text-gray-900">
+                                {marketplace}
+                              </p>
+
+                              {oferta.installments && (
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {oferta.installments}
+                                </p>
+                              )}
+
+                              <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">
+                                {obterTextoOfertaPendente(
+                                  oferta.status,
+                                  oferta.available,
+                                )}
+                              </span>
+                            </div>
+
+                            <p className="shrink-0 font-black text-gray-700">
+                              {formatarPreco(oferta.price)}
+                            </p>
+                          </div>
                         </div>
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}
 
               <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-black text-gray-900">
-                  Comprar com segurança
+                  Comprar com seguranÃ§a
                 </h2>
 
                 <p className="mt-3 text-sm leading-6 text-gray-600">
-                  O Ofertano não recebe pagamentos e não realiza vendas
-                  diretamente.
+                  O Ofertano nÃ£o recebe pagamentos e nÃ£o realiza
+                  vendas diretamente.
                 </p>
 
                 <Link
                   href="/seguranca"
                   className="mt-5 inline-flex font-black text-green-700 transition hover:text-green-900"
                 >
-                  Ver orientações de segurança →
+                  Ver orientaÃ§Ãµes de seguranÃ§a â†’
                 </Link>
               </section>
             </aside>
@@ -408,3 +555,4 @@ export default async function ProdutoPage({
     </main>
   );
 }
+
