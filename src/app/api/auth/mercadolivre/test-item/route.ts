@@ -3,6 +3,7 @@ import {
   NextResponse,
 } from "next/server";
 
+import prisma from "@/lib/prisma";
 import {
   getAccessToken,
 } from "@/lib/mercadolivre";
@@ -13,96 +14,94 @@ export const dynamic = "force-dynamic";
 const BASE_URL =
   "https://api.mercadolibre.com";
 
-type ResultadoTeste = {
+type ApiCallResult = {
   name: string;
-  url: string;
+  endpoint: string;
   authenticated: boolean;
   status: number;
   ok: boolean;
-  response: unknown;
+  data: unknown;
 };
 
-function resumirObjeto(
-  valor: Record<
+function asRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    return null;
+  }
+
+  return value as Record<
     string,
     unknown
-  >,
-): Record<string, unknown> {
+  >;
+}
+
+function resumirErroOuItem(
+  value: unknown,
+): unknown {
+  const record = asRecord(value);
+
+  if (!record) {
+    return value;
+  }
+
   return {
-    id: valor.id,
-    title: valor.title,
+    id: record.id,
+    title: record.title,
     seller_id:
-      valor.seller_id,
-    status: valor.status,
-    message: valor.message,
-    error: valor.error,
-    cause: valor.cause,
+      record.seller_id,
+    status: record.status,
+    message: record.message,
+    error: record.error,
+    code: record.code,
+    blocked_by:
+      record.blocked_by,
+    cause: record.cause,
   };
 }
 
-function resumirResposta(
+function resumirRespostaItem(
   data: unknown,
 ): unknown {
-  if (Array.isArray(data)) {
-    return data.map((entry) => {
-      if (
-        typeof entry ===
-          "object" &&
-        entry !== null &&
-        "code" in entry &&
-        "body" in entry
-      ) {
-        const typedEntry =
-          entry as {
-            code?: unknown;
-            body?: unknown;
-          };
+  if (!Array.isArray(data)) {
+    return resumirErroOuItem(data);
+  }
 
-        const body =
-          typedEntry.body;
+  return data.map((entry) => {
+    const record = asRecord(entry);
 
-        return {
-          code:
-            typedEntry.code,
-
-          body:
-            typeof body ===
-              "object" &&
-            body !== null
-              ? resumirObjeto(
-                  body as Record<
-                    string,
-                    unknown
-                  >,
-                )
-              : body,
-        };
-      }
-
+    if (!record) {
       return entry;
-    });
-  }
+    }
 
-  if (
-    typeof data === "object" &&
-    data !== null
-  ) {
-    return resumirObjeto(
-      data as Record<
-        string,
-        unknown
-      >,
+    if (
+      "body" in record ||
+      "code" in record
+    ) {
+      return {
+        code: record.code,
+        body:
+          resumirErroOuItem(
+            record.body,
+          ),
+      };
+    }
+
+    return resumirErroOuItem(
+      entry,
     );
-  }
-
-  return data;
+  });
 }
 
-async function executarTeste(
+async function apiCall(
   name: string,
-  url: string,
+  endpoint: string,
   token?: string,
-): Promise<ResultadoTeste> {
+): Promise<ApiCallResult> {
   const headers:
     Record<string, string> = {
       Accept:
@@ -114,43 +113,176 @@ async function executarTeste(
       `Bearer ${token}`;
   }
 
-  const response =
-    await fetch(url, {
+  const response = await fetch(
+    `${BASE_URL}${endpoint}`,
+    {
       method: "GET",
       headers,
       cache: "no-store",
-    });
+    },
+  );
 
-  const texto =
+  const text =
     await response.text();
 
-  let data: unknown =
-    texto;
+  let data: unknown = text;
 
   try {
     data = JSON.parse(
-      texto,
+      text,
     ) as unknown;
   } catch {
-    // Mantém como texto quando
-    // a resposta não for JSON.
+    // Mantém texto quando a resposta
+    // do Mercado Livre não for JSON.
   }
 
   return {
     name,
-    url,
+    endpoint,
     authenticated:
       Boolean(token),
-
     status:
       response.status,
-
     ok:
       response.ok,
-
-    response:
-      resumirResposta(data),
+    data,
   };
+}
+
+function extrairAplicacaoDoUsuario(
+  data: unknown,
+  appId: string,
+) {
+  if (!Array.isArray(data)) {
+    return {
+      found: false,
+      application: null,
+    };
+  }
+
+  const application = data.find(
+    (entry) => {
+      const record =
+        asRecord(entry);
+
+      return (
+        record !== null &&
+        String(
+          record.app_id ?? "",
+        ) === appId
+      );
+    },
+  );
+
+  const record =
+    asRecord(application);
+
+  return {
+    found:
+      record !== null,
+    application:
+      record
+        ? {
+            userId:
+              record.user_id ??
+              null,
+            appId:
+              record.app_id ??
+              null,
+            scopes:
+              record.scopes ??
+              null,
+            dateCreated:
+              record.date_created ??
+              null,
+          }
+        : null,
+  };
+}
+
+function extrairGrant(
+  data: unknown,
+  appId: string,
+  sellerId: string,
+) {
+  const root =
+    asRecord(data);
+
+  const grants =
+    root &&
+    Array.isArray(root.grants)
+      ? root.grants
+      : [];
+
+  const grant = grants.find(
+    (entry) => {
+      const record =
+        asRecord(entry);
+
+      return (
+        record !== null &&
+        String(
+          record.app_id ?? "",
+        ) === appId &&
+        String(
+          record.user_id ?? "",
+        ) === sellerId
+      );
+    },
+  );
+
+  const record =
+    asRecord(grant);
+
+  return {
+    found:
+      record !== null,
+    grant:
+      record
+        ? {
+            userId:
+              record.user_id ??
+              null,
+            appId:
+              record.app_id ??
+              null,
+            scopes:
+              record.scopes ??
+              null,
+            dateCreated:
+              record.date_created ??
+              null,
+          }
+        : null,
+    paging:
+      root?.paging ?? null,
+  };
+}
+
+function extrairIdsProprios(
+  data: unknown,
+): string[] {
+  const root =
+    asRecord(data);
+
+  if (
+    !root ||
+    !Array.isArray(
+      root.results,
+    )
+  ) {
+    return [];
+  }
+
+  return root.results
+    .filter(
+      (
+        value,
+      ): value is string =>
+        typeof value ===
+        "string",
+    )
+    .slice(0, 5);
 }
 
 export async function GET(
@@ -169,7 +301,6 @@ export async function GET(
       return NextResponse.json(
         {
           success: false,
-
           error:
             "Informe um itemId válido, por exemplo: MLB4224584697.",
         },
@@ -179,50 +310,264 @@ export async function GET(
       );
     }
 
+    const appId =
+      process.env
+        .MERCADO_LIVRE_CLIENT_ID
+        ?.trim();
+
+    if (!appId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "MERCADO_LIVRE_CLIENT_ID não configurado.",
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+
+    const connection =
+      await prisma
+        .marketplaceConnection
+        .findUnique({
+          where: {
+            marketplace:
+              "MERCADO_LIVRE",
+          },
+        });
+
+    if (
+      !connection ||
+      !connection.sellerId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Conexão do Mercado Livre ou sellerId não encontrado.",
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    const sellerId =
+      connection.sellerId;
+
     const token =
       await getAccessToken();
 
-    const singleUrl =
-      `${BASE_URL}/items/${itemId}`;
+    const [
+      singleWithToken,
+      multigetWithToken,
+      singleWithoutToken,
+      multigetWithoutToken,
+      userApplications,
+      appGrants,
+      ownItemsSearch,
+    ] = await Promise.all([
+      apiCall(
+        "single_with_token",
+        `/items/${itemId}`,
+        token,
+      ),
 
-    const multigetUrl =
-      `${BASE_URL}/items?ids=${encodeURIComponent(
-        itemId,
-      )}`;
+      apiCall(
+        "multiget_with_token",
+        `/items?ids=${encodeURIComponent(
+          itemId,
+        )}`,
+        token,
+      ),
 
-    const results =
-      await Promise.all([
-        executarTeste(
-          "single_with_token",
-          singleUrl,
-          token,
-        ),
+      apiCall(
+        "single_without_token",
+        `/items/${itemId}`,
+      ),
 
-        executarTeste(
-          "multiget_with_token",
-          multigetUrl,
-          token,
-        ),
+      apiCall(
+        "multiget_without_token",
+        `/items?ids=${encodeURIComponent(
+          itemId,
+        )}`,
+      ),
 
-        executarTeste(
-          "single_without_token",
-          singleUrl,
-        ),
+      apiCall(
+        "user_applications",
+        `/users/${encodeURIComponent(
+          sellerId,
+        )}/applications`,
+        token,
+      ),
 
-        executarTeste(
-          "multiget_without_token",
-          multigetUrl,
-        ),
-      ]);
+      apiCall(
+        "application_grants",
+        `/applications/${encodeURIComponent(
+          appId,
+        )}/grants`,
+        token,
+      ),
+
+      apiCall(
+        "own_items_search",
+        `/users/${encodeURIComponent(
+          sellerId,
+        )}/items/search?limit=5`,
+        token,
+      ),
+    ]);
+
+    const ownItemIds =
+      extrairIdsProprios(
+        ownItemsSearch.data,
+      );
+
+    const ownItemDetail =
+      ownItemIds[0]
+        ? await apiCall(
+            "own_item_detail",
+            `/items/${encodeURIComponent(
+              ownItemIds[0],
+            )}`,
+            token,
+          )
+        : null;
 
     return NextResponse.json({
       success: true,
-      itemId,
-
       testedAt:
         new Date().toISOString(),
 
-      results,
+      identity: {
+        appId,
+        sellerId,
+      },
+
+      effectiveAuthorization: {
+        userApplications: {
+          status:
+            userApplications.status,
+          ok:
+            userApplications.ok,
+          ...extrairAplicacaoDoUsuario(
+            userApplications.data,
+            appId,
+          ),
+        },
+
+        applicationGrant: {
+          status:
+            appGrants.status,
+          ok:
+            appGrants.ok,
+          ...extrairGrant(
+            appGrants.data,
+            appId,
+            sellerId,
+          ),
+        },
+      },
+
+      ownSellerAccess: {
+        searchStatus:
+          ownItemsSearch.status,
+        searchOk:
+          ownItemsSearch.ok,
+        itemIds:
+          ownItemIds,
+
+        searchError:
+          ownItemsSearch.ok
+            ? null
+            : resumirErroOuItem(
+                ownItemsSearch.data,
+              ),
+
+        firstItemDetail:
+          ownItemDetail
+            ? {
+                itemId:
+                  ownItemIds[0],
+                status:
+                  ownItemDetail.status,
+                ok:
+                  ownItemDetail.ok,
+                response:
+                  resumirRespostaItem(
+                    ownItemDetail.data,
+                  ),
+              }
+            : null,
+      },
+
+      targetItemAccess: {
+        itemId,
+
+        results: [
+          {
+            name:
+              singleWithToken.name,
+            authenticated:
+              true,
+            status:
+              singleWithToken.status,
+            ok:
+              singleWithToken.ok,
+            response:
+              resumirRespostaItem(
+                singleWithToken.data,
+              ),
+          },
+
+          {
+            name:
+              multigetWithToken.name,
+            authenticated:
+              true,
+            status:
+              multigetWithToken.status,
+            ok:
+              multigetWithToken.ok,
+            response:
+              resumirRespostaItem(
+                multigetWithToken.data,
+              ),
+          },
+
+          {
+            name:
+              singleWithoutToken.name,
+            authenticated:
+              false,
+            status:
+              singleWithoutToken.status,
+            ok:
+              singleWithoutToken.ok,
+            response:
+              resumirRespostaItem(
+                singleWithoutToken.data,
+              ),
+          },
+
+          {
+            name:
+              multigetWithoutToken.name,
+            authenticated:
+              false,
+            status:
+              multigetWithoutToken.status,
+            ok:
+              multigetWithoutToken.ok,
+            response:
+              resumirRespostaItem(
+                multigetWithoutToken.data,
+              ),
+          },
+        ],
+      },
     });
   } catch (error) {
     const message =
