@@ -1,22 +1,36 @@
+import type { ProductImport } from "../core/types";
+
 import { carregarPaginaAmazon } from "./api";
 import { parseAmazonProduct } from "./parser";
 
-import type { ProductImport } from "../core/types";
-
 export async function importarAmazon(
-  url: string
+  rawUrl: string,
 ): Promise<ProductImport> {
-  const $ = await carregarPaginaAmazon(url);
+  const url = rawUrl.trim();
 
-  const product = parseAmazonProduct($, url);
+  if (!url) {
+    throw new Error(
+      "Cole o link do produto da Amazon.",
+    );
+  }
+
+  const pagina =
+    await carregarPaginaAmazon(url);
+
+  const product = parseAmazonProduct(
+    pagina.$,
+    pagina.originalUrl,
+    pagina.finalUrl,
+  );
 
   const discount =
-    product.oldPrice &&
+    product.oldPrice !== undefined &&
     product.oldPrice > product.price
       ? Math.round(
-          ((product.oldPrice - product.price) /
+          ((product.oldPrice -
+            product.price) /
             product.oldPrice) *
-            100
+            100,
         )
       : null;
 
@@ -58,10 +72,11 @@ export async function importarAmazon(
 
     sales: null,
 
-    stock: null,
+    stock: product.stock,
 
-    seller: "Amazon",
+    seller:
+      product.seller ?? "Amazon",
 
-    attributes: {},
+    attributes: product.attributes,
   };
 }
