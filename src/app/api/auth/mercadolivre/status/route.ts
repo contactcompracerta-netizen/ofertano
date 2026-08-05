@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { getAccessToken } from "@/lib/mercadolivre";
+import {
+  getAccessToken,
+} from "@/lib/mercadolivre";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +11,7 @@ export const dynamic = "force-dynamic";
 type MercadoLivreUser = {
   id?: number | string;
   nickname?: string;
+
   status?: {
     site_status?: string;
   };
@@ -19,7 +22,8 @@ export async function GET() {
     const connection =
       await prisma.marketplaceConnection.findUnique({
         where: {
-          marketplace: "MERCADO_LIVRE",
+          marketplace:
+            "MERCADO_LIVRE",
         },
       });
 
@@ -36,31 +40,40 @@ export async function GET() {
       );
     }
 
-    const token = await getAccessToken();
+    const token =
+      await getAccessToken();
 
     const response = await fetch(
       "https://api.mercadolibre.com/users/me",
       {
         method: "GET",
+
         headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
+          Authorization:
+            `Bearer ${token}`,
+
+          Accept:
+            "application/json",
         },
+
         cache: "no-store",
       },
     );
 
-    const texto = await response.text();
+    const texto =
+      await response.text();
 
-    let data: MercadoLivreUser | string =
-      texto;
+    let data:
+      | MercadoLivreUser
+      | string = texto;
 
     try {
       data = JSON.parse(
         texto,
       ) as MercadoLivreUser;
     } catch {
-      // Mantém como texto quando a resposta não for JSON.
+      // Mantém o conteúdo como texto
+      // quando a resposta não for JSON.
     }
 
     if (!response.ok) {
@@ -68,11 +81,15 @@ export async function GET() {
         {
           success: false,
           tokenValid: false,
+
           savedSellerId:
             connection.sellerId,
+
           mercadoLivreStatus:
             response.status,
-          mercadoLivreResponse: data,
+
+          mercadoLivreResponse:
+            data,
         },
         {
           status: response.status,
@@ -89,21 +106,27 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       tokenValid: true,
+
       savedSellerId:
         connection.sellerId,
+
       authenticatedUserId,
+
       sellerIdMatches:
         authenticatedUserId ===
         connection.sellerId,
+
       nickname:
         typeof data === "object"
           ? data.nickname ?? null
           : null,
+
       accountStatus:
         typeof data === "object"
-          ? data.status?.site_status ??
-            null
+          ? data.status
+              ?.site_status ?? null
           : null,
+
       tokenExpiresAt:
         connection.expiresAt.toISOString(),
     });
