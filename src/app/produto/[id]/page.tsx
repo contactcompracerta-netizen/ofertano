@@ -1,9 +1,9 @@
-﻿import Image from "next/image";
-import Link from "next/link";
+﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import ProductGallery from "@/components/ProductGallery";
 import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
@@ -46,6 +46,17 @@ function formatarMarketplace(marketplace: string) {
       .toLowerCase()
       .replace(/\b\w/g, (letra) => letra.toUpperCase())
   );
+}
+
+function limparMarca(marca: string | null | undefined) {
+  const valor = marca?.trim();
+
+  if (!valor) return null;
+
+  return valor
+    .replace(/^visite\s+a\s+loja\s+/i, "")
+    .replace(/^marca:\s*/i, "")
+    .trim() || null;
 }
 
 function obterTextoOfertaPendente(status: string, available: boolean) {
@@ -265,6 +276,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       : produto.store?.trim() || "Loja parceira";
 
   const possuiLinkPrincipal = linkPrincipal.length > 0;
+  const marcaExibicao = limparMarca(produto.brand);
 
   const especificacoes =
     produto.specifications &&
@@ -307,59 +319,13 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         </div>
 
         <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(390px,0.92fr)] lg:gap-8">
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl">
-              <div className="relative flex min-h-[320px] items-center justify-center p-4 sm:min-h-[500px] sm:p-8 lg:min-h-[560px]">
-                <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2 sm:left-6 sm:top-6">
-                  {possuiDesconto && (
-                    <span className="rounded-full bg-rose-600 px-3 py-1.5 text-xs font-black text-white shadow-sm sm:text-sm">
-                      {percentualDesconto}% OFF
-                    </span>
-                  )}
-
-                  {produto.featured && (
-                    <span className="rounded-full bg-amber-400 px-3 py-1.5 text-xs font-black text-amber-950 shadow-sm sm:text-sm">
-                      Destaque
-                    </span>
-                  )}
-                </div>
-
-                <Image
-                  src={imagens[0] || produto.image}
-                  alt={produto.name}
-                  width={900}
-                  height={900}
-                  priority
-                  sizes="(max-width: 1024px) 100vw, 58vw"
-                  className="max-h-[430px] w-full object-contain sm:max-h-[500px]"
-                />
-              </div>
-
-              {imagens.length > 1 && (
-                <div className="border-t border-slate-200 px-4 py-4 sm:px-6">
-                  <div className="flex gap-3 overflow-x-auto pb-1">
-                    {imagens.map((imagem, indice) => (
-                      <div
-                        key={`${imagem}-${indice}`}
-                        className={`flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white p-2 sm:h-24 sm:w-24 ${
-                          indice === 0
-                            ? "border-emerald-500 ring-2 ring-emerald-100"
-                            : "border-slate-200"
-                        }`}
-                      >
-                        <Image
-                          src={imagem}
-                          alt={`${produto.name} - imagem ${indice + 1}`}
-                          width={120}
-                          height={120}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)] lg:gap-8">
+            <ProductGallery
+              images={imagens}
+              productName={produto.name}
+              discountPercent={percentualDesconto}
+              featured={produto.featured}
+            />
 
             <aside className="lg:sticky lg:top-24">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
@@ -369,14 +335,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     Oferta em {marketplacePrincipal}
                   </span>
 
-                  {produto.brand && (
+                  {marcaExibicao && (
                     <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-                      {produto.brand}
+                      {marcaExibicao}
                     </span>
                   )}
                 </div>
 
-                <h1 className="mt-4 text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-3xl lg:text-[2.15rem]">
+                <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.9rem]">
                   {produto.name}
                 </h1>
 
