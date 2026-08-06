@@ -286,7 +286,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
+    <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <Header />
 
       <main>
@@ -319,7 +319,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         </div>
 
         <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)] lg:gap-8">
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(430px,0.82fr)] lg:gap-8">
             <ProductGallery
               images={imagens}
               productName={produto.name}
@@ -342,7 +342,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   )}
                 </div>
 
-                <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.9rem]">
+                <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.75rem]">
                   {produto.name}
                 </h1>
 
@@ -623,6 +623,33 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </section>
         </section>
       </main>
+
+      {possuiLinkPrincipal && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-2xl items-center gap-3">
+            <div className="min-w-0 shrink-0">
+              {possuiPrecoAnterior && produto.oldPrice !== null && (
+                <p className="text-[11px] font-semibold text-slate-400 line-through">
+                  {formatarPreco(produto.oldPrice)}
+                </p>
+              )}
+              <p className="text-lg font-black leading-none text-emerald-700">
+                {formatarPreco(produto.price)}
+              </p>
+            </div>
+
+            <a
+              href={linkPrincipal}
+              target="_blank"
+              rel="noopener noreferrer sponsored"
+              className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-center text-sm font-black text-white shadow-lg shadow-emerald-600/20 active:scale-[0.99]"
+            >
+              Ver oferta
+              <ExternalLinkIcon className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
