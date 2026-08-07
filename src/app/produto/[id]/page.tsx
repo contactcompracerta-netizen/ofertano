@@ -378,7 +378,6 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       : produto.store?.trim() || "Loja parceira";
 
   const possuiLinkPrincipal = linkPrincipal.length > 0;
-  const precoLongoNaBarraMobile = produto.price >= 1000;
   const marcaExibicao = limparMarca(produto.brand);
 
   const especificacoes =
@@ -744,94 +743,52 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         </section>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-[100] border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
-        {precoLongoNaBarraMobile ? (
-          <div className="mx-auto max-w-2xl space-y-2.5">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div className="min-w-0 flex-1">
-                {possuiPrecoAnterior && produto.oldPrice !== null && (
-                  <p className="truncate text-[11px] font-semibold text-slate-400 line-through">
-                    {formatarPreco(produto.oldPrice)}
-                  </p>
-                )}
-                <p className="truncate text-lg font-black leading-none text-emerald-700">
-                  {formatarPreco(produto.price)}
-                </p>
-              </div>
-
-              <ShareProductButton
-                title={produto.name}
-                text={`Confira esta oferta no Ofertano: ${produto.name}`}
-                platform="whatsapp"
-                variant="icon"
-              />
-
-              <ShareProductButton
-                title={produto.name}
-                text={`Confira esta oferta no Ofertano: ${produto.name}`}
-                variant="icon"
-              />
-            </div>
-
-            {possuiLinkPrincipal ? (
-              <a
-                href={linkPrincipal}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-center text-sm font-black text-white shadow-lg shadow-emerald-600/20 active:scale-[0.99]"
-              >
-                Ver oferta
-                <ExternalLinkIcon className="h-4 w-4" />
-              </a>
-            ) : (
-              <div className="flex min-h-12 w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 text-center text-sm font-black text-amber-800">
-                Link em revisão
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mx-auto flex max-w-2xl min-w-0 items-center gap-2.5">
-            <div className="min-w-0 shrink-0">
-              {possuiPrecoAnterior && produto.oldPrice !== null && (
-                <p className="text-[11px] font-semibold text-slate-400 line-through">
-                  {formatarPreco(produto.oldPrice)}
-                </p>
-              )}
-              <p className="text-lg font-black leading-none text-emerald-700">
-                {formatarPreco(produto.price)}
+      <div className="fixed inset-x-0 bottom-0 z-[100] border-t border-slate-200 bg-white/95 px-2.5 py-2.5 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.65rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto grid max-w-2xl grid-cols-[minmax(72px,auto)_44px_44px_minmax(96px,1fr)] items-center gap-2">
+          <div className="min-w-0">
+            {possuiPrecoAnterior && produto.oldPrice !== null && (
+              <p className="truncate text-[10px] font-semibold text-slate-400 line-through">
+                {formatarPreco(produto.oldPrice)}
               </p>
-            </div>
+            )}
+            <p className="truncate text-[16px] font-black leading-none text-emerald-700">
+              {formatarPreco(produto.price)}
+            </p>
+          </div>
 
+          <div className="[&_button]:h-11 [&_button]:w-11">
             <ShareProductButton
               title={produto.name}
               text={`Confira esta oferta no Ofertano: ${produto.name}`}
               platform="whatsapp"
               variant="icon"
             />
+          </div>
 
+          <div className="[&_button]:h-11 [&_button]:w-11">
             <ShareProductButton
               title={produto.name}
               text={`Confira esta oferta no Ofertano: ${produto.name}`}
               variant="icon"
             />
-
-            {possuiLinkPrincipal ? (
-              <a
-                href={linkPrincipal}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                className="flex min-h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-center text-sm font-black text-white shadow-lg shadow-emerald-600/20 active:scale-[0.99]"
-              >
-                <span className="truncate">Ver oferta</span>
-                <ExternalLinkIcon className="h-4 w-4 shrink-0" />
-              </a>
-            ) : (
-              <div className="flex min-h-12 min-w-0 flex-1 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 text-center text-sm font-black text-amber-800">
-                Link em revisão
-              </div>
-            )}
           </div>
-        )}
+
+          {possuiLinkPrincipal ? (
+            <a
+              href={linkPrincipal}
+              target="_blank"
+              rel="noopener noreferrer sponsored"
+              className="flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 text-center text-[13px] font-black text-white shadow-lg shadow-emerald-600/20 active:scale-[0.99]"
+            >
+              <span className="truncate">Ver oferta</span>
+              <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
+            </a>
+          ) : (
+            <div className="flex min-h-11 min-w-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-2 text-center text-[12px] font-black text-amber-800">
+              Link em revisão
+            </div>
+          )}
+        </div>
       </div>
 
       <Footer />
