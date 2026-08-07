@@ -1,9 +1,10 @@
-﻿import Image from "next/image";
-import Link from "next/link";
+﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import ProductGallery from "@/components/ProductGallery";
+import ShareProductButton from "@/components/ShareProductButton";
 import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
@@ -46,6 +47,17 @@ function formatarMarketplace(marketplace: string) {
       .toLowerCase()
       .replace(/\b\w/g, (letra) => letra.toUpperCase())
   );
+}
+
+function limparMarca(marca: string | null | undefined) {
+  const valor = marca?.trim();
+
+  if (!valor) return null;
+
+  return valor
+    .replace(/^visite\s+a\s+loja\s+/i, "")
+    .replace(/^marca:\s*/i, "")
+    .trim() || null;
 }
 
 function obterTextoOfertaPendente(status: string, available: boolean) {
@@ -265,6 +277,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       : produto.store?.trim() || "Loja parceira";
 
   const possuiLinkPrincipal = linkPrincipal.length > 0;
+  const marcaExibicao = limparMarca(produto.brand);
 
   const especificacoes =
     produto.specifications &&
@@ -274,7 +287,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
+    <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <Header />
 
       <main>
@@ -307,76 +320,37 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         </div>
 
         <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(390px,0.92fr)] lg:gap-8">
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl">
-              <div className="relative flex min-h-[320px] items-center justify-center p-4 sm:min-h-[500px] sm:p-8 lg:min-h-[560px]">
-                <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2 sm:left-6 sm:top-6">
-                  {possuiDesconto && (
-                    <span className="rounded-full bg-rose-600 px-3 py-1.5 text-xs font-black text-white shadow-sm sm:text-sm">
-                      {percentualDesconto}% OFF
-                    </span>
-                  )}
-
-                  {produto.featured && (
-                    <span className="rounded-full bg-amber-400 px-3 py-1.5 text-xs font-black text-amber-950 shadow-sm sm:text-sm">
-                      Destaque
-                    </span>
-                  )}
-                </div>
-
-                <Image
-                  src={imagens[0] || produto.image}
-                  alt={produto.name}
-                  width={900}
-                  height={900}
-                  priority
-                  sizes="(max-width: 1024px) 100vw, 58vw"
-                  className="max-h-[430px] w-full object-contain sm:max-h-[500px]"
-                />
-              </div>
-
-              {imagens.length > 1 && (
-                <div className="border-t border-slate-200 px-4 py-4 sm:px-6">
-                  <div className="flex gap-3 overflow-x-auto pb-1">
-                    {imagens.map((imagem, indice) => (
-                      <div
-                        key={`${imagem}-${indice}`}
-                        className={`flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white p-2 sm:h-24 sm:w-24 ${
-                          indice === 0
-                            ? "border-emerald-500 ring-2 ring-emerald-100"
-                            : "border-slate-200"
-                        }`}
-                      >
-                        <Image
-                          src={imagem}
-                          alt={`${produto.name} - imagem ${indice + 1}`}
-                          width={120}
-                          height={120}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(430px,0.82fr)] lg:gap-8">
+            <ProductGallery
+              images={imagens}
+              productName={produto.name}
+              discountPercent={percentualDesconto}
+              featured={produto.featured}
+            />
 
             <aside className="lg:sticky lg:top-24">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                    <CheckIcon className="h-4 w-4" />
-                    Oferta em {marketplacePrincipal}
-                  </span>
-
-                  {produto.brand && (
-                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-                      {produto.brand}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                      <CheckIcon className="h-4 w-4" />
+                      Oferta em {marketplacePrincipal}
                     </span>
-                  )}
+
+                    {marcaExibicao && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+                        {marcaExibicao}
+                      </span>
+                    )}
+                  </div>
+
+                  <ShareProductButton
+                    title={produto.name}
+                    text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                  />
                 </div>
 
-                <h1 className="mt-4 text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-3xl lg:text-[2.15rem]">
+                <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.75rem]">
                   {produto.name}
                 </h1>
 
@@ -657,6 +631,39 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </section>
         </section>
       </main>
+
+      {possuiLinkPrincipal && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-2xl items-center gap-3">
+            <div className="min-w-0 shrink-0">
+              {possuiPrecoAnterior && produto.oldPrice !== null && (
+                <p className="text-[11px] font-semibold text-slate-400 line-through">
+                  {formatarPreco(produto.oldPrice)}
+                </p>
+              )}
+              <p className="text-lg font-black leading-none text-emerald-700">
+                {formatarPreco(produto.price)}
+              </p>
+            </div>
+
+            <ShareProductButton
+              title={produto.name}
+              text={`Confira esta oferta no Ofertano: ${produto.name}`}
+              variant="icon"
+            />
+
+            <a
+              href={linkPrincipal}
+              target="_blank"
+              rel="noopener noreferrer sponsored"
+              className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-center text-sm font-black text-white shadow-lg shadow-emerald-600/20 active:scale-[0.99]"
+            >
+              Ver oferta
+              <ExternalLinkIcon className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
