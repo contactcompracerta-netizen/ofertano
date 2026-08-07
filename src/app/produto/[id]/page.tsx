@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ProductGallery from "@/components/ProductGallery";
+import ShareProductButton from "@/components/ShareProductButton";
 import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
@@ -329,17 +330,24 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
             <aside className="lg:sticky lg:top-24">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                    <CheckIcon className="h-4 w-4" />
-                    Oferta em {marketplacePrincipal}
-                  </span>
-
-                  {marcaExibicao && (
-                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-                      {marcaExibicao}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                      <CheckIcon className="h-4 w-4" />
+                      Oferta em {marketplacePrincipal}
                     </span>
-                  )}
+
+                    {marcaExibicao && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+                        {marcaExibicao}
+                      </span>
+                    )}
+                  </div>
+
+                  <ShareProductButton
+                    title={produto.name}
+                    text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                  />
                 </div>
 
                 <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.75rem]">
@@ -637,6 +645,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                 {formatarPreco(produto.price)}
               </p>
             </div>
+
+            <ShareProductButton
+              title={produto.name}
+              text={`Confira esta oferta no Ofertano: ${produto.name}`}
+              variant="icon"
+            />
 
             <a
               href={linkPrincipal}
