@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import FavoriteButton from "@/components/FavoriteButton";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ProductGallery from "@/components/ProductGallery";
@@ -340,6 +341,38 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     notFound();
   }
 
+  const filtrosSemelhantes = [
+    { category: produto.category },
+    ...(produto.brand?.trim() ? [{ brand: produto.brand }] : []),
+  ];
+
+  const produtosSemelhantes = await prisma.product.findMany({
+    where: {
+      id: { not: produto.id },
+      active: true,
+      price: { gt: 0 },
+      image: { not: "" },
+      OR: filtrosSemelhantes,
+    },
+    select: {
+      id: true,
+      name: true,
+      image: true,
+      price: true,
+      oldPrice: true,
+      discount: true,
+      store: true,
+      brand: true,
+      rating: true,
+      reviews: true,
+    },
+    orderBy: [
+      { featured: "desc" },
+      { updatedAt: "desc" },
+    ],
+    take: 8,
+  });
+
   const imagens = Array.from(
     new Set([produto.image, ...produto.images].filter(Boolean)),
   ).slice(0, 6);
@@ -396,7 +429,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
       <main>
         <div className="border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1440px] px-4 py-3 sm:px-6 lg:px-8">
             <nav
               aria-label="Navegação estrutural"
               className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-slate-500 sm:text-sm"
@@ -423,8 +456,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </div>
         </div>
 
-        <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(430px,0.82fr)] lg:gap-8">
+        <section className="mx-auto max-w-[1440px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_500px] xl:gap-10">
             <ProductGallery
               images={imagens}
               productName={produto.name}
@@ -434,7 +467,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
             <aside className="lg:sticky lg:top-24">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
                       <CheckIcon className="h-4 w-4" />
@@ -448,7 +481,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <FavoriteButton productId={produto.id} variant="icon" />
+
                     <ShareProductButton
                       title={produto.name}
                       text={`Confira esta oferta no Ofertano: ${produto.name}`}
@@ -715,6 +750,79 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                 </section>
               )}
             </div>
+          )}
+
+          {produtosSemelhantes.length > 0 && (
+            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mt-8 sm:rounded-3xl sm:p-7 lg:p-8">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+                    Você também pode gostar
+                  </p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                    Produtos semelhantes
+                  </h2>
+                </div>
+                <p className="max-w-xl text-sm leading-6 text-slate-600">
+                  Recomendações da mesma categoria ou marca para comparar antes de comprar.
+                </p>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-4">
+                {produtosSemelhantes.map((item) => {
+                  const temPrecoAnterior = item.oldPrice !== null && item.oldPrice > item.price;
+                  const desconto =
+                    item.discount !== null && item.discount > 0
+                      ? Math.round(item.discount)
+                      : temPrecoAnterior && item.oldPrice !== null
+                        ? Math.round(((item.oldPrice - item.price) / item.oldPrice) * 100)
+                        : 0;
+
+                  return (
+                    <Link
+                      key={item.id}
+                      href={`/produto/${item.id}`}
+                      className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg"
+                    >
+                      <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-slate-50 p-4">
+                        {desconto > 0 && (
+                          <span className="absolute left-3 top-3 z-10 rounded-full bg-rose-600 px-2.5 py-1 text-[10px] font-black text-white shadow-sm">
+                            {desconto}% OFF
+                          </span>
+                        )}
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          loading="lazy"
+                          className="h-full w-full object-contain transition duration-300 group-hover:scale-[1.03]"
+                        />
+                      </div>
+                      <div className="p-3 sm:p-4">
+                        <p className="text-[11px] font-black uppercase tracking-wide text-emerald-700">
+                          {item.store}
+                        </p>
+                        <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-black leading-5 text-slate-900 sm:text-[15px]">
+                          {item.name}
+                        </h3>
+                        <div className="mt-3">
+                          {temPrecoAnterior && item.oldPrice !== null && (
+                            <p className="text-xs font-semibold text-slate-400 line-through">
+                              {formatarPreco(item.oldPrice)}
+                            </p>
+                          )}
+                          <p className="text-lg font-black text-emerald-700 sm:text-xl">
+                            {formatarPreco(item.price)}
+                          </p>
+                        </div>
+                        <span className="mt-3 flex min-h-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-black text-white transition group-hover:bg-emerald-700">
+                          Ver produto
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mt-8 sm:rounded-3xl sm:p-7 lg:p-8">
