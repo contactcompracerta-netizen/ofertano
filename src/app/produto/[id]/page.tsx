@@ -346,7 +346,20 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     ...(produto.brand?.trim() ? [{ brand: produto.brand }] : []),
   ];
 
-  const produtosSemelhantes = await prisma.product.findMany({
+  const selectRecomendado = {
+    id: true,
+    name: true,
+    image: true,
+    price: true,
+    oldPrice: true,
+    discount: true,
+    store: true,
+    brand: true,
+    rating: true,
+    reviews: true,
+  } as const;
+
+  const produtosSemelhantesDiretos = await prisma.product.findMany({
     where: {
       id: { not: produto.id },
       active: true,
@@ -354,24 +367,42 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       image: { not: "" },
       OR: filtrosSemelhantes,
     },
-    select: {
-      id: true,
-      name: true,
-      image: true,
-      price: true,
-      oldPrice: true,
-      discount: true,
-      store: true,
-      brand: true,
-      rating: true,
-      reviews: true,
-    },
+    select: selectRecomendado,
     orderBy: [
       { featured: "desc" },
       { updatedAt: "desc" },
     ],
     take: 8,
   });
+
+  const idsJaSelecionados = produtosSemelhantesDiretos.map((item) => item.id);
+
+  const produtosComplementares =
+    produtosSemelhantesDiretos.length < 8
+      ? await prisma.product.findMany({
+          where: {
+            id: {
+              notIn: [produto.id, ...idsJaSelecionados],
+            },
+            active: true,
+            price: { gt: 0 },
+            image: { not: "" },
+          },
+          select: selectRecomendado,
+          orderBy: [
+            { featured: "desc" },
+            { updatedAt: "desc" },
+          ],
+          take: 8 - produtosSemelhantesDiretos.length,
+        })
+      : [];
+
+  const produtosRecomendados = [
+    ...produtosSemelhantesDiretos,
+    ...produtosComplementares,
+  ];
+
+  const temSemelhantesDiretos = produtosSemelhantesDiretos.length > 0;
 
   const imagens = Array.from(
     new Set([produto.image, ...produto.images].filter(Boolean)),
@@ -427,7 +458,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <Header />
 
-      <main>
+      <main className="bg-slate-50/70">
         <div className="border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-[1440px] px-4 py-3 sm:px-6 lg:px-8">
             <nav
@@ -456,8 +487,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </div>
         </div>
 
-        <section className="mx-auto max-w-[1440px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_500px] xl:gap-10">
+        <section className="mx-auto max-w-[1500px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_470px] lg:gap-0 lg:overflow-visible lg:rounded-[2rem] lg:border lg:border-slate-200 lg:bg-white lg:p-6 lg:shadow-sm xl:grid-cols-[minmax(0,1fr)_510px] xl:p-8">
             <ProductGallery
               images={imagens}
               productName={produto.name}
@@ -465,8 +496,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               featured={produto.featured}
             />
 
-            <aside className="lg:sticky lg:top-24">
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
+            <aside className="lg:sticky lg:top-24 lg:border-l lg:border-slate-200 lg:pl-7 xl:pl-9">
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
@@ -752,7 +783,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             </div>
           )}
 
-          {produtosSemelhantes.length > 0 && (
+          {produtosRecomendados.length > 0 && (
             <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mt-8 sm:rounded-3xl sm:p-7 lg:p-8">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -760,16 +791,18 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     Você também pode gostar
                   </p>
                   <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-                    Produtos semelhantes
+                    {temSemelhantesDiretos ? "Produtos semelhantes" : "Ofertas recomendadas"}
                   </h2>
                 </div>
                 <p className="max-w-xl text-sm leading-6 text-slate-600">
-                  Recomendações da mesma categoria ou marca para comparar antes de comprar.
+                  {temSemelhantesDiretos
+                    ? "Produtos da mesma categoria ou marca para você comparar antes de comprar."
+                    : "Outras ofertas ativas do Ofertano selecionadas para você continuar comparando."}
                 </p>
               </div>
 
               <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-4">
-                {produtosSemelhantes.map((item) => {
+                {produtosRecomendados.map((item) => {
                   const temPrecoAnterior = item.oldPrice !== null && item.oldPrice > item.price;
                   const desconto =
                     item.discount !== null && item.discount > 0
