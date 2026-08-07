@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+﻿import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import Footer from "@/components/Footer";
@@ -215,6 +216,106 @@ function CheckIcon({ className }: IconProps) {
   );
 }
 
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://ofertano.vercel.app").replace(/\/$/, "");
+
+function normalizarUrlAbsoluta(url: string) {
+  const valor = url.trim();
+
+  if (!valor) return null;
+
+  if (/^https?:\/\//i.test(valor)) {
+    return valor;
+  }
+
+  return `${SITE_URL}${valor.startsWith("/") ? "" : "/"}${valor}`;
+}
+
+function criarDescricaoCompartilhamento(
+  nome: string,
+  descricao: string | null | undefined,
+) {
+  const descricaoLimpa = descricao
+    ?.replace(/\s+/g, " ")
+    .trim();
+
+  if (descricaoLimpa) {
+    return descricaoLimpa.length > 180
+      ? `${descricaoLimpa.slice(0, 177).trimEnd()}...`
+      : descricaoLimpa;
+  }
+
+  return `Compare o preço de ${nome} no Ofertano e compre diretamente na loja parceira.`;
+}
+
+export async function generateMetadata({
+  params,
+}: ProdutoPageProps): Promise<Metadata> {
+  const { id } = await params;
+
+  const produto = await prisma.product.findFirst({
+    where: {
+      id,
+      active: true,
+    },
+    select: {
+      name: true,
+      description: true,
+      image: true,
+      images: true,
+    },
+  });
+
+  if (!produto) {
+    return {
+      title: "Produto não encontrado | Ofertano",
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+
+  const urlProduto = `${SITE_URL}/produto/${id}`;
+  const imagemPrincipal = [produto.image, ...produto.images]
+    .filter((imagem): imagem is string => Boolean(imagem?.trim()))
+    .map(normalizarUrlAbsoluta)
+    .find((imagem): imagem is string => Boolean(imagem));
+  const descricao = criarDescricaoCompartilhamento(
+    produto.name,
+    produto.description,
+  );
+
+  return {
+    title: `${produto.name} | Ofertano`,
+    description: descricao,
+    alternates: {
+      canonical: urlProduto,
+    },
+    openGraph: {
+      title: produto.name,
+      description: descricao,
+      url: urlProduto,
+      siteName: "Ofertano",
+      locale: "pt_BR",
+      type: "website",
+      images: imagemPrincipal
+        ? [
+            {
+              url: imagemPrincipal,
+              alt: produto.name,
+            },
+          ]
+        : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: produto.name,
+      description: descricao,
+      images: imagemPrincipal ? [imagemPrincipal] : undefined,
+    },
+  };
+}
+
 export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const { id } = await params;
 
@@ -344,10 +445,20 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     )}
                   </div>
 
-                  <ShareProductButton
-                    title={produto.name}
-                    text={`Confira esta oferta no Ofertano: ${produto.name}`}
-                  />
+                  <div className="flex items-center gap-2">
+                    <ShareProductButton
+                      title={produto.name}
+                      text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                      platform="whatsapp"
+                      variant="icon"
+                    />
+
+                    <ShareProductButton
+                      title={produto.name}
+                      text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                      variant="icon"
+                    />
+                  </div>
                 </div>
 
                 <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.75rem]">
@@ -632,26 +743,33 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         </section>
       </main>
 
-      {possuiLinkPrincipal && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
-          <div className="mx-auto flex max-w-2xl items-center gap-3">
-            <div className="min-w-0 shrink-0">
-              {possuiPrecoAnterior && produto.oldPrice !== null && (
-                <p className="text-[11px] font-semibold text-slate-400 line-through">
-                  {formatarPreco(produto.oldPrice)}
-                </p>
-              )}
-              <p className="text-lg font-black leading-none text-emerald-700">
-                {formatarPreco(produto.price)}
+      <div className="fixed inset-x-0 bottom-0 z-[100] border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex max-w-2xl items-center gap-3">
+          <div className="min-w-0 shrink-0">
+            {possuiPrecoAnterior && produto.oldPrice !== null && (
+              <p className="text-[11px] font-semibold text-slate-400 line-through">
+                {formatarPreco(produto.oldPrice)}
               </p>
-            </div>
+            )}
+            <p className="text-lg font-black leading-none text-emerald-700">
+              {formatarPreco(produto.price)}
+            </p>
+          </div>
 
-            <ShareProductButton
-              title={produto.name}
-              text={`Confira esta oferta no Ofertano: ${produto.name}`}
-              variant="icon"
-            />
+          <ShareProductButton
+            title={produto.name}
+            text={`Confira esta oferta no Ofertano: ${produto.name}`}
+            platform="whatsapp"
+            variant="icon"
+          />
 
+          <ShareProductButton
+            title={produto.name}
+            text={`Confira esta oferta no Ofertano: ${produto.name}`}
+            variant="icon"
+          />
+
+          {possuiLinkPrincipal ? (
             <a
               href={linkPrincipal}
               target="_blank"
@@ -661,9 +779,13 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               Ver oferta
               <ExternalLinkIcon className="h-4 w-4" />
             </a>
-          </div>
+          ) : (
+            <div className="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 text-center text-sm font-black text-amber-800">
+              Link em revisão
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <Footer />
     </div>
