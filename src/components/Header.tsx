@@ -2,8 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+
 import Logo from "@/components/Logo";
+import { supabase } from "@/lib/supabaseClient";
+
+const FAVORITES_STORAGE_KEY = "ofertano:favorites";
+const FAVORITES_EVENT = "ofertano:favorites-changed";
 
 const linksNavegacao = [
   { nome: "Início", href: "/" },
@@ -12,10 +18,144 @@ const linksNavegacao = [
   { nome: "Blog", href: "/blog" },
 ];
 
+function contarFavoritosLocais() {
+  try {
+    const valor = window.localStorage.getItem(
+      FAVORITES_STORAGE_KEY
+    );
+
+    if (!valor) {
+      return 0;
+    }
+
+    const dados: unknown = JSON.parse(valor);
+
+    if (!Array.isArray(dados)) {
+      return 0;
+    }
+
+    return new Set(
+      dados.filter(
+        (item): item is string =>
+          typeof item === "string" &&
+          item.trim().length > 0
+      )
+    ).size;
+  } catch {
+    return 0;
+  }
+}
+
+function HeartIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.5 20c.9-4 3.4-6 7.5-6s6.6 2 7.5 6" />
+    </svg>
+  );
+}
+
 export default function Header() {
   const pathname = usePathname();
-  const [menuAberto, setMenuAberto] = useState(false);
-  const [buscaAberta, setBuscaAberta] = useState(false);
+
+  const [menuAberto, setMenuAberto] =
+    useState(false);
+
+  const [buscaAberta, setBuscaAberta] =
+    useState(false);
+
+  const [user, setUser] =
+    useState<User | null>(null);
+
+  const [
+    quantidadeFavoritos,
+    setQuantidadeFavoritos,
+  ] = useState(0);
+
+  useEffect(() => {
+    let ativo = true;
+
+    function atualizarQuantidadeFavoritos() {
+      if (!ativo) {
+        return;
+      }
+
+      setQuantidadeFavoritos(
+        contarFavoritosLocais()
+      );
+    }
+
+    atualizarQuantidadeFavoritos();
+
+    void supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (ativo) {
+          setUser(data.user ?? null);
+        }
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (ativo) {
+          setUser(session?.user ?? null);
+        }
+      }
+    );
+
+    window.addEventListener(
+      FAVORITES_EVENT,
+      atualizarQuantidadeFavoritos
+    );
+
+    window.addEventListener(
+      "storage",
+      atualizarQuantidadeFavoritos
+    );
+
+    return () => {
+      ativo = false;
+      subscription.unsubscribe();
+
+      window.removeEventListener(
+        FAVORITES_EVENT,
+        atualizarQuantidadeFavoritos
+      );
+
+      window.removeEventListener(
+        "storage",
+        atualizarQuantidadeFavoritos
+      );
+    };
+  }, []);
 
   function fecharPaineis() {
     setMenuAberto(false);
@@ -70,7 +210,10 @@ export default function Header() {
             method="GET"
             className="relative hidden min-w-0 flex-1 md:block"
           >
-            <label htmlFor="busca-header" className="sr-only">
+            <label
+              htmlFor="busca-header"
+              className="sr-only"
+            >
               Pesquisar produtos
             </label>
 
@@ -106,7 +249,8 @@ export default function Header() {
 
           <nav className="hidden shrink-0 items-center gap-1 xl:flex">
             {linksNavegacao.map((link) => {
-              const ativo = linkEstaAtivo(link.href);
+              const ativo =
+                linkEstaAtivo(link.href);
 
               return (
                 <Link
@@ -140,8 +284,20 @@ export default function Header() {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <rect x="3" y="3" width="18" height="18" rx="5" />
-              <circle cx="12" cy="12" r="4" />
+              <rect
+                x="3"
+                y="3"
+                width="18"
+                height="18"
+                rx="5"
+              />
+
+              <circle
+                cx="12"
+                cy="12"
+                r="4"
+              />
+
               <circle
                 cx="17.5"
                 cy="6.5"
@@ -155,10 +311,52 @@ export default function Header() {
           </a>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Link
+              href="/favoritos"
+              aria-label="Abrir favoritos"
+              title="Favoritos"
+              className={`relative hidden h-10 w-10 items-center justify-center rounded-xl border transition xl:flex ${
+                pathname.startsWith(
+                  "/favoritos"
+                )
+                  ? "border-rose-200 bg-rose-50 text-rose-600"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+              }`}
+            >
+              <HeartIcon />
+
+              {quantidadeFavoritos > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black leading-none text-white ring-2 ring-white">
+                  {quantidadeFavoritos > 99
+                    ? "99+"
+                    : quantidadeFavoritos}
+                </span>
+              )}
+            </Link>
+
+            <Link
+              href={
+                user ? "/favoritos" : "/login"
+              }
+              onClick={fecharPaineis}
+              className={`hidden h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-black transition xl:flex ${
+                user
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+              }`}
+            >
+              <UserIcon />
+              {user ? "Conta" : "Entrar"}
+            </Link>
+
             <button
               type="button"
               onClick={alternarBusca}
-              aria-label={buscaAberta ? "Fechar pesquisa" : "Abrir pesquisa"}
+              aria-label={
+                buscaAberta
+                  ? "Fechar pesquisa"
+                  : "Abrir pesquisa"
+              }
               aria-expanded={buscaAberta}
               aria-controls="pesquisa-mobile"
               className={`flex h-10 w-10 items-center justify-center rounded-xl border transition md:hidden ${
@@ -190,7 +388,11 @@ export default function Header() {
                   strokeWidth="2"
                   strokeLinecap="round"
                 >
-                  <circle cx="11" cy="11" r="7" />
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="7"
+                  />
                   <path d="M16.5 16.5L21 21" />
                 </svg>
               )}
@@ -199,7 +401,11 @@ export default function Header() {
             <button
               type="button"
               onClick={alternarMenu}
-              aria-label={menuAberto ? "Fechar menu" : "Abrir menu"}
+              aria-label={
+                menuAberto
+                  ? "Fechar menu"
+                  : "Abrir menu"
+              }
               aria-expanded={menuAberto}
               aria-controls="menu-mobile"
               className={`flex h-10 w-10 items-center justify-center rounded-xl border transition xl:hidden ${
@@ -245,8 +451,15 @@ export default function Header() {
             id="pesquisa-mobile"
             className="border-t border-slate-100 pb-3 pt-3 md:hidden"
           >
-            <form action="/" method="GET" className="relative">
-              <label htmlFor="busca-mobile" className="sr-only">
+            <form
+              action="/"
+              method="GET"
+              className="relative"
+            >
+              <label
+                htmlFor="busca-mobile"
+                className="sr-only"
+              >
                 Pesquisar produtos
               </label>
 
@@ -259,7 +472,11 @@ export default function Header() {
                 strokeWidth="2"
                 strokeLinecap="round"
               >
-                <circle cx="11" cy="11" r="7" />
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="7"
+                />
                 <path d="M16.5 16.5L21 21" />
               </svg>
 
@@ -287,7 +504,11 @@ export default function Header() {
                   strokeWidth="2"
                   strokeLinecap="round"
                 >
-                  <circle cx="11" cy="11" r="7" />
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="7"
+                  />
                   <path d="M16.5 16.5L21 21" />
                 </svg>
               </button>
@@ -300,9 +521,62 @@ export default function Header() {
             id="menu-mobile"
             className="border-t border-slate-200 py-3 xl:hidden"
           >
+            <div className="mb-3 grid gap-2 sm:grid-cols-2">
+              <Link
+                href="/favoritos"
+                onClick={fecharPaineis}
+                className={`relative flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-black transition ${
+                  pathname.startsWith(
+                    "/favoritos"
+                  )
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                }`}
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                  <HeartIcon />
+                </span>
+
+                <span>Favoritos</span>
+
+                {quantidadeFavoritos > 0 && (
+                  <span className="ml-auto rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-black text-white">
+                    {quantidadeFavoritos > 99
+                      ? "99+"
+                      : quantidadeFavoritos}
+                  </span>
+                )}
+              </Link>
+
+              <Link
+                href={
+                  user
+                    ? "/favoritos"
+                    : "/login"
+                }
+                onClick={fecharPaineis}
+                className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-black transition ${
+                  user
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                  <UserIcon />
+                </span>
+
+                <span>
+                  {user
+                    ? "Minha conta"
+                    : "Entrar / Criar conta"}
+                </span>
+              </Link>
+            </div>
+
             <nav className="grid gap-1.5 sm:grid-cols-2">
               {linksNavegacao.map((link) => {
-                const ativo = linkEstaAtivo(link.href);
+                const ativo =
+                  linkEstaAtivo(link.href);
 
                 return (
                   <Link
