@@ -62,7 +62,10 @@ function lerIdsFavoritosLocais(): string[] {
   }
 }
 
-function salvarIdsFavoritosLocais(ids: string[]) {
+function salvarIdsFavoritosLocais(
+  ids: string[],
+  emitirEvento = true
+) {
   const normalizados = normalizarIds(ids);
 
   window.localStorage.setItem(
@@ -70,7 +73,9 @@ function salvarIdsFavoritosLocais(ids: string[]) {
     JSON.stringify(normalizados)
   );
 
-  window.dispatchEvent(new Event(FAVORITES_EVENT));
+  if (emitirEvento) {
+    window.dispatchEvent(new Event(FAVORITES_EVENT));
+  }
 }
 
 async function carregarIdsDaConta(userId: string) {
@@ -178,7 +183,14 @@ export default function FavoritosPage() {
           new Set([...idsDaConta, ...idsLocais])
         );
 
-        salvarIdsFavoritosLocais(idsMesclados);
+        // Atualiza o cache local sem disparar o próprio evento
+        // da página e evitar loop infinito de sincronização.
+        salvarIdsFavoritosLocais(idsMesclados, false);
+
+        // Atualiza apenas o contador/estado de outros componentes,
+        // como o Header. Esta página não escuta este evento.
+        window.dispatchEvent(new Event(FAVORITES_EVENT));
+
         await carregarProdutos(idsMesclados);
       } catch (error) {
         console.error(
@@ -217,6 +229,7 @@ export default function FavoritosPage() {
       }
 
       setUser(usuarioAtual ?? null);
+
       await sincronizarECarregar(
         usuarioAtual ?? null
       );
@@ -237,13 +250,8 @@ export default function FavoritosPage() {
 
         setUser(usuarioAtual);
 
-        if (
-          event === "SIGNED_IN" ||
-          event === "INITIAL_SESSION"
-        ) {
-          void sincronizarECarregar(
-            usuarioAtual
-          );
+        if (event === "SIGNED_IN") {
+          void sincronizarECarregar(usuarioAtual);
         }
 
         if (event === "SIGNED_OUT") {
@@ -259,29 +267,22 @@ export default function FavoritosPage() {
   }, [sincronizarECarregar]);
 
   useEffect(() => {
-    const atualizar = () => {
+    function atualizarDeOutraAba() {
       void sincronizarECarregar(user);
-    };
+    }
 
-    window.addEventListener(
-      FAVORITES_EVENT,
-      atualizar
-    );
-
+    // O evento "storage" só dispara em outras abas/janelas.
+    // Não escutamos FAVORITES_EVENT aqui para impedir que a
+    // própria sincronização se chame novamente em loop.
     window.addEventListener(
       "storage",
-      atualizar
+      atualizarDeOutraAba
     );
 
     return () => {
       window.removeEventListener(
-        FAVORITES_EVENT,
-        atualizar
-      );
-
-      window.removeEventListener(
         "storage",
-        atualizar
+        atualizarDeOutraAba
       );
     };
   }, [sincronizarECarregar, user]);
@@ -296,7 +297,10 @@ export default function FavoritosPage() {
       (id) => id !== productId
     );
 
-    salvarIdsFavoritosLocais(proximos);
+    // Primeiro atualiza a tela e o cache local sem provocar
+    // nova sincronização desta página.
+    salvarIdsFavoritosLocais(proximos, false);
+
     setProducts((atuais) =>
       atuais.filter(
         (product) =>
@@ -304,28 +308,35 @@ export default function FavoritosPage() {
       )
     );
 
-    if (!user) {
-      return;
+    if (user) {
+      const { error } = await supabase
+        .from("user_favorites")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("product_id", productId);
+
+      if (error) {
+        console.error(
+          "Erro ao remover favorito da conta:",
+          error.message
+        );
+
+        salvarIdsFavoritosLocais(
+          anteriores,
+          false
+        );
+
+        setErro(
+          "Não foi possível remover este favorito. Tente novamente."
+        );
+
+        await sincronizarECarregar(user);
+        return;
+      }
     }
 
-    const { error } = await supabase
-      .from("user_favorites")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("product_id", productId);
-
-    if (error) {
-      console.error(
-        "Erro ao remover favorito da conta:",
-        error.message
-      );
-
-      salvarIdsFavoritosLocais(
-        anteriores
-      );
-
-      await sincronizarECarregar(user);
-    }
+    // Atualiza o contador do Header somente depois de concluir.
+    window.dispatchEvent(new Event(FAVORITES_EVENT));
   }
 
   async function sair() {
