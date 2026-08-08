@@ -1,6 +1,7 @@
 import type { ProductImport } from "../core/types";
 
 import {
+  buscarGaleriaShopee,
   buscarOfertaShopeePorIds,
   resolverUrlShopee,
 } from "./api";
@@ -134,6 +135,20 @@ function converterNumero(
     : null;
 }
 
+function normalizarDesconto(
+  valor: number,
+): number | null {
+  if (
+    !Number.isFinite(valor) ||
+    valor <= 0 ||
+    valor >= 100
+  ) {
+    return null;
+  }
+
+  return Math.round(valor);
+}
+
 export async function importarShopee(
   rawUrl: string,
 ): Promise<ProductImport> {
@@ -170,14 +185,27 @@ export async function importarShopee(
     );
 
   const discount =
-    Number.isFinite(
+    normalizarDesconto(
       oferta.priceDiscountRate,
-    ) &&
-    oferta.priceDiscountRate > 0
-      ? oferta.priceDiscountRate
-      : null;
+    );
 
+  /*
+   * A Affiliate Open API informa o percentual
+   * de desconto, mas não fornece o preço anterior
+   * exato nesse retorno. Por isso oldPrice continua
+   * null e o desconto é salvo diretamente.
+   */
   const oldPrice = null;
+
+  const images =
+    await buscarGaleriaShopee(
+      oferta.productLink,
+      oferta.imageUrl,
+    );
+
+  const imagemPrincipal =
+    images[0] ||
+    oferta.imageUrl.trim();
 
   const attributes: Record<
     string,
@@ -240,16 +268,9 @@ export async function importarShopee(
     externalId:
       `${oferta.shopId}.${oferta.itemId}`,
 
-    /*
-     * URL normal/canônica do produto.
-     * Será usada como sourceUrl.
-     */
     url:
       oferta.productLink.trim(),
 
-    /*
-     * Link individual oficial de afiliado.
-     */
     affiliateLink:
       oferta.offerLink.trim(),
 
@@ -263,11 +284,21 @@ export async function importarShopee(
     category: null,
 
     image:
-      oferta.imageUrl.trim(),
+      imagemPrincipal,
 
-    images: [
-      oferta.imageUrl.trim(),
-    ].filter(Boolean),
+    images:
+      Array.from(
+        new Set(
+          [
+            imagemPrincipal,
+            ...images,
+          ]
+            .map((imagem) =>
+              imagem.trim(),
+            )
+            .filter(Boolean),
+        ),
+      ),
 
     price,
 

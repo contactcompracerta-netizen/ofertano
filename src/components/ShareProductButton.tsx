@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 type ShareProductButtonProps = {
   title: string;
@@ -13,7 +17,9 @@ type IconProps = {
   className?: string;
 };
 
-function ShareIcon({ className }: IconProps) {
+function ShareIcon({
+  className,
+}: IconProps) {
   return (
     <svg
       aria-hidden="true"
@@ -26,13 +32,23 @@ function ShareIcon({ className }: IconProps) {
       <circle cx="18" cy="5" r="3" />
       <circle cx="6" cy="12" r="3" />
       <circle cx="18" cy="19" r="3" />
-      <path d="m8.7 10.7 6.6-4.2" strokeLinecap="round" />
-      <path d="m8.7 13.3 6.6 4.2" strokeLinecap="round" />
+
+      <path
+        d="m8.7 10.7 6.6-4.2"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="m8.7 13.3 6.6 4.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
-function CheckIcon({ className }: IconProps) {
+function CheckIcon({
+  className,
+}: IconProps) {
   return (
     <svg
       aria-hidden="true"
@@ -42,12 +58,18 @@ function CheckIcon({ className }: IconProps) {
       strokeWidth="2.2"
       className={className}
     >
-      <path d="m5 12 4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="m5 12 4 4L19 6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-function WhatsappIcon({ className }: IconProps) {
+function WhatsappIcon({
+  className,
+}: IconProps) {
   return (
     <svg
       aria-hidden="true"
@@ -60,17 +82,85 @@ function WhatsappIcon({ className }: IconProps) {
   );
 }
 
-function copiarLinkFallback(url: string) {
-  const textarea = document.createElement("textarea");
+function copiarLinkFallback(
+  url: string,
+) {
+  const textarea =
+    document.createElement(
+      "textarea",
+    );
+
   textarea.value = url;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
+
+  textarea.setAttribute(
+    "readonly",
+    "",
+  );
+
+  textarea.style.position =
+    "fixed";
+
   textarea.style.opacity = "0";
-  textarea.style.pointerEvents = "none";
-  document.body.appendChild(textarea);
+
+  textarea.style.pointerEvents =
+    "none";
+
+  document.body.appendChild(
+    textarea,
+  );
+
   textarea.select();
+
   document.execCommand("copy");
-  document.body.removeChild(textarea);
+
+  document.body.removeChild(
+    textarea,
+  );
+}
+
+function obterUrlCompartilhamento() {
+  const urlAtual =
+    window.location.href;
+
+  const match =
+    window.location.pathname.match(
+      /^\/produto\/([0-9a-f-]{36})\/?$/i,
+    );
+
+  const productId =
+    match?.[1];
+
+  if (!productId) {
+    return urlAtual;
+  }
+
+  /*
+   * Exemplo:
+   *
+   * 24b34afb-8143-4328-a53e-0706873ea6c1
+   *
+   * vira:
+   *
+   * 24b34afb8143
+   */
+  const codigo =
+    productId
+      .replace(/-/g, "")
+      .slice(0, 12)
+      .toLowerCase();
+
+  if (
+    !/^[0-9a-f]{12}$/.test(
+      codigo,
+    )
+  ) {
+    return urlAtual;
+  }
+
+  return (
+    `${window.location.origin}` +
+    `/o/${codigo}`
+  );
 }
 
 export default function ShareProductButton({
@@ -79,66 +169,133 @@ export default function ShareProductButton({
   variant = "label",
   platform = "native",
 }: ShareProductButtonProps) {
-  const [copiado, setCopiado] = useState(false);
+  const [
+    copiado,
+    setCopiado,
+  ] = useState(false);
 
   useEffect(() => {
-    if (!copiado) return;
+    if (!copiado) {
+      return;
+    }
 
-    const timer = window.setTimeout(() => {
-      setCopiado(false);
-    }, 1800);
+    const timer =
+      window.setTimeout(
+        () => {
+          setCopiado(false);
+        },
+        1800,
+      );
 
-    return () => window.clearTimeout(timer);
+    return () =>
+      window.clearTimeout(
+        timer,
+      );
   }, [copiado]);
 
-  const mensagemCompartilhamento = useMemo(() => {
-    return text ?? `Confira esta oferta no Ofertano: ${title}`;
-  }, [text, title]);
+  const mensagemCompartilhamento =
+    useMemo(() => {
+      const textoRecebido =
+        text?.trim();
+
+      const formatoAntigo =
+        `Confira esta oferta no Ofertano: ${title}`;
+
+      /*
+       * A página atual envia o nome inteiro
+       * do produto no texto.
+       *
+       * Quando detectar esse formato,
+       * substituímos por uma mensagem curta.
+       */
+      if (
+        !textoRecebido ||
+        textoRecebido ===
+          formatoAntigo
+      ) {
+        return "Confira esta oferta no Ofertano 👇";
+      }
+
+      return textoRecebido;
+    }, [text, title]);
 
   async function compartilharNativo() {
-    const url = window.location.href;
+    const url =
+      obterUrlCompartilhamento();
 
     try {
       if (navigator.share) {
         await navigator.share({
           title,
-          text: mensagemCompartilhamento,
+          text:
+            mensagemCompartilhamento,
           url,
         });
+
         return;
       }
 
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
+      if (
+        navigator.clipboard
+          ?.writeText
+      ) {
+        await navigator.clipboard.writeText(
+          url,
+        );
       } else {
-        copiarLinkFallback(url);
+        copiarLinkFallback(
+          url,
+        );
       }
 
       setCopiado(true);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (
+        error instanceof
+          DOMException &&
+        error.name ===
+          "AbortError"
+      ) {
         return;
       }
 
       try {
-        copiarLinkFallback(url);
+        copiarLinkFallback(
+          url,
+        );
+
         setCopiado(true);
       } catch {
-        // Evita interromper a página caso o navegador bloqueie a cópia.
+        // Mantém a página funcionando
+        // caso o navegador bloqueie a cópia.
       }
     }
   }
 
   function compartilharWhatsapp() {
-    const url = window.location.href;
-    const mensagem = `${mensagemCompartilhamento} ${url}`.trim();
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+    const url =
+      obterUrlCompartilhamento();
 
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    const mensagem =
+      `${mensagemCompartilhamento}\n${url}`;
+
+    const whatsappUrl =
+      `https://wa.me/?text=${encodeURIComponent(
+        mensagem,
+      )}`;
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer",
+    );
   }
 
   function handleClick() {
-    if (platform === "whatsapp") {
+    if (
+      platform ===
+      "whatsapp"
+    ) {
       compartilharWhatsapp();
       return;
     }
@@ -147,11 +304,16 @@ export default function ShareProductButton({
   }
 
   if (variant === "icon") {
-    if (platform === "whatsapp") {
+    if (
+      platform ===
+      "whatsapp"
+    ) {
       return (
         <button
           type="button"
-          onClick={handleClick}
+          onClick={
+            handleClick
+          }
           aria-label="Compartilhar no WhatsApp"
           title="Compartilhar no WhatsApp"
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md transition hover:bg-emerald-600 active:scale-[0.98]"
@@ -164,9 +326,19 @@ export default function ShareProductButton({
     return (
       <button
         type="button"
-        onClick={handleClick}
-        aria-label={copiado ? "Link copiado" : "Compartilhar produto"}
-        title={copiado ? "Link copiado" : "Compartilhar produto"}
+        onClick={
+          handleClick
+        }
+        aria-label={
+          copiado
+            ? "Link copiado"
+            : "Compartilhar produto"
+        }
+        title={
+          copiado
+            ? "Link copiado"
+            : "Compartilhar produto"
+        }
         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700 shadow-md transition hover:bg-slate-300 active:scale-[0.98]"
       >
         {copiado ? (
@@ -178,15 +350,23 @@ export default function ShareProductButton({
     );
   }
 
-  if (platform === "whatsapp") {
+  if (
+    platform ===
+    "whatsapp"
+  ) {
     return (
       <button
         type="button"
-        onClick={handleClick}
+        onClick={
+          handleClick
+        }
         className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-sm font-black text-white transition hover:bg-emerald-600 active:scale-[0.98]"
       >
         <WhatsappIcon className="h-4 w-4" />
-        <span>WhatsApp</span>
+
+        <span>
+          WhatsApp
+        </span>
       </button>
     );
   }
@@ -194,18 +374,26 @@ export default function ShareProductButton({
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={
+        handleClick
+      }
       className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.98]"
     >
       {copiado ? (
         <>
           <CheckIcon className="h-4 w-4 text-emerald-700" />
-          <span>Link copiado</span>
+
+          <span>
+            Link copiado
+          </span>
         </>
       ) : (
         <>
           <ShareIcon className="h-4 w-4" />
-          <span>Compartilhar</span>
+
+          <span>
+            Compartilhar
+          </span>
         </>
       )}
     </button>

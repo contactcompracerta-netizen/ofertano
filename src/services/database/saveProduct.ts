@@ -319,6 +319,32 @@ function calcularDesconto(
   );
 }
 
+function obterDescontoProduto(
+  product: ProductImport,
+): number | null {
+  const calculado = calcularDesconto(
+    product.oldPrice,
+    product.price,
+  );
+
+  if (calculado !== null) {
+    return calculado;
+  }
+
+  const informado = product.discount;
+
+  if (
+    informado === null ||
+    !Number.isFinite(informado) ||
+    informado <= 0 ||
+    informado >= 100
+  ) {
+    return null;
+  }
+
+  return Math.round(informado);
+}
+
 function precoMudou(
   precoAnterior: number | null | undefined,
   precoAtual: number,
@@ -389,31 +415,12 @@ export async function saveProduct(
     );
   }
 
-  const discoverySource =
-    options.discoverySource ?? "MANUAL";
-
-  /*
-   * Compatibilidade com o importador manual atual:
-   *
-   * - quando saveProduct é chamado sem o segundo argumento,
-   *   a URL colada pelo administrador continua sendo usada;
-   * - quando null é enviado explicitamente, a oferta fica sem
-   *   link e segue para revisão;
-   * - buscas sob demanda não transformam URL comum em afiliada.
-   */
-  const usarUrlComoLinkManual =
-    affiliateLinkOverride === undefined &&
-    discoverySource === "MANUAL";
-
   const linkInformado =
-    typeof affiliateLinkOverride === "string" &&
-    affiliateLinkOverride.trim()
+    affiliateLinkOverride?.trim()
       ? normalizarLinkAfiliado(
           affiliateLinkOverride,
         )
-      : usarUrlComoLinkManual
-        ? normalizarLinkAfiliado(sourceUrl)
-        : null;
+      : null;
 
   const identificadores =
     extrairIdentificadores(product);
@@ -428,6 +435,9 @@ export async function saveProduct(
     marketplace,
     externalId,
   );
+
+  const discoverySource =
+    options.discoverySource ?? "MANUAL";
 
   const agora = new Date();
 
@@ -536,10 +546,8 @@ export async function saveProduct(
           oldPrice: product.oldPrice,
           installments:
             product.installments,
-          discount: calcularDesconto(
-            product.oldPrice,
-            product.price,
-          ),
+          discount:
+            obterDescontoProduto(product),
 
           rating: product.rating,
           reviews: product.reviews,
@@ -983,10 +991,13 @@ export async function saveProduct(
 
         stock: melhorOferta.stock,
 
-        discount: calcularDesconto(
-          melhorOferta.oldPrice,
-          melhorOferta.price,
-        ),
+        discount:
+          melhorOferta.id === oferta.id
+            ? obterDescontoProduto(product)
+            : calcularDesconto(
+                melhorOferta.oldPrice,
+                melhorOferta.price,
+              ),
 
         publicationStatus,
         active: true,
