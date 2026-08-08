@@ -16,10 +16,11 @@ export async function searchOrImport(
     externalId?.trim() || null;
 
   if (codigoRecebido) {
-    const existente = await findProduct(
-      marketplace,
-      codigoRecebido,
-    );
+    const existente =
+      await findProduct(
+        marketplace,
+        codigoRecebido,
+      );
 
     if (existente) {
       console.log(
@@ -39,8 +40,10 @@ export async function searchOrImport(
 
   /*
    * Verifica novamente usando o código retornado
-   * pelo próprio marketplace. Isso evita duplicidade
-   * caso o externalId recebido estivesse incorreto.
+   * pelo próprio marketplace.
+   *
+   * Isso evita duplicidade caso o externalId
+   * recebido estivesse incorreto.
    */
   const existenteAposImportacao =
     await findProduct(
@@ -53,21 +56,32 @@ export async function searchOrImport(
   }
 
   /*
-   * O null explícito impede que a URL comum da loja
-   * seja tratada como link de afiliado.
+   * Se o importador retornar um link de afiliado
+   * oficial e individual, podemos ativá-lo.
    *
-   * A oferta será publicada como PENDING_AFFILIATE
-   * e aparecerá futuramente na aba Revisão.
+   * Atualmente a Shopee retorna o offerLink
+   * oficial através da Affiliate Open API.
+   *
+   * Marketplaces que não retornarem affiliateLink
+   * continuam sendo enviados com null e ficam
+   * em revisão, como já acontecia anteriormente.
    */
+  const affiliateLink =
+    produto.affiliateLink?.trim() ||
+    null;
+
   return saveProduct(
     produto,
-    null,
+    affiliateLink,
     {
       discoverySource:
         "ON_DEMAND_SEARCH",
+
       autoCreated: true,
+
       sourceQuery:
-        sourceQuery?.trim() || null,
+        sourceQuery?.trim() ||
+        null,
     },
   );
 }

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(
-  request: Request
+  request: Request,
 ) {
   try {
     const body = await request
@@ -24,16 +24,32 @@ export async function POST(
         {
           success: false,
           error:
-            "Cole o link do produto do Mercado Livre.",
+            "Cole o link do produto.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    const imported = await importarProduto(url);
-    const saved = await saveProduct(imported);
+    const imported =
+      await importarProduto(url);
+
+    /*
+     * Shopee:
+     * imported.url = URL normal do produto
+     * imported.affiliateLink = offerLink oficial
+     *
+     * Mercado Livre/Amazon:
+     * affiliateLink continua opcional.
+     * Se vier undefined, saveProduct mantém
+     * o comportamento anterior.
+     */
+    const saved =
+      await saveProduct(
+        imported,
+        imported.affiliateLink,
+      );
 
     return NextResponse.json({
       success: true,
@@ -53,7 +69,7 @@ export async function POST(
   } catch (error) {
     console.error(
       "Erro na importação:",
-      error
+      error,
     );
 
     return NextResponse.json(
@@ -66,7 +82,7 @@ export async function POST(
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

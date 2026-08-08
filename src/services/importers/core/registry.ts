@@ -1,5 +1,6 @@
 import { importarAmazon } from "../amazon";
 import { importarMercadoLivre } from "../mercadolivre";
+import { importarShopee } from "../shopee";
 
 import type { MarketplaceKey } from "./detector";
 import type { ProductImport } from "./types";
@@ -33,7 +34,7 @@ const marketplaceAdapters: Record<
   shopee: {
     key: "shopee",
     name: "Shopee",
-    importer: null,
+    importer: importarShopee,
   },
 
   magazineluiza: {
@@ -80,11 +81,16 @@ export function obterMarketplaceAdapter(
 }
 
 export function listarMarketplaceAdapters(): MarketplaceAdapter[] {
-  return Object.values(marketplaceAdapters);
+  return Object.values(
+    marketplaceAdapters,
+  );
 }
 
 export function marketplacePossuiImportador(
   marketplace: MarketplaceKey,
 ): boolean {
-  return marketplaceAdapters[marketplace].importer !== null;
+  return (
+    marketplaceAdapters[marketplace]
+      .importer !== null
+  );
 }

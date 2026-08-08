@@ -18,7 +18,9 @@ export type QueueProcessResult = {
   }>;
 };
 
-function limitarQuantidade(valor: unknown): number {
+function limitarQuantidade(
+  valor: unknown,
+): number {
   if (
     typeof valor !== "number" ||
     !Number.isInteger(valor)
@@ -26,13 +28,17 @@ function limitarQuantidade(valor: unknown): number {
     return 5;
   }
 
-  return Math.min(Math.max(valor, 1), 10);
+  return Math.min(
+    Math.max(valor, 1),
+    10,
+  );
 }
 
 export async function processImportQueue(
-  quantidade: unknown
+  quantidade: unknown,
 ): Promise<QueueProcessResult> {
-  const limit = limitarQuantidade(quantidade);
+  const limit =
+    limitarQuantidade(quantidade);
 
   const pendentes =
     await prisma.importQueue.findMany({
@@ -57,7 +63,8 @@ export async function processImportQueue(
     };
   }
 
-  const results: QueueProcessResult["results"] = [];
+  const results:
+    QueueProcessResult["results"] = [];
 
   for (const item of pendentes) {
     const reservado =
@@ -81,49 +88,69 @@ export async function processImportQueue(
 
     try {
       const imported =
-        await importarProduto(item.url);
+        await importarProduto(
+          item.url,
+        );
 
-      const saved = await saveProduct(
-        imported,
-        item.affiliateLink
-      );
+      /*
+       * Prioridade:
+       * 1. Link de afiliado já salvo na fila;
+       * 2. Link oficial retornado pelo importador;
+       * 3. null -> oferta fica em revisão.
+       */
+      const affiliateLink =
+        item.affiliateLink?.trim() ||
+        imported.affiliateLink?.trim() ||
+        null;
 
-      const processedAt = new Date();
+      const saved =
+        await saveProduct(
+          imported,
+          affiliateLink,
+        );
 
-      await prisma.$transaction(async (tx) => {
-        await tx.importQueue.update({
-          where: {
-            id: item.id,
-          },
-          data: {
-            status: "SUCCESS",
-            productId: saved.id,
-            errorMessage: null,
-            processedAt,
-          },
-        });
+      const processedAt =
+        new Date();
 
-        if (item.opportunityId) {
-          await tx.productOpportunity.updateMany({
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.importQueue.update({
             where: {
-              id: item.opportunityId,
-              status: {
-                in: [
-                  "QUEUED",
-                  "READY_TO_QUEUE",
-                  "ERROR",
-                ],
-              },
+              id: item.id,
             },
             data: {
-              status: "PUBLISHED",
+              status: "SUCCESS",
               productId: saved.id,
               errorMessage: null,
-              publishedAt: processedAt,
+              processedAt,
             },
           });
-        }
-      });
+
+          if (item.opportunityId) {
+            await tx.productOpportunity.updateMany(
+              {
+                where: {
+                  id: item.opportunityId,
+                  status: {
+                    in: [
+                      "QUEUED",
+                      "READY_TO_QUEUE",
+                      "ERROR",
+                    ],
+                  },
+                },
+                data: {
+                  status: "PUBLISHED",
+                  productId: saved.id,
+                  errorMessage: null,
+                  publishedAt:
+                    processedAt,
+                },
+              },
+            );
+          }
+        },
+      );
 
       results.push({
         queueId: item.id,
@@ -138,43 +165,50 @@ export async function processImportQueue(
           ? error.message
           : "Erro desconhecido ao importar.";
 
-      const processedAt = new Date();
-      const errorMessage = mensagem.slice(0, 2000);
+      const processedAt =
+        new Date();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.importQueue.update({
-          where: {
-            id: item.id,
-          },
-          data: {
-            status: "ERROR",
-            errorMessage,
-            processedAt,
-          },
-        });
+      const errorMessage =
+        mensagem.slice(0, 2000);
 
-        if (item.opportunityId) {
-          await tx.productOpportunity.updateMany({
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.importQueue.update({
             where: {
-              id: item.opportunityId,
-              status: {
-                in: [
-                  "QUEUED",
-                  "READY_TO_QUEUE",
-                  "ERROR",
-                ],
-              },
+              id: item.id,
             },
             data: {
               status: "ERROR",
-              attempts: {
-                increment: 1,
-              },
               errorMessage,
+              processedAt,
             },
           });
-        }
-      });
+
+          if (item.opportunityId) {
+            await tx.productOpportunity.updateMany(
+              {
+                where: {
+                  id: item.opportunityId,
+                  status: {
+                    in: [
+                      "QUEUED",
+                      "READY_TO_QUEUE",
+                      "ERROR",
+                    ],
+                  },
+                },
+                data: {
+                  status: "ERROR",
+                  attempts: {
+                    increment: 1,
+                  },
+                  errorMessage,
+                },
+              },
+            );
+          }
+        },
+      );
 
       results.push({
         queueId: item.id,
@@ -185,11 +219,14 @@ export async function processImportQueue(
     }
   }
 
-  const imported = results.filter(
-    (resultado) => resultado.success
-  ).length;
+  const imported =
+    results.filter(
+      (resultado) =>
+        resultado.success,
+    ).length;
 
-  const errors = results.length - imported;
+  const errors =
+    results.length - imported;
 
   return {
     success: true,
