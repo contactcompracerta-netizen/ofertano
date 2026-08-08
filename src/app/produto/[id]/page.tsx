@@ -530,7 +530,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </div>
                 </div>
 
-                <h1 className="mt-4 text-2xl font-black leading-[1.12] tracking-tight text-slate-950 sm:text-3xl lg:text-[1.75rem]">
+                <h1 className="mt-4 text-xl font-black leading-[1.18] tracking-tight text-slate-950 sm:text-2xl lg:text-[1.45rem]">
                   {produto.name}
                 </h1>
 
