@@ -84,6 +84,10 @@ export function detectarMarketplace(
       "magazineluiza.com.br",
       "magalu.com.br",
       "magalu.com",
+      "magazinevoce.com.br",
+      "influenciadormagalu.com.br",
+      "parceiromagalu.com.br",
+      "magazineluiza.onelink.me",
     ])
   ) {
     return "magazineluiza";

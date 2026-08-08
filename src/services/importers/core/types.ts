@@ -1,7 +1,8 @@
 export type MarketplaceName =
   | "Mercado Livre"
   | "Amazon"
-  | "Shopee";
+  | "Shopee"
+  | "Magazine Luiza";
 
 export interface ProductImport {
   marketplace: MarketplaceName;

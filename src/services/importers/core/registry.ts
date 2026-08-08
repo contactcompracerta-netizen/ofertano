@@ -1,4 +1,5 @@
 import { importarAmazon } from "../amazon";
+import { importarMagazineLuiza } from "../magazineluiza";
 import { importarMercadoLivre } from "../mercadolivre";
 import { importarShopee } from "../shopee";
 
@@ -40,7 +41,7 @@ const marketplaceAdapters: Record<
   magazineluiza: {
     key: "magazineluiza",
     name: "Magazine Luiza",
-    importer: null,
+    importer: importarMagazineLuiza,
   },
 
   casasbahia: {

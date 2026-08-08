@@ -1,11 +1,12 @@
-import prisma from "@/lib/prisma";
+﻿import prisma from "@/lib/prisma";
 
 import type { ProductImport } from "@/services/importers/core/types";
 
 type MarketplaceDatabase =
   | "MERCADO_LIVRE"
   | "AMAZON"
-  | "SHOPEE";
+  | "SHOPEE"
+  | "MAGAZINE_LUIZA";
 
 type DiscoverySourceDatabase =
   | "MANUAL"
@@ -82,11 +83,14 @@ function converterMarketplace(
     case "Shopee":
       return "SHOPEE";
 
+    case "Magazine Luiza":
+      return "MAGAZINE_LUIZA";
+
     default: {
       const marketplaceNunca: never = marketplace;
 
       throw new Error(
-        `Marketplace não suportado: ${String(
+        `Marketplace nÃ£o suportado: ${String(
           marketplaceNunca,
         )}`,
       );
@@ -104,6 +108,7 @@ function nomeMarketplace(
     MERCADO_LIVRE: "Mercado Livre",
     AMAZON: "Amazon",
     SHOPEE: "Shopee",
+    MAGAZINE_LUIZA: "Magazine Luiza",
   };
 
   return nomes[marketplace];
@@ -390,7 +395,7 @@ export async function saveProduct(
 
   if (!externalId) {
     throw new Error(
-      "O produto não possui identificador externo.",
+      "O produto nÃ£o possui identificador externo.",
     );
   }
 
@@ -399,7 +404,7 @@ export async function saveProduct(
     product.price <= 0
   ) {
     throw new Error(
-      "O produto não possui um preço válido.",
+      "O produto nÃ£o possui um preÃ§o vÃ¡lido.",
     );
   }
 
@@ -411,7 +416,7 @@ export async function saveProduct(
 
   if (!sourceUrl) {
     throw new Error(
-      "O produto não possui uma URL de origem.",
+      "O produto nÃ£o possui uma URL de origem.",
     );
   }
 
