@@ -743,42 +743,78 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           )}
 
           {(produto.description || especificacoes.length > 0) && (
-            <div className="mt-6 grid gap-6 sm:mt-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+            <div className="mt-6 grid gap-4 sm:mt-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
               {produto.description && (
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
-                    Detalhes
-                  </p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
-                    Sobre o produto
-                  </h2>
+                <details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl">
+                  <summary className="flex min-h-20 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 outline-none transition hover:bg-slate-50 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-emerald-100 sm:px-7 sm:py-5 lg:px-8 [&::-webkit-details-marker]:hidden">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+                        Detalhes
+                      </p>
+                      <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+                        Sobre o produto
+                      </h2>
+                    </div>
 
-                  <p className="mt-5 whitespace-pre-line text-sm leading-7 text-slate-600 sm:text-base">
-                    {produto.description}
-                  </p>
-                </section>
+                    <div className="flex shrink-0 items-center gap-2 text-slate-500">
+                      <span className="hidden text-xs font-bold sm:inline group-open:hidden">
+                        Ver detalhes
+                      </span>
+                      <span className="hidden text-xs font-bold sm:group-open:inline">
+                        Recolher
+                      </span>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 transition group-open:border-emerald-200 group-open:bg-emerald-50 group-open:text-emerald-700">
+                        <ChevronRightIcon className="h-5 w-5 transition-transform duration-200 group-open:rotate-90" />
+                      </span>
+                    </div>
+                  </summary>
+
+                  <div className="border-t border-slate-200 px-5 pb-5 pt-4 sm:px-7 sm:pb-7 sm:pt-5 lg:px-8 lg:pb-8">
+                    <p className="whitespace-pre-line text-sm leading-7 text-slate-600 sm:text-base">
+                      {produto.description}
+                    </p>
+                  </div>
+                </details>
               )}
 
               {especificacoes.length > 0 && (
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-3xl sm:p-7 lg:p-8">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
-                    Ficha técnica
-                  </p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
-                    Especificações
-                  </h2>
+                <details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl">
+                  <summary className="flex min-h-20 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 outline-none transition hover:bg-slate-50 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-emerald-100 sm:px-7 sm:py-5 lg:px-8 [&::-webkit-details-marker]:hidden">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+                        Informações
+                      </p>
+                      <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+                        Ficha técnica
+                      </h2>
+                    </div>
 
-                  <dl className="mt-5 divide-y divide-slate-200">
-                    {especificacoes.map(([chave, valor]) => (
-                      <div key={chave} className="grid gap-1 py-3 sm:grid-cols-[0.8fr_1.2fr] sm:gap-4">
-                        <dt className="text-sm font-black text-slate-800">{chave}</dt>
-                        <dd className="text-sm leading-6 text-slate-600 sm:text-right">
-                          {formatarValorEspecificacao(valor)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </section>
+                    <div className="flex shrink-0 items-center gap-2 text-slate-500">
+                      <span className="hidden text-xs font-bold sm:inline group-open:hidden">
+                        Ver especificações
+                      </span>
+                      <span className="hidden text-xs font-bold sm:group-open:inline">
+                        Recolher
+                      </span>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 transition group-open:border-emerald-200 group-open:bg-emerald-50 group-open:text-emerald-700">
+                        <ChevronRightIcon className="h-5 w-5 transition-transform duration-200 group-open:rotate-90" />
+                      </span>
+                    </div>
+                  </summary>
+
+                  <div className="border-t border-slate-200 px-5 pb-5 sm:px-7 sm:pb-7 lg:px-8 lg:pb-8">
+                    <dl className="divide-y divide-slate-200">
+                      {especificacoes.map(([chave, valor]) => (
+                        <div key={chave} className="grid gap-1 py-3.5 sm:grid-cols-[0.8fr_1.2fr] sm:gap-4">
+                          <dt className="text-sm font-black text-slate-800">{chave}</dt>
+                          <dd className="text-sm leading-6 text-slate-600 sm:text-right">
+                            {formatarValorEspecificacao(valor)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </details>
               )}
             </div>
           )}
