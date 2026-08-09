@@ -701,12 +701,68 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     notFound();
   }
 
-  const historicoCronologico = [...produto.priceHistory].reverse();
+  /*
+   * O histórico representa o MENOR PREÇO DO MERCADO para este
+   * produto exato, e não o preço da oferta principal comprável.
+   *
+   * Exemplo: uma oferta sem link de afiliado pode ser a mais barata.
+   * Ela continua válida para comparação e histórico, embora outra
+   * loja permaneça como botão principal de compra.
+   */
+  const ofertaBaseComparador =
+    produto.offers.length > 0
+      ? produto.offers.reduce((maisAntiga, oferta) =>
+          oferta.createdAt.getTime() < maisAntiga.createdAt.getTime()
+            ? oferta
+            : maisAntiga,
+        )
+      : null;
+
+  const ofertasComparador = produto.offers.filter(
+    (oferta) =>
+      oferta.id === ofertaBaseComparador?.id ||
+      oferta.matchStatus === "EXACT",
+  );
+
+  const ofertasComparadorDisponiveis = ofertasComparador.filter(
+    (oferta) =>
+      oferta.available &&
+      oferta.status !== "UNAVAILABLE" &&
+      oferta.status !== "ERROR" &&
+      Number.isFinite(oferta.price) &&
+      oferta.price > 0,
+  );
+
+  const menorPrecoComparador =
+    ofertasComparadorDisponiveis.length > 0
+      ? Math.min(
+          ...ofertasComparadorDisponiveis.map(
+            (oferta) => oferta.price,
+          ),
+        )
+      : null;
+
+  const precoAtualMercado =
+    menorPrecoComparador ??
+    (produto.price > 0 ? produto.price : 0);
+
+  const idsOfertasComparador = new Set(
+    ofertasComparador.map((oferta) => oferta.id),
+  );
+
+  const historicoCronologico = [...produto.priceHistory]
+    .reverse()
+    .filter(
+      (registro) =>
+        registro.offerId === null ||
+        idsOfertasComparador.has(registro.offerId),
+    );
+
   const pontosHistorico = construirHistoricoMelhorPreco(
     historicoCronologico,
   );
 
-  const ultimaVerificacao = produto.offers.reduce<Date | null>(
+  const ultimaVerificacao = ofertasComparador.reduce<Date | null>(
     (maisRecente, oferta) => {
       if (!oferta.lastCheckedAt) {
         return maisRecente;
@@ -724,7 +780,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     null,
   );
 
-  if (produto.price > 0) {
+  /*
+   * Adicionamos o estado atual somente quando o menor preço realmente
+   * mudou. Assim duas lojas consultadas no mesmo dia não viram dois
+   * pontos artificiais no gráfico.
+   */
+  if (precoAtualMercado > 0) {
     const ultimoPonto = pontosHistorico.at(-1);
     const dataAtualDoPreco =
       ultimaVerificacao ??
@@ -733,17 +794,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
     if (
       !ultimoPonto ||
-      Math.abs(ultimoPonto.price - produto.price) > 0.009
+      Math.abs(
+        ultimoPonto.price - precoAtualMercado,
+      ) > 0.009
     ) {
       pontosHistorico.push({
-        price: produto.price,
-        recordedAt: dataAtualDoPreco,
-      });
-    } else if (
-      dataAtualDoPreco.getTime() > ultimoPonto.recordedAt.getTime()
-    ) {
-      pontosHistorico.push({
-        price: produto.price,
+        price: precoAtualMercado,
         recordedAt: dataAtualDoPreco,
       });
     }
@@ -756,12 +812,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const menorPrecoHistorico =
     precosHistorico.length > 0
       ? Math.min(...precosHistorico)
-      : produto.price;
+      : precoAtualMercado;
 
   const maiorPrecoHistorico =
     precosHistorico.length > 0
       ? Math.max(...precosHistorico)
-      : produto.price;
+      : precoAtualMercado;
 
   const inicioMonitoramento =
     historicoCronologico[0]?.recordedAt ?? null;
@@ -789,10 +845,10 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       fimMonitoramento ??
         pontosHistorico.at(-1)?.recordedAt ??
         new Date(),
-    ) ?? produto.price;
+    ) ?? precoAtualMercado;
 
   const analisePreco = analisarPrecoAtual({
-    precoAtual: produto.price,
+    precoAtual: precoAtualMercado,
     menorPreco: menorPrecoHistorico,
     maiorPreco: maiorPrecoHistorico,
     mediaPreco: mediaHistorica,
@@ -908,39 +964,6 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     : ofertaPrincipalComLink
       ? formatarMarketplace(ofertaPrincipalComLink.marketplace)
       : produto.store?.trim() || "Loja parceira";
-
-  const ofertaBaseComparador =
-    produto.offers.length > 0
-      ? produto.offers.reduce((maisAntiga, oferta) =>
-          oferta.createdAt.getTime() < maisAntiga.createdAt.getTime()
-            ? oferta
-            : maisAntiga,
-        )
-      : null;
-
-  const ofertasComparador = produto.offers.filter(
-    (oferta) =>
-      oferta.id === ofertaBaseComparador?.id ||
-      oferta.matchStatus === "EXACT",
-  );
-
-  const ofertasComparadorDisponiveis = ofertasComparador.filter(
-    (oferta) =>
-      oferta.available &&
-      oferta.status !== "UNAVAILABLE" &&
-      oferta.status !== "ERROR" &&
-      Number.isFinite(oferta.price) &&
-      oferta.price > 0,
-  );
-
-  const menorPrecoComparador =
-    ofertasComparadorDisponiveis.length > 0
-      ? Math.min(
-          ...ofertasComparadorDisponiveis.map(
-            (oferta) => oferta.price,
-          ),
-        )
-      : null;
 
   const possuiComparacaoEntreLojas =
     new Set(ofertasComparador.map((oferta) => oferta.marketplace)).size > 1;
@@ -1297,10 +1320,10 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               <div className="mt-2 grid grid-cols-3 gap-1.5">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
                   <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
-                    Preço atual
+                    Menor preço atual
                   </p>
                   <p className="mt-0.5 text-base font-black text-emerald-700 sm:text-lg">
-                    {formatarPreco(produto.price)}
+                    {formatarPreco(precoAtualMercado)}
                   </p>
                 </div>
 
