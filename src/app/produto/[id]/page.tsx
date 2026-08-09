@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import FavoriteButton from "@/components/FavoriteButton";
+import PriceAlertButton from "@/components/PriceAlertButton";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ProductGallery from "@/components/ProductGallery";
@@ -1050,6 +1051,11 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     <FavoriteButton
                       productId={produto.id}
                       variant="icon"
+                    />
+
+                    <PriceAlertButton
+                      productId={produto.id}
+                      currentPrice={precoAtualMercado}
                     />
 
                     <ShareProductButton
