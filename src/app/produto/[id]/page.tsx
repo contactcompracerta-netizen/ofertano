@@ -909,6 +909,24 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       ? formatarMarketplace(ofertaPrincipalComLink.marketplace)
       : produto.store?.trim() || "Loja parceira";
 
+  const ofertaBaseComparador =
+    produto.offers.length > 0
+      ? produto.offers.reduce((maisAntiga, oferta) =>
+          oferta.createdAt.getTime() < maisAntiga.createdAt.getTime()
+            ? oferta
+            : maisAntiga,
+        )
+      : null;
+
+  const ofertasComparador = produto.offers.filter(
+    (oferta) =>
+      oferta.id === ofertaBaseComparador?.id ||
+      oferta.matchStatus === "EXACT",
+  );
+
+  const possuiComparacaoEntreLojas =
+    new Set(ofertasComparador.map((oferta) => oferta.marketplace)).size > 1;
+
   const possuiLinkPrincipal = linkPrincipal.length > 0;
 
   const usarBarraMobileEmDuasLinhas =
@@ -1135,7 +1153,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             </aside>
           </div>
 
-          {produto.offers.length > 0 && (
+          {possuiComparacaoEntreLojas && (
             <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
               <div className="grid gap-2 lg:grid-cols-[315px_minmax(0,1fr)] lg:items-center lg:gap-4">
                 <div>
@@ -1150,8 +1168,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </p>
                 </div>
 
-                <div className={`grid gap-1.5 ${produto.offers.length === 1 ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
-                {produto.offers.map((oferta) => {
+                <div className={`grid gap-1.5 ${ofertasComparador.length === 1 ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
+                {ofertasComparador.map((oferta) => {
                   const link = oferta.affiliateLink?.trim();
                   const linkAtivo =
                     Boolean(link) &&
