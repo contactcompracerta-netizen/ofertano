@@ -5,6 +5,7 @@ import {
   getCatalogProduct,
   getCategory,
   getDescription,
+  getItem,
   getReviews,
 } from "./api";
 
@@ -15,17 +16,13 @@ import type {
   MercadoLivreResolvedProduct,
 } from "./types";
 
-function normalizarId(
-  id: string
-): string {
+function normalizarId(id: string): string {
   return id
     .replace("-", "")
     .toUpperCase();
 }
 
-function decodificarLink(
-  link: string
-): string {
+function decodificarLink(link: string): string {
   try {
     return decodeURIComponent(link);
   } catch {
@@ -33,101 +30,42 @@ function decodificarLink(
   }
 }
 
-function extrairIds(
-  link: string
-): {
+function extrairIds(link: string): {
   itemId: string | null;
   catalogId: string | null;
 } {
-  const decoded =
-    decodificarLink(link);
+  const decoded = decodificarLink(link);
+  const url = new URL(link);
 
-  let url: URL;
-
-  try {
-    url = new URL(link);
-  } catch {
-    throw new Error(
-      "O link informado não é válido."
-    );
-  }
-
-  /*
-   * Links de páginas de catálogo possuem:
-   *
-   * /p/MLB12345678
-   *
-   * Esses links têm prioridade mesmo quando
-   * também existe um parâmetro wid no endereço.
-   */
-  const catalogPath =
-    url.pathname.match(
-      /\/p\/(MLB-?\d+)/i
-    );
-
-  if (catalogPath?.[1]) {
-    return {
-      itemId: null,
-      catalogId:
-        normalizarId(
-          catalogPath[1]
-        ),
-    };
-  }
-
-  /*
-   * Alguns links podem trazer o código do
-   * produto de catálogo em parâmetros.
-   */
-  const catalogParam =
-    decoded.match(
-      /(?:catalog_product_id|product_id)\s*(?:=|:)\s*(MLB-?\d+)/i
-    );
-
-  if (catalogParam?.[1]) {
-    return {
-      itemId: null,
-      catalogId:
-        normalizarId(
-          catalogParam[1]
-        ),
-    };
-  }
-
-  /*
-   * O parâmetro wid identifica um anúncio
-   * específico de um vendedor.
-   */
-  const itemParam =
-    decoded.match(
-      /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
-    );
+  const itemParam = decoded.match(
+    /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
+  );
 
   if (itemParam?.[1]) {
     return {
-      itemId:
-        normalizarId(
-          itemParam[1]
-        ),
+      itemId: normalizarId(itemParam[1]),
       catalogId: null,
     };
   }
 
-  /*
-   * Links antigos de anúncio podem possuir
-   * o MLB diretamente no caminho.
-   */
-  const itemPath =
-    url.pathname.match(
-      /\/(MLB-?\d+)(?:-|\/|$)/i
-    );
+  const catalogPath = url.pathname.match(
+    /\/p\/(MLB-?\d+)/i
+  );
+
+  if (catalogPath?.[1]) {
+    return {
+      itemId: null,
+      catalogId: normalizarId(catalogPath[1]),
+    };
+  }
+
+  const itemPath = url.pathname.match(
+    /\/(MLB-?\d+)(?:-|\/|$)/i
+  );
 
   if (itemPath?.[1]) {
     return {
-      itemId:
-        normalizarId(
-          itemPath[1]
-        ),
+      itemId: normalizarId(itemPath[1]),
       catalogId: null,
     };
   }
@@ -140,32 +78,20 @@ function extrairIds(
 async function resolverLinkCurto(
   rawUrl: string
 ): Promise<string> {
-  let url: URL;
-
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new Error(
-      "O link informado não é válido."
-    );
-  }
-
-  const hostname =
-    url.hostname.toLowerCase();
+  const url = new URL(rawUrl);
 
   if (
-    hostname !== "meli.la" &&
-    !hostname.endsWith(".meli.la")
+    url.hostname !== "meli.la" &&
+    !url.hostname.endsWith(".meli.la")
   ) {
     return rawUrl;
   }
 
-  const response =
-    await fetch(rawUrl, {
-      method: "GET",
-      redirect: "follow",
-      cache: "no-store",
-    });
+  const response = await fetch(rawUrl, {
+    method: "GET",
+    redirect: "follow",
+    cache: "no-store",
+  });
 
   return response.url || rawUrl;
 }
@@ -181,23 +107,17 @@ async function tentar<T>(
 }
 
 function escolherOferta(
-  ofertas:
-    MercadoLivreCatalogOffer[],
+  ofertas: MercadoLivreCatalogOffer[],
   winnerItemId?: string
 ): MercadoLivreCatalogOffer {
-  const validas =
-    ofertas.filter(
-      (oferta) =>
-        typeof oferta.item_id ===
-          "string" &&
-        typeof oferta.price ===
-          "number" &&
-        oferta.price > 0 &&
-        oferta.status !==
-          "inactive" &&
-        oferta.status !==
-          "closed"
-    );
+  const validas = ofertas.filter(
+    (oferta) =>
+      typeof oferta.item_id === "string" &&
+      typeof oferta.price === "number" &&
+      oferta.price > 0 &&
+      oferta.status !== "inactive" &&
+      oferta.status !== "closed"
+  );
 
   if (validas.length === 0) {
     throw new Error(
@@ -206,12 +126,10 @@ function escolherOferta(
   }
 
   if (winnerItemId) {
-    const vencedora =
-      validas.find(
-        (oferta) =>
-          oferta.item_id ===
-          winnerItemId
-      );
+    const vencedora = validas.find(
+      (oferta) =>
+        oferta.item_id === winnerItemId
+    );
 
     if (vencedora) {
       return vencedora;
@@ -220,162 +138,134 @@ function escolherOferta(
 
   return validas.sort(
     (a, b) =>
-      (
-        a.price ??
-        Number.MAX_VALUE
-      ) -
-      (
-        b.price ??
-        Number.MAX_VALUE
-      )
+      (a.price ?? Number.MAX_VALUE) -
+      (b.price ?? Number.MAX_VALUE)
   )[0];
+}
+
+function erroSemVencedores(
+  error: unknown
+): boolean {
+  const mensagem =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
+  return /No winners found/i.test(
+    mensagem
+  );
 }
 
 async function importarCatalogo(
   catalogId: string,
   originalUrl: string
 ): Promise<ProductImport> {
-  const [
-    catalog,
-    catalogItems,
-  ] = await Promise.all([
-    getCatalogProduct(
-      catalogId
-    ),
+  const catalog =
+    await getCatalogProduct(catalogId);
 
-    getCatalogItems(
-      catalogId
-    ),
-  ]);
+  let catalogItems:
+    Awaited<
+      ReturnType<typeof getCatalogItems>
+    > | null = null;
 
-  const oferta =
-    escolherOferta(
-      catalogItems.results ?? [],
-      catalog.buy_box_winner
-        ?.item_id
-    );
-
-  const itemId =
-    oferta.item_id;
-
-  if (!itemId) {
-    throw new Error(
-      "O Mercado Livre não retornou o código da oferta."
-    );
+  try {
+    catalogItems =
+      await getCatalogItems(catalogId);
+  } catch (error) {
+    if (!erroSemVencedores(error)) {
+      throw error;
+    }
   }
 
-  const [
-    category,
-    description,
-    reviews,
-  ] = await Promise.all([
-    oferta.category_id
-      ? tentar(
-          getCategory(
-            oferta.category_id
-          )
-        )
-      : Promise.resolve(null),
+  const winnerItemId =
+    catalog.buy_box_winner?.item_id;
 
-    tentar(
-      getDescription(itemId)
-    ),
-
-    tentar(
-      getReviews(itemId)
-    ),
-  ]);
-
-  const price =
-    oferta.price;
+  /*
+   * Em alguns produtos de catálogo o Mercado Livre
+   * responde "No winners found" em /products/{id}/items.
+   *
+   * Se ainda houver buy_box_winner no produto de catálogo,
+   * usamos o anúncio vencedor diretamente.
+   */
+  if (
+    (!catalogItems?.results ||
+      catalogItems.results.length === 0) &&
+    winnerItemId
+  ) {
+    return importarAnuncio(
+      winnerItemId,
+      originalUrl
+    );
+  }
 
   if (
-    typeof price !== "number" ||
-    price <= 0
+    !catalogItems?.results ||
+    catalogItems.results.length === 0
   ) {
     throw new Error(
-      "O Mercado Livre não retornou um preço válido."
+      "Este produto de catálogo existe no Mercado Livre, mas nenhuma oferta ativa foi retornada pela API. Abra uma oferta de um vendedor para este mesmo produto e importe o link do anúncio."
     );
   }
 
-  const originalPrice =
-    typeof oferta.original_price ===
-      "number" &&
-    oferta.original_price > price
-      ? oferta.original_price
-      : null;
+  const oferta = escolherOferta(
+    catalogItems.results,
+    winnerItemId
+  );
 
-  const resolved:
-    MercadoLivreResolvedProduct = {
+  const itemId = oferta.item_id!;
+
+  const [category, description, reviews] =
+    await Promise.all([
+      oferta.category_id
+        ? tentar(getCategory(oferta.category_id))
+        : Promise.resolve(null),
+
+      tentar(getDescription(itemId)),
+      tentar(getReviews(itemId)),
+    ]);
+
+  const resolved: MercadoLivreResolvedProduct = {
     itemId,
-
     title:
       catalog.name?.trim() ||
       catalog.family_name?.trim() ||
       `Produto ${catalogId}`,
-
-    price,
-
-    originalPrice,
-
+    price: oferta.price!,
+    originalPrice:
+      typeof oferta.original_price === "number" &&
+      oferta.original_price > oferta.price!
+        ? oferta.original_price
+        : null,
     categoryName:
-      category?.name?.trim() ||
-      "Ofertas",
-
+      category?.name?.trim() || "Ofertas",
     sellerId:
-      typeof oferta.seller_id ===
-      "number"
+      typeof oferta.seller_id === "number"
         ? oferta.seller_id
         : null,
-
     availableQuantity:
-      typeof oferta.available_quantity ===
-      "number"
+      typeof oferta.available_quantity === "number"
         ? oferta.available_quantity
         : null,
-
     soldQuantity:
-      typeof oferta.sold_quantity ===
-      "number"
+      typeof oferta.sold_quantity === "number"
         ? oferta.sold_quantity
         : null,
-
-    condition:
-      oferta.condition ?? null,
-
-    warranty:
-      oferta.warranty ?? null,
-
-    pictures:
-      catalog.pictures ?? [],
-
-    attributes:
-      catalog.attributes ?? [],
-
+    condition: oferta.condition ?? null,
+    warranty: oferta.warranty ?? null,
+    pictures: catalog.pictures ?? [],
+    attributes: catalog.attributes ?? [],
     description:
-      description
-        ?.plain_text
-        ?.trim() ||
-      description
-        ?.text
-        ?.trim() ||
+      description?.plain_text?.trim() ||
+      description?.text?.trim() ||
       null,
-
     rating:
-      typeof reviews
-        ?.rating_average ===
-      "number"
+      typeof reviews?.rating_average === "number"
         ? reviews.rating_average
         : null,
-
     reviews:
-      typeof reviews?.total ===
-      "number"
+      typeof reviews?.total === "number"
         ? reviews.total
-        : typeof reviews
-              ?.paging
-              ?.total ===
-            "number"
+        : typeof reviews?.paging?.total === "number"
           ? reviews.paging.total
           : null,
   };
@@ -386,21 +276,115 @@ async function importarCatalogo(
   );
 }
 
-function criarErroLinkDeAnuncio(
-  itemId: string
-): Error {
-  return new Error(
-    `O link informado é de um anúncio individual (${itemId}). ` +
-      "O Mercado Livre não permite que o Ofertano consulte esse tipo de anúncio pela API. " +
-      "Abra a página principal do produto e copie o endereço que contém /p/MLB."
+async function importarAnuncio(
+  itemId: string,
+  originalUrl: string
+): Promise<ProductImport> {
+  const item = await getItem(itemId);
+
+  if (!item.id) {
+    throw new Error(
+      "O Mercado Livre não retornou o código do anúncio."
+    );
+  }
+
+  const catalog = item.catalog_product_id
+    ? await tentar(
+        getCatalogProduct(item.catalog_product_id)
+      )
+    : null;
+
+  const [category, description, reviews] =
+    await Promise.all([
+      item.category_id
+        ? tentar(getCategory(item.category_id))
+        : Promise.resolve(null),
+
+      tentar(getDescription(item.id)),
+      tentar(getReviews(item.id)),
+    ]);
+
+  const pictures =
+    item.pictures?.length
+      ? item.pictures
+      : catalog?.pictures?.length
+        ? catalog.pictures
+        : [
+            {
+              secure_url:
+                item.secure_thumbnail ||
+                item.thumbnail,
+            },
+          ];
+
+  const attributes =
+    item.attributes?.length
+      ? item.attributes
+      : catalog?.attributes ?? [];
+
+  const price =
+    typeof item.price === "number"
+      ? item.price
+      : 0;
+
+  const originalPrice =
+    typeof item.original_price === "number" &&
+    item.original_price > price
+      ? item.original_price
+      : null;
+
+  const resolved: MercadoLivreResolvedProduct = {
+    itemId: item.id,
+    title:
+      item.title?.trim() ||
+      catalog?.name?.trim() ||
+      `Produto ${item.id}`,
+    price,
+    originalPrice,
+    categoryName:
+      category?.name?.trim() || "Ofertas",
+    sellerId:
+      typeof item.seller_id === "number"
+        ? item.seller_id
+        : null,
+    availableQuantity:
+      typeof item.available_quantity === "number"
+        ? item.available_quantity
+        : null,
+    soldQuantity:
+      typeof item.sold_quantity === "number"
+        ? item.sold_quantity
+        : null,
+    condition: item.condition ?? null,
+    warranty: item.warranty ?? null,
+    pictures,
+    attributes,
+    description:
+      description?.plain_text?.trim() ||
+      description?.text?.trim() ||
+      null,
+    rating:
+      typeof reviews?.rating_average === "number"
+        ? reviews.rating_average
+        : null,
+    reviews:
+      typeof reviews?.total === "number"
+        ? reviews.total
+        : typeof reviews?.paging?.total === "number"
+          ? reviews.paging.total
+          : null,
+  };
+
+  return parseMercadoLivre(
+    resolved,
+    originalUrl
   );
 }
 
 export async function importarMercadoLivre(
   rawUrl: string
 ): Promise<ProductImport> {
-  const originalUrl =
-    rawUrl.trim();
+  const originalUrl = rawUrl.trim();
 
   if (!originalUrl) {
     throw new Error(
@@ -409,27 +393,22 @@ export async function importarMercadoLivre(
   }
 
   const resolvedUrl =
-    await resolverLinkCurto(
+    await resolverLinkCurto(originalUrl);
+
+  const { itemId, catalogId } =
+    extrairIds(resolvedUrl);
+
+  if (itemId) {
+    return importarAnuncio(
+      itemId,
       originalUrl
     );
-
-  const {
-    itemId,
-    catalogId,
-  } = extrairIds(
-    resolvedUrl
-  );
+  }
 
   if (catalogId) {
     return importarCatalogo(
       catalogId,
       originalUrl
-    );
-  }
-
-  if (itemId) {
-    throw criarErroLinkDeAnuncio(
-      itemId
     );
   }
 
