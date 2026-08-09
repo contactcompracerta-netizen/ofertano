@@ -55,18 +55,14 @@ function extrairIds(link: string): {
     };
   }
 
-  const itemParam = decoded.match(
-    /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
-  );
-
-  if (itemParam?.[1]) {
-    return {
-      itemId: normalizarId(itemParam[1]),
-      catalogId: null,
-      userProductId: null,
-    };
-  }
-
+  /*
+   * Em páginas /p/ do Mercado Livre, o fragmento da URL
+   * pode trazer um wid de uma oferta específica.
+   *
+   * Esse wid pode estar restrito pela API mesmo quando o
+   * produto de catálogo continua público e possui outras
+   * ofertas válidas. Por isso o catálogo deve ter prioridade.
+   */
   const catalogPath = url.pathname.match(
     /\/p\/(MLB-?\d+)/i
   );
@@ -75,6 +71,18 @@ function extrairIds(link: string): {
     return {
       itemId: null,
       catalogId: normalizarId(catalogPath[1]),
+      userProductId: null,
+    };
+  }
+
+  const itemParam = decoded.match(
+    /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
+  );
+
+  if (itemParam?.[1]) {
+    return {
+      itemId: normalizarId(itemParam[1]),
+      catalogId: null,
       userProductId: null,
     };
   }
