@@ -202,6 +202,26 @@ function normalizarValorVariante(
   return normalizado || null;
 }
 
+function extrairVoltagemDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  if (texto.includes("BIVOLT")) {
+    return "BIVOLT";
+  }
+
+  const encontrada = texto.match(
+    /\b(110|127|220|240)\s*(?:V|VOLTS?)\b/,
+  );
+
+  return encontrada?.[1]
+    ? `${encontrada[1]}V`
+    : null;
+}
+
 function normalizarMarcaCanonical(
   valor: string | null,
 ): string | null {
@@ -400,9 +420,11 @@ function extrairIdentificadores(
     corEncontrada,
   );
 
-  const voltage = normalizarValorVariante(
-    voltagemEncontrada,
-  );
+  const voltage =
+    normalizarValorVariante(
+      voltagemEncontrada,
+    ) ??
+    extrairVoltagemDoTitulo(product.title);
 
   const size = normalizarValorVariante(
     tamanhoEncontrado,
@@ -440,6 +462,286 @@ function extrairIdentificadores(
   };
 }
 
+type ProdutoParaMatching = {
+  id: string;
+  name: string;
+  canonicalName: string | null;
+  brand: string | null;
+  specifications: unknown;
+  modelNumber: string | null;
+  ean: string | null;
+  gtin: string | null;
+  mpn: string | null;
+  color: string | null;
+  voltage: string | null;
+  size: string | null;
+};
+
+function converterEspecificacoesParaAtributos(
+  specifications: unknown,
+): Record<string, string> {
+  if (
+    !specifications ||
+    typeof specifications !== "object" ||
+    Array.isArray(specifications)
+  ) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(
+      specifications as Record<string, unknown>,
+    )
+      .filter(
+        ([, valor]) =>
+          valor !== null &&
+          valor !== undefined,
+      )
+      .map(([chave, valor]) => [
+        chave,
+        String(valor),
+      ]),
+  );
+}
+
+function extrairIdentidadeProdutoExistente(
+  produto: ProdutoParaMatching,
+) {
+  const attributes =
+    converterEspecificacoesParaAtributos(
+      produto.specifications,
+    );
+
+  const mpnDosAtributos = normalizarCodigoProduto(
+    encontrarAtributo(attributes, [
+      "MPN",
+      "PART_NUMBER",
+      "NUMERO_DA_PECA",
+      "CODIGO_DO_FABRICANTE",
+      "REFERENCIA_DO_FABRICANTE",
+    ]),
+  );
+
+  const modeloDosAtributos =
+    normalizarCodigoProduto(
+      encontrarAtributo(attributes, [
+        "MODELO_ALFANUMERICO",
+        "MODELO_DETALHADO",
+        "MODEL_NUMBER",
+        "NUMERO_DO_MODELO",
+        "CODIGO_DO_MODELO",
+        "NOME_DO_MODELO",
+        "MODELO",
+        "MODEL",
+      ]),
+    );
+
+  const titulo =
+    produto.canonicalName?.trim() ||
+    produto.name;
+
+  return {
+    brand: normalizarMarcaCanonical(
+      produto.brand,
+    ),
+    ean: normalizarCodigoNumerico(
+      produto.ean,
+    ),
+    gtin: normalizarCodigoNumerico(
+      produto.gtin,
+    ),
+    codes: Array.from(
+      new Set(
+        [
+          normalizarCodigoProduto(
+            produto.mpn,
+          ),
+          normalizarCodigoProduto(
+            produto.modelNumber,
+          ),
+          mpnDosAtributos,
+          modeloDosAtributos,
+        ].filter(
+          (valor): valor is string =>
+            Boolean(valor),
+        ),
+      ),
+    ),
+    color:
+      normalizarValorVariante(
+        produto.color,
+      ) ??
+      normalizarValorVariante(
+        encontrarAtributo(attributes, [
+          "COR",
+          "COLOR",
+          "COR_PRINCIPAL",
+        ]),
+      ),
+    voltage:
+      normalizarValorVariante(
+        produto.voltage,
+      ) ??
+      normalizarValorVariante(
+        encontrarAtributo(attributes, [
+          "VOLTAGEM",
+          "TENSAO",
+          "VOLTAGE",
+        ]),
+      ) ??
+      extrairVoltagemDoTitulo(titulo),
+    size:
+      normalizarValorVariante(
+        produto.size,
+      ) ??
+      normalizarValorVariante(
+        encontrarAtributo(attributes, [
+          "TAMANHO",
+          "SIZE",
+          "TAMANHO_DO_COLCHAO",
+          "TAMANHO_DA_TELA",
+        ]),
+      ),
+    capacity: normalizarValorVariante(
+      encontrarAtributo(attributes, [
+        "CAPACIDADE",
+        "CAPACIDADE_EM_VOLUME",
+        "VOLUME_DA_UNIDADE",
+        "PESO_LIQUIDO",
+      ]),
+    ),
+    ram: normalizarValorVariante(
+      encontrarAtributo(attributes, [
+        "MEMORIA_RAM",
+        "RAM",
+        "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
+        "MEMORY_SIZE",
+      ]),
+    ),
+    storage: normalizarValorVariante(
+      encontrarAtributo(attributes, [
+        "ARMAZENAMENTO",
+        "STORAGE",
+        "TAMANHO_DO_DISCO_RIGIDO",
+        "CAPACIDADE_DO_SSD",
+        "SSD",
+      ]),
+    ),
+    kitQuantity: normalizarValorVariante(
+      encontrarAtributo(attributes, [
+        "UNIDADES_POR_EMBALAGEM",
+        "QUANTIDADE_DE_PECAS",
+        "QUANTIDADE_DE_UNIDADES",
+        "QUANTIDADE_DE_MESAS_DE_CABECEIRA",
+        "UNIDADES_POR_KIT",
+      ]),
+    ),
+  };
+}
+
+function calcularCompatibilidadeExata(
+  produtoExistente: ProdutoParaMatching,
+  product: ProductImport,
+  identificadores: ReturnType<
+    typeof extrairIdentificadores
+  >,
+): number | null {
+  const existente =
+    extrairIdentidadeProdutoExistente(
+      produtoExistente,
+    );
+
+  const marcaImportada =
+    normalizarMarcaCanonical(product.brand);
+
+  if (
+    !marcaImportada ||
+    !existente.brand ||
+    marcaImportada !== existente.brand
+  ) {
+    return null;
+  }
+
+  const globalImportado =
+    identificadores.gtin ||
+    identificadores.ean;
+
+  const globalExistente =
+    existente.gtin || existente.ean;
+
+  if (
+    globalImportado &&
+    globalExistente
+  ) {
+    return globalImportado === globalExistente
+      ? 1
+      : null;
+  }
+
+  const codigosImportados = Array.from(
+    new Set(
+      [
+        identificadores.mpn,
+        identificadores.modelNumber,
+      ].filter(
+        (valor): valor is string =>
+          Boolean(valor),
+      ),
+    ),
+  );
+
+  const codigoCoincide =
+    codigosImportados.some((codigo) =>
+      existente.codes.includes(codigo),
+    );
+
+  if (!codigoCoincide) {
+    return null;
+  }
+
+  const paresVariantes = [
+    [identificadores.voltage, existente.voltage],
+    [identificadores.size, existente.size],
+    [identificadores.capacity, existente.capacity],
+    [identificadores.ram, existente.ram],
+    [identificadores.storage, existente.storage],
+    [identificadores.kitQuantity, existente.kitQuantity],
+  ] as const;
+
+  let variantesFortesCoincidentes = 0;
+
+  for (const [importada, salva] of paresVariantes) {
+    if (importada && salva) {
+      if (importada !== salva) {
+        return null;
+      }
+
+      variantesFortesCoincidentes += 1;
+    }
+  }
+
+  if (
+    identificadores.color &&
+    existente.color &&
+    identificadores.color !== existente.color
+  ) {
+    return null;
+  }
+
+  /*
+   * Sem GTIN/EAN, exigimos ao menos uma variante
+   * forte coincidente além de marca + código/modelo.
+   */
+  if (variantesFortesCoincidentes < 1) {
+    return null;
+  }
+
+  return Math.min(
+    0.95 + variantesFortesCoincidentes * 0.01,
+    0.99,
+  );
+}
+
 function criarCanonicalKey(
   product: ProductImport,
   identificadores: ReturnType<
@@ -458,18 +760,11 @@ function criarCanonicalKey(
     product.brand,
   );
 
-  if (marca && identificadores.mpn) {
-    return [
-      "brand-mpn",
-      marca,
-      identificadores.mpn,
-    ].join(":");
-  }
+  const codigoFabricante =
+    identificadores.mpn ||
+    identificadores.modelNumber;
 
-  if (
-    !marca ||
-    !identificadores.modelNumber
-  ) {
+  if (!marca || !codigoFabricante) {
     return null;
   }
 
@@ -485,7 +780,12 @@ function criarCanonicalKey(
       Boolean(valor),
   );
 
-  if (variantesFortes.length < 2) {
+  /*
+   * Sem GTIN/EAN, marca + código/modelo sozinhos
+   * não são suficientes para autoagrupar variantes.
+   * Ex.: um mesmo modelo pode existir em 127V e 220V.
+   */
+  if (variantesFortes.length < 1) {
     return null;
   }
 
@@ -517,9 +817,9 @@ function criarCanonicalKey(
   );
 
   return [
-    "brand-model-v2",
+    "brand-code-v3",
     marca,
-    identificadores.modelNumber,
+    codigoFabricante,
     ...partesVariantes,
   ].join(":");
 }
@@ -686,6 +986,52 @@ export async function saveProduct(
           })
         : null;
 
+    const marcaParaMatching =
+      product.brand?.trim() || null;
+
+    const candidatosPorIdentidade =
+      !produtoPeloCanonicalKey &&
+      marcaParaMatching &&
+      (identificadores.mpn ||
+        identificadores.modelNumber ||
+        identificadores.ean ||
+        identificadores.gtin)
+        ? await tx.product.findMany({
+            where: {
+              active: true,
+              brand: {
+                equals: marcaParaMatching,
+                mode: "insensitive",
+              },
+            },
+            take: 30,
+          })
+        : [];
+
+    const candidatosExatos =
+      candidatosPorIdentidade
+        .map((candidato) => ({
+          candidato,
+          score: calcularCompatibilidadeExata(
+            candidato,
+            product,
+            identificadores,
+          ),
+        }))
+        .filter(
+          (
+            item,
+          ): item is {
+            candidato: typeof candidatosPorIdentidade[number];
+            score: number;
+          } => item.score !== null,
+        );
+
+    const produtoCompativelPorIdentidade =
+      candidatosExatos.length === 1
+        ? candidatosExatos[0]
+        : null;
+
     let saved =
       ofertaPeloCodigo?.product ?? null;
 
@@ -716,6 +1062,14 @@ export async function saveProduct(
       produtoPeloCanonicalKey
     ) {
       saved = produtoPeloCanonicalKey;
+    }
+
+    if (
+      !saved &&
+      produtoCompativelPorIdentidade
+    ) {
+      saved =
+        produtoCompativelPorIdentidade.candidato;
     }
 
     if (!saved) {
@@ -977,6 +1331,17 @@ export async function saveProduct(
       product.price,
     );
 
+    const matchScoreExato =
+      ofertaPeloCodigo
+        ? 1
+        : produtoPeloCanonicalKey?.id ===
+              saved.id
+          ? 1
+          : produtoCompativelPorIdentidade
+                ?.candidato.id === saved.id
+            ? produtoCompativelPorIdentidade.score
+            : null;
+
     const oferta =
       await tx.marketplaceOffer.upsert({
         where: {
@@ -1005,18 +1370,11 @@ export async function saveProduct(
           status,
 
           matchStatus:
-            ofertaPeloCodigo ||
-            produtoPeloCanonicalKey?.id ===
-              saved.id
+            matchScoreExato !== null
               ? "EXACT"
               : "HIGH",
 
-          matchScore:
-            ofertaPeloCodigo ||
-            produtoPeloCanonicalKey?.id ===
-              saved.id
-              ? 1
-              : null,
+          matchScore: matchScoreExato,
 
           discoverySource,
 
@@ -1077,16 +1435,11 @@ export async function saveProduct(
           status,
 
           matchStatus:
-            produtoPeloCanonicalKey?.id ===
-            saved.id
+            matchScoreExato !== null
               ? "EXACT"
               : "HIGH",
 
-          matchScore:
-            produtoPeloCanonicalKey?.id ===
-            saved.id
-              ? 1
-              : null,
+          matchScore: matchScoreExato,
 
           discoverySource,
 
