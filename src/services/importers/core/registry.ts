@@ -1,10 +1,16 @@
+import { importarAliExpress } from "../aliexpress";
 import { importarAmazon } from "../amazon";
 import { importarMagazineLuiza } from "../magazineluiza";
 import { importarMercadoLivre } from "../mercadolivre";
 import { importarShopee } from "../shopee";
 
-import type { MarketplaceKey } from "./detector";
-import type { ProductImport } from "./types";
+import type {
+  MarketplaceKey,
+} from "./detector";
+
+import type {
+  ProductImport,
+} from "./types";
 
 export type MarketplaceImporter = (
   url: string,
@@ -13,35 +19,41 @@ export type MarketplaceImporter = (
 export type MarketplaceAdapter = {
   key: MarketplaceKey;
   name: string;
-  importer: MarketplaceImporter | null;
+  importer:
+    MarketplaceImporter | null;
 };
 
-const marketplaceAdapters: Record<
-  MarketplaceKey,
-  MarketplaceAdapter
-> = {
+const marketplaceAdapters:
+  Record<
+    MarketplaceKey,
+    MarketplaceAdapter
+  > = {
   mercadolivre: {
     key: "mercadolivre",
     name: "Mercado Livre",
-    importer: importarMercadoLivre,
+    importer:
+      importarMercadoLivre,
   },
 
   amazon: {
     key: "amazon",
     name: "Amazon",
-    importer: importarAmazon,
+    importer:
+      importarAmazon,
   },
 
   shopee: {
     key: "shopee",
     name: "Shopee",
-    importer: importarShopee,
+    importer:
+      importarShopee,
   },
 
   magazineluiza: {
     key: "magazineluiza",
     name: "Magazine Luiza",
-    importer: importarMagazineLuiza,
+    importer:
+      importarMagazineLuiza,
   },
 
   casasbahia: {
@@ -65,7 +77,8 @@ const marketplaceAdapters: Record<
   aliexpress: {
     key: "aliexpress",
     name: "AliExpress",
-    importer: null,
+    importer:
+      importarAliExpress,
   },
 
   carrefour: {
@@ -78,10 +91,13 @@ const marketplaceAdapters: Record<
 export function obterMarketplaceAdapter(
   marketplace: MarketplaceKey,
 ): MarketplaceAdapter {
-  return marketplaceAdapters[marketplace];
+  return marketplaceAdapters[
+    marketplace
+  ];
 }
 
-export function listarMarketplaceAdapters(): MarketplaceAdapter[] {
+export function listarMarketplaceAdapters():
+  MarketplaceAdapter[] {
   return Object.values(
     marketplaceAdapters,
   );
@@ -91,7 +107,8 @@ export function marketplacePossuiImportador(
   marketplace: MarketplaceKey,
 ): boolean {
   return (
-    marketplaceAdapters[marketplace]
-      .importer !== null
+    marketplaceAdapters[
+      marketplace
+    ].importer !== null
   );
 }

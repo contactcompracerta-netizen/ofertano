@@ -2,7 +2,8 @@ export type MarketplaceName =
   | "Mercado Livre"
   | "Amazon"
   | "Shopee"
-  | "Magazine Luiza";
+  | "Magazine Luiza"
+  | "AliExpress";
 
 export interface ProductImport {
   marketplace: MarketplaceName;
@@ -16,9 +17,6 @@ export interface ProductImport {
 
   /*
    * Link individual de afiliado.
-   *
-   * Opcional para manter compatibilidade
-   * com os importadores já existentes.
    */
   affiliateLink?: string | null;
 

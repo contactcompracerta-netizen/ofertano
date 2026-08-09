@@ -6,7 +6,8 @@ type MarketplaceDatabase =
   | "MERCADO_LIVRE"
   | "AMAZON"
   | "SHOPEE"
-  | "MAGAZINE_LUIZA";
+  | "MAGAZINE_LUIZA"
+  | "ALIEXPRESS";
 
 type DiscoverySourceDatabase =
   | "MANUAL"
@@ -86,6 +87,9 @@ function converterMarketplace(
     case "Magazine Luiza":
       return "MAGAZINE_LUIZA";
 
+    case "AliExpress":
+      return "ALIEXPRESS";
+
     default: {
       const marketplaceNunca: never = marketplace;
 
@@ -109,6 +113,7 @@ function nomeMarketplace(
     AMAZON: "Amazon",
     SHOPEE: "Shopee",
     MAGAZINE_LUIZA: "Magazine Luiza",
+    ALIEXPRESS: "AliExpress",
   };
 
   return nomes[marketplace];
