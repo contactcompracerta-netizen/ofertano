@@ -1173,12 +1173,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
           {possuiComparacaoEntreLojas && (
             <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
-              <div className="grid gap-2 lg:grid-cols-[315px_minmax(0,1fr)] lg:items-center lg:gap-4">
+              <div className="grid gap-2 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-center lg:gap-5">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
                     Comparador Ofertano
                   </p>
-                  <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl lg:whitespace-nowrap">
+                  <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl lg:text-[18px] lg:leading-6 xl:text-xl xl:whitespace-nowrap">
                     Compare preços em outras lojas
                   </h2>
                   <p className="mt-1 text-[10px] leading-4 text-slate-500 lg:hidden">
@@ -1186,7 +1186,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </p>
                 </div>
 
-                <div className={`grid gap-1.5 ${ofertasComparador.length === 1 ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
+                <div className={`min-w-0 grid gap-1.5 ${ofertasComparador.length === 1 ? "grid-cols-1" : "md:grid-cols-2 2xl:grid-cols-3"}`}>
                 {ofertasComparador.map((oferta) => {
                   const link = oferta.affiliateLink?.trim();
                   const linkAtivo =
