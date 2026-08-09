@@ -432,6 +432,184 @@ function normalizarCodigoProduto(
   return codigo || null;
 }
 
+
+function normalizarCapacidadeDigital(
+  valor: string | null,
+): string | null {
+  if (!valor) {
+    return null;
+  }
+
+  const texto = normalizarTextoIdentificador(
+    valor,
+  );
+
+  const encontrada = texto.match(
+    /\b(\d+(?:[.,]\d+)?)\s*(MB|GB|TB)\b/,
+  );
+
+  if (!encontrada?.[1] || !encontrada[2]) {
+    return null;
+  }
+
+  const numero = encontrada[1]
+    .replace(",", ".")
+    .replace(/\.0+$/, "");
+
+  return `${numero}${encontrada[2]}`;
+}
+
+function encontrarCapacidadeRam(
+  atributos: Record<string, string>,
+): string | null {
+  const entradas = Object.entries(atributos)
+    .map(([chave, valor]) => ({
+      chave: normalizarChaveAtributo(chave),
+      valor: valor.trim(),
+    }))
+    .filter((item) => Boolean(item.valor));
+
+  const prioridades = [
+    "CAPACIDADE_TOTAL_DO_MODULO_DE_MEMORIA_RAM",
+    "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
+    "CAPACIDADE_DA_MEMORIA_RAM",
+    "CAPACIDADE_DE_MEMORIA_RAM",
+    "MEMORIA_RAM_INSTALADA",
+    "RAM_SIZE",
+    "MEMORY_SIZE",
+    "MEMORIA_RAM",
+    "RAM",
+  ];
+
+  for (const prioridade of prioridades) {
+    const exata = entradas.find(
+      (item) => item.chave === prioridade,
+    );
+
+    const capacidade = normalizarCapacidadeDigital(
+      exata?.valor ?? null,
+    );
+
+    if (capacidade) {
+      return capacidade;
+    }
+  }
+
+  const bloqueadas = [
+    "TIPO",
+    "VELOCIDADE",
+    "FREQUENCIA",
+    "SLOT",
+    "MAXIMA",
+    "MAXIMO",
+    "SUPORTADA",
+    "LATENCIA",
+  ];
+
+  for (const item of entradas) {
+    const relacionada =
+      item.chave.includes("MEMORIA_RAM") ||
+      item.chave === "RAM" ||
+      item.chave.endsWith("_RAM");
+
+    if (!relacionada) {
+      continue;
+    }
+
+    if (
+      bloqueadas.some((palavra) =>
+        item.chave.includes(palavra),
+      )
+    ) {
+      continue;
+    }
+
+    const capacidade =
+      normalizarCapacidadeDigital(item.valor);
+
+    if (capacidade) {
+      return capacidade;
+    }
+  }
+
+  return null;
+}
+
+function encontrarCapacidadeArmazenamento(
+  atributos: Record<string, string>,
+): string | null {
+  const entradas = Object.entries(atributos)
+    .map(([chave, valor]) => ({
+      chave: normalizarChaveAtributo(chave),
+      valor: valor.trim(),
+    }))
+    .filter((item) => Boolean(item.valor));
+
+  const prioridades = [
+    "CAPACIDADE_DE_DISCO_SSD",
+    "CAPACIDADE_DO_DISCO_SSD",
+    "CAPACIDADE_DO_SSD",
+    "CAPACIDADE_SSD",
+    "SSD_CAPACITY",
+    "CAPACIDADE_DO_DISCO_RIGIDO",
+    "TAMANHO_DO_DISCO_RIGIDO",
+    "CAPACIDADE_DE_ARMAZENAMENTO",
+    "ARMAZENAMENTO",
+    "STORAGE",
+  ];
+
+  for (const prioridade of prioridades) {
+    const exata = entradas.find(
+      (item) => item.chave === prioridade,
+    );
+
+    const capacidade = normalizarCapacidadeDigital(
+      exata?.valor ?? null,
+    );
+
+    if (capacidade) {
+      return capacidade;
+    }
+  }
+
+  const bloqueadas = [
+    "INTERFACE",
+    "TIPO",
+    "MODELO",
+    "CONEXAO",
+    "VELOCIDADE",
+    "SLOT",
+  ];
+
+  for (const item of entradas) {
+    const relacionada =
+      item.chave.includes("SSD") ||
+      item.chave.includes("HDD") ||
+      item.chave.includes("ARMAZENAMENTO");
+
+    if (!relacionada) {
+      continue;
+    }
+
+    if (
+      bloqueadas.some((palavra) =>
+        item.chave.includes(palavra),
+      )
+    ) {
+      continue;
+    }
+
+    const capacidade =
+      normalizarCapacidadeDigital(item.valor);
+
+    if (capacidade) {
+      return capacidade;
+    }
+  }
+
+  return null;
+}
+
 function extrairIdentificadores(
   product: ProductImport,
 ) {
@@ -524,26 +702,14 @@ function extrairIdentificadores(
       ],
     );
 
-  const ramEncontrada = encontrarAtributo(
-    product.attributes,
-    [
-      "MEMORIA_RAM",
-      "RAM",
-      "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
-      "MEMORY_SIZE",
-    ],
-  );
+  const ramEncontrada =
+    encontrarCapacidadeRam(
+      product.attributes,
+    );
 
   const armazenamentoEncontrado =
-    encontrarAtributo(
+    encontrarCapacidadeArmazenamento(
       product.attributes,
-      [
-        "ARMAZENAMENTO",
-        "STORAGE",
-        "TAMANHO_DO_DISCO_RIGIDO",
-        "CAPACIDADE_DO_SSD",
-        "SSD",
-      ],
     );
 
   const quantidadeKitEncontrada =
@@ -782,23 +948,14 @@ function extrairIdentidadeProdutoExistente(
     ),
     ram:
       normalizarValorVariante(
-        encontrarAtributo(attributes, [
-          "MEMORIA_RAM",
-          "RAM",
-          "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
-          "MEMORY_SIZE",
-        ]),
+        encontrarCapacidadeRam(attributes),
       ) ??
       extrairRamDoTitulo(titulo),
     storage:
       normalizarValorVariante(
-        encontrarAtributo(attributes, [
-          "ARMAZENAMENTO",
-          "STORAGE",
-          "TAMANHO_DO_DISCO_RIGIDO",
-          "CAPACIDADE_DO_SSD",
-          "SSD",
-        ]),
+        encontrarCapacidadeArmazenamento(
+          attributes,
+        ),
       ) ??
       extrairArmazenamentoDoTitulo(
         titulo,
