@@ -143,39 +143,15 @@ function escolherOferta(
   )[0];
 }
 
-function erroSemVencedores(
-  error: unknown
-): boolean {
-  const mensagem =
-    error instanceof Error
-      ? error.message
-      : String(error);
-
-  return /No winners found/i.test(
-    mensagem
-  );
-}
-
 async function importarCatalogo(
   catalogId: string,
   originalUrl: string
 ): Promise<ProductImport> {
-  const catalog =
-    await getCatalogProduct(catalogId);
-
-  let catalogItems:
-    Awaited<
-      ReturnType<typeof getCatalogItems>
-    > | null = null;
-
-  try {
-    catalogItems =
-      await getCatalogItems(catalogId);
-  } catch (error) {
-    if (!erroSemVencedores(error)) {
-      throw error;
-    }
-  }
+  const [catalog, catalogItems] =
+    await Promise.all([
+      getCatalogProduct(catalogId),
+      tentar(getCatalogItems(catalogId)),
+    ]);
 
   const winnerItemId =
     catalog.buy_box_winner?.item_id;
