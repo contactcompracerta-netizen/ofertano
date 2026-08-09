@@ -1571,13 +1571,33 @@ export async function saveProduct(
         },
       });
 
-    const melhorOferta =
+    const melhorOfertaEncontrada =
       ofertasDoProduto.find(
         (item) =>
           item.available &&
           item.status !== "UNAVAILABLE" &&
           item.status !== "ERROR",
       ) ?? ofertasDoProduto[0];
+
+    /*
+     * A oferta principal precisa ser comprável.
+     *
+     * Assim, uma oferta mais barata ainda sem link de afiliado
+     * continua aparecendo no comparador como menor preço encontrado,
+     * mas não substitui preço/botão principal por uma combinação
+     * inconsistente.
+     */
+    const melhorOfertaCompravel =
+      ofertasDoProduto.find(
+        (item) =>
+          item.available &&
+          item.status === "ACTIVE" &&
+          Boolean(item.affiliateLink?.trim()),
+      ) ?? null;
+
+    const melhorOfertaPrincipal =
+      melhorOfertaCompravel ??
+      melhorOfertaEncontrada;
 
     await tx.marketplaceOffer.updateMany({
       where: {
@@ -1589,10 +1609,10 @@ export async function saveProduct(
       },
     });
 
-    if (melhorOferta) {
+    if (melhorOfertaPrincipal) {
       await tx.marketplaceOffer.update({
         where: {
-          id: melhorOferta.id,
+          id: melhorOfertaPrincipal.id,
         },
         data: {
           isBest: true,
@@ -1624,7 +1644,7 @@ export async function saveProduct(
         ? "LIVE_PARTIAL"
         : "LIVE_COMPLETE";
 
-    if (!melhorOferta) {
+    if (!melhorOfertaPrincipal) {
       return tx.product.update({
         where: {
           id: saved.id,
@@ -1642,27 +1662,27 @@ export async function saveProduct(
       },
       data: {
         store: nomeMarketplace(
-          melhorOferta.marketplace as MarketplaceDatabase,
+          melhorOfertaPrincipal.marketplace as MarketplaceDatabase,
         ),
 
         affiliateLink:
-          melhorOferta.affiliateLink?.trim() ||
+          melhorOfertaPrincipal.affiliateLink?.trim() ||
           "",
 
-        price: melhorOferta.price,
-        oldPrice: melhorOferta.oldPrice,
+        price: melhorOfertaPrincipal.price,
+        oldPrice: melhorOfertaPrincipal.oldPrice,
 
         installments:
-          melhorOferta.installments,
+          melhorOfertaPrincipal.installments,
 
-        stock: melhorOferta.stock,
+        stock: melhorOfertaPrincipal.stock,
 
         discount:
-          melhorOferta.id === oferta.id
+          melhorOfertaPrincipal.id === oferta.id
             ? obterDescontoProduto(product)
             : calcularDesconto(
-                melhorOferta.oldPrice,
-                melhorOferta.price,
+                melhorOfertaPrincipal.oldPrice,
+                melhorOfertaPrincipal.price,
               ),
 
         publicationStatus,

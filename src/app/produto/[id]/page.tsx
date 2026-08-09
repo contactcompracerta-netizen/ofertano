@@ -924,6 +924,24 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       oferta.matchStatus === "EXACT",
   );
 
+  const ofertasComparadorDisponiveis = ofertasComparador.filter(
+    (oferta) =>
+      oferta.available &&
+      oferta.status !== "UNAVAILABLE" &&
+      oferta.status !== "ERROR" &&
+      Number.isFinite(oferta.price) &&
+      oferta.price > 0,
+  );
+
+  const menorPrecoComparador =
+    ofertasComparadorDisponiveis.length > 0
+      ? Math.min(
+          ...ofertasComparadorDisponiveis.map(
+            (oferta) => oferta.price,
+          ),
+        )
+      : null;
+
   const possuiComparacaoEntreLojas =
     new Set(ofertasComparador.map((oferta) => oferta.marketplace)).size > 1;
 
@@ -1178,6 +1196,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   const marketplace = formatarMarketplace(
                     oferta.marketplace,
                   );
+                  const menorPrecoEncontrado =
+                    menorPrecoComparador !== null &&
+                    oferta.available &&
+                    oferta.status !== "UNAVAILABLE" &&
+                    oferta.status !== "ERROR" &&
+                    Math.abs(oferta.price - menorPrecoComparador) < 0.01;
 
                   const conteudoOferta = (
                     <div className="flex items-center justify-between gap-3">
@@ -1187,9 +1211,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                             {marketplace}
                           </p>
 
-                          {oferta.isBest && (
+                          {menorPrecoEncontrado && (
                             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">
-                              Melhor preço
+                              Menor preço encontrado
                             </span>
                           )}
                         </div>
