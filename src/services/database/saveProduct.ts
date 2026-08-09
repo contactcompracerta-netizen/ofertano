@@ -222,6 +222,97 @@ function extrairVoltagemDoTitulo(
     : null;
 }
 
+
+function extrairTamanhoDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  const comUnidade = texto.match(
+    /\b(\d{1,2})[.,](\d)\s*(?:["”″]|POLEGADAS?|POL)(?:\s|$)/,
+  );
+
+  if (comUnidade?.[1] && comUnidade[2]) {
+    return normalizarValorVariante(
+      `${comUnidade[1]}.${comUnidade[2]}`,
+    );
+  }
+
+  const depoisDeTela = texto.match(
+    /\bTELA\b.{0,30}\b(\d{1,2})[.,](\d)\b/,
+  );
+
+  if (depoisDeTela?.[1] && depoisDeTela[2]) {
+    return normalizarValorVariante(
+      `${depoisDeTela[1]}.${depoisDeTela[2]}`,
+    );
+  }
+
+  return null;
+}
+
+function extrairRamDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  const depoisDoNumero = texto.match(
+    /\b(\d{1,3})\s*GB\s*(?:DE\s*)?(?:RAM|DDR[345]?)\b/,
+  );
+
+  if (depoisDoNumero?.[1]) {
+    return normalizarValorVariante(
+      `${depoisDoNumero[1]}GB`,
+    );
+  }
+
+  const depoisDeRam = texto.match(
+    /\bRAM\s*(?:DE\s*)?(\d{1,3})\s*GB\b/,
+  );
+
+  if (depoisDeRam?.[1]) {
+    return normalizarValorVariante(
+      `${depoisDeRam[1]}GB`,
+    );
+  }
+
+  return null;
+}
+
+function extrairArmazenamentoDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  const numeroAntes = texto.match(
+    /\b(\d{2,4})\s*(GB|TB)\s*(?:SSD|NVME|HDD)\b/,
+  );
+
+  if (numeroAntes?.[1] && numeroAntes[2]) {
+    return normalizarValorVariante(
+      `${numeroAntes[1]}${numeroAntes[2]}`,
+    );
+  }
+
+  const tipoAntes = texto.match(
+    /\b(?:SSD|NVME|HDD)\s*(?:DE\s*)?(\d{2,4})\s*(GB|TB)\b/,
+  );
+
+  if (tipoAntes?.[1] && tipoAntes[2]) {
+    return normalizarValorVariante(
+      `${tipoAntes[1]}${tipoAntes[2]}`,
+    );
+  }
+
+  return null;
+}
+
 function extrairModeloDoTitulo(
   titulo: string,
 ): string | null {
@@ -279,6 +370,31 @@ function normalizarMarcaCanonical(
     .trim();
 
   return marca || null;
+}
+
+
+function tituloContemMarca(
+  titulo: string,
+  marca: string,
+): boolean {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  )
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+
+  const marcaNormalizada =
+    normalizarTextoIdentificador(marca)
+      .replace(/[^A-Z0-9]+/g, " ")
+      .trim();
+
+  if (!texto || !marcaNormalizada) {
+    return false;
+  }
+
+  return ` ${texto} `.includes(
+    ` ${marcaNormalizada} `,
+  );
 }
 
 function normalizarCodigoNumerico(
@@ -470,21 +586,29 @@ function extrairIdentificadores(
     ) ??
     extrairVoltagemDoTitulo(product.title);
 
-  const size = normalizarValorVariante(
-    tamanhoEncontrado,
-  );
+  const size =
+    normalizarValorVariante(
+      tamanhoEncontrado,
+    ) ??
+    extrairTamanhoDoTitulo(product.title);
 
   const capacity = normalizarValorVariante(
     capacidadeEncontrada,
   );
 
-  const ram = normalizarValorVariante(
-    ramEncontrada,
-  );
+  const ram =
+    normalizarValorVariante(
+      ramEncontrada,
+    ) ??
+    extrairRamDoTitulo(product.title);
 
-  const storage = normalizarValorVariante(
-    armazenamentoEncontrado,
-  );
+  const storage =
+    normalizarValorVariante(
+      armazenamentoEncontrado,
+    ) ??
+    extrairArmazenamentoDoTitulo(
+      product.title,
+    );
 
   const kitQuantity =
     normalizarValorVariante(
@@ -646,7 +770,8 @@ function extrairIdentidadeProdutoExistente(
           "TAMANHO_DO_COLCHAO",
           "TAMANHO_DA_TELA",
         ]),
-      ),
+      ) ??
+      extrairTamanhoDoTitulo(titulo),
     capacity: normalizarValorVariante(
       encontrarAtributo(attributes, [
         "CAPACIDADE",
@@ -655,23 +780,29 @@ function extrairIdentidadeProdutoExistente(
         "PESO_LIQUIDO",
       ]),
     ),
-    ram: normalizarValorVariante(
-      encontrarAtributo(attributes, [
-        "MEMORIA_RAM",
-        "RAM",
-        "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
-        "MEMORY_SIZE",
-      ]),
-    ),
-    storage: normalizarValorVariante(
-      encontrarAtributo(attributes, [
-        "ARMAZENAMENTO",
-        "STORAGE",
-        "TAMANHO_DO_DISCO_RIGIDO",
-        "CAPACIDADE_DO_SSD",
-        "SSD",
-      ]),
-    ),
+    ram:
+      normalizarValorVariante(
+        encontrarAtributo(attributes, [
+          "MEMORIA_RAM",
+          "RAM",
+          "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
+          "MEMORY_SIZE",
+        ]),
+      ) ??
+      extrairRamDoTitulo(titulo),
+    storage:
+      normalizarValorVariante(
+        encontrarAtributo(attributes, [
+          "ARMAZENAMENTO",
+          "STORAGE",
+          "TAMANHO_DO_DISCO_RIGIDO",
+          "CAPACIDADE_DO_SSD",
+          "SSD",
+        ]),
+      ) ??
+      extrairArmazenamentoDoTitulo(
+        titulo,
+      ),
     kitQuantity: normalizarValorVariante(
       encontrarAtributo(attributes, [
         "UNIDADES_POR_EMBALAGEM",
@@ -699,12 +830,43 @@ function calcularCompatibilidadeExata(
   const marcaImportada =
     normalizarMarcaCanonical(product.brand);
 
+  const marcaExistente = existente.brand;
+
+  const tituloExistente =
+    produtoExistente.canonicalName?.trim() ||
+    produtoExistente.name;
+
   if (
-    !marcaImportada ||
-    !existente.brand ||
-    marcaImportada !== existente.brand
+    marcaImportada &&
+    marcaExistente &&
+    marcaImportada !== marcaExistente
   ) {
     return null;
+  }
+
+  const marcasEstruturadasNosDois =
+    Boolean(
+      marcaImportada &&
+      marcaExistente,
+    );
+
+  if (!marcasEstruturadasNosDois) {
+    const marcaConfirmadaNoTitulo =
+      !marcaImportada && marcaExistente
+        ? tituloContemMarca(
+            product.title,
+            marcaExistente,
+          )
+        : marcaImportada && !marcaExistente
+          ? tituloContemMarca(
+              tituloExistente,
+              marcaImportada,
+            )
+          : false;
+
+    if (!marcaConfirmadaNoTitulo) {
+      return null;
+    }
   }
 
   const globalImportado =
@@ -774,15 +936,33 @@ function calcularCompatibilidadeExata(
   }
 
   /*
-   * Sem GTIN/EAN, exigimos ao menos uma variante
-   * forte coincidente além de marca + código/modelo.
+   * Sem GTIN/EAN:
+   *
+   * - com marca estruturada nos dois lados, exigimos
+   *   ao menos uma variante forte coincidente;
+   * - se uma loja não forneceu marca estruturada,
+   *   a marca precisa aparecer no título e exigimos
+   *   ao menos duas variantes fortes coincidentes.
+   *
+   * Isso permite comparar feeds pobres, como Shopee,
+   * sem afrouxar a proteção contra variantes erradas.
    */
-  if (variantesFortesCoincidentes < 1) {
+  const minimoVariantesFortes =
+    marcasEstruturadasNosDois ? 1 : 2;
+
+  if (
+    variantesFortesCoincidentes <
+    minimoVariantesFortes
+  ) {
     return null;
   }
 
+  const baseScore =
+    marcasEstruturadasNosDois ? 0.95 : 0.94;
+
   return Math.min(
-    0.95 + variantesFortesCoincidentes * 0.01,
+    baseScore +
+      variantesFortesCoincidentes * 0.01,
     0.99,
   );
 }
@@ -1049,9 +1229,12 @@ export async function saveProduct(
       ),
     );
 
+    const codigoModeloParaBusca =
+      identificadores.modelNumber ||
+      identificadores.mpn;
+
     const candidatosPorIdentidade =
       !produtoPeloCanonicalKey &&
-      marcasParaBusca.length > 0 &&
       (identificadores.mpn ||
         identificadores.modelNumber ||
         identificadores.ean ||
@@ -1059,12 +1242,68 @@ export async function saveProduct(
         ? await tx.product.findMany({
             where: {
               active: true,
-              OR: marcasParaBusca.map((marca) => ({
-                brand: {
-                  equals: marca,
-                  mode: "insensitive",
-                },
-              })),
+              OR: [
+                ...marcasParaBusca.map(
+                  (marca) => ({
+                    brand: {
+                      equals: marca,
+                      mode: "insensitive" as const,
+                    },
+                  }),
+                ),
+                ...(codigoModeloParaBusca
+                  ? [
+                      {
+                        modelNumber: {
+                          equals:
+                            codigoModeloParaBusca,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                      {
+                        mpn: {
+                          equals:
+                            codigoModeloParaBusca,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                      {
+                        name: {
+                          contains:
+                            codigoModeloParaBusca,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                      {
+                        canonicalName: {
+                          contains:
+                            codigoModeloParaBusca,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(identificadores.ean
+                  ? [
+                      {
+                        ean: identificadores.ean,
+                      },
+                      {
+                        gtin: identificadores.ean,
+                      },
+                    ]
+                  : []),
+                ...(identificadores.gtin
+                  ? [
+                      {
+                        gtin: identificadores.gtin,
+                      },
+                      {
+                        ean: identificadores.gtin,
+                      },
+                    ]
+                  : []),
+              ],
             },
             take: 30,
           })
