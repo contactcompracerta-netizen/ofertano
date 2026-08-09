@@ -99,7 +99,7 @@ export default function ProductGallery({
   if (imagensValidas.length === 0) {
     return (
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex h-[280px] items-center justify-center bg-slate-50 sm:h-[360px] lg:h-[460px]">
+        <div className="flex h-[220px] items-center justify-center bg-slate-50 sm:h-[270px] lg:h-[320px]">
           <span className="text-sm font-semibold text-slate-400">
             Imagem indisponível
           </span>
@@ -130,16 +130,16 @@ export default function ProductGallery({
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-none lg:border-0 lg:shadow-none">
-      <div className="relative flex h-[300px] items-center justify-center overflow-hidden bg-white p-3 sm:h-[390px] sm:p-4 lg:h-[480px] lg:p-5 xl:h-[500px]">
-        <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-1.5 sm:left-4 sm:top-4">
+      <div className="relative flex h-[235px] items-center justify-center overflow-hidden bg-white p-2 sm:h-[285px] sm:p-2.5 lg:h-[325px] lg:p-3 xl:h-[340px]">
+        <div className="absolute left-2 top-2 z-20 flex flex-wrap gap-1 sm:left-2.5 sm:top-2.5">
           {discountPercent > 0 && (
-            <span className="rounded-full bg-rose-600 px-2.5 py-1 text-[10px] font-black text-white shadow-sm sm:text-[11px]">
+            <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-black text-white shadow-sm sm:text-[10px]">
               {discountPercent}% OFF
             </span>
           )}
 
           {featured && (
-            <span className="rounded-full bg-amber-400 px-2.5 py-1 text-[10px] font-black text-amber-950 shadow-sm sm:text-[11px]">
+            <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[9px] font-black text-amber-950 shadow-sm sm:text-[10px]">
               Destaque
             </span>
           )}
@@ -162,7 +162,7 @@ export default function ProductGallery({
               type="button"
               onClick={mostrarAnterior}
               aria-label="Mostrar imagem anterior"
-              className="absolute left-2 top-1/2 z-30 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 sm:left-3 sm:h-9 sm:w-9"
+              className="absolute left-2 top-1/2 z-30 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
             >
               <ArrowIcon direction="left" />
             </button>
@@ -171,12 +171,12 @@ export default function ProductGallery({
               type="button"
               onClick={mostrarProxima}
               aria-label="Mostrar próxima imagem"
-              className="absolute right-2 top-1/2 z-30 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 sm:right-3 sm:h-9 sm:w-9"
+              className="absolute right-2 top-1/2 z-30 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
             >
               <ArrowIcon direction="right" />
             </button>
 
-            <span className="absolute bottom-2.5 right-2.5 z-20 rounded-full bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white sm:bottom-3 sm:right-3 sm:text-[11px]">
+            <span className="absolute bottom-2 right-2 z-20 rounded-full bg-slate-950/75 px-2 py-0.5 text-[9px] font-bold text-white sm:text-[10px]">
               {selectedIndex + 1} / {imagensValidas.length}
             </span>
           </>
@@ -184,8 +184,8 @@ export default function ProductGallery({
       </div>
 
       {possuiVariasImagens && (
-        <div className="border-t border-slate-200 bg-slate-50/50 px-2.5 py-2.5 sm:px-3 sm:py-3">
-          <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="border-t border-slate-200 bg-slate-50/50 px-2 py-1.5">
+          <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {imagensValidas.map((imagem, indice) => {
               const selecionada = selectedIndex === indice;
 
@@ -196,7 +196,7 @@ export default function ProductGallery({
                   onClick={() => setSelectedIndex(indice)}
                   aria-label={`Mostrar imagem ${indice + 1} de ${imagensValidas.length}`}
                   aria-pressed={selecionada}
-                  className={`relative z-10 flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-white p-1 transition active:scale-95 sm:h-16 sm:w-16 ${
+                  className={`relative z-10 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-white p-0.5 transition active:scale-95 sm:h-11 sm:w-11 ${
                     selecionada
                       ? "border-emerald-500 ring-2 ring-emerald-100"
                       : "border-slate-200 hover:border-emerald-300"

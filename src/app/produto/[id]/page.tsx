@@ -244,6 +244,331 @@ function CheckIcon({ className }: IconProps) {
   );
 }
 
+
+type HistoricoPrecoEntrada = {
+  offerId: string | null;
+  marketplace: string | null;
+  price: number;
+  recordedAt: Date;
+};
+
+type PontoHistoricoPreco = {
+  price: number;
+  recordedAt: Date;
+};
+
+type AnalisePreco = {
+  titulo: string;
+  descricao: string;
+  badgeClassName: string;
+  cardClassName: string;
+};
+
+const UM_DIA_EM_MS = 24 * 60 * 60 * 1000;
+
+function construirHistoricoMelhorPreco(
+  historico: HistoricoPrecoEntrada[],
+): PontoHistoricoPreco[] {
+  const precosPorOferta = new Map<string, number>();
+  const pontos: PontoHistoricoPreco[] = [];
+
+  for (const registro of historico) {
+    if (!Number.isFinite(registro.price) || registro.price <= 0) {
+      continue;
+    }
+
+    const chaveOferta =
+      registro.offerId ??
+      `marketplace:${registro.marketplace ?? "DESCONHECIDO"}`;
+
+    precosPorOferta.set(chaveOferta, registro.price);
+
+    const precosConhecidos = Array.from(precosPorOferta.values());
+
+    if (precosConhecidos.length === 0) {
+      continue;
+    }
+
+    const melhorPreco = Math.min(...precosConhecidos);
+    const ultimoPonto = pontos.at(-1);
+
+    if (
+      !ultimoPonto ||
+      Math.abs(ultimoPonto.price - melhorPreco) > 0.009
+    ) {
+      pontos.push({
+        price: melhorPreco,
+        recordedAt: registro.recordedAt,
+      });
+    }
+  }
+
+  return pontos;
+}
+
+function calcularMediaPonderada(
+  pontos: PontoHistoricoPreco[],
+  fimPeriodo: Date,
+) {
+  if (pontos.length === 0) {
+    return null;
+  }
+
+  if (pontos.length === 1) {
+    return pontos[0].price;
+  }
+
+  let totalPonderado = 0;
+  let duracaoTotal = 0;
+
+  for (let indice = 0; indice < pontos.length; indice += 1) {
+    const pontoAtual = pontos[indice];
+    const proximoPonto = pontos[indice + 1];
+
+    const inicio = pontoAtual.recordedAt.getTime();
+    const fim = proximoPonto
+      ? proximoPonto.recordedAt.getTime()
+      : fimPeriodo.getTime();
+
+    const duracao = Math.max(fim - inicio, 1);
+
+    totalPonderado += pontoAtual.price * duracao;
+    duracaoTotal += duracao;
+  }
+
+  return duracaoTotal > 0
+    ? totalPonderado / duracaoTotal
+    : pontos.at(-1)?.price ?? null;
+}
+
+function analisarPrecoAtual({
+  precoAtual,
+  menorPreco,
+  maiorPreco,
+  mediaPreco,
+  diasMonitorados,
+}: {
+  precoAtual: number;
+  menorPreco: number;
+  maiorPreco: number;
+  mediaPreco: number;
+  diasMonitorados: number;
+}): AnalisePreco {
+  if (diasMonitorados < 7) {
+    return {
+      titulo: "Histórico ainda insuficiente para recomendar.",
+      descricao:
+        "O Ofertano ainda está acumulando dados reais deste produto. A recomendação aparecerá quando houver pelo menos 7 dias de acompanhamento.",
+      badgeClassName:
+        "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+      cardClassName: "border-slate-200 bg-slate-50",
+    };
+  }
+
+  const variacaoTotal =
+    menorPreco > 0 ? (maiorPreco - menorPreco) / menorPreco : 0;
+  const relacaoComMedia =
+    mediaPreco > 0 ? precoAtual / mediaPreco : 1;
+
+  if (variacaoTotal <= 0.02) {
+    return {
+      titulo: "Preço dentro da média",
+      descricao:
+        "O preço está estável em relação ao período acompanhado. Não houve variação suficiente para indicar uma oportunidade excepcional.",
+      badgeClassName:
+        "bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200",
+      cardClassName: "border-sky-200 bg-sky-50/60",
+    };
+  }
+
+  if (
+    precoAtual <= menorPreco * 1.01 ||
+    relacaoComMedia <= 0.9
+  ) {
+    return {
+      titulo: "Excelente momento para comprar",
+      descricao:
+        "O preço atual está muito próximo do menor valor observado ou bem abaixo da média do período monitorado.",
+      badgeClassName:
+        "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200",
+      cardClassName: "border-emerald-200 bg-emerald-50/70",
+    };
+  }
+
+  if (relacaoComMedia <= 0.97) {
+    return {
+      titulo: "Bom preço",
+      descricao:
+        "O valor atual está abaixo da média registrada no período acompanhado.",
+      badgeClassName:
+        "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200",
+      cardClassName: "border-emerald-200 bg-emerald-50/50",
+    };
+  }
+
+  if (relacaoComMedia <= 1.05) {
+    return {
+      titulo: "Preço dentro da média",
+      descricao:
+        "O valor atual está próximo da média registrada durante o acompanhamento.",
+      badgeClassName:
+        "bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200",
+      cardClassName: "border-sky-200 bg-sky-50/60",
+    };
+  }
+
+  if (relacaoComMedia <= 1.12) {
+    return {
+      titulo: "Preço acima da média",
+      descricao:
+        "O valor atual está acima da média observada. Vale comparar as lojas antes de concluir a compra.",
+      badgeClassName:
+        "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200",
+      cardClassName: "border-amber-200 bg-amber-50/70",
+    };
+  }
+
+  return {
+    titulo: "Pode valer a pena esperar",
+    descricao:
+      "O preço atual está significativamente acima da média do período monitorado. Se a compra não for urgente, acompanhar novas variações pode ser vantajoso.",
+    badgeClassName:
+      "bg-orange-100 text-orange-900 ring-1 ring-inset ring-orange-200",
+    cardClassName: "border-orange-200 bg-orange-50/70",
+  };
+}
+
+function formatarDataHistorico(data: Date) {
+  return data.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
+
+function PriceHistoryChart({
+  pontos,
+}: {
+  pontos: PontoHistoricoPreco[];
+}) {
+  if (pontos.length === 0) {
+    return null;
+  }
+
+  const largura = 720;
+  const altura = 110;
+  const margemX = 20;
+  const margemSuperior = 9;
+  const margemInferior = 13;
+  const larguraGrafico = largura - margemX * 2;
+  const alturaGrafico = altura - margemSuperior - margemInferior;
+
+  const valores = pontos.map((ponto) => ponto.price);
+  const minimo = Math.min(...valores);
+  const maximo = Math.max(...valores);
+  const amplitudeOriginal = maximo - minimo;
+  const amplitude = Math.max(
+    amplitudeOriginal,
+    Math.max(maximo * 0.08, 1),
+  );
+
+  const piso = Math.max(0, minimo - amplitude * 0.18);
+  const teto = maximo + amplitude * 0.18;
+  const faixa = Math.max(teto - piso, 1);
+
+  const primeiroTempo = pontos[0].recordedAt.getTime();
+  const ultimoTempo = pontos.at(-1)?.recordedAt.getTime() ?? primeiroTempo;
+  const faixaTempo = Math.max(ultimoTempo - primeiroTempo, 1);
+
+  const coordenadas = pontos.map((ponto, indice) => {
+    const tempo = ponto.recordedAt.getTime();
+
+    const x =
+      pontos.length === 1
+        ? largura / 2
+        : margemX +
+          ((tempo - primeiroTempo) / faixaTempo) *
+            larguraGrafico;
+
+    const y =
+      margemSuperior +
+      ((teto - ponto.price) / faixa) * alturaGrafico;
+
+    return {
+      ...ponto,
+      x,
+      y,
+      indice,
+    };
+  });
+
+  const linha = coordenadas
+    .map((ponto) => `${ponto.x.toFixed(2)},${ponto.y.toFixed(2)}`)
+    .join(" ");
+
+  const linhasGrade = [0, 0.5, 1].map((proporcao) => ({
+    y: margemSuperior + alturaGrafico * proporcao,
+  }));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div>
+        <svg
+          viewBox={`0 0 ${largura} ${altura}`}
+          role="img"
+          aria-label="Gráfico do histórico do melhor preço do produto"
+          className="h-auto w-full"
+        >
+          {linhasGrade.map((linhaGrade, indice) => (
+            <line
+              key={indice}
+              x1={margemX}
+              x2={largura - margemX}
+              y1={linhaGrade.y}
+              y2={linhaGrade.y}
+              stroke="currentColor"
+              strokeWidth="1"
+              className="text-slate-200"
+            />
+          ))}
+
+          {coordenadas.length > 1 && (
+            <polyline
+              points={linha}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-emerald-600"
+            />
+          )}
+
+          {coordenadas.map((ponto) => (
+            <circle
+              key={`${ponto.recordedAt.toISOString()}-${ponto.indice}`}
+              cx={ponto.x}
+              cy={ponto.y}
+              r={coordenadas.length <= 20 ? 4.2 : 3.2}
+              fill="currentColor"
+              className="text-emerald-600"
+            />
+          ))}
+        </svg>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-slate-100 px-2.5 py-1.5 text-[9px] font-bold text-slate-500 sm:text-[10px]">
+        <span>{formatarDataHistorico(pontos[0].recordedAt)}</span>
+        <span>
+          {formatarDataHistorico(
+            pontos.at(-1)?.recordedAt ?? pontos[0].recordedAt,
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://ofertano.vercel.app"
 ).replace(/\/$/, "");
@@ -357,12 +682,122 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           price: "asc",
         },
       },
+      priceHistory: {
+        orderBy: {
+          recordedAt: "desc",
+        },
+        take: 120,
+        select: {
+          offerId: true,
+          marketplace: true,
+          price: true,
+          recordedAt: true,
+        },
+      },
     },
   });
 
   if (!produto) {
     notFound();
   }
+
+  const historicoCronologico = [...produto.priceHistory].reverse();
+  const pontosHistorico = construirHistoricoMelhorPreco(
+    historicoCronologico,
+  );
+
+  const ultimaVerificacao = produto.offers.reduce<Date | null>(
+    (maisRecente, oferta) => {
+      if (!oferta.lastCheckedAt) {
+        return maisRecente;
+      }
+
+      if (
+        !maisRecente ||
+        oferta.lastCheckedAt.getTime() > maisRecente.getTime()
+      ) {
+        return oferta.lastCheckedAt;
+      }
+
+      return maisRecente;
+    },
+    null,
+  );
+
+  if (produto.price > 0) {
+    const ultimoPonto = pontosHistorico.at(-1);
+    const dataAtualDoPreco =
+      ultimaVerificacao ??
+      ultimoPonto?.recordedAt ??
+      produto.updatedAt;
+
+    if (
+      !ultimoPonto ||
+      Math.abs(ultimoPonto.price - produto.price) > 0.009
+    ) {
+      pontosHistorico.push({
+        price: produto.price,
+        recordedAt: dataAtualDoPreco,
+      });
+    } else if (
+      dataAtualDoPreco.getTime() > ultimoPonto.recordedAt.getTime()
+    ) {
+      pontosHistorico.push({
+        price: produto.price,
+        recordedAt: dataAtualDoPreco,
+      });
+    }
+  }
+
+  const precosHistorico = pontosHistorico.map(
+    (ponto) => ponto.price,
+  );
+
+  const menorPrecoHistorico =
+    precosHistorico.length > 0
+      ? Math.min(...precosHistorico)
+      : produto.price;
+
+  const maiorPrecoHistorico =
+    precosHistorico.length > 0
+      ? Math.max(...precosHistorico)
+      : produto.price;
+
+  const inicioMonitoramento =
+    historicoCronologico[0]?.recordedAt ?? null;
+
+  const fimMonitoramento =
+    ultimaVerificacao ??
+    pontosHistorico.at(-1)?.recordedAt ??
+    inicioMonitoramento;
+
+  const diasMonitorados =
+    inicioMonitoramento && fimMonitoramento
+      ? Math.max(
+          0,
+          Math.floor(
+            (fimMonitoramento.getTime() -
+              inicioMonitoramento.getTime()) /
+              UM_DIA_EM_MS,
+          ),
+        )
+      : 0;
+
+  const mediaHistorica =
+    calcularMediaPonderada(
+      pontosHistorico,
+      fimMonitoramento ??
+        pontosHistorico.at(-1)?.recordedAt ??
+        new Date(),
+    ) ?? produto.price;
+
+  const analisePreco = analisarPrecoAtual({
+    precoAtual: produto.price,
+    menorPreco: menorPrecoHistorico,
+    maiorPreco: maiorPrecoHistorico,
+    mediaPreco: mediaHistorica,
+    diasMonitorados,
+  });
 
   const filtrosSemelhantes = [
     { category: produto.category },
@@ -527,8 +962,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </div>
         </div>
 
-        <section className="mx-auto max-w-[1280px] px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
-          <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_390px] lg:gap-0 lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-4 lg:shadow-sm xl:grid-cols-[minmax(0,1fr)_410px] xl:p-5">
+        <section className="mx-auto max-w-[1280px] px-3 py-2 sm:px-5 sm:py-3 lg:px-6 lg:py-3">
+          <div className="grid items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-0 lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-2.5 lg:shadow-sm xl:grid-cols-[minmax(0,1fr)_375px] xl:p-3">
             <ProductGallery
               images={imagens}
               productName={produto.name}
@@ -536,8 +971,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               featured={produto.featured}
             />
 
-            <aside className="lg:sticky lg:top-20 lg:border-l lg:border-slate-200 lg:pl-5 xl:pl-6">
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+            <aside className="lg:sticky lg:top-20 lg:border-l lg:border-slate-200 lg:pl-4 xl:pl-5">
+              <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-inset ring-emerald-200 sm:text-[11px]">
@@ -573,14 +1008,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </div>
                 </div>
 
-                <h1 className="mt-3 text-[18px] font-bold leading-[1.3] tracking-[-0.01em] text-slate-950 sm:text-[19px] lg:text-[20px]">
+                <h1 className="mt-2 text-[16px] font-bold leading-[1.25] tracking-[-0.01em] text-slate-950 sm:text-[17px] lg:text-[18px]">
                   {produto.name}
                 </h1>
 
                 {(possuiAvaliacao ||
                   possuiVendas ||
                   (possuiEstoque && produto.stock! <= 5)) && (
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
                     {possuiAvaliacao && (
                       <div className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 font-bold text-amber-800">
                         <StarIcon className="h-3.5 w-3.5 text-amber-500" />
@@ -608,7 +1043,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </div>
                 )}
 
-                <div className="my-4 h-px bg-slate-200" />
+                <div className="my-2.5 h-px bg-slate-200" />
 
                 <div>
                   {possuiPrecoAnterior &&
@@ -619,7 +1054,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     )}
 
                   <div className="mt-0.5 flex flex-wrap items-end gap-2">
-                    <p className="text-[30px] font-black leading-none tracking-tight text-emerald-700 sm:text-[32px] lg:text-[34px]">
+                    <p className="text-[27px] font-black leading-none tracking-tight text-emerald-700 sm:text-[29px] lg:text-[30px]">
                       {formatarPreco(produto.price)}
                     </p>
 
@@ -646,13 +1081,13 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     href={linkPrincipal}
                     target="_blank"
                     rel="noopener noreferrer sponsored"
-                    className="mt-4 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-center text-sm font-black text-white shadow-md shadow-emerald-600/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200"
+                    className="mt-2.5 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-center text-[12px] font-black text-white shadow-md shadow-emerald-600/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200"
                   >
                     Ver oferta em {marketplacePrincipal}
                     <ExternalLinkIcon className="h-4 w-4" />
                   </a>
                 ) : (
-                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-center">
                     <p className="text-sm font-black text-amber-950">
                       Link em revisão
                     </p>
@@ -662,48 +1097,37 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </div>
                 )}
 
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex gap-2.5">
-                    <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
-                    <div>
-                      <p className="text-xs font-black text-slate-900">
-                        Compra realizada na loja parceira
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-4 text-slate-600 sm:text-xs">
-                        O Ofertano compara preços. Pagamento, entrega e garantia são confirmados diretamente na loja.
-                      </p>
-                    </div>
+                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <div className="flex items-start gap-2">
+                    <ShieldIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
+                    <p className="text-[10px] leading-4 text-slate-600">
+                      <span className="font-black text-slate-900">
+                        Compra na loja parceira.
+                      </span>{" "}
+                      Pagamento, entrega e garantia são confirmados diretamente na loja.
+                    </p>
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-1.5">
-                  <div className="rounded-lg border border-slate-200 p-2 text-center">
-                    <CardIcon className="mx-auto h-4 w-4 text-slate-700" />
-                    <p className="mt-1 text-[10px] font-black text-slate-900 sm:text-[11px]">
+                <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                  <div className="flex items-center justify-center gap-1 rounded-md border border-slate-200 px-1.5 py-1.5 text-center">
+                    <CardIcon className="h-3.5 w-3.5 shrink-0 text-slate-700" />
+                    <p className="text-[9px] font-black text-slate-800 sm:text-[10px]">
                       Pagamento
                     </p>
-                    <p className="text-[9px] leading-3 text-slate-500 sm:text-[10px]">
-                      Na loja
-                    </p>
                   </div>
 
-                  <div className="rounded-lg border border-slate-200 p-2 text-center">
-                    <TruckIcon className="mx-auto h-4 w-4 text-slate-700" />
-                    <p className="mt-1 text-[10px] font-black text-slate-900 sm:text-[11px]">
+                  <div className="flex items-center justify-center gap-1 rounded-md border border-slate-200 px-1.5 py-1.5 text-center">
+                    <TruckIcon className="h-3.5 w-3.5 shrink-0 text-slate-700" />
+                    <p className="text-[9px] font-black text-slate-800 sm:text-[10px]">
                       Entrega
                     </p>
-                    <p className="text-[9px] leading-3 text-slate-500 sm:text-[10px]">
-                      Pela loja
-                    </p>
                   </div>
 
-                  <div className="rounded-lg border border-slate-200 p-2 text-center">
-                    <ShieldIcon className="mx-auto h-4 w-4 text-slate-700" />
-                    <p className="mt-1 text-[10px] font-black text-slate-900 sm:text-[11px]">
+                  <div className="flex items-center justify-center gap-1 rounded-md border border-slate-200 px-1.5 py-1.5 text-center">
+                    <ShieldIcon className="h-3.5 w-3.5 shrink-0 text-slate-700" />
+                    <p className="text-[9px] font-black text-slate-800 sm:text-[10px]">
                       Garantia
-                    </p>
-                    <p className="text-[9px] leading-3 text-slate-500 sm:text-[10px]">
-                      Da oferta
                     </p>
                   </div>
                 </div>
@@ -712,23 +1136,21 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </div>
 
           {produto.offers.length > 0 && (
-            <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-5 sm:p-5 lg:p-6">
-              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+            <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
+              <div className="grid gap-2 lg:grid-cols-[315px_minmax(0,1fr)] lg:items-center lg:gap-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
                     Comparador Ofertano
                   </p>
-                  <h2 className="mt-0.5 text-xl font-black tracking-tight text-slate-950 sm:text-[22px]">
+                  <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl lg:whitespace-nowrap">
                     Compare preços em outras lojas
                   </h2>
+                  <p className="mt-1 text-[10px] leading-4 text-slate-500 lg:hidden">
+                    Confira preço, parcelamento e disponibilidade antes de concluir a compra.
+                  </p>
                 </div>
 
-                <p className="max-w-lg text-xs leading-5 text-slate-600">
-                  Confira preço, parcelamento e disponibilidade antes de concluir a compra.
-                </p>
-              </div>
-
-              <div className="mt-4 grid gap-2.5 lg:grid-cols-2">
+                <div className={`grid gap-1.5 ${produto.offers.length === 1 ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
                 {produto.offers.map((oferta) => {
                   const link = oferta.affiliateLink?.trim();
                   const linkAtivo =
@@ -792,7 +1214,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                         href={link}
                         target="_blank"
                         rel="noopener noreferrer sponsored"
-                        className="rounded-lg border border-slate-200 p-3 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:shadow-sm sm:p-4"
+                        className="rounded-lg border border-slate-200 px-2.5 py-2 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:shadow-sm"
                       >
                         {conteudoOferta}
                       </a>
@@ -802,12 +1224,94 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   return (
                     <div
                       key={oferta.id}
-                      className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:p-4"
+                      className="rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2"
                     >
                       {conteudoOferta}
                     </div>
                   );
                 })}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {pontosHistorico.length > 0 && (
+            <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
+                    Inteligência de preço
+                  </p>
+                  <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl">
+                    Histórico de preços
+                  </h2>
+                </div>
+
+                <p className="max-w-xl text-[11px] leading-4 text-slate-600 sm:text-xs">
+                  Acompanhamos o melhor preço registrado no Ofertano sem inventar valores anteriores.
+                </p>
+              </div>
+
+              <div className="mt-2 grid grid-cols-3 gap-1.5">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
+                    Preço atual
+                  </p>
+                  <p className="mt-0.5 text-base font-black text-emerald-700 sm:text-lg">
+                    {formatarPreco(produto.price)}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
+                    Menor registrado
+                  </p>
+                  <p className="mt-0.5 text-base font-black text-slate-950 sm:text-lg">
+                    {formatarPreco(menorPrecoHistorico)}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
+                    Média do período
+                  </p>
+                  <p className="mt-0.5 text-base font-black text-slate-950 sm:text-lg">
+                    {formatarPreco(mediaHistorica)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1fr)_260px]">
+                <PriceHistoryChart pontos={pontosHistorico} />
+
+                <div
+                  className={`rounded-lg border p-2.5 ${analisePreco.cardClassName}`}
+                >
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                    Comprar agora ou esperar?
+                  </p>
+
+                  <span
+                    className={`mt-1.5 block rounded-md px-2 py-1 text-[10px] font-black leading-4 ${analisePreco.badgeClassName}`}
+                  >
+                    {analisePreco.titulo}
+                  </span>
+
+                  <p className="mt-1.5 text-[10px] leading-4 text-slate-700 sm:text-[11px]">
+                    {analisePreco.descricao}
+                  </p>
+
+                  <div className="mt-2 border-t border-slate-200/80 pt-2">
+                    <p className="text-[11px] font-bold text-slate-600">
+                      {diasMonitorados > 0
+                        ? `${diasMonitorados} ${diasMonitorados === 1 ? "dia" : "dias"} de acompanhamento`
+                        : "Acompanhamento iniciado recentemente"}
+                    </p>
+                    <p className="mt-0.5 text-[9px] leading-[14px] text-slate-500 sm:text-[10px] sm:leading-4">
+                      A análise usa somente preços realmente registrados pelo Ofertano e pode mudar conforme novas verificações são realizadas.
+                    </p>
+                  </div>
+                </div>
               </div>
             </section>
           )}
@@ -896,7 +1400,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
           {produtosRecomendados.length > 0 && (
             <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-5 sm:p-5 lg:p-6">
-              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
                     Você também pode gostar
