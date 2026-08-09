@@ -1493,6 +1493,8 @@ export async function saveProduct(
     let saved =
       ofertaPeloCodigo?.product ?? null;
 
+    let produtoCriadoAgora = false;
+
     if (
       !saved &&
       marketplace === "MERCADO_LIVRE"
@@ -1531,6 +1533,8 @@ export async function saveProduct(
     }
 
     if (!saved) {
+      produtoCriadoAgora = true;
+
       saved = await tx.product.create({
         data: {
           mlId:
@@ -1792,13 +1796,15 @@ export async function saveProduct(
     const matchScoreExato =
       ofertaPeloCodigo
         ? 1
-        : produtoPeloCanonicalKey?.id ===
-              saved.id
+        : produtoCriadoAgora
           ? 1
-          : produtoCompativelPorIdentidade
-                ?.candidato.id === saved.id
-            ? produtoCompativelPorIdentidade.score
-            : null;
+          : produtoPeloCanonicalKey?.id ===
+                saved.id
+            ? 1
+            : produtoCompativelPorIdentidade
+                  ?.candidato.id === saved.id
+              ? produtoCompativelPorIdentidade.score
+              : null;
 
     const oferta =
       await tx.marketplaceOffer.upsert({
