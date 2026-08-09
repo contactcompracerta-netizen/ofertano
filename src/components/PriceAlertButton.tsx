@@ -62,10 +62,29 @@ function BellIcon({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+      <path d="M10 21h4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
+function CloseIcon({
+  className,
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className={className}
+    >
       <path
-        d="M10 21h4"
+        d="M6 6l12 12M18 6 6 18"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -76,28 +95,20 @@ export default function PriceAlertButton({
   currentPrice,
 }: PriceAlertButtonProps) {
   const [aberto, setAberto] = useState(false);
-
   const [carregando, setCarregando] =
     useState(true);
-
   const [salvando, setSalvando] =
     useState(false);
-
   const [autenticado, setAutenticado] =
     useState(false);
-
   const [alertaAtual, setAlertaAtual] =
     useState<PriceAlertRow | null>(null);
-
   const [tipo, setTipo] =
     useState<AlertType>("ANY_DROP");
-
   const [precoAlvo, setPrecoAlvo] =
     useState("");
-
   const [erro, setErro] =
     useState<string | null>(null);
-
   const [sucesso, setSucesso] =
     useState<string | null>(null);
 
@@ -149,11 +160,9 @@ export default function PriceAlertButton({
             "Erro ao carregar alerta:",
             error.message
           );
-
           setErro(
             "Não foi possível consultar seu alerta."
           );
-
           return;
         }
 
@@ -167,7 +176,6 @@ export default function PriceAlertButton({
         const alerta = data as PriceAlertRow;
 
         setAlertaAtual(alerta);
-
         setTipo(
           alerta.alert_type === "TARGET"
             ? "TARGET"
@@ -187,6 +195,8 @@ export default function PriceAlertButton({
               }
             )
           );
+        } else {
+          setPrecoAlvo("");
         }
       } finally {
         if (ativo) {
@@ -205,9 +215,7 @@ export default function PriceAlertButton({
           return;
         }
 
-        setAutenticado(
-          Boolean(session?.user)
-        );
+        setAutenticado(Boolean(session?.user));
 
         if (!session?.user) {
           setAlertaAtual(null);
@@ -220,6 +228,38 @@ export default function PriceAlertButton({
       subscription.unsubscribe();
     };
   }, [productId]);
+
+  useEffect(() => {
+    if (!aberto) {
+      document.body.style.overflow = "";
+      return;
+    }
+
+    const overflowAnterior =
+      document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    function fecharNoEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAberto(false);
+      }
+    }
+
+    window.addEventListener(
+      "keydown",
+      fecharNoEscape
+    );
+
+    return () => {
+      document.body.style.overflow =
+        overflowAnterior;
+      window.removeEventListener(
+        "keydown",
+        fecharNoEscape
+      );
+    };
+  }, [aberto]);
 
   async function salvarAlerta() {
     if (salvando) {
@@ -236,7 +276,6 @@ export default function PriceAlertButton({
       setErro(
         "O preço atual deste produto não está disponível."
       );
-
       return;
     }
 
@@ -249,7 +288,6 @@ export default function PriceAlertButton({
       setErro(
         "Entre na sua conta para criar alertas de preço."
       );
-
       return;
     }
 
@@ -266,7 +304,6 @@ export default function PriceAlertButton({
         setErro(
           "Informe um preço-alvo válido."
         );
-
         return;
       }
 
@@ -276,7 +313,6 @@ export default function PriceAlertButton({
             currentPrice
           )}. Defina um valor abaixo do preço atual.`
         );
-
         return;
       }
     }
@@ -290,18 +326,14 @@ export default function PriceAlertButton({
           {
             user_id: user.id,
             product_id: productId,
-
             alert_type: tipo,
             target_price:
               tipo === "TARGET"
                 ? targetPrice
                 : null,
-
             reference_price: currentPrice,
             last_seen_price: currentPrice,
-
             active: true,
-
             last_notified_price: null,
             last_notified_at: null,
           },
@@ -327,17 +359,13 @@ export default function PriceAlertButton({
           "Erro ao salvar alerta:",
           error.message
         );
-
         setErro(
           "Não foi possível salvar o alerta."
         );
-
         return;
       }
 
-      const alerta =
-        data as PriceAlertRow;
-
+      const alerta = data as PriceAlertRow;
       setAlertaAtual(alerta);
 
       if (tipo === "TARGET") {
@@ -394,11 +422,9 @@ export default function PriceAlertButton({
           "Erro ao desativar alerta:",
           error.message
         );
-
         setErro(
           "Não foi possível desativar o alerta."
         );
-
         return;
       }
 
@@ -451,213 +477,237 @@ export default function PriceAlertButton({
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-12 z-50 w-[min(340px,calc(100vw-32px))] rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
-              Alerta de preço
-            </p>
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/45 p-0 sm:absolute sm:right-0 sm:top-12 sm:inset-auto sm:z-50 sm:block sm:bg-transparent"
+          onClick={() => setAberto(false)}
+        >
+          <div
+            className="w-full max-w-none rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:w-[360px] sm:max-w-[calc(100vw-32px)] sm:rounded-2xl"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-200 sm:hidden" />
 
-            <h3 className="mt-1 text-base font-black text-slate-950">
-              Avise quando o preço baixar
-            </h3>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                  Alerta de preço
+                </p>
 
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Menor preço atual:{" "}
-              <strong className="text-slate-800">
-                {formatarPreco(
-                  currentPrice
-                )}
-              </strong>
-            </p>
-          </div>
+                <h3 className="mt-1 text-base font-black leading-5 text-slate-950">
+                  Avise quando o preço baixar
+                </h3>
 
-          {!autenticado ? (
-            <div className="mt-4">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                <p className="text-xs font-bold leading-5 text-amber-900">
-                  Entre na sua conta para salvar
-                  alertas e recebê-los em todos
-                  os seus dispositivos.
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Menor preço atual:{" "}
+                  <strong className="text-slate-800">
+                    {formatarPreco(
+                      currentPrice
+                    )}
+                  </strong>
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={abrirLogin}
-                className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
+                onClick={() =>
+                  setAberto(false)
+                }
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                aria-label="Fechar alerta"
               >
-                Entrar para criar alerta
+                <CloseIcon className="h-4 w-4" />
               </button>
             </div>
-          ) : (
-            <>
-              <div className="mt-4 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTipo(
-                      "ANY_DROP"
-                    );
-                    setErro(null);
-                    setSucesso(null);
-                  }}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
-                    tipo === "ANY_DROP"
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        tipo === "ANY_DROP"
-                          ? "border-emerald-600"
-                          : "border-slate-300"
-                      }`}
-                    >
-                      {tipo ===
-                        "ANY_DROP" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
-                      )}
-                    </span>
 
-                    <div>
-                      <p className="text-sm font-black text-slate-900">
-                        Qualquer queda de
-                        preço
-                      </p>
-
-                      <p className="mt-0.5 text-xs leading-4 text-slate-500">
-                        Avise quando o menor
-                        preço ficar abaixo de{" "}
-                        {formatarPreco(
-                          currentPrice
-                        )}
-                        .
-                      </p>
-                    </div>
+            <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1 sm:max-h-[75vh]">
+              {!autenticado ? (
+                <div>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-sm font-bold leading-5 text-amber-900">
+                      Entre na sua conta para
+                      salvar alertas e recebê-los
+                      em todos os seus dispositivos.
+                    </p>
                   </div>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTipo("TARGET");
-                    setErro(null);
-                    setSucesso(null);
-                  }}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
-                    tipo === "TARGET"
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        tipo === "TARGET"
-                          ? "border-emerald-600"
-                          : "border-slate-300"
-                      }`}
-                    >
-                      {tipo ===
-                        "TARGET" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
-                      )}
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-black text-slate-900">
-                        Definir preço-alvo
-                      </p>
-
-                      <p className="mt-0.5 text-xs leading-4 text-slate-500">
-                        Exemplo: avise quando
-                        chegar a R$ 1.500.
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-
-              {tipo === "TARGET" && (
-                <div className="mt-3">
-                  <label
-                    htmlFor={`price-alert-${productId}`}
-                    className="mb-1.5 block text-xs font-black text-slate-700"
+                  <button
+                    type="button"
+                    onClick={abrirLogin}
+                    className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
                   >
-                    Avise quando chegar a:
-                  </label>
+                    Entrar para criar alerta
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipo("ANY_DROP");
+                        setErro(null);
+                        setSucesso(null);
+                      }}
+                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                        tipo === "ANY_DROP"
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                            tipo === "ANY_DROP"
+                              ? "border-emerald-600"
+                              : "border-slate-300"
+                          }`}
+                        >
+                          {tipo ===
+                            "ANY_DROP" && (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                          )}
+                        </span>
 
-                  <div className="flex h-11 items-center rounded-xl border border-slate-300 bg-white px-3 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10">
-                    <span className="mr-2 text-sm font-black text-slate-500">
-                      R$
-                    </span>
+                        <div>
+                          <p className="text-sm font-black text-slate-900">
+                            Qualquer queda de preço
+                          </p>
 
-                    <input
-                      id={`price-alert-${productId}`}
-                      type="text"
-                      inputMode="decimal"
-                      value={precoAlvo}
-                      onChange={(event) =>
-                        setPrecoAlvo(
-                          event.target.value
-                        )
-                      }
-                      placeholder="1.500,00"
-                      className="min-w-0 flex-1 bg-transparent text-sm font-black text-slate-900 outline-none placeholder:text-slate-400"
-                    />
+                          <p className="mt-0.5 text-xs leading-4 text-slate-500">
+                            Avise quando o menor
+                            preço ficar abaixo de{" "}
+                            {formatarPreco(
+                              currentPrice
+                            )}
+                            .
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipo("TARGET");
+                        setErro(null);
+                        setSucesso(null);
+                      }}
+                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                        tipo === "TARGET"
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                            tipo === "TARGET"
+                              ? "border-emerald-600"
+                              : "border-slate-300"
+                          }`}
+                        >
+                          {tipo ===
+                            "TARGET" && (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                          )}
+                        </span>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-black text-slate-900">
+                            Definir preço-alvo
+                          </p>
+
+                          <p className="mt-0.5 text-xs leading-4 text-slate-500">
+                            Exemplo: avise quando
+                            chegar a R$ 1.500,00.
+                          </p>
+                        </div>
+                      </div>
+                    </button>
                   </div>
-                </div>
+
+                  {tipo === "TARGET" && (
+                    <div className="mt-3">
+                      <label
+                        htmlFor={`price-alert-${productId}`}
+                        className="mb-1.5 block text-xs font-black text-slate-700"
+                      >
+                        Avise quando chegar a:
+                      </label>
+
+                      <div className="flex h-11 items-center rounded-xl border border-slate-300 bg-white px-3 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10">
+                        <span className="mr-2 text-sm font-black text-slate-500">
+                          R$
+                        </span>
+
+                        <input
+                          id={`price-alert-${productId}`}
+                          type="text"
+                          inputMode="decimal"
+                          value={precoAlvo}
+                          onChange={(event) =>
+                            setPrecoAlvo(
+                              event.target.value
+                            )
+                          }
+                          placeholder="1.500,00"
+                          className="min-w-0 flex-1 bg-transparent text-sm font-black text-slate-900 outline-none placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {erro && (
+                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                      <p className="text-xs font-bold leading-5 text-red-700">
+                        {erro}
+                      </p>
+                    </div>
+                  )}
+
+                  {sucesso && (
+                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-xs font-bold leading-5 text-emerald-800">
+                        {sucesso}
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void salvarAlerta()
+                    }
+                    disabled={salvando}
+                    className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <BellIcon className="h-4 w-4" />
+
+                    {salvando
+                      ? "Salvando..."
+                      : alertaAtivo
+                        ? "Atualizar alerta"
+                        : "Criar alerta"}
+                  </button>
+
+                  {alertaAtivo && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void desativarAlerta()
+                      }
+                      disabled={salvando}
+                      className="mt-2 flex min-h-10 w-full items-center justify-center rounded-xl px-4 text-xs font-black text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60"
+                    >
+                      Desativar alerta
+                    </button>
+                  )}
+                </>
               )}
-
-              {erro && (
-                <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-                  <p className="text-xs font-bold leading-5 text-red-700">
-                    {erro}
-                  </p>
-                </div>
-              )}
-
-              {sucesso && (
-                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <p className="text-xs font-bold leading-5 text-emerald-800">
-                    {sucesso}
-                  </p>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() =>
-                  void salvarAlerta()
-                }
-                disabled={salvando}
-                className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
-              >
-                <BellIcon className="h-4 w-4" />
-
-                {salvando
-                  ? "Salvando..."
-                  : alertaAtivo
-                    ? "Atualizar alerta"
-                    : "Criar alerta"}
-              </button>
-
-              {alertaAtivo && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void desativarAlerta()
-                  }
-                  disabled={salvando}
-                  className="mt-2 flex min-h-10 w-full items-center justify-center rounded-xl px-4 text-xs font-black text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60"
-                >
-                  Desativar alerta
-                </button>
-              )}
-            </>
-          )}
+            </div>
+          </div>
         </div>
       )}
     </div>
