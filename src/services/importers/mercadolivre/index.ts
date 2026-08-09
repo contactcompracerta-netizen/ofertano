@@ -7,6 +7,8 @@ import {
   getDescription,
   getItem,
   getReviews,
+  getUserProduct,
+  searchUserProductItems,
 } from "./api";
 
 import { parseMercadoLivre } from "./parser";
@@ -33,9 +35,25 @@ function decodificarLink(link: string): string {
 function extrairIds(link: string): {
   itemId: string | null;
   catalogId: string | null;
+  userProductId: string | null;
 } {
   const decoded = decodificarLink(link);
   const url = new URL(link);
+
+  const userProductPath =
+    url.pathname.match(
+      /\/up\/(MLBU-?\d+)/i
+    );
+
+  if (userProductPath?.[1]) {
+    return {
+      itemId: null,
+      catalogId: null,
+      userProductId: normalizarId(
+        userProductPath[1]
+      ),
+    };
+  }
 
   const itemParam = decoded.match(
     /(?:wid|item_id)\s*(?:=|:)\s*(MLB-?\d+)/i
@@ -45,6 +63,7 @@ function extrairIds(link: string): {
     return {
       itemId: normalizarId(itemParam[1]),
       catalogId: null,
+      userProductId: null,
     };
   }
 
@@ -56,6 +75,7 @@ function extrairIds(link: string): {
     return {
       itemId: null,
       catalogId: normalizarId(catalogPath[1]),
+      userProductId: null,
     };
   }
 
@@ -67,6 +87,7 @@ function extrairIds(link: string): {
     return {
       itemId: normalizarId(itemPath[1]),
       catalogId: null,
+      userProductId: null,
     };
   }
 
@@ -252,6 +273,85 @@ async function importarCatalogo(
   );
 }
 
+async function importarUserProduct(
+  userProductId: string,
+  originalUrl: string
+): Promise<ProductImport> {
+  const userProduct =
+    await getUserProduct(userProductId);
+
+  if (
+    !userProduct.id ||
+    typeof userProduct.user_id !== "number"
+  ) {
+    throw new Error(
+      "O Mercado Livre não retornou os dados necessários deste User Product."
+    );
+  }
+
+  const search =
+    await searchUserProductItems(
+      userProduct.user_id,
+      userProductId
+    );
+
+  const itemIds = [
+    ...new Set(
+      (search.results ?? [])
+        .map((id) => id.trim().toUpperCase())
+        .filter((id) => /^MLB\d+$/.test(id))
+    ),
+  ];
+
+  if (itemIds.length === 0) {
+    throw new Error(
+      "Este User Product existe no Mercado Livre, mas nenhuma oferta ativa foi localizada."
+    );
+  }
+
+  const itens = (
+    await Promise.all(
+      itemIds.slice(0, 30).map((id) =>
+        tentar(getItem(id))
+      )
+    )
+  ).filter(
+    (
+      item
+    ): item is NonNullable<
+      Awaited<ReturnType<typeof getItem>>
+    > => Boolean(item)
+  );
+
+  const ativos = itens
+    .filter(
+      (item) =>
+        typeof item.id === "string" &&
+        typeof item.price === "number" &&
+        item.price > 0 &&
+        item.status !== "inactive" &&
+        item.status !== "closed"
+    )
+    .sort(
+      (a, b) =>
+        (a.price ?? Number.MAX_VALUE) -
+        (b.price ?? Number.MAX_VALUE)
+    );
+
+  const melhorItem = ativos[0];
+
+  if (!melhorItem?.id) {
+    throw new Error(
+      "Este User Product existe no Mercado Livre, mas nenhuma oferta comprável foi retornada pela API."
+    );
+  }
+
+  return importarAnuncio(
+    melhorItem.id,
+    originalUrl
+  );
+}
+
 async function importarAnuncio(
   itemId: string,
   originalUrl: string
@@ -371,12 +471,22 @@ export async function importarMercadoLivre(
   const resolvedUrl =
     await resolverLinkCurto(originalUrl);
 
-  const { itemId, catalogId } =
-    extrairIds(resolvedUrl);
+  const {
+    itemId,
+    catalogId,
+    userProductId,
+  } = extrairIds(resolvedUrl);
 
   if (itemId) {
     return importarAnuncio(
       itemId,
+      originalUrl
+    );
+  }
+
+  if (userProductId) {
+    return importarUserProduct(
+      userProductId,
       originalUrl
     );
   }

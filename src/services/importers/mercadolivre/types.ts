@@ -63,6 +63,24 @@ export interface MercadoLivreCatalogItems {
   results?: MercadoLivreCatalogOffer[];
 }
 
+export interface MercadoLivreUserProduct {
+  id?: string;
+  name?: string;
+  user_id?: number;
+  family_id?: number | string;
+  status?: string;
+}
+
+export interface MercadoLivreUserProductItemSearch {
+  seller_id?: number | string;
+  results?: string[];
+  paging?: {
+    total?: number;
+    limit?: number;
+    offset?: number;
+  };
+}
+
 export interface MercadoLivreCategory {
   id?: string;
   name?: string;

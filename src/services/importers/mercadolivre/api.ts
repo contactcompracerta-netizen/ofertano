@@ -7,6 +7,8 @@ import type {
   MercadoLivreDescription,
   MercadoLivreItem,
   MercadoLivreReviews,
+  MercadoLivreUserProduct,
+  MercadoLivreUserProductItemSearch,
 } from "./types";
 
 export async function getItem(
@@ -31,6 +33,25 @@ export async function getCatalogItems(
   return mercadoLivreFetch(
     `/products/${productId}/items`
   ) as Promise<MercadoLivreCatalogItems>;
+}
+
+export async function getUserProduct(
+  userProductId: string
+): Promise<MercadoLivreUserProduct> {
+  return mercadoLivreFetch(
+    `/user-products/${userProductId}`
+  ) as Promise<MercadoLivreUserProduct>;
+}
+
+export async function searchUserProductItems(
+  userId: number,
+  userProductId: string
+): Promise<MercadoLivreUserProductItemSearch> {
+  return mercadoLivreFetch(
+    `/users/${userId}/items/search?user_product_id=${encodeURIComponent(
+      userProductId
+    )}`
+  ) as Promise<MercadoLivreUserProductItemSearch>;
 }
 
 export async function getCategory(
