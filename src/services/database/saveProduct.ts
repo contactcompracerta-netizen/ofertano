@@ -222,6 +222,48 @@ function extrairVoltagemDoTitulo(
     : null;
 }
 
+function extrairModeloDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  /*
+   * Fallback conservador para códigos de modelo
+   * alfanuméricos com hífen, como E-02,
+   * ANV15-52-77BG etc.
+   *
+   * Não usamos tokens genéricos como 220V, 30W,
+   * 16GB ou RTX4050 como modelo.
+   */
+  const candidatos =
+    texto.match(
+      /\b[A-Z][A-Z0-9]{0,11}-[A-Z0-9][A-Z0-9-]{0,24}\b/g,
+    ) ?? [];
+
+  const bloqueados = new Set([
+    "WI-FI",
+    "USB-C",
+    "TYPE-C",
+  ]);
+
+  for (const candidato of candidatos) {
+    const codigo =
+      normalizarCodigoProduto(candidato);
+
+    if (
+      codigo &&
+      !bloqueados.has(codigo) &&
+      !/^\d/.test(codigo)
+    ) {
+      return codigo;
+    }
+  }
+
+  return null;
+}
+
 function normalizarMarcaCanonical(
   valor: string | null,
 ): string | null {
@@ -412,9 +454,11 @@ function extrairIdentificadores(
     mpnEncontrado,
   );
 
-  const modelNumber = normalizarCodigoProduto(
-    modeloEncontrado,
-  );
+  const modelNumber =
+    normalizarCodigoProduto(
+      modeloEncontrado,
+    ) ??
+    extrairModeloDoTitulo(product.title);
 
   const color = normalizarValorVariante(
     corEncontrada,
@@ -561,6 +605,7 @@ function extrairIdentidadeProdutoExistente(
           ),
           mpnDosAtributos,
           modeloDosAtributos,
+          extrairModeloDoTitulo(titulo),
         ].filter(
           (valor): valor is string =>
             Boolean(valor),
@@ -986,12 +1031,27 @@ export async function saveProduct(
           })
         : null;
 
-    const marcaParaMatching =
+    const marcaOriginalParaMatching =
       product.brand?.trim() || null;
+
+    const marcaNormalizadaParaMatching =
+      normalizarMarcaCanonical(product.brand);
+
+    const marcasParaBusca = Array.from(
+      new Set(
+        [
+          marcaOriginalParaMatching,
+          marcaNormalizadaParaMatching,
+        ].filter(
+          (valor): valor is string =>
+            Boolean(valor),
+        ),
+      ),
+    );
 
     const candidatosPorIdentidade =
       !produtoPeloCanonicalKey &&
-      marcaParaMatching &&
+      marcasParaBusca.length > 0 &&
       (identificadores.mpn ||
         identificadores.modelNumber ||
         identificadores.ean ||
@@ -999,10 +1059,12 @@ export async function saveProduct(
         ? await tx.product.findMany({
             where: {
               active: true,
-              brand: {
-                equals: marcaParaMatching,
-                mode: "insensitive",
-              },
+              OR: marcasParaBusca.map((marca) => ({
+                brand: {
+                  equals: marca,
+                  mode: "insensitive",
+                },
+              })),
             },
             take: 30,
           })
