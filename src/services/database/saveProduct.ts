@@ -150,24 +150,73 @@ function encontrarAtributo(
     normalizarChaveAtributo,
   );
 
-  for (const [chave, valor] of Object.entries(
-    atributos,
-  )) {
-    const chaveNormalizada =
-      normalizarChaveAtributo(chave);
+  const entradas = Object.entries(atributos)
+    .map(([chave, valor]) => ({
+      chaveNormalizada:
+        normalizarChaveAtributo(chave),
+      valor: valor.trim(),
+    }))
+    .filter((item) => Boolean(item.valor));
 
-    const encontrado = nomesNormalizados.some(
-      (nome) =>
-        chaveNormalizada === nome ||
-        chaveNormalizada.includes(nome),
+  for (const nome of nomesNormalizados) {
+    const exato = entradas.find(
+      (item) => item.chaveNormalizada === nome,
     );
 
-    if (encontrado && valor.trim()) {
-      return valor.trim();
+    if (exato) {
+      return exato.valor;
+    }
+  }
+
+  for (const nome of nomesNormalizados) {
+    const parcial = entradas.find((item) => {
+      const chave = item.chaveNormalizada;
+
+      return (
+        chave.startsWith(`${nome}_`) ||
+        chave.endsWith(`_${nome}`) ||
+        chave.includes(`_${nome}_`)
+      );
+    });
+
+    if (parcial) {
+      return parcial.valor;
     }
   }
 
   return null;
+}
+
+function normalizarValorVariante(
+  valor: string | null,
+): string | null {
+  if (!valor) {
+    return null;
+  }
+
+  const normalizado =
+    normalizarTextoIdentificador(valor)
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 80);
+
+  return normalizado || null;
+}
+
+function normalizarMarcaCanonical(
+  valor: string | null,
+): string | null {
+  if (!valor) {
+    return null;
+  }
+
+  const marca = normalizarTextoIdentificador(
+    valor,
+  )
+    .replace(/^VISITE A LOJA\s+/i, "")
+    .replace(/^MARCA[:\s]+/i, "")
+    .trim();
+
+  return marca || null;
 }
 
 function normalizarCodigoNumerico(
@@ -245,13 +294,91 @@ function extrairIdentificadores(
   const modeloEncontrado = encontrarAtributo(
     product.attributes,
     [
-      "MODELO",
-      "MODEL",
+      "MODELO_ALFANUMERICO",
+      "MODELO_DETALHADO",
       "MODEL_NUMBER",
       "NUMERO_DO_MODELO",
       "CODIGO_DO_MODELO",
+      "NOME_DO_MODELO",
+      "MODELO",
+      "MODEL",
     ],
   );
+
+  const corEncontrada = encontrarAtributo(
+    product.attributes,
+    [
+      "COR",
+      "COLOR",
+      "COR_PRINCIPAL",
+    ],
+  );
+
+  const voltagemEncontrada =
+    encontrarAtributo(
+      product.attributes,
+      [
+        "VOLTAGEM",
+        "TENSAO",
+        "VOLTAGE",
+      ],
+    );
+
+  const tamanhoEncontrado =
+    encontrarAtributo(
+      product.attributes,
+      [
+        "TAMANHO",
+        "SIZE",
+        "TAMANHO_DO_COLCHAO",
+        "TAMANHO_DA_TELA",
+      ],
+    );
+
+  const capacidadeEncontrada =
+    encontrarAtributo(
+      product.attributes,
+      [
+        "CAPACIDADE",
+        "CAPACIDADE_EM_VOLUME",
+        "VOLUME_DA_UNIDADE",
+        "PESO_LIQUIDO",
+      ],
+    );
+
+  const ramEncontrada = encontrarAtributo(
+    product.attributes,
+    [
+      "MEMORIA_RAM",
+      "RAM",
+      "TAMANHO_INSTALADO_DA_MEMORIA_RAM",
+      "MEMORY_SIZE",
+    ],
+  );
+
+  const armazenamentoEncontrado =
+    encontrarAtributo(
+      product.attributes,
+      [
+        "ARMAZENAMENTO",
+        "STORAGE",
+        "TAMANHO_DO_DISCO_RIGIDO",
+        "CAPACIDADE_DO_SSD",
+        "SSD",
+      ],
+    );
+
+  const quantidadeKitEncontrada =
+    encontrarAtributo(
+      product.attributes,
+      [
+        "UNIDADES_POR_EMBALAGEM",
+        "QUANTIDADE_DE_PECAS",
+        "QUANTIDADE_DE_UNIDADES",
+        "QUANTIDADE_DE_MESAS_DE_CABECEIRA",
+        "UNIDADES_POR_KIT",
+      ],
+    );
 
   const ean = normalizarCodigoNumerico(
     eanEncontrado,
@@ -269,11 +396,47 @@ function extrairIdentificadores(
     modeloEncontrado,
   );
 
+  const color = normalizarValorVariante(
+    corEncontrada,
+  );
+
+  const voltage = normalizarValorVariante(
+    voltagemEncontrada,
+  );
+
+  const size = normalizarValorVariante(
+    tamanhoEncontrado,
+  );
+
+  const capacity = normalizarValorVariante(
+    capacidadeEncontrada,
+  );
+
+  const ram = normalizarValorVariante(
+    ramEncontrada,
+  );
+
+  const storage = normalizarValorVariante(
+    armazenamentoEncontrado,
+  );
+
+  const kitQuantity =
+    normalizarValorVariante(
+      quantidadeKitEncontrada,
+    );
+
   return {
     ean,
     gtin,
     mpn,
     modelNumber,
+    color,
+    voltage,
+    size,
+    capacity,
+    ram,
+    storage,
+    kitQuantity,
   };
 }
 
@@ -291,25 +454,74 @@ function criarCanonicalKey(
     return `gtin:${codigoGlobal}`;
   }
 
-  const codigoFabricante =
-    identificadores.mpn ||
-    identificadores.modelNumber;
+  const marca = normalizarMarcaCanonical(
+    product.brand,
+  );
 
-  const marca = product.brand
-    ? normalizarTextoIdentificador(
-        product.brand,
-      )
-    : null;
-
-  if (marca && codigoFabricante) {
+  if (marca && identificadores.mpn) {
     return [
-      "brand-model",
+      "brand-mpn",
       marca,
-      codigoFabricante,
+      identificadores.mpn,
     ].join(":");
   }
 
-  return null;
+  if (
+    !marca ||
+    !identificadores.modelNumber
+  ) {
+    return null;
+  }
+
+  const variantesFortes = [
+    identificadores.voltage,
+    identificadores.size,
+    identificadores.capacity,
+    identificadores.ram,
+    identificadores.storage,
+    identificadores.kitQuantity,
+  ].filter(
+    (valor): valor is string =>
+      Boolean(valor),
+  );
+
+  if (variantesFortes.length < 2) {
+    return null;
+  }
+
+  const partesVariantes = [
+    identificadores.color
+      ? `color=${identificadores.color}`
+      : null,
+    identificadores.voltage
+      ? `voltage=${identificadores.voltage}`
+      : null,
+    identificadores.size
+      ? `size=${identificadores.size}`
+      : null,
+    identificadores.capacity
+      ? `capacity=${identificadores.capacity}`
+      : null,
+    identificadores.ram
+      ? `ram=${identificadores.ram}`
+      : null,
+    identificadores.storage
+      ? `storage=${identificadores.storage}`
+      : null,
+    identificadores.kitQuantity
+      ? `kit=${identificadores.kitQuantity}`
+      : null,
+  ].filter(
+    (valor): valor is string =>
+      Boolean(valor),
+  );
+
+  return [
+    "brand-model-v2",
+    marca,
+    identificadores.modelNumber,
+    ...partesVariantes,
+  ].join(":");
 }
 
 function calcularDesconto(
@@ -527,6 +739,10 @@ export async function saveProduct(
           gtin: identificadores.gtin,
           mpn: identificadores.mpn,
 
+          color: identificadores.color,
+          voltage: identificadores.voltage,
+          size: identificadores.size,
+
           image: product.image,
           images: unirImagens(
             [],
@@ -645,6 +861,18 @@ export async function saveProduct(
           mpn:
             saved.mpn ??
             identificadores.mpn,
+
+          color:
+            saved.color ??
+            identificadores.color,
+
+          voltage:
+            saved.voltage ??
+            identificadores.voltage,
+
+          size:
+            saved.size ??
+            identificadores.size,
 
           image: atualizarDadosPrincipais
             ? product.image
@@ -783,6 +1011,13 @@ export async function saveProduct(
               ? "EXACT"
               : "HIGH",
 
+          matchScore:
+            ofertaPeloCodigo ||
+            produtoPeloCanonicalKey?.id ===
+              saved.id
+              ? 1
+              : null,
+
           discoverySource,
 
           active: true,
@@ -846,6 +1081,12 @@ export async function saveProduct(
             saved.id
               ? "EXACT"
               : "HIGH",
+
+          matchScore:
+            produtoPeloCanonicalKey?.id ===
+            saved.id
+              ? 1
+              : null,
 
           discoverySource,
 
