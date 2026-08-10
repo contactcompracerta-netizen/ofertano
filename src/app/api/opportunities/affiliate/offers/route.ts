@@ -67,9 +67,18 @@ export async function GET() {
         where: {
           marketplace:
             "MERCADO_LIVRE",
+
           status:
             "PENDING_AFFILIATE",
-          affiliateLink: null,
+
+          OR: [
+            {
+              affiliateLink: null,
+            },
+            {
+              affiliateLink: "",
+            },
+          ],
         },
 
         orderBy: {
@@ -80,6 +89,7 @@ export async function GET() {
           id: true,
           productId: true,
           externalId: true,
+          sourceUrl: true,
           price: true,
           createdAt: true,
 
@@ -96,10 +106,21 @@ export async function GET() {
       });
 
     const productIds =
-      offers.map(
-        (offer) => offer.productId,
+      Array.from(
+        new Set(
+          offers.map(
+            (offer) =>
+              offer.productId,
+          ),
+        ),
       );
 
+    /*
+     * Compatibilidade com produtos antigos:
+     * antes de MarketplaceOffer.sourceUrl ser usado
+     * como fonte principal, algumas URLs estavam
+     * disponíveis apenas em ProductOpportunity.
+     */
     const opportunities =
       productIds.length > 0
         ? await prisma.productOpportunity.findMany(
@@ -108,9 +129,12 @@ export async function GET() {
                 productId: {
                   in: productIds,
                 },
+
                 marketplace:
                   "MERCADO_LIVRE",
-                status: "PUBLISHED",
+
+                status:
+                  "PUBLISHED",
               },
 
               orderBy: {
@@ -164,22 +188,37 @@ export async function GET() {
               offer.productId,
             );
 
-          if (!opportunity) {
+          /*
+           * A URL da própria MarketplaceOffer é a
+           * fonte principal. Isso cobre MANUAL,
+           * ON_DEMAND_SEARCH, PRICE_MONITOR e API.
+           *
+           * ProductOpportunity fica somente como
+           * fallback para registros antigos.
+           */
+          const sourceUrl =
+            offer.sourceUrl?.trim() ||
+            opportunity?.sourceUrl?.trim() ||
+            "";
+
+          if (!sourceUrl) {
             return null;
           }
 
           return {
-            offerId: offer.id,
+            offerId:
+              offer.id,
+
             productId:
               offer.productId,
+
             opportunityId:
-              opportunity.id,
+              opportunity?.id ?? "",
 
             externalId:
               offer.externalId,
 
-            sourceUrl:
-              opportunity.sourceUrl,
+            sourceUrl,
 
             name:
               offer.product.name,
@@ -449,17 +488,32 @@ export async function POST(
               {
                 where: {
                   id: offer.id,
+
                   marketplace:
                     "MERCADO_LIVRE",
+
                   status:
                     "PENDING_AFFILIATE",
-                  affiliateLink: null,
+
+                  OR: [
+                    {
+                      affiliateLink:
+                        null,
+                    },
+                    {
+                      affiliateLink:
+                        "",
+                    },
+                  ],
                 },
 
                 data: {
                   affiliateLink:
                     item.affiliateLink,
-                  status: "ACTIVE",
+
+                  status:
+                    "ACTIVE",
+
                   active: true,
                 },
               },
@@ -475,14 +529,17 @@ export async function POST(
 
           await tx.product.update({
             where: {
-              id: offer.productId,
+              id:
+                offer.productId,
             },
 
             data: {
               affiliateLink:
                 item.affiliateLink,
+
               publicationStatus:
                 "LIVE_COMPLETE",
+
               active: true,
             },
           });
@@ -492,8 +549,10 @@ export async function POST(
               where: {
                 productId:
                   offer.productId,
+
                 marketplace:
                   "MERCADO_LIVRE",
+
                 status:
                   "PUBLISHED",
               },

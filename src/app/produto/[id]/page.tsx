@@ -920,60 +920,113 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     new Set([produto.image, ...produto.images].filter(Boolean)),
   ).slice(0, 6);
 
-  const possuiPrecoAnterior =
-    produto.oldPrice !== null && produto.oldPrice > produto.price;
+  /*
+   * A oferta principal precisa ser uma única fonte coerente para
+   * marketplace, preço, parcelamento e link.
+   *
+   * Regras:
+   * - somente produto EXACT;
+   * - oferta ACTIVE e disponível;
+   * - preço válido;
+   * - link individual de afiliado presente;
+   * - entre as elegíveis, vence o menor preço.
+   *
+   * Product.affiliateLink permanece apenas como compatibilidade
+   * para registros antigos que ainda não tenham MarketplaceOffer
+   * comprável. Ele nunca deve sobrescrever uma oferta EXACT válida.
+   */
+  const ofertasCompraveisExact = ofertasComparador
+    .filter((oferta) => {
+      const link = oferta.affiliateLink?.trim();
 
-  const percentualDesconto =
-    produto.discount !== null && produto.discount > 0
-      ? Math.round(produto.discount)
-      : possuiPrecoAnterior && produto.oldPrice !== null
-        ? Math.round(
-            ((produto.oldPrice - produto.price) / produto.oldPrice) * 100,
-          )
-        : 0;
+      return (
+        oferta.matchStatus === "EXACT" &&
+        Boolean(link) &&
+        oferta.status === "ACTIVE" &&
+        oferta.available &&
+        Number.isFinite(oferta.price) &&
+        oferta.price > 0
+      );
+    })
+    .sort((a, b) => a.price - b.price);
 
-  const possuiDesconto = percentualDesconto > 0;
-  const possuiAvaliacao =
-    produto.rating !== null && produto.rating > 0;
-  const possuiAvaliacoes =
-    produto.reviews !== null && produto.reviews > 0;
-  const possuiVendas =
-    produto.sales !== null && produto.sales > 0;
-  const possuiEstoque =
-    produto.stock !== null && produto.stock > 0;
+  const ofertaPrincipalComLink =
+    ofertasCompraveisExact[0] ?? null;
 
   const linkLegadoPrincipal =
     produto.affiliateLink?.trim() ?? "";
 
-  const ofertaPrincipalComLink = produto.offers.find((oferta) => {
-    const link = oferta.affiliateLink?.trim();
-
-    return (
-      Boolean(link) &&
-      oferta.status === "ACTIVE" &&
-      oferta.available
-    );
-  });
-
   const linkPrincipal =
-    linkLegadoPrincipal ||
     ofertaPrincipalComLink?.affiliateLink?.trim() ||
-    "";
+    linkLegadoPrincipal;
 
-  const marketplacePrincipal = linkLegadoPrincipal
-    ? produto.store?.trim() || "Loja parceira"
-    : ofertaPrincipalComLink
-      ? formatarMarketplace(ofertaPrincipalComLink.marketplace)
+  const marketplacePrincipal =
+    ofertaPrincipalComLink
+      ? formatarMarketplace(
+          ofertaPrincipalComLink.marketplace,
+        )
       : produto.store?.trim() || "Loja parceira";
 
-  const possuiComparacaoEntreLojas =
-    new Set(ofertasComparador.map((oferta) => oferta.marketplace)).size > 1;
+  const precoPrincipal =
+    ofertaPrincipalComLink?.price ??
+    (produto.price > 0 ? produto.price : 0);
 
-  const possuiLinkPrincipal = linkPrincipal.length > 0;
+  const precoAnteriorPrincipal =
+    ofertaPrincipalComLink?.oldPrice ??
+    produto.oldPrice;
+
+  const parcelamentoPrincipal =
+    ofertaPrincipalComLink?.installments ??
+    produto.installments;
+
+  const possuiPrecoAnterior =
+    precoAnteriorPrincipal !== null &&
+    precoAnteriorPrincipal > precoPrincipal;
+
+  const percentualDesconto =
+    possuiPrecoAnterior &&
+    precoAnteriorPrincipal !== null
+      ? Math.round(
+          ((precoAnteriorPrincipal - precoPrincipal) /
+            precoAnteriorPrincipal) *
+            100,
+        )
+      : !ofertaPrincipalComLink &&
+          produto.discount !== null &&
+          produto.discount > 0
+        ? Math.round(produto.discount)
+        : 0;
+
+  const possuiDesconto =
+    percentualDesconto > 0;
+
+  const possuiAvaliacao =
+    produto.rating !== null && produto.rating > 0;
+
+  const possuiAvaliacoes =
+    produto.reviews !== null && produto.reviews > 0;
+
+  const possuiVendas =
+    produto.sales !== null && produto.sales > 0;
+
+  const possuiEstoque =
+    produto.stock !== null && produto.stock > 0;
+
+  const possuiComparacaoEntreLojas =
+    new Set(
+      ofertasComparador.map(
+        (oferta) => oferta.marketplace,
+      ),
+    ).size > 1;
+
+  const possuiLinkPrincipal =
+    linkPrincipal.length > 0;
 
   const usarBarraMobileEmDuasLinhas =
-    marketplacePrincipal.toLowerCase().includes("amazon") ||
-    formatarPreco(produto.price).length >= 11;
+    marketplacePrincipal
+      .toLowerCase()
+      .includes("amazon") ||
+    formatarPreco(precoPrincipal).length >= 11;
 
   const marcaExibicao = limparMarca(produto.brand);
 
@@ -1112,15 +1165,15 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
                 <div>
                   {possuiPrecoAnterior &&
-                    produto.oldPrice !== null && (
+                    precoAnteriorPrincipal !== null && (
                       <p className="text-xs font-semibold text-slate-400 line-through sm:text-[13px]">
-                        {formatarPreco(produto.oldPrice)}
+                        {formatarPreco(precoAnteriorPrincipal)}
                       </p>
                     )}
 
                   <div className="mt-0.5 flex flex-wrap items-end gap-2">
                     <p className="text-[27px] font-black leading-none tracking-tight text-emerald-700 sm:text-[29px] lg:text-[30px]">
-                      {formatarPreco(produto.price)}
+                      {formatarPreco(precoPrincipal)}
                     </p>
 
                     {possuiDesconto && (
@@ -1130,9 +1183,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     )}
                   </div>
 
-                  {produto.installments && (
+                  {parcelamentoPrincipal && (
                     <p className="mt-1.5 text-xs font-semibold text-slate-700 sm:text-[13px]">
-                      {produto.installments}
+                      {parcelamentoPrincipal}
                     </p>
                   )}
 
@@ -1598,14 +1651,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             <div className="flex min-w-0 items-center gap-1.5">
               <div className="min-w-0 flex-1">
                 {possuiPrecoAnterior &&
-                  produto.oldPrice !== null && (
+                  precoAnteriorPrincipal !== null && (
                     <p className="truncate text-[9px] font-semibold text-slate-400 line-through">
-                      {formatarPreco(produto.oldPrice)}
+                      {formatarPreco(precoAnteriorPrincipal)}
                     </p>
                   )}
 
                 <p className="truncate text-[16px] font-black leading-none text-emerald-700">
-                  {formatarPreco(produto.price)}
+                  {formatarPreco(precoPrincipal)}
                 </p>
               </div>
 
@@ -1649,14 +1702,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           <div className="mx-auto grid max-w-2xl grid-cols-[minmax(68px,auto)_36px_36px_minmax(92px,1fr)] items-center gap-1.5">
             <div className="min-w-0">
               {possuiPrecoAnterior &&
-                produto.oldPrice !== null && (
+                precoAnteriorPrincipal !== null && (
                   <p className="truncate text-[9px] font-semibold text-slate-400 line-through">
-                    {formatarPreco(produto.oldPrice)}
+                    {formatarPreco(precoAnteriorPrincipal)}
                   </p>
                 )}
 
               <p className="truncate text-[15px] font-black leading-none text-emerald-700">
-                {formatarPreco(produto.price)}
+                {formatarPreco(precoPrincipal)}
               </p>
             </div>
 
