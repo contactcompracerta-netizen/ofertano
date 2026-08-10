@@ -45,13 +45,17 @@ export async function processImportQueue(
       where: {
         status: "PENDING",
       },
+
       orderBy: {
         createdAt: "asc",
       },
+
       take: limit,
     });
 
-  if (pendentes.length === 0) {
+  if (
+    pendentes.length === 0
+  ) {
     return {
       success: true,
       message:
@@ -66,23 +70,30 @@ export async function processImportQueue(
   const results:
     QueueProcessResult["results"] = [];
 
-  for (const item of pendentes) {
+  for (
+    const item of pendentes
+  ) {
     const reservado =
       await prisma.importQueue.updateMany({
         where: {
           id: item.id,
           status: "PENDING",
         },
+
         data: {
           status: "PROCESSING",
+
           attempts: {
             increment: 1,
           },
+
           errorMessage: null,
         },
       });
 
-    if (reservado.count === 0) {
+    if (
+      reservado.count === 0
+    ) {
       continue;
     }
 
@@ -93,20 +104,39 @@ export async function processImportQueue(
         );
 
       /*
-       * Prioridade:
-       * 1. Link de afiliado já salvo na fila;
-       * 2. Link oficial retornado pelo importador;
-       * 3. null -> oferta fica em revisão.
+       * Prioridade do link:
+       *
+       * 1. Link individual já salvo na fila;
+       * 2. Link individual retornado pelo importador;
+       * 3. null -> oferta fica pendente de afiliado.
        */
       const affiliateLink =
         item.affiliateLink?.trim() ||
         imported.affiliateLink?.trim() ||
         null;
 
+      /*
+       * Se existe opportunityId, o item foi criado
+       * pelo sistema automático de oportunidades.
+       *
+       * Nesse caso:
+       * - Product.autoCreated = true
+       * - discoverySource = OPPORTUNITY
+       *
+       * Itens adicionados manualmente à fila continuam
+       * usando o comportamento padrão do saveProduct.
+       */
       const saved =
         await saveProduct(
           imported,
           affiliateLink,
+          item.opportunityId
+            ? {
+                autoCreated: true,
+                discoverySource:
+                  "OPPORTUNITY",
+              }
+            : undefined,
         );
 
       const processedAt =
@@ -118,6 +148,7 @@ export async function processImportQueue(
             where: {
               id: item.id,
             },
+
             data: {
               status: "SUCCESS",
               productId: saved.id,
@@ -126,38 +157,56 @@ export async function processImportQueue(
             },
           });
 
-          if (item.opportunityId) {
-            await tx.productOpportunity.updateMany(
-              {
-                where: {
-                  id: item.opportunityId,
-                  status: {
-                    in: [
-                      "QUEUED",
-                      "READY_TO_QUEUE",
-                      "ERROR",
-                    ],
-                  },
-                },
-                data: {
-                  status: "PUBLISHED",
-                  productId: saved.id,
-                  errorMessage: null,
-                  publishedAt:
-                    processedAt,
+          if (
+            item.opportunityId
+          ) {
+            await tx.productOpportunity.updateMany({
+              where: {
+                id:
+                  item.opportunityId,
+
+                status: {
+                  in: [
+                    "QUEUED",
+                    "READY_TO_QUEUE",
+                    "ERROR",
+                  ],
                 },
               },
-            );
+
+              data: {
+                status:
+                  "PUBLISHED",
+
+                productId:
+                  saved.id,
+
+                errorMessage:
+                  null,
+
+                publishedAt:
+                  processedAt,
+              },
+            });
           }
         },
       );
 
       results.push({
-        queueId: item.id,
-        url: item.url,
-        success: true,
-        productId: saved.id,
-        productName: saved.name,
+        queueId:
+          item.id,
+
+        url:
+          item.url,
+
+        success:
+          true,
+
+        productId:
+          saved.id,
+
+        productName:
+          saved.name,
       });
     } catch (error) {
       const mensagem =
@@ -169,7 +218,10 @@ export async function processImportQueue(
         new Date();
 
       const errorMessage =
-        mensagem.slice(0, 2000);
+        mensagem.slice(
+          0,
+          2000,
+        );
 
       await prisma.$transaction(
         async (tx) => {
@@ -177,44 +229,61 @@ export async function processImportQueue(
             where: {
               id: item.id,
             },
+
             data: {
-              status: "ERROR",
+              status:
+                "ERROR",
+
               errorMessage,
+
               processedAt,
             },
           });
 
-          if (item.opportunityId) {
-            await tx.productOpportunity.updateMany(
-              {
-                where: {
-                  id: item.opportunityId,
-                  status: {
-                    in: [
-                      "QUEUED",
-                      "READY_TO_QUEUE",
-                      "ERROR",
-                    ],
-                  },
-                },
-                data: {
-                  status: "ERROR",
-                  attempts: {
-                    increment: 1,
-                  },
-                  errorMessage,
+          if (
+            item.opportunityId
+          ) {
+            await tx.productOpportunity.updateMany({
+              where: {
+                id:
+                  item.opportunityId,
+
+                status: {
+                  in: [
+                    "QUEUED",
+                    "READY_TO_QUEUE",
+                    "ERROR",
+                  ],
                 },
               },
-            );
+
+              data: {
+                status:
+                  "ERROR",
+
+                attempts: {
+                  increment: 1,
+                },
+
+                errorMessage,
+              },
+            });
           }
         },
       );
 
       results.push({
-        queueId: item.id,
-        url: item.url,
-        success: false,
-        error: mensagem,
+        queueId:
+          item.id,
+
+        url:
+          item.url,
+
+        success:
+          false,
+
+        error:
+          mensagem,
       });
     }
   }
@@ -226,15 +295,22 @@ export async function processImportQueue(
     ).length;
 
   const errors =
-    results.length - imported;
+    results.length -
+    imported;
 
   return {
     success: true,
+
     message:
       `${imported} produto(s) importado(s) e ${errors} erro(s).`,
-    processed: results.length,
+
+    processed:
+      results.length,
+
     imported,
+
     errors,
+
     results,
   };
 }
