@@ -2,9 +2,11 @@
 
 import { importarProduto } from "@/services/importers";
 import { saveProduct } from "@/services/database/saveProduct";
+import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(
   request: Request,
@@ -32,39 +34,87 @@ export async function POST(
       );
     }
 
+    /*
+     * Primeiro importamos e salvamos
+     * o produto informado pelo administrador.
+     */
     const imported =
       await importarProduto(url);
 
-    /*
-     * Shopee:
-     * imported.url = URL normal do produto
-     * imported.affiliateLink = offerLink oficial
-     *
-     * Mercado Livre/Amazon:
-     * affiliateLink continua opcional.
-     * Se vier undefined, saveProduct mantém
-     * o comportamento anterior.
-     */
     const saved =
       await saveProduct(
         imported,
         imported.affiliateLink,
+        {
+          discoverySource:
+            "MANUAL",
+          autoCreated: false,
+        },
       );
+
+    /*
+     * Depois procuramos automaticamente
+     * ofertas equivalentes.
+     *
+     * Falha na busca secundária nunca deve
+     * desfazer a importação principal.
+     */
+    let comparison:
+      Awaited<
+        ReturnType<
+          typeof buscarComparacaoManual
+        >
+      > | null = null;
+
+    let comparisonError:
+      string | null = null;
+
+    try {
+      comparison =
+        await buscarComparacaoManual(
+          imported,
+          saved.id,
+        );
+    } catch (error) {
+      console.error(
+        "Erro na comparação multiloja:",
+        error,
+      );
+
+      comparisonError =
+        error instanceof Error
+          ? error.message
+          : "Erro durante a busca de outras lojas.";
+    }
 
     return NextResponse.json({
       success: true,
+
       message:
-        "Produto importado com sucesso!",
+        comparison?.found
+          ? `Produto importado e ${comparison.found} oferta(s) equivalente(s) encontrada(s).`
+          : "Produto importado com sucesso. Nenhuma nova oferta exata foi encontrada automaticamente.",
+
       product: {
         id: saved.id,
         mlId: saved.mlId,
         name: saved.name,
         image: saved.image,
         price: saved.price,
-        oldPrice: saved.oldPrice,
-        discount: saved.discount,
-        category: saved.category,
+        oldPrice:
+          saved.oldPrice,
+        discount:
+          saved.discount,
+        category:
+          saved.category,
+
+        sourceMarketplace:
+          imported.marketplace,
       },
+
+      comparison,
+
+      comparisonError,
     });
   } catch (error) {
     console.error(
@@ -75,6 +125,7 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
+
         error:
           error instanceof Error
             ? error.message
