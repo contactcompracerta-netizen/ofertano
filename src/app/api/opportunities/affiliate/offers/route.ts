@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,6 +71,9 @@ export async function GET() {
 
           status:
             "PENDING_AFFILIATE",
+
+          matchStatus:
+            "EXACT",
 
           OR: [
             {
@@ -405,6 +409,7 @@ export async function POST(
             productId: true,
             marketplace: true,
             status: true,
+            matchStatus: true,
             affiliateLink: true,
           },
         },
@@ -446,6 +451,7 @@ export async function POST(
       if (
         offer.status !==
           "PENDING_AFFILIATE" ||
+        offer.matchStatus !== "EXACT" ||
         offer.affiliateLink
       ) {
         return NextResponse.json(
@@ -515,6 +521,19 @@ export async function POST(
                     "ACTIVE",
 
                   active: true,
+                  available: true,
+
+                  reviewReason:
+                    null,
+
+                  errorMessage:
+                    null,
+
+                  affiliateValidatedAt:
+                    new Date(),
+
+                  reviewedAt:
+                    new Date(),
                 },
               },
             );
@@ -527,22 +546,10 @@ export async function POST(
             );
           }
 
-          await tx.product.update({
-            where: {
-              id:
-                offer.productId,
-            },
-
-            data: {
-              affiliateLink:
-                item.affiliateLink,
-
-              publicationStatus:
-                "LIVE_COMPLETE",
-
-              active: true,
-            },
-          });
+          await sincronizarMelhorOfertaDoProduto(
+            tx,
+            offer.productId,
+          );
 
           await tx.productOpportunity.updateMany(
             {

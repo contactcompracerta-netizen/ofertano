@@ -1,4 +1,6 @@
-﻿import prisma from "@/lib/prisma";
+﻿import type { Prisma } from "@prisma/client";
+
+import prisma from "@/lib/prisma";
 
 import type { ProductImport } from "@/services/importers/core/types";
 
@@ -1284,6 +1286,166 @@ function unirImagens(
   );
 }
 
+
+type SincronizarMelhorOfertaOptions = {
+  ofertaIdComDesconto?: string | null;
+  descontoDaOferta?: number | null;
+};
+
+/**
+ * Mantém os campos legados de Product sincronizados com a oferta
+ * principal real do comparador.
+ *
+ * Regra central:
+ * - somente ofertas EXACT podem virar oferta principal;
+ * - entre as EXACT, a menor oferta ACTIVE + available + com link
+ *   individual é a principal comprável;
+ * - se ainda não houver oferta comprável, mantemos como referência
+ *   a menor EXACT encontrada e deixamos o produto LIVE_PARTIAL;
+ * - ofertas HIGH/REVIEW/REJECTED nunca recebem isBest nem assumem
+ *   store, price ou affiliateLink do Product.
+ *
+ * Esta função também deve ser usada por fluxos que alterem uma
+ * MarketplaceOffer sem passar pelo saveProduct.
+ */
+export async function sincronizarMelhorOfertaDoProduto(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  options: SincronizarMelhorOfertaOptions = {},
+) {
+  const ofertasExatas =
+    await tx.marketplaceOffer.findMany({
+      where: {
+        productId,
+        active: true,
+        matchStatus: "EXACT",
+      },
+      orderBy: {
+        price: "asc",
+      },
+    });
+
+  const melhorOfertaEncontrada =
+    ofertasExatas.find(
+      (item) =>
+        item.available &&
+        item.status !== "UNAVAILABLE" &&
+        item.status !== "ERROR" &&
+        Number.isFinite(item.price) &&
+        item.price > 0,
+    ) ?? null;
+
+  const melhorOfertaCompravel =
+    ofertasExatas.find(
+      (item) =>
+        item.available &&
+        item.status === "ACTIVE" &&
+        Number.isFinite(item.price) &&
+        item.price > 0 &&
+        Boolean(item.affiliateLink?.trim()),
+    ) ?? null;
+
+  const melhorOfertaPrincipal =
+    melhorOfertaCompravel ??
+    melhorOfertaEncontrada;
+
+  await tx.marketplaceOffer.updateMany({
+    where: {
+      productId,
+      isBest: true,
+    },
+    data: {
+      isBest: false,
+    },
+  });
+
+  if (melhorOfertaPrincipal) {
+    await tx.marketplaceOffer.update({
+      where: {
+        id: melhorOfertaPrincipal.id,
+      },
+      data: {
+        isBest: true,
+      },
+    });
+  }
+
+  const possuiOfertaAtiva =
+    ofertasExatas.some(
+      (item) =>
+        item.available &&
+        item.status === "ACTIVE" &&
+        Number.isFinite(item.price) &&
+        item.price > 0 &&
+        Boolean(item.affiliateLink?.trim()),
+    );
+
+  const possuiOfertaPendente =
+    ofertasExatas.some((item) =>
+      [
+        "DISCOVERED",
+        "PENDING_AFFILIATE",
+        "UNDER_REVIEW",
+      ].includes(item.status),
+    );
+
+  const publicationStatus =
+    possuiOfertaPendente ||
+    !possuiOfertaAtiva
+      ? "LIVE_PARTIAL"
+      : "LIVE_COMPLETE";
+
+  if (!melhorOfertaPrincipal) {
+    return tx.product.update({
+      where: {
+        id: productId,
+      },
+      data: {
+        publicationStatus,
+        active: true,
+      },
+    });
+  }
+
+  const descontoCalculado =
+    melhorOfertaPrincipal.id ===
+      options.ofertaIdComDesconto &&
+    options.descontoDaOferta !== undefined
+      ? options.descontoDaOferta
+      : calcularDesconto(
+          melhorOfertaPrincipal.oldPrice,
+          melhorOfertaPrincipal.price,
+        );
+
+  return tx.product.update({
+    where: {
+      id: productId,
+    },
+    data: {
+      store: nomeMarketplace(
+        melhorOfertaPrincipal.marketplace as MarketplaceDatabase,
+      ),
+
+      affiliateLink:
+        melhorOfertaPrincipal.affiliateLink?.trim() ||
+        "",
+
+      price: melhorOfertaPrincipal.price,
+      oldPrice: melhorOfertaPrincipal.oldPrice,
+
+      installments:
+        melhorOfertaPrincipal.installments,
+
+      stock: melhorOfertaPrincipal.stock,
+
+      discount: descontoCalculado,
+
+      publicationStatus,
+      active: true,
+    },
+  });
+}
+
 export async function saveProduct(
   product: ProductImport,
   affiliateLinkOverride?: string | null,
@@ -1962,134 +2124,14 @@ export async function saveProduct(
       });
     }
 
-    const ofertasDoProduto =
-      await tx.marketplaceOffer.findMany({
-        where: {
-          productId: saved.id,
-          active: true,
-        },
-        orderBy: {
-          price: "asc",
-        },
-      });
-
-    const melhorOfertaEncontrada =
-      ofertasDoProduto.find(
-        (item) =>
-          item.available &&
-          item.status !== "UNAVAILABLE" &&
-          item.status !== "ERROR",
-      ) ?? ofertasDoProduto[0];
-
-    /*
-     * A oferta principal precisa ser comprável.
-     *
-     * Assim, uma oferta mais barata ainda sem link de afiliado
-     * continua aparecendo no comparador como menor preço encontrado,
-     * mas não substitui preço/botão principal por uma combinação
-     * inconsistente.
-     */
-    const melhorOfertaCompravel =
-      ofertasDoProduto.find(
-        (item) =>
-          item.available &&
-          item.status === "ACTIVE" &&
-          Boolean(item.affiliateLink?.trim()),
-      ) ?? null;
-
-    const melhorOfertaPrincipal =
-      melhorOfertaCompravel ??
-      melhorOfertaEncontrada;
-
-    await tx.marketplaceOffer.updateMany({
-      where: {
-        productId: saved.id,
-        isBest: true,
+    return sincronizarMelhorOfertaDoProduto(
+      tx,
+      saved.id,
+      {
+        ofertaIdComDesconto: oferta.id,
+        descontoDaOferta:
+          obterDescontoProduto(product),
       },
-      data: {
-        isBest: false,
-      },
-    });
-
-    if (melhorOfertaPrincipal) {
-      await tx.marketplaceOffer.update({
-        where: {
-          id: melhorOfertaPrincipal.id,
-        },
-        data: {
-          isBest: true,
-        },
-      });
-    }
-
-    const possuiOfertaAtiva =
-      ofertasDoProduto.some(
-        (item) =>
-          item.status === "ACTIVE" &&
-          Boolean(
-            item.affiliateLink?.trim(),
-          ),
-      );
-
-    const possuiOfertaPendente =
-      ofertasDoProduto.some((item) =>
-        [
-          "DISCOVERED",
-          "PENDING_AFFILIATE",
-          "UNDER_REVIEW",
-        ].includes(item.status),
-      );
-
-    const publicationStatus =
-      possuiOfertaPendente ||
-      !possuiOfertaAtiva
-        ? "LIVE_PARTIAL"
-        : "LIVE_COMPLETE";
-
-    if (!melhorOfertaPrincipal) {
-      return tx.product.update({
-        where: {
-          id: saved.id,
-        },
-        data: {
-          publicationStatus,
-          active: true,
-        },
-      });
-    }
-
-    return tx.product.update({
-      where: {
-        id: saved.id,
-      },
-      data: {
-        store: nomeMarketplace(
-          melhorOfertaPrincipal.marketplace as MarketplaceDatabase,
-        ),
-
-        affiliateLink:
-          melhorOfertaPrincipal.affiliateLink?.trim() ||
-          "",
-
-        price: melhorOfertaPrincipal.price,
-        oldPrice: melhorOfertaPrincipal.oldPrice,
-
-        installments:
-          melhorOfertaPrincipal.installments,
-
-        stock: melhorOfertaPrincipal.stock,
-
-        discount:
-          melhorOfertaPrincipal.id === oferta.id
-            ? obterDescontoProduto(product)
-            : calcularDesconto(
-                melhorOfertaPrincipal.oldPrice,
-                melhorOfertaPrincipal.price,
-              ),
-
-        publicationStatus,
-        active: true,
-      },
-    });
+    );
   });
 }
