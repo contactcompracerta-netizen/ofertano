@@ -8,6 +8,44 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function obterLinkAfiliadoAmazon(
+  rawUrl: string,
+  marketplace: string,
+): string | null {
+  if (marketplace !== "Amazon") {
+    return null;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+
+    const hostname = url.hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
+
+    const dominioAmazon =
+      hostname === "amazon.com.br" ||
+      hostname.endsWith(".amazon.com.br") ||
+      hostname === "amazon.com" ||
+      hostname.endsWith(".amazon.com");
+
+    if (!dominioAmazon) {
+      return null;
+    }
+
+    const tag =
+      url.searchParams.get("tag")?.trim();
+
+    if (tag !== "ofertano-20") {
+      return null;
+    }
+
+    return rawUrl.trim();
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(
   request: Request,
 ) {
@@ -35,16 +73,38 @@ export async function POST(
     }
 
     /*
-     * Primeiro importamos e salvamos
-     * o produto informado pelo administrador.
+     * Primeiro importamos o produto informado
+     * pelo administrador.
      */
     const imported =
       await importarProduto(url);
 
+    /*
+     * Na importação manual da Amazon,
+     * preservamos o URL original quando ele
+     * contém o identificador oficial do
+     * Ofertano no programa de afiliados.
+     *
+     * Isso evita perder os parâmetros
+     * tag, linkCode e linkId durante a
+     * normalização/canonicalização feita
+     * pelo importador da Amazon.
+     */
+    const affiliateLinkAmazon =
+      obterLinkAfiliadoAmazon(
+        url,
+        imported.marketplace,
+      );
+
+    const affiliateLink =
+      affiliateLinkAmazon ??
+      imported.affiliateLink?.trim() ??
+      null;
+
     const saved =
       await saveProduct(
         imported,
-        imported.affiliateLink,
+        affiliateLink,
         {
           discoverySource:
             "MANUAL",
