@@ -148,24 +148,76 @@ function limparUrl(
 }
 
 function extrairIdProduto(
-  url: string,
+  rawUrl: string,
 ): string | null {
-  const padroes = [
+  const urlLimpa =
+    limparUrl(rawUrl) ??
+    rawUrl.trim();
+
+  if (!urlLimpa) {
+    return null;
+  }
+
+  const padroesDiretos = [
     /\/item\/(\d+)\.html/i,
     /\/item\/(\d+)/i,
     /[?&]productId=(\d+)/i,
     /[?&]product_id=(\d+)/i,
   ];
 
-  for (
-    const padrao of padroes
-  ) {
+  for (const padrao of padroesDiretos) {
     const resultado =
-      url.match(padrao);
+      urlLimpa.match(padrao);
 
     if (resultado?.[1]) {
       return resultado[1];
     }
+  }
+
+  try {
+    const parsed =
+      new URL(urlLimpa);
+
+    /*
+     * Links modernos de vitrine do AliExpress:
+     * /ssr/.../BundleDeals2?productIds=PRODUTO:SKU
+     *
+     * O primeiro número é o Product ID.
+     */
+    const productIds =
+      parsed.searchParams.get("productIds") ??
+      parsed.searchParams.get("product_ids");
+
+    if (productIds) {
+      const primeiroId =
+        productIds.match(
+          /^(\d{8,})(?=:|$)/,
+        )?.[1];
+
+      if (primeiroId) {
+        return primeiroId;
+      }
+    }
+
+    /*
+     * Fallback usado em alguns links de recomendação:
+     * utparam-url=...|x_object_id:PRODUCT_ID|...
+     */
+    const utparamUrl =
+      parsed.searchParams.get(
+        "utparam-url",
+      );
+
+    const xObjectId =
+      utparamUrl?.match(
+        /(?:^|[|&])x_object_id[:=](\d{8,})(?:[|&]|$)/i,
+      )?.[1];
+
+    if (xObjectId) {
+      return xObjectId;
+    }
+  } catch {
+    // Os padrões diretos acima já foram tentados.
   }
 
   return null;
@@ -632,6 +684,872 @@ function escaparHtml(
     );
 }
 
+function converterPrecoPagina(
+  valor: unknown,
+): number | null {
+  if (
+    typeof valor === "number"
+  ) {
+    return Number.isFinite(valor) &&
+      valor > 0
+      ? valor
+      : null;
+  }
+
+  if (
+    typeof valor !== "string"
+  ) {
+    return null;
+  }
+
+  let texto =
+    valor.trim();
+
+  if (!texto) {
+    return null;
+  }
+
+  try {
+    if (
+      texto.startsWith('"') &&
+      texto.endsWith('"')
+    ) {
+      texto =
+        JSON.parse(texto);
+    }
+  } catch {
+    // Mantém o texto original.
+  }
+
+  texto = texto
+    .replace(
+      /\\u0024/gi,
+      "$",
+    )
+    .replace(
+      /\\u00a0/gi,
+      " ",
+    )
+    .replace(
+      /&nbsp;/gi,
+      " ",
+    )
+    .replace(
+      /\s+/g,
+      " ",
+    )
+    .trim();
+
+  const brl =
+    texto.match(
+      /R\$\s*([\d.]+(?:,\d{1,2})?)/i,
+    )?.[1];
+
+  if (brl) {
+    const numero =
+      Number(
+        brl
+          .replace(/\./g, "")
+          .replace(",", "."),
+      );
+
+    return Number.isFinite(numero) &&
+      numero > 0
+      ? numero
+      : null;
+  }
+
+  const simples =
+    texto.match(
+      /(\d+(?:[.,]\d{1,2})?)/,
+    )?.[1];
+
+  if (!simples) {
+    return null;
+  }
+
+  const numero =
+    Number(
+      simples.replace(",", "."),
+    );
+
+  return Number.isFinite(numero) &&
+    numero > 0
+    ? numero
+    : null;
+}
+
+type PrecoPaginaResultado = {
+  valor: number;
+  fonte: string;
+  precoAnterior?: number | null;
+};
+
+type CandidatoPrecoPagina = {
+  valor: number;
+  fonte: string;
+  indice: number;
+  prioridade: number;
+};
+
+function extrairPrecoMetaProduto(
+  html: string,
+): PrecoPaginaResultado | null {
+  const padroes = [
+    /<meta[^>]+property=["']product:price:amount["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']product:price:amount["'][^>]*>/i,
+    /<meta[^>]+itemprop=["']price["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']price["'][^>]*>/i,
+  ];
+
+  for (const padrao of padroes) {
+    const valorBruto =
+      html.match(
+        padrao,
+      )?.[1];
+
+    const valor =
+      converterPrecoPagina(
+        valorBruto,
+      );
+
+    if (
+      valor !== null &&
+      valor > 0
+    ) {
+      return {
+        valor,
+        fonte:
+          "meta-product-price",
+      };
+    }
+  }
+
+  return null;
+}
+
+function extrairPrecoJsonLdProduto(
+  html: string,
+): PrecoPaginaResultado | null {
+  const regex =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  let match:
+    RegExpExecArray | null;
+
+  const visitar = (
+    valor: unknown,
+  ): number | null => {
+    if (
+      !valor ||
+      typeof valor !== "object"
+    ) {
+      return null;
+    }
+
+    if (Array.isArray(valor)) {
+      for (
+        const item of valor
+      ) {
+        const encontrado =
+          visitar(item);
+
+        if (
+          encontrado !== null
+        ) {
+          return encontrado;
+        }
+      }
+
+      return null;
+    }
+
+    const registro =
+      valor as Record<
+        string,
+        unknown
+      >;
+
+    const tipo =
+      registro["@type"];
+
+    const tipos =
+      Array.isArray(tipo)
+        ? tipo.map(String)
+        : tipo
+          ? [String(tipo)]
+          : [];
+
+    const ehProduto =
+      tipos.some(
+        (item) =>
+          item
+            .toLowerCase() ===
+          "product",
+      );
+
+    if (ehProduto) {
+      const ofertas =
+        Array.isArray(
+          registro.offers,
+        )
+          ? registro.offers
+          : registro.offers
+            ? [registro.offers]
+            : [];
+
+      for (
+        const oferta of ofertas
+      ) {
+        if (
+          !oferta ||
+          typeof oferta !==
+            "object"
+        ) {
+          continue;
+        }
+
+        const dadosOferta =
+          oferta as Record<
+            string,
+            unknown
+          >;
+
+        const moeda =
+          typeof dadosOferta
+            .priceCurrency ===
+          "string"
+            ? dadosOferta
+                .priceCurrency
+                .trim()
+                .toUpperCase()
+            : null;
+
+        if (
+          moeda &&
+          moeda !== "BRL"
+        ) {
+          continue;
+        }
+
+        const candidatos = [
+          dadosOferta.price,
+          dadosOferta.lowPrice,
+          (
+            dadosOferta
+              .priceSpecification &&
+            typeof dadosOferta
+              .priceSpecification ===
+              "object"
+              ? (
+                  dadosOferta
+                    .priceSpecification as Record<
+                    string,
+                    unknown
+                  >
+                ).price
+              : null
+          ),
+        ];
+
+        for (
+          const candidato
+          of candidatos
+        ) {
+          const preco =
+            converterPrecoPagina(
+              candidato,
+            );
+
+          if (
+            preco !== null &&
+            preco > 0
+          ) {
+            return preco;
+          }
+        }
+      }
+    }
+
+    for (
+      const filho
+      of Object.values(
+        registro,
+      )
+    ) {
+      const encontrado =
+        visitar(filho);
+
+      if (
+        encontrado !== null
+      ) {
+        return encontrado;
+      }
+    }
+
+    return null;
+  };
+
+  while (
+    (match =
+      regex.exec(html)) !==
+    null
+  ) {
+    const jsonBruto =
+      match[1]?.trim();
+
+    if (!jsonBruto) {
+      continue;
+    }
+
+    try {
+      const json =
+        JSON.parse(
+          jsonBruto,
+        );
+
+      const valor =
+        visitar(json);
+
+      if (
+        valor !== null &&
+        valor > 0
+      ) {
+        return {
+          valor,
+          fonte:
+            "json-ld-product",
+        };
+      }
+    } catch {
+      // Ignora JSON-LD inválido e continua.
+    }
+  }
+
+  return null;
+}
+
+function coletarCandidatosPrecoPagina(
+  html: string,
+): CandidatoPrecoPagina[] {
+  const candidatos:
+    CandidatoPrecoPagina[] =
+    [];
+
+  /*
+   * Não usamos mais Math.min() sobre a página inteira.
+   *
+   * Uma página do AliExpress pode carregar recomendações,
+   * outros SKUs e campanhas no mesmo HTML. O menor número
+   * encontrado pode não ser o preço principal do produto.
+   *
+   * A prioridade abaixo representa a preferência por campos
+   * que normalmente descrevem o preço promocional principal.
+   */
+  const camposString = [
+    {
+      campo:
+        "formattedActivityPrice",
+      prioridade: 0,
+    },
+    {
+      campo:
+        "formattedSalePrice",
+      prioridade: 2,
+    },
+    {
+      campo:
+        "salePriceString",
+      prioridade: 3,
+    },
+    {
+      campo:
+        "formattedPrice",
+      prioridade: 4,
+    },
+  ];
+
+  for (
+    const {
+      campo,
+      prioridade,
+    } of camposString
+  ) {
+    const regex =
+      new RegExp(
+        `"${campo}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`,
+        "gi",
+      );
+
+    let match:
+      RegExpExecArray | null;
+
+    while (
+      (match =
+        regex.exec(html)) !==
+      null
+    ) {
+      const bruto =
+        match[1];
+
+      if (!bruto) {
+        continue;
+      }
+
+      let valor =
+        bruto;
+
+      try {
+        valor =
+          JSON.parse(
+            `"${bruto}"`,
+          );
+      } catch {
+        // Mantém o valor bruto.
+      }
+
+      const preco =
+        converterPrecoPagina(
+          valor,
+        );
+
+      if (
+        preco !== null &&
+        preco > 0
+      ) {
+        candidatos.push({
+          valor:
+            Math.round(
+              preco * 100,
+            ) / 100,
+          fonte: campo,
+          indice:
+            match.index,
+          prioridade,
+        });
+      }
+    }
+  }
+
+  const camposNumero = [
+    {
+      campo:
+        "minActivityAmount",
+      prioridade: 1,
+    },
+    {
+      campo:
+        "activityAmount",
+      prioridade: 1,
+    },
+  ];
+
+  for (
+    const {
+      campo,
+      prioridade,
+    } of camposNumero
+  ) {
+    const regex =
+      new RegExp(
+        `"${campo}"\\s*:\\s*"?([0-9]+(?:\\.[0-9]+)?)"?`,
+        "gi",
+      );
+
+    let match:
+      RegExpExecArray | null;
+
+    while (
+      (match =
+        regex.exec(html)) !==
+      null
+    ) {
+      const preco =
+        converterPrecoPagina(
+          match[1],
+        );
+
+      if (
+        preco !== null &&
+        preco > 0
+      ) {
+        candidatos.push({
+          valor:
+            Math.round(
+              preco * 100,
+            ) / 100,
+          fonte: campo,
+          indice:
+            match.index,
+          prioridade,
+        });
+      }
+    }
+  }
+
+  return candidatos;
+}
+
+function localizarOcorrencias(
+  texto: string,
+  termo: string,
+): number[] {
+  const indices: number[] =
+    [];
+
+  let inicio = 0;
+
+  while (inicio < texto.length) {
+    const indice =
+      texto.indexOf(
+        termo,
+        inicio,
+      );
+
+    if (indice < 0) {
+      break;
+    }
+
+    indices.push(indice);
+
+    inicio =
+      indice +
+      termo.length;
+  }
+
+  return indices;
+}
+
+function escolherPrecoSsrDoProduto(
+  html: string,
+  productId: string,
+): PrecoPaginaResultado | null {
+  const candidatos =
+    coletarCandidatosPrecoPagina(
+      html,
+    );
+
+  if (
+    candidatos.length === 0
+  ) {
+    return null;
+  }
+
+  const ocorrenciasProduto =
+    localizarOcorrencias(
+      html,
+      productId,
+    );
+
+  /*
+   * Exigimos proximidade entre o campo de preço e o Product ID
+   * principal. Isso reduz muito o risco de capturar preço de
+   * recomendação, banner ou outro SKU carregado no HTML.
+   */
+  if (
+    ocorrenciasProduto.length === 0
+  ) {
+    return null;
+  }
+
+  const candidatosDoProduto =
+    candidatos
+      .map(
+        (candidato) => {
+          const distancia =
+            ocorrenciasProduto.reduce(
+              (
+                menor,
+                indiceProduto,
+              ) =>
+                Math.min(
+                  menor,
+                  Math.abs(
+                    candidato.indice -
+                      indiceProduto,
+                  ),
+                ),
+              Number.POSITIVE_INFINITY,
+            );
+
+          return {
+            ...candidato,
+            distancia,
+          };
+        },
+      )
+      .filter(
+        (candidato) =>
+          candidato.distancia <=
+          30000,
+      )
+      .sort(
+        (a, b) =>
+          a.prioridade -
+            b.prioridade ||
+          a.distancia -
+            b.distancia ||
+          a.indice -
+            b.indice,
+      );
+
+  const escolhido =
+    candidatosDoProduto[0];
+
+  if (!escolhido) {
+    return null;
+  }
+
+  return {
+    valor:
+      escolhido.valor,
+    fonte:
+      `ssr:${escolhido.fonte}`,
+  };
+}
+
+function extrairPrecoPrincipalDaPagina(
+  html: string,
+  productId: string,
+): PrecoPaginaResultado | null {
+  return (
+    extrairPrecoMetaProduto(
+      html,
+    ) ??
+    extrairPrecoJsonLdProduto(
+      html,
+    ) ??
+    escolherPrecoSsrDoProduto(
+      html,
+      productId,
+    )
+  );
+}
+
+function extrairPrecoContextualPdpNpi(
+  rawUrl: string,
+): {
+  valor: number;
+  precoAnterior: number | null;
+  fonte: string;
+} | null {
+  try {
+    const url =
+      new URL(rawUrl);
+
+    const pdpNpi =
+      url.searchParams.get(
+        "pdp_npi",
+      );
+
+    if (!pdpNpi) {
+      return null;
+    }
+
+    /*
+     * Exemplo real:
+     * 6@dis!BRL!91.74!29.03!...
+     *
+     * Após BRL:
+     * - primeiro valor = preço anterior/de referência;
+     * - segundo valor = preço contextual de venda.
+     */
+    const partes =
+      pdpNpi.split("!");
+
+    const indiceBrl =
+      partes.findIndex(
+        (parte) =>
+          parte
+            .trim()
+            .toUpperCase() ===
+          "BRL",
+      );
+
+    if (indiceBrl < 0) {
+      return null;
+    }
+
+    const precoAnterior =
+      converterPrecoPagina(
+        partes[
+          indiceBrl + 1
+        ],
+      );
+
+    const valor =
+      converterPrecoPagina(
+        partes[
+          indiceBrl + 2
+        ],
+      );
+
+    if (
+      valor === null ||
+      valor <= 0
+    ) {
+      return null;
+    }
+
+    return {
+      valor:
+        Math.round(
+          valor * 100,
+        ) / 100,
+
+      precoAnterior:
+        precoAnterior !== null &&
+        precoAnterior > valor
+          ? Math.round(
+              precoAnterior * 100,
+            ) / 100
+          : null,
+
+      fonte:
+        "url:pdp_npi",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function prepararUrlPaginaBrasil(
+  rawUrl: string,
+  productId: string,
+): URL {
+  let url: URL;
+
+  try {
+    url =
+      new URL(rawUrl);
+  } catch {
+    url =
+      new URL(
+        `https://www.aliexpress.com/item/${productId}.html`,
+      );
+  }
+
+  const host =
+    url.hostname
+      .toLowerCase();
+
+  if (
+    !host.includes(
+      "aliexpress.",
+    )
+  ) {
+    url =
+      new URL(
+        `https://www.aliexpress.com/item/${productId}.html`,
+      );
+  }
+
+  /*
+   * Preservamos os parâmetros do link original, pois campanhas
+   * como SuperDeals podem depender deles. Apenas acrescentamos
+   * a adaptação para a experiência brasileira.
+   */
+  url.searchParams.set(
+    "gatewayAdapt",
+    "glo2bra",
+  );
+
+  return url;
+}
+
+async function buscarPrecoExibidoNaPagina(
+  productId: string,
+  finalUrl: string,
+): Promise<PrecoPaginaResultado | null> {
+  const urls = [
+    prepararUrlPaginaBrasil(
+      finalUrl,
+      productId,
+    ),
+    prepararUrlPaginaBrasil(
+      `https://www.aliexpress.com/item/${productId}.html`,
+      productId,
+    ),
+  ];
+
+  const urlsUnicas =
+    Array.from(
+      new Map(
+        urls.map(
+          (url) => [
+            url.toString(),
+            url,
+          ],
+        ),
+      ).values(),
+    );
+
+  for (
+    const url of urlsUnicas
+  ) {
+    try {
+      const response =
+        await fetch(
+          url.toString(),
+          {
+            method: "GET",
+
+            redirect:
+              "follow",
+
+            cache:
+              "no-store",
+
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151 Safari/537.36",
+
+              Accept:
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+
+              "Accept-Language":
+                "pt-BR,pt;q=0.9,en;q=0.8",
+
+              Cookie:
+                "aep_usuc_f=site=glo&c_tp=BRL&region=BR&b_locale=pt_BR; intl_locale=pt_BR",
+            },
+          },
+        );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const html =
+        await response.text();
+
+      if (
+        !html ||
+        html.length < 1000
+      ) {
+        continue;
+      }
+
+      const resultado =
+        extrairPrecoPrincipalDaPagina(
+          html,
+          productId,
+        );
+
+      if (
+        resultado &&
+        resultado.valor > 0
+      ) {
+        return resultado;
+      }
+    } catch {
+      // Tenta a próxima URL e, depois, a API oficial.
+    }
+  }
+
+  return null;
+}
+
 function criarHtmlVirtual(
   produto: ProdutoAliExpressApi,
   productId: string,
@@ -989,6 +1907,7 @@ export async function carregarPaginaAliExpress(
   url: string,
 ): Promise<PaginaAliExpress> {
   const requestedUrl =
+    limparUrl(url) ??
     url.trim();
 
   if (!requestedUrl) {
@@ -1005,10 +1924,92 @@ export async function carregarPaginaAliExpress(
       requestedUrl,
     );
 
-  const produto =
+  const produtoApi =
     await buscarProdutoApi(
       productId,
     );
+
+  /*
+   * O preço mostrado ao comprador pode ser menor que o preço
+   * genérico retornado pela Affiliate API (ex.: Welcome Deal /
+   * SuperDeals). Por isso tentamos ler primeiro o preço
+   * promocional publicado na própria página brasileira.
+   *
+   * Se a página não puder ser lida normalmente, mantemos
+   * integralmente o preço oficial da API.
+   */
+  const precoPagina =
+    await buscarPrecoExibidoNaPagina(
+      productId,
+      finalUrl,
+    );
+
+  /*
+   * Em vários acessos o HTML entregue ao servidor não contém
+   * o preço, embora o navegador mostre o valor normalmente.
+   *
+   * Quando isso acontece, o próprio link do AliExpress pode
+   * carregar o contexto de preço no parâmetro pdp_npi.
+   */
+  const precoContextualLink =
+    extrairPrecoContextualPdpNpi(
+      finalUrl,
+    ) ??
+    extrairPrecoContextualPdpNpi(
+      requestedUrl,
+    );
+
+  /*
+   * Ordem de prioridade:
+   *
+   * 1. preço principal validado no HTML da página;
+   * 2. preço contextual BRL do próprio link (pdp_npi);
+   * 3. Affiliate API como fallback.
+   */
+  const precoPrincipal =
+    precoPagina ??
+    precoContextualLink;
+
+  const produto:
+    ProdutoAliExpressApi =
+    precoPrincipal
+      ? {
+          ...produtoApi,
+
+          target_sale_price:
+            precoPrincipal.valor,
+
+          target_sale_price_currency:
+            "BRL",
+
+          target_original_price:
+            precoPrincipal
+              .precoAnterior ??
+            produtoApi
+              .target_original_price,
+
+          target_original_price_currency:
+            precoPrincipal
+              .precoAnterior !==
+            undefined &&
+            precoPrincipal
+              .precoAnterior !==
+            null
+              ? "BRL"
+              : produtoApi
+                  .target_original_price_currency,
+
+          /*
+           * Impede o campo de app da API de voltar a sobrescrever
+           * o preço contextual que acabamos de validar.
+           */
+          target_app_sale_price:
+            undefined,
+
+          target_app_sale_price_currency:
+            undefined,
+        }
+      : produtoApi;
 
   const promotionLink =
     limparUrl(
