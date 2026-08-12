@@ -654,3 +654,95 @@ export async function buscarGaleriaShopee(
     return [principal];
   }
 }
+
+export async function buscarOfertasShopeePorPalavraChave(
+  keywordRaw: string,
+  limitRaw = 50,
+): Promise<ShopeeAffiliateOffer[]> {
+  const keyword =
+    keywordRaw.trim();
+
+  if (!keyword) {
+    return [];
+  }
+
+  const limit =
+    Math.min(
+      Math.max(
+        Number.isFinite(limitRaw)
+          ? Math.trunc(limitRaw)
+          : 20,
+        1,
+      ),
+      50,
+    );
+
+  const keywordGraphql =
+    JSON.stringify(keyword);
+
+  const query = `{
+    productOfferV2(
+      keyword: ${keywordGraphql},
+      page: 1,
+      limit: ${limit}
+    ) {
+      nodes {
+        itemId
+        shopId
+        productName
+        shopName
+        price
+        priceMin
+        priceMax
+        imageUrl
+        productLink
+        offerLink
+        ratingStar
+        sales
+        priceDiscountRate
+        commissionRate
+        commission
+        appExistRate
+        appNewRate
+        webExistRate
+        webNewRate
+        periodStartTime
+        periodEndTime
+        productCatIds
+        shopType
+        sellerCommissionRate
+        shopeeCommissionRate
+      }
+
+      pageInfo {
+        page
+        limit
+        hasNextPage
+        scrollId
+      }
+    }
+  }`;
+
+  const resultado =
+    await executarGraphqlShopee<
+      ShopeeProductOfferResponse
+    >(query);
+
+  const erro =
+    mensagemErroGraphql(
+      resultado.errors,
+    );
+
+  if (erro) {
+    throw new Error(
+      `Erro na API da Shopee: ${erro}`,
+    );
+  }
+
+  return (
+    resultado.data
+      ?.productOfferV2
+      ?.nodes ?? []
+  );
+}
+

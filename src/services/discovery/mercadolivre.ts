@@ -1,4 +1,4 @@
-import { mercadoLivreFetch } from "@/lib/mercadolivre";
+﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
 import type {
   DiscoveryCandidate,
@@ -129,6 +129,8 @@ function normalizarTexto(
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/([a-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([a-z])/g, "$1 $2")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
@@ -167,6 +169,372 @@ function calcularRelevancia(
   );
 }
 
+
+const TERMOS_ACESSORIOS_GERAIS = [
+  "capa",
+  "capinha",
+  "case",
+  "pelicula",
+  "cabo",
+  "carregador",
+  "adaptador",
+  "suporte",
+  "protetor",
+  "borracha",
+  "anel de vedacao",
+  "pino",
+  "peso regulador",
+  "regulador",
+  "valvula",
+  "gaxeta",
+  "guarnicao",
+  "peca de reposicao",
+  "kit reparo",
+  "flex antena",
+];
+
+function contemExpressao(
+  textoNormalizado: string,
+  expressao: string,
+): boolean {
+  const texto =
+    ` ${textoNormalizado} `;
+
+  const termo =
+    ` ${normalizarTexto(expressao)} `;
+
+  return texto.includes(
+    termo,
+  );
+}
+
+function possuiAcessorioNaoSolicitado(
+  titulo: string,
+  consulta: string,
+): boolean {
+  const tituloNormalizado =
+    normalizarTexto(
+      titulo,
+    );
+
+  const consultaNormalizada =
+    normalizarTexto(
+      consulta,
+    );
+
+  return TERMOS_ACESSORIOS_GERAIS.some(
+    (termo) =>
+      contemExpressao(
+        tituloNormalizado,
+        termo,
+      ) &&
+      !contemExpressao(
+        consultaNormalizada,
+        termo,
+      ),
+  );
+}
+const FAMILIAS_VARIANTE_ESTRITA = [
+  "iphone",
+  "galaxy",
+  "redmi",
+  "poco",
+  "moto g",
+  "moto e",
+  "moto edge",
+  "macbook",
+  "ipad",
+];
+
+const QUALIFICADORES_MODELO = [
+  "pro max",
+  "pro",
+  "max",
+  "plus",
+  "mini",
+  "air",
+  "ultra",
+  "lite",
+  "fe",
+];
+
+function extrairQualificadoresModelo(
+  valor: string,
+): Set<string> {
+  const texto =
+    ` ${normalizarTexto(valor)} `;
+
+  const encontrados =
+    new Set<string>();
+
+  if (texto.includes(" pro max ")) {
+    encontrados.add("pro max");
+  } else {
+    if (texto.includes(" pro ")) {
+      encontrados.add("pro");
+    }
+
+    if (texto.includes(" max ")) {
+      encontrados.add("max");
+    }
+  }
+
+  for (const qualificador of QUALIFICADORES_MODELO) {
+    if (
+      qualificador === "pro max" ||
+      qualificador === "pro" ||
+      qualificador === "max"
+    ) {
+      continue;
+    }
+
+    if (texto.includes(` ${qualificador} `)) {
+      encontrados.add(qualificador);
+    }
+  }
+
+  return encontrados;
+}
+
+function conjuntosIguais(
+  primeiro: Set<string>,
+  segundo: Set<string>,
+): boolean {
+  if (primeiro.size !== segundo.size) {
+    return false;
+  }
+
+  for (const valor of primeiro) {
+    if (!segundo.has(valor)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+
+function extrairNumerosDeModelo(
+  valor: string,
+): Set<string> {
+  const tokens =
+    normalizarTexto(valor)
+      .split(" ");
+
+  const encontrados =
+    new Set<string>();
+
+  for (
+    let index = 0;
+    index < tokens.length;
+    index += 1
+  ) {
+    const token =
+      tokens[index];
+
+    if (
+      !token ||
+      !/^\d+$/.test(token)
+    ) {
+      continue;
+    }
+
+    const proximo =
+      tokens[index + 1];
+
+    /*
+     * Números de capacidade não representam
+     * o modelo do produto.
+     */
+    if (
+      proximo === "gb" ||
+      proximo === "tb"
+    ) {
+      continue;
+    }
+
+    encontrados.add(token);
+  }
+
+  return encontrados;
+}
+
+function modeloNumericoCompativel(
+  titulo: string,
+  consulta: string,
+): boolean {
+  const referencia =
+    extrairNumerosDeModelo(
+      consulta,
+    );
+
+  if (
+    referencia.size === 0
+  ) {
+    return true;
+  }
+
+  const candidato =
+    extrairNumerosDeModelo(
+      titulo,
+    );
+
+  for (
+    const numero of referencia
+  ) {
+    if (
+      !candidato.has(numero)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+function varianteCompativel(
+  titulo: string,
+  consulta: string,
+): boolean {
+  const consultaNormalizada =
+    normalizarTexto(consulta);
+
+  const familiaEstrita =
+    FAMILIAS_VARIANTE_ESTRITA.some(
+      (familia) =>
+        consultaNormalizada.includes(familia),
+    );
+
+  if (!familiaEstrita) {
+    return true;
+  }
+
+  return conjuntosIguais(
+    extrairQualificadoresModelo(consulta),
+    extrairQualificadoresModelo(titulo),
+  );
+}
+
+function extrairCapacidades(
+  valor: string,
+): Set<string> {
+  const encontrados =
+    new Set<string>();
+
+  const normalizado =
+    normalizarTexto(valor);
+
+  const regex =
+    /\b(\d+(?:[.,]\d+)?)\s*(gb|tb)\b/gi;
+
+  for (const match of normalizado.matchAll(regex)) {
+    const numero =
+      match[1]?.replace(",", ".");
+
+    const unidade =
+      match[2]?.toLowerCase();
+
+    if (numero && unidade) {
+      encontrados.add(
+        `${numero}${unidade}`,
+      );
+    }
+  }
+
+  return encontrados;
+}
+
+function obterMemoriaInterna(
+  produto: CatalogProduct,
+): string | null {
+  const atributo =
+    produto.attributes?.find(
+      (item) =>
+        item.id ===
+        "INTERNAL_MEMORY",
+    );
+
+  return (
+    atributo?.value_name?.trim() ||
+    null
+  );
+}
+
+function capacidadeCompativel(
+  produto: CatalogProduct,
+  titulo: string,
+  consulta: string,
+): boolean {
+  const referencia =
+    extrairCapacidades(
+      consulta,
+    );
+
+  if (
+    referencia.size === 0
+  ) {
+    return true;
+  }
+
+  /*
+   * Prioridade: atributo oficial do catálogo.
+   *
+   * Isso evita confundir:
+   * 256 GB de armazenamento
+   * com
+   * 8/12 GB de RAM escritos no título.
+   */
+  const memoriaInterna =
+    obterMemoriaInterna(
+      produto,
+    );
+
+  if (memoriaInterna) {
+    const capacidadesMemoria =
+      extrairCapacidades(
+        memoriaInterna,
+      );
+
+    if (
+      capacidadesMemoria.size === 0
+    ) {
+      return false;
+    }
+
+    return conjuntosIguais(
+      referencia,
+      capacidadesMemoria,
+    );
+  }
+
+  /*
+   * Fallback para produtos cujo catálogo
+   * não informe INTERNAL_MEMORY.
+   */
+  const candidato =
+    extrairCapacidades(
+      titulo,
+    );
+
+  if (
+    candidato.size === 0
+  ) {
+    return false;
+  }
+
+  for (
+    const capacidade of referencia
+  ) {
+    if (
+      !candidato.has(
+        capacidade,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
 function obterMarca(
   produto: CatalogProduct,
 ): string | null {
@@ -288,7 +656,7 @@ async function descobrirDominio(
     );
   } catch (error) {
     console.error(
-      "Falha ao descobrir domínio do Mercado Livre:",
+      "Falha ao descobrir domÃ­nio do Mercado Livre:",
       error,
     );
 
@@ -337,6 +705,43 @@ async function carregarCandidato(
       return null;
     }
 
+    if (
+      possuiAcessorioNaoSolicitado(
+        titulo,
+        query,
+      )
+    ) {
+      return null;
+    }
+
+    if (
+      !varianteCompativel(
+        titulo,
+        query,
+      )
+    ) {
+      return null;
+    }
+
+    if (
+      !modeloNumericoCompativel(
+        titulo,
+        query,
+      )
+    ) {
+      return null;
+    }
+
+    if (
+      !capacidadeCompativel(
+        produto,
+        titulo,
+        query,
+      )
+    ) {
+      return null;
+    }
+
     let ofertas:
       CatalogItemsResponse;
 
@@ -347,16 +752,16 @@ async function carregarCandidato(
         )) as CatalogItemsResponse;
     } catch (error) {
       /*
-       * Alguns produtos ativos de catálogo não possuem
-       * publicações disponíveis naquele momento.
+       * Alguns produtos ativos de catÃ¡logo nÃ£o possuem
+       * publicaÃ§Ãµes disponÃ­veis naquele momento.
        *
        * Nesse caso o Mercado Livre pode responder
        * 404 "No winners found".
        *
-       * Isso não deve interromper a descoberta inteira.
+       * Isso nÃ£o deve interromper a descoberta inteira.
        */
       console.warn(
-        `Produto ${productId} sem ofertas disponíveis:`,
+        `Produto ${productId} sem ofertas disponÃ­veis:`,
         error instanceof Error
           ? error.message
           : error,
@@ -399,15 +804,15 @@ async function carregarCandidato(
           "Mercado Livre",
 
         /*
-         * O candidato representa o produto de catálogo.
-         * A oferta escolhida fornece o menor preço válido.
+         * O candidato representa o produto de catÃ¡logo.
+         * A oferta escolhida fornece o menor preÃ§o vÃ¡lido.
          */
         externalId:
           productId,
 
         /*
-         * Não dependemos de GET /items/{ITEM_ID},
-         * pois anúncios de terceiros podem retornar 403
+         * NÃ£o dependemos de GET /items/{ITEM_ID},
+         * pois anÃºncios de terceiros podem retornar 403
          * com o token atual.
          */
         sourceUrl:
@@ -417,7 +822,7 @@ async function carregarCandidato(
           ),
 
         /*
-         * Link afiliado individual será resolvido
+         * Link afiliado individual serÃ¡ resolvido
          * posteriormente pelo fluxo de afiliados.
          */
         affiliateLink:
@@ -505,13 +910,13 @@ export async function buscarMercadoLivre(
 
   try {
     /*
-     * Primeiro descobrimos o domínio correto.
+     * Primeiro descobrimos o domÃ­nio correto.
      *
      * Exemplo:
      * "iPhone 15" -> MLB-CELLPHONES
      *
-     * Isso evita retornar capas e acessórios
-     * quando o usuário procura pelo aparelho.
+     * Isso evita retornar capas e acessÃ³rios
+     * quando o usuÃ¡rio procura pelo aparelho.
      */
     const domainId =
       await descobrirDominio(
@@ -607,7 +1012,7 @@ export async function buscarMercadoLivre(
       0;
 
     /*
-     * Pequenos lotes para não bombardear
+     * Pequenos lotes para nÃ£o bombardear
      * a API do Mercado Livre.
      */
     for (
@@ -732,3 +1137,6 @@ export async function buscarMercadoLivre(
     };
   }
 }
+
+
+

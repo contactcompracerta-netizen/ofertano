@@ -1,4 +1,5 @@
-import { buscarMercadoLivre } from "../mercadolivre";
+﻿import { buscarMercadoLivre } from "../mercadolivre";
+import { buscarShopee } from "../shopee";
 
 import type {
   DiscoveryAdapter,
@@ -27,8 +28,8 @@ const discoveryAdapters:
   SHOPEE: {
     marketplace: "SHOPEE",
     marketplaceName: "Shopee",
-    enabled: false,
-    searcher: null,
+    enabled: true,
+    searcher: buscarShopee,
   },
 
   MAGAZINE_LUIZA: {
