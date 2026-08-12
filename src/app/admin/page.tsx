@@ -4,40 +4,32 @@ import Link from "next/link";
 import { useState } from "react";
 
 export default function AdminPage() {
-  const [url, setUrl] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function importarProduto() {
     if (!url.trim()) {
-      alert(
-        "Cole o link de um produto.",
-      );
+      alert("Cole o link de um produto.");
       return;
     }
 
     try {
       setLoading(true);
 
-      const response =
-        await fetch(
-          "/api/import-product/v2",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              url: url.trim(),
-            }),
+      const response = await fetch(
+        "/api/import-product/v2",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-        );
+          body: JSON.stringify({
+            url: url.trim(),
+          }),
+        },
+      );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         alert(
@@ -83,7 +75,8 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Gerencie oportunidades, descoberta e publicação de produtos.
+              Gerencie oportunidades, descoberta
+              e publicação de produtos.
             </p>
 
             <Link
@@ -104,7 +97,8 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Resolva em lote os links dos produtos que o robô importou automaticamente.
+              Resolva em lote os links dos produtos
+              que o robô importou automaticamente.
             </p>
 
             <Link
@@ -112,6 +106,46 @@ export default function AdminPage() {
               className="mt-5 block w-full rounded-xl bg-emerald-600 px-5 py-4 text-center font-bold text-white transition hover:bg-emerald-700"
             >
               Resolver links pendentes
+            </Link>
+          </div>
+
+          <div className="rounded-2xl border border-sky-200 bg-white p-6 shadow md:p-8">
+            <div className="inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-sky-800">
+              Sistema
+            </div>
+
+            <h2 className="mt-3 text-xl font-bold text-gray-900">
+              Central de Integrações
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              Acompanhe conexões, credenciais,
+              ofertas e status dos marketplaces.
+            </p>
+
+            <Link
+              href="/admin/integracoes"
+              className="mt-5 block w-full rounded-xl bg-sky-600 px-5 py-4 text-center font-bold text-white transition hover:bg-sky-700"
+            >
+              Abrir Integrações
+            </Link>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow md:p-8">
+            <h2 className="text-xl font-bold text-gray-900">
+              Fila de importação
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              Acompanhe os produtos enviados para
+              processamento automático.
+            </p>
+
+            <Link
+              href="/admin/fila"
+              className="mt-5 block w-full rounded-xl border border-slate-300 bg-white px-5 py-4 text-center font-bold text-slate-900 transition hover:bg-slate-50"
+            >
+              Abrir Fila
             </Link>
           </div>
         </div>
@@ -122,7 +156,8 @@ export default function AdminPage() {
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-gray-600">
-            Cole o link de um produto para importá-lo manualmente.
+            Cole o link de um produto para
+            importá-lo manualmente.
           </p>
 
           <label
@@ -137,9 +172,7 @@ export default function AdminPage() {
             type="url"
             value={url}
             onChange={(event) =>
-              setUrl(
-                event.target.value,
-              )
+              setUrl(event.target.value)
             }
             placeholder="Cole aqui o link do produto..."
             className="w-full rounded-lg border border-gray-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10"
@@ -147,9 +180,7 @@ export default function AdminPage() {
 
           <button
             type="button"
-            onClick={
-              importarProduto
-            }
+            onClick={importarProduto}
             disabled={loading}
             className="mt-6 w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
