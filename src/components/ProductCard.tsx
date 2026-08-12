@@ -132,7 +132,10 @@ export default function ProductCard({ produto }: ProductCardProps) {
 
             {possuiVendas && (
               <span className="font-medium text-slate-500">
-                {formatarQuantidade(produto.sales!)} vendidos
+                {formatarQuantidade(produto.sales!)}{" "}
+                {produto.store.trim().toLowerCase() === "aliexpress"
+                  ? "vendas recentes"
+                  : "vendidos"}
               </span>
             )}
           </div>

@@ -1149,7 +1149,10 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
                     {possuiVendas && (
                       <span className="rounded-md bg-slate-100 px-2 py-1 font-semibold text-slate-600">
-                        {formatarQuantidade(produto.sales!)} vendidos
+                        {formatarQuantidade(produto.sales!)}{" "}
+                        {marketplacePrincipal === "AliExpress"
+                          ? "vendas recentes"
+                          : "vendidos"}
                       </span>
                     )}
 
@@ -1190,7 +1193,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   )}
 
                   <p className="mt-1.5 text-[11px] leading-4 text-slate-500 sm:text-xs">
-                    Preço e condições podem mudar na loja parceira.
+                    {marketplacePrincipal === "AliExpress"
+                      ? "Preço público consultado no AliExpress. Promoções personalizadas, de novo usuário ou exclusivas do app podem apresentar outro valor."
+                      : "Preço e condições podem mudar na loja parceira."}
                   </p>
                 </div>
 
