@@ -1,5 +1,6 @@
 ﻿import { buscarAliExpress } from "../aliexpress";
 import { buscarAmazon } from "../amazon";
+import { buscarMagazineLuiza } from "../magazineluiza";
 import { buscarMercadoLivre } from "../mercadolivre";
 import { buscarShopee } from "../shopee";
 
@@ -36,8 +37,8 @@ const discoveryAdapters: Record<
   MAGAZINE_LUIZA: {
     marketplace: "MAGAZINE_LUIZA",
     marketplaceName: "Magazine Luiza",
-    enabled: false,
-    searcher: null,
+    enabled: true,
+    searcher: buscarMagazineLuiza,
   },
 
   ALIEXPRESS: {
