@@ -246,6 +246,137 @@ function possuiBundleNaoSolicitado(
   );
 }
 
+
+const TERMOS_CONDICAO_NAO_NOVA = new Set([
+  "usado",
+  "usada",
+  "usados",
+  "usadas",
+  "seminovo",
+  "seminova",
+  "seminovos",
+  "seminovas",
+  "recondicionado",
+  "recondicionada",
+  "recondicionados",
+  "recondicionadas",
+  "refurbished",
+  "renewed",
+]);
+
+const FAMILIAS_VARIANTE_ESTRITA = new Set([
+  "galaxy",
+  "iphone",
+  "redmi",
+  "poco",
+  "pixel",
+  "moto",
+  "macbook",
+  "ipad",
+  "echo",
+]);
+
+const QUALIFICADORES_MODELO = new Set([
+  "fe",
+  "ultra",
+  "plus",
+  "pro",
+  "max",
+  "mini",
+  "air",
+  "lite",
+]);
+
+function possuiCondicaoNaoNova(
+  title: string,
+): boolean {
+  const tokens = new Set(
+    normalizarTexto(title)
+      .replace(/\+/g, " plus ")
+      .split(" ")
+      .filter(Boolean),
+  );
+
+  const texto =
+    normalizarTexto(title);
+
+  if (texto.includes("open box")) {
+    return true;
+  }
+
+  return Array.from(
+    TERMOS_CONDICAO_NAO_NOVA,
+  ).some(
+    (termo) =>
+      tokens.has(termo),
+  );
+}
+
+function extrairQualificadoresModelo(
+  value: string,
+): Set<string> {
+  const tokens = new Set(
+    normalizarTexto(value)
+      .replace(/\+/g, " plus ")
+      .split(" ")
+      .filter(Boolean),
+  );
+
+  return new Set(
+    Array.from(
+      QUALIFICADORES_MODELO,
+    ).filter(
+      (qualificador) =>
+        tokens.has(qualificador),
+    ),
+  );
+}
+
+function conjuntosIguais(
+  primeiro: Set<string>,
+  segundo: Set<string>,
+): boolean {
+  if (
+    primeiro.size !==
+    segundo.size
+  ) {
+    return false;
+  }
+
+  for (const valor of primeiro) {
+    if (!segundo.has(valor)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function varianteModeloCompativel(
+  query: string,
+  title: string,
+): boolean {
+  const queryTokens =
+    tokenizar(query);
+
+  const familiaEstrita =
+    queryTokens.some(
+      (token) =>
+        FAMILIAS_VARIANTE_ESTRITA.has(
+          token,
+        ),
+    );
+
+  if (!familiaEstrita) {
+    return true;
+  }
+
+  return conjuntosIguais(
+    extrairQualificadoresModelo(query),
+    extrairQualificadoresModelo(title),
+  );
+}
+
 function tituloCompativel(
   query: string,
   title: string,
@@ -281,6 +412,24 @@ function tituloCompativel(
   ) {
     return false;
   }
+
+  if (
+    possuiCondicaoNaoNova(
+      title,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !varianteModeloCompativel(
+      query,
+      title,
+    )
+  ) {
+    return false;
+  }
+
 
   const queryCapacities =
     extrairCapacidades(query);
