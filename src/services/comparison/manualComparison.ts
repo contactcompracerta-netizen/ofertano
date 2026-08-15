@@ -1853,26 +1853,40 @@ export async function buscarComparacaoManual(
     let varianteInsegura:
       string | null = null;
 
-    for (
-      const chave
-      of variantesCriticas
-    ) {
-      const originalValor =
-        identidadeOriginal
-          .variants[chave];
-
-      const candidataValor =
-        identidadeCandidata
-          .variants[chave];
-
-      if (
-        Boolean(originalValor) !==
-        Boolean(candidataValor)
+    /*
+     * O matcher específico de móveis já valida
+     * marca, linha/modelo, portas, gavetas e
+     * divergência de cor quando ambos os lados
+     * informam a cor.
+     *
+     * Portanto, ausência de uma variante em uma
+     * das lojas não deve impedir o móvel de chegar
+     * ao matcher específico.
+     *
+     * Eletrônicos continuam com a proteção rígida.
+     */
+    if (!ehProdutoMovel(original.title)) {
+      for (
+        const chave
+        of variantesCriticas
       ) {
-        varianteInsegura =
-          `Variante ${chave} insuficiente para confirmação automática.`;
+        const originalValor =
+          identidadeOriginal
+            .variants[chave];
 
-        break;
+        const candidataValor =
+          identidadeCandidata
+            .variants[chave];
+
+        if (
+          Boolean(originalValor) !==
+          Boolean(candidataValor)
+        ) {
+          varianteInsegura =
+            `Variante ${chave} insuficiente para confirmação automática.`;
+
+          break;
+        }
       }
     }
 
@@ -2043,5 +2057,6 @@ export async function buscarComparacaoManual(
     errors,
   };
 }
+
 
 
