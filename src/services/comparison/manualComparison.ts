@@ -1160,123 +1160,414 @@ export async function buscarComparacaoManual(
   original: ProductImport,
   targetProductId: string,
 ): Promise<ManualComparisonSummary> {
-  const query = criarTermoBusca(original);
+  /*
+   * O produto importado manualmente é a referência.
+   *
+   * A descoberta das outras lojas usa o mesmo
+   * Marketplace Discovery da busca pública.
+   *
+   * Antes de anexar qualquer oferta ao Product
+   * principal, mantemos uma validação estrita de
+   * identidade e variante.
+   */
+  const query =
+    criarTermoBusca(original);
 
-  const searchedMarketplaces: string[] = [];
-  const errors: string[] = [];
-  const offers: ManualComparisonSummary["offers"] = [];
-  const rejections: ManualComparisonSummary["rejections"] = [];
+  const {
+    descobrirProdutos,
+  } = await import(
+    "@/services/discovery"
+  );
 
-  let scanned = 0;
+  const resultado =
+    await descobrirProdutos(
+      query,
+      5,
+    );
+
+  const marketplacesDisponiveis = [
+    "Mercado Livre",
+    "Amazon",
+    "Shopee",
+    "Magazine Luiza",
+    "AliExpress",
+  ];
+
+  const searchedMarketplaces =
+    marketplacesDisponiveis.filter(
+      (marketplace) =>
+        marketplace !==
+        original.marketplace,
+    );
+
+  const pendingMarketplaces:
+    string[] = [];
+
+  const errors =
+    resultado.marketplaces
+      .filter(
+        (marketplace) =>
+          Boolean(
+            marketplace.error,
+          ),
+      )
+      .map(
+        (marketplace) =>
+          `${marketplace.marketplace}: ${marketplace.error}`,
+      );
+
+  const offers:
+    ManualComparisonSummary["offers"] =
+      [];
+
+  const rejections:
+    ManualComparisonSummary["rejections"] =
+      [];
+
+  const marketplacesEncontrados =
+    new Set<string>();
+
   let importedCandidates = 0;
   let rejectedCandidates = 0;
 
-  if (original.marketplace !== "Mercado Livre") {
-    searchedMarketplaces.push("Mercado Livre");
+  const scanned =
+    resultado.marketplaces.reduce(
+      (total, marketplace) =>
+        total +
+        marketplace.scanned,
+      0,
+    );
 
-    try {
-      const results = await pesquisarCatalogoMercadoLivre(original);
+  /*
+   * Processamos primeiro as ofertas de menor preço.
+   *
+   * Como o schema mantém uma oferta por
+   * marketplace/Product, a primeira oferta EXACT
+   * de cada loja será a mais barata encontrada.
+   */
+  const candidatos =
+    [...resultado.candidates].sort(
+      (primeiro, segundo) =>
+        (
+          primeiro.price ??
+          Number.POSITIVE_INFINITY
+        ) -
+        (
+          segundo.price ??
+          Number.POSITIVE_INFINITY
+        ),
+    );
 
-      scanned += results.length;
+  const identidadeOriginal =
+    extrairIdentidade(
+      original,
+    );
 
-      for (const result of results) {
-        const catalogId =
-          typeof result.id === "string"
-            ? result.id.trim()
-            : "";
+  for (const candidato of candidatos) {
+    if (
+      candidato.marketplaceName ===
+      original.marketplace
+    ) {
+      /*
+       * A oferta original já foi salva pela rota.
+       * Não permitimos que o Discovery substitua
+       * o link manual/afiliado informado.
+       */
+      continue;
+    }
 
-        if (!catalogId) {
-          continue;
-        }
+    if (
+      marketplacesEncontrados.has(
+        candidato.marketplaceName,
+      )
+    ) {
+      continue;
+    }
 
-        const catalogUrl =
-          `https://www.mercadolivre.com.br/p/${catalogId}`;
+    if (
+      candidato.status !== "FOUND" ||
+      candidato.price === null ||
+      !Number.isFinite(
+        candidato.price,
+      ) ||
+      candidato.price <= 0
+    ) {
+      continue;
+    }
 
-        let candidate: ProductImport;
+    const image =
+      candidato.image?.trim();
 
-        try {
-          candidate = await importarMercadoLivre(catalogUrl);
-          importedCandidates += 1;
-        } catch (error) {
-          errors.push(
-            error instanceof Error
-              ? `Mercado Livre ${catalogId}: ${error.message}`
-              : `Mercado Livre ${catalogId}: erro ao importar candidato.`,
-          );
+    if (!image) {
+      continue;
+    }
 
-          continue;
-        }
+    importedCandidates += 1;
 
-        const match = compararProdutoEstritamente(
-          original,
-          candidate,
-        );
+    const oldPrice =
+      candidato.oldPrice !== null &&
+      Number.isFinite(
+        candidato.oldPrice,
+      ) &&
+      candidato.oldPrice >
+        candidato.price
+        ? candidato.oldPrice
+        : null;
 
-        if (!match.exact) {
-          rejectedCandidates += 1;
+    const candidateProduct:
+      ProductImport = {
+      marketplace:
+        candidato.marketplaceName,
 
-          rejections.push({
-            marketplace: "Mercado Livre",
-            catalogId,
-            name: candidate.title,
-            reason: match.reason,
-          });
+      externalId:
+        candidato.externalId.trim(),
 
-          continue;
-        }
+      url:
+        candidato.sourceUrl.trim(),
 
-        const saved = await saveProduct(
-          candidate,
-          candidate.affiliateLink ?? null,
-          {
-            targetProductId,
-            discoverySource: "ON_DEMAND_SEARCH",
-            sourceQuery: query,
-            autoCreated: false,
-          },
-        );
+      affiliateLink:
+        candidato.affiliateLink
+          ?.trim() ||
+        null,
 
-        if (saved.id !== targetProductId) {
-          errors.push(
-            "O Mercado Livre encontrado já pertence a outro produto do Ofertano. " +
-              "A associação automática foi cancelada.",
-          );
+      title:
+        candidato.title.trim(),
 
-          continue;
-        }
+      description:
+        null,
 
-        await prisma.marketplaceOffer.updateMany({
-          where: {
-            productId: targetProductId,
-            marketplace: "MERCADO_LIVRE",
-            externalId: candidate.externalId,
-          },
-          data: {
-            matchStatus: "EXACT",
-          },
-        });
+      brand:
+        candidato.brand?.trim() ||
+        null,
 
-        offers.push({
-          marketplace: "Mercado Livre",
-          externalId: candidate.externalId,
-          productId: targetProductId,
-          name: candidate.title,
-          price: candidate.price,
-          affiliateLink: candidate.affiliateLink ?? null,
-          reason: match.reason,
-        });
+      category:
+        candidato.category?.trim() ||
+        null,
 
-        /*
-         * O schema atual mantém uma oferta por marketplace/produto.
-         * Portanto, paramos após encontrar a primeira oferta EXACT.
-         */
+      image,
+
+      images: [
+        image,
+      ],
+
+      price:
+        candidato.price,
+
+      oldPrice,
+
+      discount:
+        oldPrice
+          ? Math.round(
+              (
+                (
+                  oldPrice -
+                  candidato.price
+                ) /
+                oldPrice
+              ) *
+                100,
+            )
+          : null,
+
+      installments:
+        null,
+
+      rating:
+        null,
+
+      reviews:
+        null,
+
+      sales:
+        null,
+
+      stock:
+        null,
+
+      seller:
+        candidato.seller?.trim() ||
+        null,
+
+      attributes:
+        {},
+    };
+
+    const identidadeCandidata =
+      extrairIdentidade(
+        candidateProduct,
+      );
+
+    /*
+     * Para variantes críticas, ausência de
+     * informação de apenas um lado também impede
+     * agrupamento automático.
+     *
+     * Exemplo:
+     * - iPhone Azul não pode receber oferta sem cor;
+     * - 128 GB não pode receber oferta sem capacidade;
+     * - eletrodoméstico 127V não pode receber 220V
+     *   ou tensão desconhecida.
+     */
+    const variantesCriticas = [
+      "color",
+      "storage",
+      "voltage",
+      "size",
+    ] as const;
+
+    let varianteInsegura:
+      string | null = null;
+
+    for (
+      const chave
+      of variantesCriticas
+    ) {
+      const originalValor =
+        identidadeOriginal
+          .variants[chave];
+
+      const candidataValor =
+        identidadeCandidata
+          .variants[chave];
+
+      if (
+        Boolean(originalValor) !==
+        Boolean(candidataValor)
+      ) {
+        varianteInsegura =
+          `Variante ${chave} insuficiente para confirmação automática.`;
+
         break;
       }
+    }
+
+    if (varianteInsegura) {
+      rejectedCandidates += 1;
+
+      rejections.push({
+        marketplace:
+          candidato.marketplaceName,
+
+        catalogId:
+          candidato.externalId,
+
+        name:
+          candidato.title,
+
+        reason:
+          varianteInsegura,
+      });
+
+      continue;
+    }
+
+    const match =
+      compararProdutoEstritamente(
+        original,
+        candidateProduct,
+      );
+
+    if (!match.exact) {
+      rejectedCandidates += 1;
+
+      rejections.push({
+        marketplace:
+          candidato.marketplaceName,
+
+        catalogId:
+          candidato.externalId,
+
+        name:
+          candidato.title,
+
+        reason:
+          match.reason,
+      });
+
+      continue;
+    }
+
+    try {
+      const saved =
+        await saveProduct(
+          candidateProduct,
+          candidateProduct
+            .affiliateLink ??
+            null,
+          {
+            targetProductId,
+            discoverySource:
+              "ON_DEMAND_SEARCH",
+            sourceQuery:
+              query,
+            autoCreated:
+              false,
+          },
+        );
+
+      if (
+        saved.id !==
+        targetProductId
+      ) {
+        errors.push(
+          `${candidato.marketplaceName}: a oferta pertence a outro Product do Ofertano.`,
+        );
+
+        continue;
+      }
+
+      await prisma
+        .marketplaceOffer
+        .updateMany({
+          where: {
+            productId:
+              targetProductId,
+
+            marketplace:
+              candidato.marketplace,
+
+            externalId:
+              candidato.externalId,
+          },
+
+          data: {
+            matchStatus:
+              "EXACT",
+          },
+        });
+
+      marketplacesEncontrados.add(
+        candidato.marketplaceName,
+      );
+
+      offers.push({
+        marketplace:
+          candidato.marketplaceName,
+
+        externalId:
+          candidato.externalId,
+
+        productId:
+          targetProductId,
+
+        name:
+          candidato.title,
+
+        price:
+          candidato.price,
+
+        affiliateLink:
+          candidato.affiliateLink ??
+          null,
+
+        reason:
+          match.reason,
+      });
     } catch (error) {
       errors.push(
         error instanceof Error
-          ? `Mercado Livre: ${error.message}`
-          : "Mercado Livre: erro durante a busca.",
+          ? `${candidato.marketplaceName}: ${error.message}`
+          : `${candidato.marketplaceName}: erro ao salvar oferta.`,
       );
     }
   }
@@ -1284,25 +1575,24 @@ export async function buscarComparacaoManual(
   try {
     await prisma.product.update({
       where: {
-        id: targetProductId,
+        id:
+          targetProductId,
       },
+
       data: {
-        sourceQuery: query,
-        lastSearchedAt: new Date(),
+        sourceQuery:
+          query,
+
+        lastSearchedAt:
+          new Date(),
       },
     });
   } catch (error) {
     console.error(
-      "Erro ao registrar busca manual:",
+      "Erro ao registrar comparação manual:",
       error,
     );
   }
-
-  const pendingMarketplaces = MARKETPLACES.filter(
-    (marketplace) =>
-      marketplace !== original.marketplace &&
-      !searchedMarketplaces.includes(marketplace),
-  );
 
   return {
     query,
@@ -1311,7 +1601,8 @@ export async function buscarComparacaoManual(
     scanned,
     importedCandidates,
     rejectedCandidates,
-    found: offers.length,
+    found:
+      offers.length,
     offers,
     rejections,
     errors,
