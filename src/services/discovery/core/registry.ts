@@ -1,4 +1,5 @@
-﻿import { buscarAmazon } from "../amazon";
+﻿import { buscarAliExpress } from "../aliexpress";
+import { buscarAmazon } from "../amazon";
 import { buscarMercadoLivre } from "../mercadolivre";
 import { buscarShopee } from "../shopee";
 
@@ -42,19 +43,23 @@ const discoveryAdapters: Record<
   ALIEXPRESS: {
     marketplace: "ALIEXPRESS",
     marketplaceName: "AliExpress",
-    enabled: false,
-    searcher: null,
+    enabled: true,
+    searcher: buscarAliExpress,
   },
 };
 
 export function obterDiscoveryAdapter(
   marketplace: DiscoveryMarketplace,
 ): DiscoveryAdapter {
-  return discoveryAdapters[marketplace];
+  return discoveryAdapters[
+    marketplace
+  ];
 }
 
 export function listarDiscoveryAdapters(): DiscoveryAdapter[] {
-  return Object.values(discoveryAdapters);
+  return Object.values(
+    discoveryAdapters,
+  );
 }
 
 export function listarDiscoveryAdaptersAtivos(): DiscoveryAdapter[] {
@@ -68,7 +73,10 @@ export function listarDiscoveryAdaptersAtivos(): DiscoveryAdapter[] {
 export function marketplacePossuiBuscaAutomatica(
   marketplace: DiscoveryMarketplace,
 ): boolean {
-  const adapter = discoveryAdapters[marketplace];
+  const adapter =
+    discoveryAdapters[
+      marketplace
+    ];
 
   return (
     adapter.enabled &&
