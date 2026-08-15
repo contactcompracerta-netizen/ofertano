@@ -587,60 +587,148 @@ function criarUrlCatalogo(
   return `https://www.mercadolivre.com.br/p/${productId}`;
 }
 
-function escolherOferta(
-  ofertas: CatalogOffer[],
-): CatalogOffer | null {
-  const validas =
-    ofertas.filter(
-      (oferta) => {
-        if (
-          typeof oferta.item_id !==
-            "string" ||
-          !oferta.item_id.trim()
-        ) {
-          return false;
-        }
+const reputacaoVendedorCache =
+  new Map<
+    number,
+    Promise<boolean>
+  >();
 
-        if (
-          typeof oferta.price !==
-            "number" ||
-          !Number.isFinite(
-            oferta.price,
-          ) ||
-          oferta.price <= 0
-        ) {
-          return false;
-        }
-
-        if (
-          oferta.currency_id &&
-          oferta.currency_id !== "BRL"
-        ) {
-          return false;
-        }
-
-        if (
-          oferta.condition &&
-          oferta.condition !== "new"
-        ) {
-          return false;
-        }
-
-        return true;
-      },
+async function vendedorElegivelAfiliados(
+  sellerId: number,
+): Promise<boolean> {
+  const existente =
+    reputacaoVendedorCache.get(
+      sellerId,
     );
 
-  if (validas.length === 0) {
-    return null;
+  if (existente) {
+    return existente;
   }
 
-  return [...validas].sort(
-    (a, b) =>
-      (a.price ??
-        Number.POSITIVE_INFINITY) -
-      (b.price ??
-        Number.POSITIVE_INFINITY),
-  )[0];
+  const consulta =
+    (async () => {
+      try {
+        const usuario =
+          (await mercadoLivreFetch(
+            `/users/${sellerId}?attributes=seller_reputation`,
+          )) as {
+            seller_reputation?: {
+              level_id?: string | null;
+            };
+          };
+
+        const nivel =
+          usuario.seller_reputation
+            ?.level_id
+            ?.trim();
+
+        return (
+          nivel === "5_green" ||
+          nivel === "4_light_green"
+        );
+      } catch {
+        /*
+         * Se nao conseguimos comprovar
+         * reputacao verde, nao usamos
+         * a oferta no fluxo de afiliados.
+         */
+        return false;
+      }
+    })();
+
+  reputacaoVendedorCache.set(
+    sellerId,
+    consulta,
+  );
+
+  return consulta;
+}
+
+async function escolherOferta(
+  ofertas: CatalogOffer[],
+): Promise<CatalogOffer | null> {
+  const validas =
+    ofertas
+      .filter(
+        (oferta) => {
+          if (
+            typeof oferta.item_id !==
+              "string" ||
+            !oferta.item_id.trim()
+          ) {
+            return false;
+          }
+
+          if (
+            typeof oferta.price !==
+              "number" ||
+            !Number.isFinite(
+              oferta.price,
+            ) ||
+            oferta.price <= 0
+          ) {
+            return false;
+          }
+
+          if (
+            oferta.currency_id &&
+            oferta.currency_id !== "BRL"
+          ) {
+            return false;
+          }
+
+          if (
+            oferta.condition &&
+            oferta.condition !== "new"
+          ) {
+            return false;
+          }
+
+          if (
+            typeof oferta.seller_id !==
+              "number" ||
+            !Number.isFinite(
+              oferta.seller_id,
+            )
+          ) {
+            return false;
+          }
+
+          return true;
+        },
+      )
+      .sort(
+        (a, b) =>
+          (a.price ??
+            Number.POSITIVE_INFINITY) -
+          (b.price ??
+            Number.POSITIVE_INFINITY),
+      );
+
+  /*
+   * Percorremos do menor para o maior preco.
+   *
+   * Assim que encontramos o primeiro vendedor
+   * com reputacao verde, essa ja e a oferta
+   * elegivel mais barata.
+   */
+  for (const oferta of validas) {
+    const sellerId =
+      oferta.seller_id!;
+
+    if (
+      await vendedorElegivelAfiliados(
+        sellerId,
+      )
+    ) {
+      return oferta;
+    }
+  }
+
+  /*
+   * Nenhuma oferta elegivel para afiliados.
+   */
+  return null;
 }
 
 async function descobrirDominio(
@@ -777,7 +865,7 @@ async function carregarCandidato(
     }
 
     const oferta =
-      escolherOferta(
+      await escolherOferta(
         ofertas.results ?? [],
       );
 

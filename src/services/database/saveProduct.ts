@@ -734,6 +734,29 @@ function normalizarMarcaCanonical(
   }
 
   /*
+   * Valores genéricos enviados por alguns feeds
+   * não representam uma marca real.
+   *
+   * Nesses casos permitimos que a marca seja
+   * inferida posteriormente pelo título.
+   */
+  const marcasInvalidas = new Set([
+    "NAO DEFINIDO",
+    "NAO INFORMADO",
+    "SEM MARCA",
+    "GENERICO",
+    "GENERICA",
+    "UNKNOWN",
+    "NOT DEFINED",
+    "N A",
+    "N/A",
+  ]);
+
+  if (marcasInvalidas.has(marca)) {
+    return null;
+  }
+
+  /*
    * Alguns marketplaces retornam a linha/família
    * junto com a marca.
    *
@@ -1526,6 +1549,23 @@ function calcularCompatibilidadeExata(
     }
   }
 
+  /*
+   * Cor é uma variante forte.
+   *
+   * Se apenas um dos lados informa a cor,
+   * não assumimos que sejam a mesma variante.
+   *
+   * Isso evita, por exemplo, que um iPhone sem
+   * cor identificada contamine posteriormente
+   * um Product Azul, Preto ou Rosa.
+   */
+  if (
+    Boolean(identificadores.color) !==
+    Boolean(existente.color)
+  ) {
+    return null;
+  }
+
   if (
     identificadores.color &&
     existente.color &&
@@ -1955,7 +1995,9 @@ export async function saveProduct(
    * -> brand = Samsung
    */
   const marcaEfetiva =
-    product.brand?.trim() ||
+    normalizarMarcaCanonical(
+      product.brand,
+    ) ||
     inferirMarcaDoTitulo(
       product.title,
     );
@@ -2275,14 +2317,30 @@ export async function saveProduct(
       const atualizarDadosPrincipais =
         mesmaOferta || saved.autoCreated;
 
+      /*
+       * Uma identidade canônica já estabelecida deve
+       * permanecer estável.
+       *
+       * Ofertas posteriores podem trazer menos dados
+       * ou atributos que não representam uma variante
+       * real do produto, como tamanho de tela.
+       *
+       * Portanto:
+       * - Product sem canonicalKey pode receber uma;
+       * - Product com canonicalKey mantém a original.
+       */
       const canonicalKeyPermitida =
-        !canonicalKey
-          ? saved.canonicalKey
-          : !produtoPeloCanonicalKey ||
-              produtoPeloCanonicalKey.id ===
-                saved.id
+        saved.canonicalKey ??
+        (
+          canonicalKey &&
+          (
+            !produtoPeloCanonicalKey ||
+            produtoPeloCanonicalKey.id ===
+              saved.id
+          )
             ? canonicalKey
-            : saved.canonicalKey;
+            : null
+        );
 
       saved = await tx.product.update({
         where: {
@@ -2620,4 +2678,5 @@ export async function saveProduct(
     );
   });
 }
+
 

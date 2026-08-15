@@ -1,4 +1,4 @@
-import { saveProduct } from "@/services/database/saveProduct";
+﻿import { saveProduct } from "@/services/database/saveProduct";
 
 import type {
   ProductImport,
@@ -19,6 +19,91 @@ const PRIORIDADE_MARKETPLACE: Record<
   SHOPEE: 3,
   ALIEXPRESS: 4,
 };
+
+const TERMOS_ACESSORIOS = [
+  "capa",
+  "capinha",
+  "case",
+  "pelicula",
+  "vidro temperado",
+  "cabo",
+  "carregador",
+  "adaptador",
+  "fonte",
+  "suporte",
+  "base",
+  "stand",
+  "pedestal",
+  "protetor",
+  "peca de reposicao",
+  "kit reparo",
+
+  "pen drive",
+  "pendrive",
+  "memoria usb",
+  "cartao de memoria",
+  "cartao memoria",
+  "micro sd",
+  "microsd",
+
+  "pulseira",
+  "bracelete",
+  "correia",
+
+  "protetor de camera",
+  "protetor de lente",
+  "protetor de tela",
+
+  "controle remoto",
+  "controle universal",
+  "soundbar",
+  "hub usb",
+  "dock",
+];
+
+function normalizarTextoFiltro(
+  valor: string,
+): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function contemExpressaoFiltro(
+  texto: string,
+  expressao: string,
+): boolean {
+  const textoNormalizado =
+    ` ${normalizarTextoFiltro(texto)} `;
+
+  const termoNormalizado =
+    ` ${normalizarTextoFiltro(expressao)} `;
+
+  return textoNormalizado.includes(
+    termoNormalizado,
+  );
+}
+
+function possuiAcessorioNaoSolicitado(
+  titulo: string,
+  consulta: string,
+): boolean {
+  return TERMOS_ACESSORIOS.some(
+    (termo) =>
+      contemExpressaoFiltro(
+        titulo,
+        termo,
+      ) &&
+      !contemExpressaoFiltro(
+        consulta,
+        termo,
+      ),
+  );
+}
 
 export type DiscoveryPublishItem = {
   marketplace: DiscoveryCandidate["marketplace"];
@@ -76,6 +161,7 @@ function calcularDesconto(
 
 function candidatoPublicavel(
   candidato: DiscoveryCandidate,
+  consulta: string,
 ): boolean {
   return (
     candidato.status === "FOUND" &&
@@ -95,7 +181,11 @@ function candidatoPublicavel(
     Number.isFinite(
       candidato.price,
     ) &&
-    candidato.price > 0
+    candidato.price > 0 &&
+    !possuiAcessorioNaoSolicitado(
+      candidato.title,
+      consulta,
+    )
   );
 }
 
@@ -110,7 +200,7 @@ function converterCandidato(
     candidato.price <= 0
   ) {
     throw new Error(
-      "Candidato sem preço válido.",
+      "Candidato sem preÃ§o vÃ¡lido.",
     );
   }
 
@@ -119,7 +209,7 @@ function converterCandidato(
 
   if (!image) {
     throw new Error(
-      "Candidato sem imagem válida.",
+      "Candidato sem imagem vÃ¡lida.",
     );
   }
 
@@ -232,11 +322,11 @@ function ordenarParaPersistencia(
 
       /*
        * Dentro do mesmo marketplace, processamos
-       * primeiro os preços maiores.
+       * primeiro os preÃ§os maiores.
        *
        * Se duas ofertas acabarem apontando para o
        * mesmo Product + marketplace, a mais barata
-       * será persistida por último.
+       * serÃ¡ persistida por Ãºltimo.
        */
       const precoPrimeiro =
         primeiro.price ??
@@ -341,7 +431,11 @@ export async function publicarResultadoDiscovery(
   const publicaveis =
     ordenarParaPersistencia(
       unicos.filter(
-        candidatoPublicavel,
+        (candidato) =>
+          candidatoPublicavel(
+            candidato,
+            resultado.query,
+          ),
       ),
     );
 
@@ -365,10 +459,10 @@ export async function publicarResultadoDiscovery(
         );
 
       /*
-       * Não usamos targetProductId aqui.
+       * NÃ£o usamos targetProductId aqui.
        *
-       * O saveProduct já possui a regra canônica
-       * responsável por:
+       * O saveProduct jÃ¡ possui a regra canÃ´nica
+       * responsÃ¡vel por:
        * - localizar a oferta pelo marketplace/externalId;
        * - localizar Product por canonicalKey;
        * - comparar identidade/modelo/variante;
@@ -376,7 +470,7 @@ export async function publicarResultadoDiscovery(
        * - registrar PriceHistory;
        * - sincronizar a melhor oferta EXACT.
        *
-       * Forçar targetProductId neste estágio poderia
+       * ForÃ§ar targetProductId neste estÃ¡gio poderia
        * agrupar produtos diferentes em buscas amplas
        * como "Smartwatch".
        */
