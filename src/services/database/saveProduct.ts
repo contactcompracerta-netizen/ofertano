@@ -252,8 +252,146 @@ function extrairTamanhoDoTitulo(
     );
   }
 
+  /*
+   * Smartwatches normalmente trazem o tamanho da
+   * caixa diretamente no título: 40mm, 44mm, 46mm.
+   */
+  const tamanhoMm = texto.match(
+    /\b(\d{2})\s*MM\b/,
+  );
+
+  if (tamanhoMm?.[1]) {
+    return normalizarValorVariante(
+      `${tamanhoMm[1]}MM`,
+    );
+  }
+
   return null;
 }
+
+function extrairConectividadeDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  /*
+   * A conectividade é uma variante crítica em
+   * smartwatches. Watch Bluetooth e Watch LTE
+   * podem ter o mesmo modelo, tamanho, cor e memória,
+   * mas são produtos diferentes.
+   */
+  const pareceSmartwatch =
+    /\b(?:SMARTWATCH|WATCH|RELOGIO)\b/.test(
+      texto,
+    );
+
+  if (!pareceSmartwatch) {
+    return null;
+  }
+
+  if (/\b(?:LTE|4G)\b/.test(texto)) {
+    return "LTE";
+  }
+
+  if (/\b(?:BLUETOOTH|BT)\b/.test(texto)) {
+    return "BLUETOOTH";
+  }
+
+  return null;
+}
+
+function extrairCorDoTitulo(
+  titulo: string,
+): string | null {
+  const texto = normalizarTextoIdentificador(
+    titulo,
+  );
+
+  const cores: Array<{
+    padrao: RegExp;
+    valor: string;
+  }> = [
+    {
+      padrao: /\b(?:PRETO|PRETA|BLACK)\b/,
+      valor: "PRETO",
+    },
+    {
+      padrao: /\b(?:BRANCO|BRANCA|WHITE)\b/,
+      valor: "BRANCO",
+    },
+    {
+      padrao: /\b(?:CINZA|GRAY|GREY)\b/,
+      valor: "CINZA",
+    },
+    {
+      padrao: /\b(?:GRAFITE|GRAPHITE)\b/,
+      valor: "GRAFITE",
+    },
+    {
+      padrao: /\b(?:PRATA|SILVER)\b/,
+      valor: "PRATA",
+    },
+    {
+      padrao: /\b(?:AZUL|BLUE)\b/,
+      valor: "AZUL",
+    },
+    {
+      padrao: /\b(?:VERDE|GREEN)\b/,
+      valor: "VERDE",
+    },
+    {
+      padrao: /\b(?:VERMELHO|VERMELHA|RED)\b/,
+      valor: "VERMELHO",
+    },
+    {
+      padrao: /\b(?:ROSA|PINK)\b/,
+      valor: "ROSA",
+    },
+    {
+      padrao: /\b(?:ROXO|ROXA|PURPLE)\b/,
+      valor: "ROXO",
+    },
+    {
+      padrao: /\b(?:VIOLETA|VIOLET)\b/,
+      valor: "VIOLETA",
+    },
+    {
+      padrao: /\b(?:BEGE|BEIGE)\b/,
+      valor: "BEGE",
+    },
+    {
+      padrao: /\b(?:MARROM|BROWN)\b/,
+      valor: "MARROM",
+    },
+    {
+      padrao: /\b(?:DOURADO|DOURADA|GOLD)\b/,
+      valor: "DOURADO",
+    },
+    {
+      padrao: /\b(?:AMARELO|AMARELA|YELLOW)\b/,
+      valor: "AMARELO",
+    },
+    {
+      padrao: /\b(?:LARANJA|ORANGE)\b/,
+      valor: "LARANJA",
+    },
+    {
+      padrao: /\b(?:CREME|CREAM)\b/,
+      valor: "CREME",
+    },
+  ];
+
+  for (const cor of cores) {
+    if (cor.padrao.test(texto)) {
+      return cor.valor;
+    }
+  }
+
+  return null;
+}
+
 
 function extrairRamDoTitulo(
   titulo: string,
@@ -292,8 +430,12 @@ function extrairArmazenamentoDoTitulo(
     titulo,
   );
 
+  /*
+   * Primeiro preservamos os padrões explícitos de
+   * armazenamento usados em notebooks e computadores.
+   */
   const numeroAntes = texto.match(
-    /\b(\d{2,4})\s*(GB|TB)\s*(?:SSD|NVME|HDD)\b/,
+    /\b(\d{1,4})\s*(GB|TB)\s*(?:SSD|NVME|HDD)\b/,
   );
 
   if (numeroAntes?.[1] && numeroAntes[2]) {
@@ -303,7 +445,7 @@ function extrairArmazenamentoDoTitulo(
   }
 
   const tipoAntes = texto.match(
-    /\b(?:SSD|NVME|HDD)\s*(?:DE\s*)?(\d{2,4})\s*(GB|TB)\b/,
+    /\b(?:SSD|NVME|HDD)\s*(?:DE\s*)?(\d{1,4})\s*(GB|TB)\b/,
   );
 
   if (tipoAntes?.[1] && tipoAntes[2]) {
@@ -312,7 +454,76 @@ function extrairArmazenamentoDoTitulo(
     );
   }
 
-  return null;
+  /*
+   * Celulares, tablets, smartwatches e outros produtos
+   * normalmente anunciam o armazenamento apenas como
+   * "128GB", "256 GB", "1TB" etc.
+   *
+   * Ignoramos capacidades identificadas como RAM/DDR/VRAM
+   * e, quando houver mais de uma capacidade genérica,
+   * escolhemos a maior. Isso cobre títulos como:
+   *
+   * - "Galaxy S24 256GB 8GB RAM";
+   * - "12GB RAM + 256GB";
+   * - "Smartwatch ... 32GB".
+   */
+  const capacidades = Array.from(
+    texto.matchAll(
+      /\b(\d{1,4})\s*(GB|TB)\b/g,
+    ),
+  )
+    .filter((encontrada) => {
+      const indice = encontrada.index ?? 0;
+
+      const antes = texto.slice(
+        Math.max(0, indice - 24),
+        indice,
+      );
+
+      const depois = texto.slice(
+        indice + encontrada[0].length,
+        indice + encontrada[0].length + 24,
+      );
+
+      const memoriaAntes =
+        /(?:RAM|VRAM|DDR[345]?|LPDDR[345X]?|GDDR[3456X]?)\s*(?:DE\s*)?$/.test(
+          antes,
+        );
+
+      const memoriaDepois =
+        /^\s*(?:DE\s*)?(?:RAM|VRAM|DDR[345]?|LPDDR[345X]?|GDDR[3456X]?)\b/.test(
+          depois,
+        );
+
+      return !memoriaAntes && !memoriaDepois;
+    })
+    .map((encontrada) => {
+      const numero = Number(encontrada[1]);
+      const unidade = encontrada[2];
+
+      return {
+        valor: `${encontrada[1]}${unidade}`,
+        comparavel:
+          unidade === "TB"
+            ? numero * 1024
+            : numero,
+      };
+    })
+    .filter(
+      (item) =>
+        Number.isFinite(item.comparavel) &&
+        item.comparavel > 0,
+    )
+    .sort(
+      (primeiro, segundo) =>
+        segundo.comparavel - primeiro.comparavel,
+    );
+
+  return capacidades[0]?.valor
+    ? normalizarValorVariante(
+        capacidades[0].valor,
+      )
+    : null;
 }
 
 function extrairModeloDoTitulo(
@@ -322,34 +533,181 @@ function extrairModeloDoTitulo(
     titulo,
   );
 
+  const normalizarModelo = (
+    valor: string,
+  ): string | null =>
+    normalizarCodigoProduto(
+      valor
+        .replace(/\+/g, "PLUS")
+        .replace(/\s+/g, ""),
+    );
+
   /*
-   * Fallback conservador para códigos de modelo
-   * alfanuméricos com hífen, como E-02,
-   * ANV15-52-77BG etc.
+   * Famílias populares em que o "modelo comercial"
+   * não possui hífen e precisa ser preservado para
+   * comparar o mesmo produto entre marketplaces.
    *
-   * Não usamos tokens genéricos como 220V, 30W,
-   * 16GB ou RTX4050 como modelo.
+   * Os sufixos fazem parte da identidade:
+   * S24, S24+, S24 Ultra e S24 FE NÃO são o mesmo modelo.
    */
-  const candidatos =
+  const iphone = texto.match(
+    /\bIPHONE\s*(\d{1,2})(?:\s+(PRO\s+MAX|PRO|PLUS|MINI|AIR|E))?\b/,
+  );
+
+  if (iphone?.[1]) {
+    return normalizarModelo(
+      `IPHONE${iphone[1]}${iphone[2] ?? ""}`,
+    );
+  }
+
+  const galaxyDobrav = texto.match(
+    /\bGALAXY\s+Z\s+(FOLD|FLIP)\s*(\d{1,2})(?:\s+(ULTRA|FE))?\b/,
+  );
+
+  if (
+    galaxyDobrav?.[1] &&
+    galaxyDobrav[2]
+  ) {
+    return normalizarModelo(
+      `Z${galaxyDobrav[1]}${galaxyDobrav[2]}${galaxyDobrav[3] ?? ""}`,
+    );
+  }
+
+  const galaxyWatch = texto.match(
+    /\bGALAXY\s+WATCH\s*(\d{1,2})(?:\s+(CLASSIC|ULTRA|FE))?\b/,
+  );
+
+  if (galaxyWatch?.[1]) {
+    return normalizarModelo(
+      `WATCH${galaxyWatch[1]}${galaxyWatch[2] ?? ""}`,
+    );
+  }
+
+  const galaxy = texto.match(
+    /\bGALAXY\s+([ASMZF]\d{1,3})(?:\s*(\+|PLUS|ULTRA|FE))?(?=\s|$|[,.;:/()[\]{}-])/,
+  );
+
+  if (galaxy?.[1]) {
+    return normalizarModelo(
+      `${galaxy[1]}${galaxy[2] ?? ""}`,
+    );
+  }
+
+  const pixel = texto.match(
+    /\bPIXEL\s*(\d{1,2})(?:\s+(PRO\s+XL|PRO|XL|A))?\b/,
+  );
+
+  if (pixel?.[1]) {
+    return normalizarModelo(
+      `PIXEL${pixel[1]}${pixel[2] ?? ""}`,
+    );
+  }
+
+  const redmiNote = texto.match(
+    /\bREDMI\s+NOTE\s*(\d{1,2})(?:\s+(PRO\s*\+|PRO|PLUS))?\b/,
+  );
+
+  if (redmiNote?.[1]) {
+    return normalizarModelo(
+      `REDMINOTE${redmiNote[1]}${redmiNote[2] ?? ""}`,
+    );
+  }
+
+  const poco = texto.match(
+    /\bPOCO\s+([A-Z]\d{1,2})(?:\s+(PRO|ULTRA))?\b/,
+  );
+
+  if (poco?.[1]) {
+    return normalizarModelo(
+      `POCO${poco[1]}${poco[2] ?? ""}`,
+    );
+  }
+
+  const moto = texto.match(
+    /\b(?:MOTO|MOTOROLA)\s+([GE]\d{1,3})(?:\s+(PLUS|POWER|PLAY|STYLUS))?\b/,
+  );
+
+  if (moto?.[1]) {
+    return normalizarModelo(
+      `${moto[1]}${moto[2] ?? ""}`,
+    );
+  }
+
+  const echoDot = texto.match(
+    /\bECHO\s+DOT\s+(\d{1,2})(?:\s*(?:A|ª)?\s*GERACAO)?\b/,
+  );
+
+  if (echoDot?.[1]) {
+    return normalizarModelo(
+      `ECHODOT${echoDot[1]}`,
+    );
+  }
+
+  /*
+   * Mantemos o fallback já existente para códigos
+   * alfanuméricos com hífen, como E-02,
+   * ANV15-52-77BG, SM-S921B etc.
+   */
+  const candidatosComHifen =
     texto.match(
       /\b[A-Z][A-Z0-9]{0,11}-[A-Z0-9][A-Z0-9-]{0,24}\b/g,
     ) ?? [];
 
-  const bloqueados = new Set([
+  const bloqueadosComHifen = new Set([
     "WI-FI",
     "USB-C",
     "TYPE-C",
   ]);
 
-  for (const candidato of candidatos) {
+  for (
+    const candidato of candidatosComHifen
+  ) {
     const codigo =
       normalizarCodigoProduto(candidato);
 
     if (
       codigo &&
-      !bloqueados.has(codigo) &&
+      !bloqueadosComHifen.has(codigo) &&
       !/^\d/.test(codigo)
     ) {
+      return codigo;
+    }
+  }
+
+  /*
+   * Último fallback: códigos curtos formados por letras
+   * + números, como S24, A17, A55, G84, PS5, Watch8.
+   *
+   * Bloqueamos padrões técnicos que aparecem com
+   * frequência em títulos mas não identificam o produto.
+   */
+  const candidatosSimples =
+    texto.match(
+      /\b[A-Z]{1,10}\d{1,5}[A-Z0-9]*\+?(?=\b|\s|$|[,.;:/()[\]{}-])/g,
+    ) ?? [];
+
+  for (
+    const candidato of candidatosSimples
+  ) {
+    const codigo =
+      normalizarModelo(candidato);
+
+    if (!codigo) {
+      continue;
+    }
+
+    const tecnico =
+      /^(?:RTX|GTX|RX|ARC)\d/.test(codigo) ||
+      /^(?:DDR|LPDDR|GDDR)\d/.test(codigo) ||
+      /^(?:USB|HDMI|WIFI|BT|HDR|IP)\d/.test(codigo) ||
+      /^(?:OLED|QLED|AMOLED)\d/.test(codigo) ||
+      /^(?:SSD|HDD|NVME)\d/.test(codigo) ||
+      /^\d/.test(codigo) ||
+      /\d+(?:GB|TB|MB|MHZ|GHZ|W|V|MP|MAH)$/.test(
+        codigo,
+      );
+
+    if (!tecnico) {
       return codigo;
     }
   }
@@ -744,9 +1102,11 @@ function extrairIdentificadores(
     ) ??
     extrairModeloDoTitulo(product.title);
 
-  const color = normalizarValorVariante(
-    corEncontrada,
-  );
+  const color =
+    normalizarValorVariante(
+      corEncontrada,
+    ) ??
+    extrairCorDoTitulo(product.title);
 
   const voltage =
     normalizarValorVariante(
@@ -783,6 +1143,11 @@ function extrairIdentificadores(
       quantidadeKitEncontrada,
     );
 
+  const connectivity =
+    extrairConectividadeDoTitulo(
+      product.title,
+    );
+
   return {
     ean,
     gtin,
@@ -795,6 +1160,7 @@ function extrairIdentificadores(
     ram,
     storage,
     kitQuantity,
+    connectivity,
   };
 }
 
@@ -914,7 +1280,8 @@ function extrairIdentidadeProdutoExistente(
           "COLOR",
           "COR_PRINCIPAL",
         ]),
-      ),
+      ) ??
+      extrairCorDoTitulo(titulo),
     voltage:
       normalizarValorVariante(
         produto.voltage,
@@ -971,6 +1338,10 @@ function extrairIdentidadeProdutoExistente(
         "UNIDADES_POR_KIT",
       ]),
     ),
+    connectivity:
+      extrairConectividadeDoTitulo(
+        titulo,
+      ),
   };
 }
 
@@ -1072,6 +1443,7 @@ function calcularCompatibilidadeExata(
     [identificadores.ram, existente.ram],
     [identificadores.storage, existente.storage],
     [identificadores.kitQuantity, existente.kitQuantity],
+    [identificadores.connectivity, existente.connectivity],
   ] as const;
 
   let variantesFortesCoincidentes = 0;
@@ -1090,6 +1462,17 @@ function calcularCompatibilidadeExata(
     identificadores.color &&
     existente.color &&
     identificadores.color !== existente.color
+  ) {
+    return null;
+  }
+
+  /*
+   * Para smartwatch, se apenas um lado informa a
+   * conectividade, não assumimos equivalência.
+   */
+  if (
+    Boolean(identificadores.connectivity) !==
+    Boolean(existente.connectivity)
   ) {
     return null;
   }
@@ -1159,6 +1542,7 @@ function criarCanonicalKey(
     identificadores.ram,
     identificadores.storage,
     identificadores.kitQuantity,
+    identificadores.connectivity,
   ].filter(
     (valor): valor is string =>
       Boolean(valor),
@@ -1194,6 +1578,9 @@ function criarCanonicalKey(
       : null,
     identificadores.kitQuantity
       ? `kit=${identificadores.kitQuantity}`
+      : null,
+    identificadores.connectivity
+      ? `connectivity=${identificadores.connectivity}`
       : null,
   ].filter(
     (valor): valor is string =>
