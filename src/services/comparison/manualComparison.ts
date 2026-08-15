@@ -1204,7 +1204,7 @@ export async function buscarComparacaoManual(
     string[] = [];
 
   const errors =
-    resultado.marketplaces
+    resultado.results
       .filter(
         (marketplace) =>
           Boolean(
@@ -1231,7 +1231,7 @@ export async function buscarComparacaoManual(
   let rejectedCandidates = 0;
 
   const scanned =
-    resultado.marketplaces.reduce(
+    resultado.results.reduce(
       (total, marketplace) =>
         total +
         marketplace.scanned,
@@ -1608,3 +1608,4 @@ export async function buscarComparacaoManual(
     errors,
   };
 }
+
