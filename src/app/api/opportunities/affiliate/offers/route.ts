@@ -1,12 +1,16 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-function validateMercadoLivreAffiliateLink(
+const TRANSACTION_MAX_WAIT_MS = 10_000;
+const TRANSACTION_TIMEOUT_MS = 45_000;
+
+function validateMercadoLivreAffiliateLink(       
   value: string,
 ): string | null {
   const text = value.trim();
@@ -26,7 +30,7 @@ function validateMercadoLivreAffiliateLink(
       url.hostname.toLowerCase();
 
     const isMercadoLivre =
-      hostname === "mercadolivre.com.br" ||
+      hostname === "mercadolivre.com.br" ||       
       hostname.endsWith(
         ".mercadolivre.com.br",
       );
@@ -64,7 +68,7 @@ function validateMercadoLivreAffiliateLink(
 export async function GET() {
   try {
     const offers =
-      await prisma.marketplaceOffer.findMany({
+      await prisma.marketplaceOffer.findMany({    
         where: {
           marketplace:
             "MERCADO_LIVRE",
@@ -120,10 +124,10 @@ export async function GET() {
       );
 
     /*
-     * Compatibilidade com produtos antigos:
+     * Compatibilidade com produtos antigos:      
      * antes de MarketplaceOffer.sourceUrl ser usado
-     * como fonte principal, algumas URLs estavam
-     * disponíveis apenas em ProductOpportunity.
+     * como fonte principal, algumas URLs estavam 
+     * disponíveis apenas em ProductOpportunity.  
      */
     const opportunities =
       productIds.length > 0
@@ -194,15 +198,15 @@ export async function GET() {
 
           /*
            * A URL da própria MarketplaceOffer é a
-           * fonte principal. Isso cobre MANUAL,
+           * fonte principal. Isso cobre MANUAL,  
            * ON_DEMAND_SEARCH, PRICE_MONITOR e API.
            *
-           * ProductOpportunity fica somente como
-           * fallback para registros antigos.
+           * ProductOpportunity fica somente como 
+           * fallback para registros antigos.     
            */
           const sourceUrl =
             offer.sourceUrl?.trim() ||
-            opportunity?.sourceUrl?.trim() ||
+            opportunity?.sourceUrl?.trim() ||     
             "";
 
           if (!sourceUrl) {
@@ -252,7 +256,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error(
-      "Erro ao carregar links pendentes:",
+      "Erro ao carregar links pendentes:",        
       error,
     );
 
@@ -316,7 +320,7 @@ export async function POST(
         typeof rawItem
           ?.affiliateLink ===
         "string"
-          ? validateMercadoLivreAffiliateLink(
+          ? validateMercadoLivreAffiliateLink(    
               rawItem.affiliateLink,
             )
           : null;
@@ -396,7 +400,7 @@ export async function POST(
     }
 
     const offers =
-      await prisma.marketplaceOffer.findMany(
+      await prisma.marketplaceOffer.findMany(     
         {
           where: {
             id: {
@@ -475,6 +479,9 @@ export async function POST(
         ]),
       );
 
+    const validatedAt =
+      new Date();
+
     await prisma.$transaction(
       async (tx) => {
         for (const offer of offers) {
@@ -490,7 +497,7 @@ export async function POST(
           }
 
           const updated =
-            await tx.marketplaceOffer.updateMany(
+            await tx.marketplaceOffer.updateMany( 
               {
                 where: {
                   id: offer.id,
@@ -530,10 +537,10 @@ export async function POST(
                     null,
 
                   affiliateValidatedAt:
-                    new Date(),
+                    validatedAt,
 
                   reviewedAt:
-                    new Date(),
+                    validatedAt,
                 },
               },
             );
@@ -546,12 +553,12 @@ export async function POST(
             );
           }
 
-          await sincronizarMelhorOfertaDoProduto(
+          await sincronizarMelhorOfertaDoProduto( 
             tx,
             offer.productId,
           );
 
-          await tx.productOpportunity.updateMany(
+          await tx.productOpportunity.updateMany( 
             {
               where: {
                 productId:
@@ -572,6 +579,13 @@ export async function POST(
           );
         }
       },
+      {
+        maxWait:
+          TRANSACTION_MAX_WAIT_MS,
+
+        timeout:
+          TRANSACTION_TIMEOUT_MS,
+      },
     );
 
     return NextResponse.json({
@@ -582,7 +596,7 @@ export async function POST(
     });
   } catch (error) {
     console.error(
-      "Erro ao ativar links de afiliado:",
+      "Erro ao ativar links de afiliado:",        
       error,
     );
 
@@ -592,7 +606,7 @@ export async function POST(
         error:
           error instanceof Error
             ? error.message
-            : "Erro interno ao ativar os links.",
+            : "Erro interno ao ativar os links.", 
       },
       {
         status: 500,
