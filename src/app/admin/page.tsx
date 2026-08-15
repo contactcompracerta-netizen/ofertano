@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -39,17 +39,11 @@ export default function AdminPage() {
         return;
       }
 
-      alert(
-        "Produto importado com sucesso!",
-      );
-
+      alert("Produto importado com sucesso!");
       setUrl("");
     } catch (error) {
       console.error(error);
-
-      alert(
-        "Erro ao importar produto.",
-      );
+      alert("Erro ao importar produto.");
     } finally {
       setLoading(false);
     }
@@ -75,8 +69,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Gerencie oportunidades, descoberta
-              e publicação de produtos.
+              Gerencie oportunidades, descoberta e publicação de produtos.
             </p>
 
             <Link
@@ -97,8 +90,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Resolva em lote os links dos produtos
-              que o robô importou automaticamente.
+              Resolva em lote os links dos produtos que o robô importou automaticamente.
             </p>
 
             <Link
@@ -119,8 +111,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Acompanhe conexões, credenciais,
-              ofertas e status dos marketplaces.
+              Acompanhe conexões, credenciais, ofertas e status dos marketplaces.
             </p>
 
             <Link
@@ -131,14 +122,34 @@ export default function AdminPage() {
             </Link>
           </div>
 
+          <div className="rounded-2xl border border-violet-200 bg-white p-6 shadow md:p-8">
+            <div className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-violet-800">
+              Editorial
+            </div>
+
+            <h2 className="mt-3 text-xl font-bold text-gray-900">
+              Blog do Ofertano
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              Crie, edite, agende e publique artigos diretamente pelo painel.
+            </p>
+
+            <Link
+              href="/admin/blog"
+              className="mt-5 block w-full rounded-xl bg-violet-600 px-5 py-4 text-center font-bold text-white transition hover:bg-violet-700"
+            >
+              Administrar blog
+            </Link>
+          </div>
+
           <div className="rounded-2xl bg-white p-6 shadow md:p-8">
             <h2 className="text-xl font-bold text-gray-900">
               Fila de importação
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Acompanhe os produtos enviados para
-              processamento automático.
+              Acompanhe os produtos enviados para processamento automático.
             </p>
 
             <Link
@@ -156,8 +167,7 @@ export default function AdminPage() {
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-gray-600">
-            Cole o link de um produto para
-            importá-lo manualmente.
+            Cole o link de um produto para importá-lo manualmente.
           </p>
 
           <label
@@ -193,3 +203,4 @@ export default function AdminPage() {
     </main>
   );
 }
+

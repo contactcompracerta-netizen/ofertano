@@ -3,11 +3,10 @@ import Link from "next/link";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import { listarPostsPublicados } from "@/services/blog/public";
+import type { BlogPost } from "@/services/blog/types";
 
-import {
-  blogPosts,
-  type BlogPost,
-} from "./posts";
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Blog | Guias para comprar melhor",
@@ -206,6 +205,17 @@ function ArticleVisual({
           : "min-h-[320px] lg:min-h-full"
       }`}
     >
+      {post.coverImage && (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage: `url("${post.coverImage.replace(/"/g, "%22")}")`,
+            }}
+          />
+          <div className="absolute inset-0 bg-slate-950/55" />
+        </>
+      )}
       <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full border border-white/15" />
       <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
 
@@ -290,17 +300,14 @@ function ArticleCard({
   );
 }
 
-export default function BlogPage() {
+export default async function BlogPage() {
+  const blogPosts =
+    await listarPostsPublicados();
+
   const featuredPost =
     blogPosts.find(
       (post) => post.featured,
     ) ?? blogPosts[0];
-
-  const latestPosts =
-    blogPosts.filter(
-      (post) =>
-        post.slug !== featuredPost.slug,
-    );
 
   const categories = [
     "Guias de compra",
@@ -308,6 +315,38 @@ export default function BlogPage() {
     "Economia",
     "Compra segura",
   ];
+
+  if (!featuredPost) {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-950">
+        <Header />
+        <section className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6 lg:px-8">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+            Blog do Ofertano
+          </p>
+          <h1 className="mt-3 text-4xl font-black tracking-tight">
+            Novos conteúdos em preparação
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl leading-7 text-slate-600">
+            Estamos preparando novos guias para ajudar você a comparar preços e comprar melhor.
+          </p>
+          <Link
+            href="/ofertas"
+            className="mt-8 inline-flex rounded-xl bg-emerald-600 px-6 py-4 font-black text-white hover:bg-emerald-700"
+          >
+            Ver ofertas verificadas
+          </Link>
+        </section>
+        <Footer />
+      </main>
+    );
+  }
+
+  const latestPosts =
+    blogPosts.filter(
+      (post) =>
+        post.slug !== featuredPost.slug,
+    );
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">

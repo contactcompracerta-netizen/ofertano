@@ -4,12 +4,13 @@ import { notFound } from "next/navigation";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
-
 import {
-  blogPosts,
-  encontrarPostPorSlug,
-  type BlogPost,
-} from "../posts";
+  buscarPostPublicadoPorSlug,
+  listarPostsPublicados,
+} from "@/services/blog/public";
+import type { BlogPost } from "@/services/blog/types";
+
+export const revalidate = 60;
 
 type BlogArticlePageProps = {
   params: Promise<{
@@ -107,12 +108,6 @@ function CheckIcon() {
   );
 }
 
-export function generateStaticParams() {
-  return blogPosts.map((post) => ({
-    slug: post.slug,
-  }));
-}
-
 export async function generateMetadata({
   params,
 }: BlogArticlePageProps): Promise<Metadata> {
@@ -120,7 +115,7 @@ export async function generateMetadata({
     await params;
 
   const post =
-    encontrarPostPorSlug(slug);
+    await buscarPostPublicadoPorSlug(slug);
 
   if (!post) {
     return {
@@ -133,8 +128,9 @@ export async function generateMetadata({
   }
 
   return {
-    title: post.title,
-    description: post.excerpt,
+    title: post.seoTitle ?? post.title,
+    description:
+      post.seoDescription ?? post.excerpt,
     alternates: {
       canonical: `/blog/${post.slug}`,
     },
@@ -142,15 +138,29 @@ export async function generateMetadata({
       type: "article",
       url: `/blog/${post.slug}`,
       title: post.title,
-      description: post.excerpt,
+      description:
+        post.seoDescription ?? post.excerpt,
       publishedTime: post.publishedAt,
-      authors: ["Ofertano"],
+      modifiedTime:
+        post.updatedAt ?? post.publishedAt,
+      authors: [post.author ?? "Ofertano"],
       section: post.category,
+      ...(post.coverImage
+        ? {
+            images: [post.coverImage],
+          }
+        : {}),
     },
     twitter: {
       card: "summary_large_image",
       title: post.title,
-      description: post.excerpt,
+      description:
+        post.seoDescription ?? post.excerpt,
+      ...(post.coverImage
+        ? {
+            images: [post.coverImage],
+          }
+        : {}),
     },
   };
 }
@@ -162,7 +172,7 @@ export default async function BlogArticlePage({
     await params;
 
   const post =
-    encontrarPostPorSlug(slug);
+    await buscarPostPublicadoPorSlug(slug);
 
   if (!post) {
     notFound();
@@ -170,6 +180,9 @@ export default async function BlogArticlePage({
 
   const theme =
     themeClasses[post.theme];
+
+  const blogPosts =
+    await listarPostsPublicados();
 
   const relatedPosts =
     blogPosts
@@ -201,10 +214,11 @@ export default async function BlogArticlePage({
     headline: post.title,
     description: post.excerpt,
     datePublished: post.publishedAt,
-    dateModified: post.publishedAt,
+    dateModified:
+      post.updatedAt ?? post.publishedAt,
     author: {
       "@type": "Organization",
-      name: "Ofertano",
+      name: post.author ?? "Ofertano",
       url: "https://ofertano.vercel.app",
     },
     publisher: {
@@ -216,6 +230,11 @@ export default async function BlogArticlePage({
       "@type": "WebPage",
       "@id": `https://ofertano.vercel.app/blog/${post.slug}`,
     },
+    ...(post.coverImage
+      ? {
+          image: post.coverImage,
+        }
+      : {}),
   };
 
   return (
@@ -235,6 +254,17 @@ export default async function BlogArticlePage({
       <section
         className={`relative overflow-hidden bg-gradient-to-br text-white ${theme.hero}`}
       >
+        {post.coverImage && (
+          <>
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: `url("${post.coverImage.replace(/"/g, "%22")}")`,
+              }}
+            />
+            <div className="absolute inset-0 bg-slate-950/65" />
+          </>
+        )}
         <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full border border-white/10" />
         <div className="absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
 
@@ -276,7 +306,9 @@ export default async function BlogArticlePage({
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-white/70">
-              <span>Por Ofertano</span>
+              <span>
+                Por {post.author ?? "Ofertano"}
+              </span>
               <span
                 className="h-1 w-1 rounded-full bg-white/50"
                 aria-hidden="true"

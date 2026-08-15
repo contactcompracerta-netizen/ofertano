@@ -340,3 +340,43 @@ model ProductOpportunity {
   @@index([searchRequestId, discoveredAt])
   @@index([matchStatus, discoveredAt])
 }
+
+enum BlogPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+model BlogPost {
+  id String @id @default(cuid())
+
+  slug     String @unique
+  title    String
+  excerpt  String @db.Text
+  category String
+  author   String @default("Ofertano")
+
+  readingTime String @default("5 min de leitura")
+  theme       String @default("emerald")
+  coverImage  String? @db.Text
+
+  sections Json
+
+  status   BlogPostStatus @default(DRAFT)
+  featured Boolean        @default(false)
+
+  seoTitle       String?
+  seoDescription String? @db.Text
+  socialCaption  String? @db.Text
+
+  scheduledAt DateTime?
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([status, scheduledAt])
+  @@index([featured, status])
+}

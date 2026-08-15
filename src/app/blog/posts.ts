@@ -1,23 +1,11 @@
-export type BlogPostSection = {
-  title: string;
-  paragraphs: string[];
-  bullets?: string[];
-};
+import type { BlogPost } from "@/services/blog/types";
 
-export type BlogPost = {
-  slug: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  publishedAt: string;
-  publishedLabel: string;
-  readingTime: string;
-  theme: "emerald" | "blue" | "amber" | "violet" | "rose" | "cyan";
-  featured?: boolean;
-  sections: BlogPostSection[];
-};
+export type {
+  BlogPost,
+  BlogPostSection,
+} from "@/services/blog/types";
 
-export const blogPosts: BlogPost[] = [
+export const legacyBlogPosts: BlogPost[] = [
   {
     slug: "como-comparar-precos-antes-de-comprar",
     title: "Como comparar preços de verdade antes de comprar",
@@ -216,7 +204,10 @@ export const blogPosts: BlogPost[] = [
 export function encontrarPostPorSlug(
   slug: string,
 ): BlogPost | undefined {
-  return blogPosts.find(
+  return legacyBlogPosts.find(
     (post) => post.slug === slug,
   );
 }
+
+// Alias temporário para manter compatibilidade durante a migração.
+export const blogPosts = legacyBlogPosts;
