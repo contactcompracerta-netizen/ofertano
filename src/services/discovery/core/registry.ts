@@ -1,4 +1,5 @@
-﻿import { buscarMercadoLivre } from "../mercadolivre";
+﻿import { buscarAmazon } from "../amazon";
+import { buscarMercadoLivre } from "../mercadolivre";
 import { buscarShopee } from "../shopee";
 
 import type {
@@ -6,11 +7,10 @@ import type {
   DiscoveryMarketplace,
 } from "./types";
 
-const discoveryAdapters:
-  Record<
-    DiscoveryMarketplace,
-    DiscoveryAdapter
-  > = {
+const discoveryAdapters: Record<
+  DiscoveryMarketplace,
+  DiscoveryAdapter
+> = {
   MERCADO_LIVRE: {
     marketplace: "MERCADO_LIVRE",
     marketplaceName: "Mercado Livre",
@@ -21,8 +21,8 @@ const discoveryAdapters:
   AMAZON: {
     marketplace: "AMAZON",
     marketplaceName: "Amazon",
-    enabled: false,
-    searcher: null,
+    enabled: true,
+    searcher: buscarAmazon,
   },
 
   SHOPEE: {
@@ -34,8 +34,7 @@ const discoveryAdapters:
 
   MAGAZINE_LUIZA: {
     marketplace: "MAGAZINE_LUIZA",
-    marketplaceName:
-      "Magazine Luiza",
+    marketplaceName: "Magazine Luiza",
     enabled: false,
     searcher: null,
   },
@@ -51,20 +50,14 @@ const discoveryAdapters:
 export function obterDiscoveryAdapter(
   marketplace: DiscoveryMarketplace,
 ): DiscoveryAdapter {
-  return discoveryAdapters[
-    marketplace
-  ];
+  return discoveryAdapters[marketplace];
 }
 
-export function listarDiscoveryAdapters():
-DiscoveryAdapter[] {
-  return Object.values(
-    discoveryAdapters,
-  );
+export function listarDiscoveryAdapters(): DiscoveryAdapter[] {
+  return Object.values(discoveryAdapters);
 }
 
-export function listarDiscoveryAdaptersAtivos():
-DiscoveryAdapter[] {
+export function listarDiscoveryAdaptersAtivos(): DiscoveryAdapter[] {
   return listarDiscoveryAdapters().filter(
     (adapter) =>
       adapter.enabled &&
@@ -75,8 +68,7 @@ DiscoveryAdapter[] {
 export function marketplacePossuiBuscaAutomatica(
   marketplace: DiscoveryMarketplace,
 ): boolean {
-  const adapter =
-    discoveryAdapters[marketplace];
+  const adapter = discoveryAdapters[marketplace];
 
   return (
     adapter.enabled &&

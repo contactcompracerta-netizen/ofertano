@@ -15,8 +15,13 @@ type OpportunityStatus =
   | "DISMISSED"
   | "ERROR";
 
+type DiscoveryMarketplace =
+  | "MERCADO_LIVRE"
+  | "AMAZON";
+
 type Opportunity = {
   id: string;
+  marketplace: DiscoveryMarketplace;
   externalId: string;
   sourceType: string;
   sourceUrl: string;
@@ -68,10 +73,18 @@ type BatchPublishResponse = {
   };
 };
 
+type DismissOpportunityResponse = {
+  success: boolean;
+  message?: string;
+  error?: string;
+};
+
 type DiscoverResponse = {
   success: boolean;
   message?: string;
   error?: string;
+  marketplace?: DiscoveryMarketplace;
+  query?: string;
   categoryId?: string;
   categoryName?: string;
   requested?: number;
@@ -132,6 +145,33 @@ const statusClasses: Record<
     "border-red-200 bg-red-100 text-red-800",
 };
 
+const marketplaceLabels: Record<
+  DiscoveryMarketplace,
+  string
+> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+};
+
+const marketplaceClasses: Record<
+  DiscoveryMarketplace,
+  string
+> = {
+  MERCADO_LIVRE:
+    "border-yellow-200 bg-yellow-50 text-yellow-800",
+  AMAZON:
+    "border-orange-200 bg-orange-50 text-orange-800",
+};
+
+const marketplaceOpenLabels: Record<
+  DiscoveryMarketplace,
+  string
+> = {
+  MERCADO_LIVRE:
+    "Abrir no Mercado Livre",
+  AMAZON: "Abrir na Amazon",
+};
+
 function formatCurrency(value: number | null) {
   if (value === null) {
     return "Preço não informado";
@@ -179,7 +219,17 @@ export default function OpportunitiesPage() {
   const [batchLinks, setBatchLinks] =
     useState("");
 
+  const [
+    discoveryMarketplace,
+    setDiscoveryMarketplace,
+  ] = useState<DiscoveryMarketplace>(
+    "MERCADO_LIVRE"
+  );
+
   const [categoryId, setCategoryId] =
+    useState("");
+
+  const [amazonQuery, setAmazonQuery] =
     useState("");
 
   const [categories, setCategories] =
@@ -202,6 +252,9 @@ export default function OpportunitiesPage() {
 
   const [copyingUrls, setCopyingUrls] =
     useState(false);
+
+  const [dismissingId, setDismissingId] =
+    useState<string | null>(null);
 
   const [error, setError] = useState("");
   const [message, setMessage] =
@@ -253,6 +306,20 @@ export default function OpportunitiesPage() {
 
   const linksMissing =
     opportunitiesWithoutLink.length;
+
+  const hasPendingMercadoLivre =
+    opportunitiesWithoutLink.some(
+      (opportunity) =>
+        opportunity.marketplace ===
+        "MERCADO_LIVRE"
+    );
+
+  const hasPendingAmazon =
+    opportunitiesWithoutLink.some(
+      (opportunity) =>
+        opportunity.marketplace ===
+        "AMAZON"
+    );
 
   const pastedLinksMatch =
     linksMissing === 0
@@ -376,9 +443,26 @@ export default function OpportunitiesPage() {
     const normalizedCategoryId =
       categoryId.trim().toUpperCase();
 
-    if (!/^MLB\d+$/.test(normalizedCategoryId)) {
+    const normalizedAmazonQuery =
+      amazonQuery.trim();
+
+    if (
+      discoveryMarketplace ===
+        "MERCADO_LIVRE" &&
+      !/^MLB\d+$/.test(normalizedCategoryId)
+    ) {
       setError(
         "Selecione uma categoria válida do Mercado Livre."
+      );
+      return;
+    }
+
+    if (
+      discoveryMarketplace === "AMAZON" &&
+      normalizedAmazonQuery.length < 3
+    ) {
+      setError(
+        "Digite o nome do produto que deseja buscar na Amazon."
       );
       return;
     }
@@ -415,11 +499,23 @@ export default function OpportunitiesPage() {
             "Content-Type":
               "application/json",
           },
-          body: JSON.stringify({
-            categoryId:
-              normalizedCategoryId,
-            quantity,
-          }),
+          body: JSON.stringify(
+            discoveryMarketplace ===
+              "AMAZON"
+              ? {
+                  marketplace: "AMAZON",
+                  query:
+                    normalizedAmazonQuery,
+                  quantity,
+                }
+              : {
+                  marketplace:
+                    "MERCADO_LIVRE",
+                  categoryId:
+                    normalizedCategoryId,
+                  quantity,
+                }
+          ),
         }
       );
 
@@ -490,6 +586,68 @@ export default function OpportunitiesPage() {
       );
     } finally {
       setCopyingUrls(false);
+    }
+  }
+
+  async function dismissOpportunity(
+    opportunity: Opportunity
+  ) {
+    const confirmed = window.confirm(
+      `Descartar "${opportunity.title}" por estar indisponível?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDismissingId(opportunity.id);
+      setError("");
+      setMessage("");
+
+      const response = await fetch(
+        "/api/opportunities",
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            id: opportunity.id,
+            reason:
+              "Produto indisponível no marketplace.",
+          }),
+        }
+      );
+
+      const data =
+        (await response.json()) as DismissOpportunityResponse;
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Não foi possível descartar o produto."
+        );
+      }
+
+      setBatchLinks("");
+
+      setMessage(
+        data.message ||
+          "Produto indisponível descartado."
+      );
+
+      await loadOpportunities();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Erro ao descartar produto."
+      );
+    } finally {
+      setDismissingId(null);
     }
   }
 
@@ -705,7 +863,8 @@ export default function OpportunitiesPage() {
             }
             disabled={
               loading ||
-              publishingBatch
+              publishingBatch ||
+              dismissingId !== null
             }
             className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -726,55 +885,135 @@ export default function OpportunitiesPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Escolha a categoria e quantos
-              produtos deseja buscar.
+              Escolha o marketplace, informe o
+              produto e defina quantas
+              oportunidades deseja buscar.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-[1fr_180px_auto] md:items-end">
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr_160px_auto] lg:items-end">
             <div>
               <label
-                htmlFor="category-id"
+                htmlFor="discovery-marketplace"
                 className="mb-2 block text-sm font-bold text-slate-900"
               >
-                Categoria do Mercado Livre
+                Marketplace
               </label>
 
               <select
-                id="category-id"
-                value={categoryId}
-                onChange={(event) =>
-                  setCategoryId(
-                    event.target.value
-                  )
-                }
+                id="discovery-marketplace"
+                value={discoveryMarketplace}
+                onChange={(event) => {
+                  setDiscoveryMarketplace(
+                    event.target
+                      .value as DiscoveryMarketplace
+                  );
+                  setError("");
+                  setMessage("");
+                }}
                 disabled={
-                  loadingCategories ||
-                  categories.length === 0 ||
+                  discovering ||
                   publishingBatch
                 }
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
-                {loadingCategories ? (
-                  <option value="">
-                    Carregando categorias...
-                  </option>
-                ) : categories.length === 0 ? (
-                  <option value="">
-                    Nenhuma categoria disponível
-                  </option>
-                ) : (
-                  categories.map((category) => (
-                    <option
-                      key={category.id}
-                      value={category.id}
-                    >
-                      {category.name}
-                    </option>
-                  ))
-                )}
+                <option value="MERCADO_LIVRE">
+                  Mercado Livre
+                </option>
+
+                <option value="AMAZON">
+                  Amazon
+                </option>
               </select>
             </div>
+
+            {discoveryMarketplace ===
+            "MERCADO_LIVRE" ? (
+              <div>
+                <label
+                  htmlFor="category-id"
+                  className="mb-2 block text-sm font-bold text-slate-900"
+                >
+                  Categoria do Mercado Livre
+                </label>
+
+                <select
+                  id="category-id"
+                  value={categoryId}
+                  onChange={(event) =>
+                    setCategoryId(
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    loadingCategories ||
+                    categories.length === 0 ||
+                    discovering ||
+                    publishingBatch
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                >
+                  {loadingCategories ? (
+                    <option value="">
+                      Carregando categorias...
+                    </option>
+                  ) : categories.length === 0 ? (
+                    <option value="">
+                      Nenhuma categoria disponível
+                    </option>
+                  ) : (
+                    categories.map(
+                      (category) => (
+                        <option
+                          key={category.id}
+                          value={category.id}
+                        >
+                          {category.name}
+                        </option>
+                      )
+                    )
+                  )}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label
+                  htmlFor="amazon-query"
+                  className="mb-2 block text-sm font-bold text-slate-900"
+                >
+                  Produto para buscar na Amazon
+                </label>
+
+                <input
+                  id="amazon-query"
+                  type="search"
+                  value={amazonQuery}
+                  onChange={(event) =>
+                    setAmazonQuery(
+                      event.target.value
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !discovering &&
+                      !publishingBatch &&
+                      pendingOpportunities.length ===
+                        0
+                    ) {
+                      event.preventDefault();
+                      void discoverOpportunities();
+                    }
+                  }}
+                  disabled={
+                    discovering ||
+                    publishingBatch
+                  }
+                  placeholder="Ex.: Samsung Galaxy A55 5G 256GB"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+              </div>
+            )}
 
             <div>
               <label
@@ -820,16 +1059,23 @@ export default function OpportunitiesPage() {
               disabled={
                 discovering ||
                 loading ||
-                loadingCategories ||
                 publishingBatch ||
+                dismissingId !== null ||
                 pendingOpportunities.length > 0 ||
-                !categoryId
+                (discoveryMarketplace ===
+                "MERCADO_LIVRE"
+                  ? loadingCategories ||
+                    !categoryId
+                  : amazonQuery.trim().length < 3)
               }
               className="rounded-xl bg-blue-600 px-6 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {discovering
                 ? "Descobrindo..."
-                : "Descobrir produtos"}
+                : discoveryMarketplace ===
+                    "AMAZON"
+                  ? "Buscar na Amazon"
+                  : "Descobrir produtos"}
             </button>
           </div>
         </section>
@@ -863,9 +1109,10 @@ export default function OpportunitiesPage() {
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Copie as URLs, gere os links no
-              programa de afiliados, cole todos
-              abaixo e clique uma única vez para
-              validar, importar e publicar.
+              programa de afiliados da loja
+              indicada, cole todos abaixo e clique
+              uma única vez para validar, importar
+              e publicar.
             </p>
           </div>
 
@@ -911,6 +1158,7 @@ export default function OpportunitiesPage() {
                   disabled={
                     copyingUrls ||
                     publishingBatch ||
+                    dismissingId !== null ||
                     linksMissing === 0
                   }
                   className="mt-5 flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -955,12 +1203,18 @@ export default function OpportunitiesPage() {
                 }
                 placeholder={
                   linksMissing > 0
-                    ? "Cole um link por linha:\nhttps://meli.la/...\nhttps://meli.la/..."
+                    ? hasPendingAmazon &&
+                      hasPendingMercadoLivre
+                      ? "Cole um link por linha, mantendo a ordem:\nhttps://meli.la/...\nhttps://www.amazon.com.br/dp/ASIN?tag=ofertano-20"
+                      : hasPendingAmazon
+                        ? "Cole um link Amazon por linha:\nhttps://www.amazon.com.br/dp/ASIN?tag=ofertano-20"
+                        : "Cole um link por linha:\nhttps://meli.la/...\nhttps://meli.la/..."
                     : "Todos os produtos já possuem link. Clique em publicar."
                 }
                 rows={9}
                 disabled={
-                  publishingBatch
+                  publishingBatch ||
+                  dismissingId !== null
                 }
                 className="mt-2 w-full resize-y rounded-2xl border border-slate-300 px-4 py-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
@@ -997,6 +1251,7 @@ export default function OpportunitiesPage() {
                 }
                 disabled={
                   publishingBatch ||
+                  dismissingId !== null ||
                   pendingOpportunities.length ===
                     0
                 }
@@ -1088,6 +1343,20 @@ export default function OpportunitiesPage() {
                   <div className="min-w-0">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <span
+                        className={`rounded-full border px-3 py-1 text-xs font-black ${
+                          marketplaceClasses[
+                            opportunity.marketplace
+                          ]
+                        }`}
+                      >
+                        {
+                          marketplaceLabels[
+                            opportunity.marketplace
+                          ]
+                        }
+                      </span>
+
+                      <span
                         className={`rounded-full border px-3 py-1 text-xs font-bold ${
                           statusClasses[
                             opportunity.status
@@ -1121,9 +1390,12 @@ export default function OpportunitiesPage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-slate-500">
-                      {opportunity.categoryName ||
-                        opportunity.categoryId ||
-                        "Categoria não informada"}
+                      {opportunity.marketplace ===
+                      "AMAZON"
+                        ? `ASIN: ${opportunity.externalId}`
+                        : opportunity.categoryName ||
+                          opportunity.categoryId ||
+                          "Categoria não informada"}
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -1133,9 +1405,14 @@ export default function OpportunitiesPage() {
                         </p>
 
                         <p className="text-2xl font-bold text-emerald-600">
-                          {formatCurrency(
-                            opportunity.price
-                          )}
+                          {opportunity.price ===
+                            null &&
+                          opportunity.marketplace ===
+                            "AMAZON"
+                            ? "Carregado ao publicar"
+                            : formatCurrency(
+                                opportunity.price
+                              )}
                         </p>
                       </div>
 
@@ -1164,8 +1441,33 @@ export default function OpportunitiesPage() {
                         rel="noopener noreferrer"
                         className="inline-flex rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
-                        Abrir no Mercado Livre
+                        {
+                          marketplaceOpenLabels[
+                            opportunity.marketplace
+                          ]
+                        }
                       </a>
+
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void dismissOpportunity(
+                              opportunity
+                            )
+                          }
+                          disabled={
+                            publishingBatch ||
+                            dismissingId !== null
+                          }
+                          className="inline-flex rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {dismissingId ===
+                          opportunity.id
+                            ? "Descartando..."
+                            : "Descartar indisponível"}
+                        </button>
+                      ) : null}
 
                       {opportunity.productId ? (
                         <a
@@ -1206,17 +1508,23 @@ export default function OpportunitiesPage() {
                         }}
                         disabled={
                           !canEdit ||
-                          publishingBatch
+                          publishingBatch ||
+                          dismissingId !== null
                         }
-                        placeholder="Preenchido automaticamente pelos links colados acima"
+                        placeholder={
+                          opportunity.marketplace ===
+                          "AMAZON"
+                            ? "Cole o link individual Amazon com tag=ofertano-20"
+                            : "Preenchido automaticamente pelos links colados acima"
+                        }
                         className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                       />
 
                       <p className="mt-2 text-xs text-slate-500">
-                        Use este campo apenas para
-                        corrigir manualmente um link.
-                        Não é necessário salvar
-                        separadamente.
+                        {opportunity.marketplace ===
+                        "AMAZON"
+                          ? "Use o link individual do mesmo ASIN com a tag ofertano-20. O sistema confere o produto antes de publicar."
+                          : "Use este campo apenas para corrigir manualmente um link. Não é necessário salvar separadamente."}
                       </p>
 
                       {opportunity.errorMessage ? (
