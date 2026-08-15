@@ -76,7 +76,14 @@ export default function AdminPage() {
             .join("\n")
         : JSON.stringify(data, null, 2);
 
-      alert(detalhes);
+      const debugRejeicoes =
+        data.comparison?.rejections?.slice(0, 5) ?? [];
+
+      alert(
+        detalhes +
+          "\n\nPRIMEIRAS REJEICOES:\n" +
+          JSON.stringify(debugRejeicoes, null, 2)
+      );
       setUrl("");
     } catch (error) {
       console.error(error);
@@ -240,6 +247,7 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
 
