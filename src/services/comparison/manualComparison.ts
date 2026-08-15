@@ -793,6 +793,412 @@ function encontrarModeloEmComum(
   return null;
 }
 
+const TERMOS_MOVEIS = [
+  "armario",
+  "guarda roupa",
+  "balcao",
+  "buffet",
+  "aparador",
+  "comoda",
+  "rack",
+  "painel para tv",
+  "estante",
+  "mesa de cabeceira",
+  "criado mudo",
+  "sapateira",
+  "gabinete de cozinha",
+  "cozinha completa",
+  "cozinha modulada",
+  "cozinha compacta",
+  "cozinha suspensa",
+] as const;
+
+const TOKENS_GENERICOS_MOVEL = new Set([
+  "armario",
+  "armarios",
+  "cozinha",
+  "completa",
+  "completo",
+  "compacta",
+  "compacto",
+  "modulada",
+  "modulado",
+  "suspensa",
+  "suspenso",
+  "aereo",
+  "aerea",
+  "balcao",
+  "balcoes",
+  "buffet",
+  "aparador",
+  "guarda",
+  "roupa",
+  "comoda",
+  "rack",
+  "painel",
+  "estante",
+  "mesa",
+  "cabeceira",
+  "criado",
+  "mudo",
+  "sapateira",
+  "gabinete",
+  "kit",
+  "movel",
+  "moveis",
+  "mdf",
+  "mdp",
+  "porta",
+  "portas",
+  "gaveta",
+  "gavetas",
+  "com",
+  "sem",
+  "para",
+  "de",
+  "da",
+  "do",
+  "das",
+  "dos",
+  "em",
+  "e",
+  "cm",
+  "mm",
+  "metro",
+  "metros",
+  "cor",
+  "cores",
+
+  /*
+   * Acabamentos comuns não identificam a linha/modelo.
+   */
+  "preto",
+  "preta",
+  "branco",
+  "branca",
+  "grafite",
+  "cinamomo",
+  "carvalho",
+  "amendoa",
+  "freijo",
+  "nogueira",
+  "nature",
+  "off",
+  "white",
+  "bege",
+  "marrom",
+  "cinza",
+  "verde",
+  "azul",
+  "rosa",
+  "dourado",
+  "dourada",
+  "prata",
+]);
+
+function ehProdutoMovel(
+  title: string,
+): boolean {
+  const texto =
+    normalizarTexto(title);
+
+  return TERMOS_MOVEIS.some(
+    (termo) =>
+      texto.includes(
+        normalizarTexto(termo),
+      ),
+  );
+}
+
+function extrairContagemMovel(
+  title: string,
+  tipo: "porta" | "gaveta",
+): number | null {
+  const texto =
+    normalizarTexto(title);
+
+  const pattern =
+    tipo === "porta"
+      ? /\b(\d{1,2})\s*portas?\b/i
+      : /\b(\d{1,2})\s*gavetas?\b/i;
+
+  const match =
+    texto.match(pattern);
+
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const valor =
+    Number(match[1]);
+
+  return Number.isInteger(valor) &&
+    valor > 0
+    ? valor
+    : null;
+}
+
+function extrairTokensFortesMovel(
+  title: string,
+  brand: string | null,
+): string[] {
+  const brandTokens =
+    new Set(
+      normalizarTexto(
+        brand ?? "",
+      )
+        .split(" ")
+        .filter(Boolean),
+    );
+
+  return Array.from(
+    new Set(
+      normalizarTexto(title)
+        .split(" ")
+        .filter(Boolean)
+        .filter((token) => {
+          if (
+            brandTokens.has(token) ||
+            TOKENS_GENERICOS_MOVEL.has(token)
+          ) {
+            return false;
+          }
+
+          /*
+           * Numeros pequenos normalmente são
+           * quantidade de portas/gavetas.
+           * Códigos longos continuam válidos
+           * como identificadores de modelo.
+           */
+          if (/^\d+$/.test(token)) {
+            return token.length >= 5;
+          }
+
+          return token.length >= 3;
+        }),
+    ),
+  );
+}
+
+function compararMovelEstritamente(
+  original: ProductImport,
+  candidate: ProductImport,
+  a: ProductIdentity,
+  b: ProductIdentity,
+): MatchResult | null {
+  if (!ehProdutoMovel(original.title)) {
+    return null;
+  }
+
+  if (!ehProdutoMovel(candidate.title)) {
+    return {
+      exact: false,
+      reason:
+        "O candidato não pertence à mesma família de móveis.",
+    };
+  }
+
+  /*
+   * A marca do produto original continua obrigatória.
+   * Caso a outra loja não forneça brand estruturada,
+   * aceitamos a marca somente se ela estiver escrita
+   * explicitamente no título.
+   */
+  if (!a.brand) {
+    return {
+      exact: false,
+      reason:
+        "Marca do móvel original insuficiente para confirmação automática.",
+    };
+  }
+
+  const marcaOriginal =
+    normalizarTexto(a.brand);
+
+  if (
+    b.brand &&
+    normalizarTexto(b.brand) !==
+      marcaOriginal
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Marca diferente: ${a.brand} x ${b.brand}.`,
+    };
+  }
+
+  if (!b.brand) {
+    const tituloCandidato =
+      ` ${normalizarTexto(candidate.title)} `;
+
+    if (
+      !tituloCandidato.includes(
+        ` ${marcaOriginal} `,
+      )
+    ) {
+      return {
+        exact: false,
+        reason:
+          `A marca ${a.brand} não foi confirmada no candidato.`,
+      };
+    }
+  }
+
+  const portasOriginal =
+    extrairContagemMovel(
+      original.title,
+      "porta",
+    );
+
+  const portasCandidato =
+    extrairContagemMovel(
+      candidate.title,
+      "porta",
+    );
+
+  if (portasOriginal !== null) {
+    if (portasCandidato === null) {
+      return {
+        exact: false,
+        reason:
+          `${portasOriginal} porta(s) no original, mas quantidade não confirmada no candidato.`,
+      };
+    }
+
+    if (
+      portasOriginal !==
+      portasCandidato
+    ) {
+      return {
+        exact: false,
+        reason:
+          `Quantidade de portas diferente: ${portasOriginal} x ${portasCandidato}.`,
+      };
+    }
+  }
+
+  const gavetasOriginal =
+    extrairContagemMovel(
+      original.title,
+      "gaveta",
+    );
+
+  const gavetasCandidato =
+    extrairContagemMovel(
+      candidate.title,
+      "gaveta",
+    );
+
+  if (gavetasOriginal !== null) {
+    if (gavetasCandidato === null) {
+      return {
+        exact: false,
+        reason:
+          `${gavetasOriginal} gaveta(s) no original, mas quantidade não confirmada no candidato.`,
+      };
+    }
+
+    if (
+      gavetasOriginal !==
+      gavetasCandidato
+    ) {
+      return {
+        exact: false,
+        reason:
+          `Quantidade de gavetas diferente: ${gavetasOriginal} x ${gavetasCandidato}.`,
+      };
+    }
+  }
+
+  /*
+   * Se ambas as lojas informarem cor,
+   * cores diferentes continuam sendo variantes
+   * distintas.
+   */
+  if (
+    a.variants.color &&
+    b.variants.color &&
+    a.variants.color !==
+      b.variants.color
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Cor diferente: ${a.variants.color} x ${b.variants.color}.`,
+    };
+  }
+
+  const tokensOriginal =
+    extrairTokensFortesMovel(
+      original.title,
+      a.brand,
+    );
+
+  const tokensCandidato =
+    new Set(
+      extrairTokensFortesMovel(
+        candidate.title,
+        b.brand ?? a.brand,
+      ),
+    );
+
+  const tokensComuns =
+    tokensOriginal.filter(
+      (token) =>
+        tokensCandidato.has(token),
+    );
+
+  /*
+   * Para "Kit Mega", por exemplo, Mega vira
+   * um identificador forte. Atenas, Nanda,
+   * Luana etc. não passam.
+   */
+  if (tokensOriginal.length === 0) {
+    return {
+      exact: false,
+      reason:
+        "Linha/modelo do móvel insuficiente para confirmação automática.",
+    };
+  }
+
+  const minimoTokens =
+    tokensOriginal.length >= 2
+      ? 2
+      : 1;
+
+  if (
+    tokensComuns.length <
+    minimoTokens
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Linha/modelo do móvel não coincide. ` +
+        `Original: ${tokensOriginal.join(", ") || "não identificado"}.`,
+    };
+  }
+
+  const detalhes = [
+    ...tokensComuns,
+    portasOriginal !== null
+      ? `${portasOriginal} portas`
+      : null,
+    gavetasOriginal !== null
+      ? `${gavetasOriginal} gavetas`
+      : null,
+  ]
+    .filter(
+      (value): value is string =>
+        Boolean(value),
+    )
+    .join(", ");
+
+  return {
+    exact: true,
+    reason:
+      `Móvel confirmado por marca, linha/modelo e características: ${detalhes}.`,
+  };
+}
 function compararProdutoEstritamente(
   original: ProductImport,
   candidate: ProductImport,
@@ -812,6 +1218,18 @@ function compararProdutoEstritamente(
       exact: false,
       reason: "GTIN/EAN diferente.",
     };
+  }
+
+  const matchMovel =
+    compararMovelEstritamente(
+      original,
+      candidate,
+      a,
+      b,
+    );
+
+  if (matchMovel) {
+    return matchMovel;
   }
 
   if (a.brand && b.brand && a.brand !== b.brand) {
@@ -893,6 +1311,23 @@ function compararProdutoEstritamente(
 function criarTermoBusca(
   product: ProductImport,
 ): string {
+  /*
+   * Móveis dependem muito de nome da linha,
+   * quantidade de portas/gavetas e marca.
+   *
+   * Exemplo:
+   * Aramóveis Kit Mega 9 Portas 2 Gavetas.
+   *
+   * Por isso preservamos o título completo
+   * como consulta em vez de reduzir a um
+   * token genérico.
+   */
+  if (ehProdutoMovel(product.title)) {
+    return normalizarTexto(
+      product.title,
+    ).slice(0, 180);
+  }
+
   const identity = extrairIdentidade(product);
 
   const modeloBusca =
@@ -1608,4 +2043,5 @@ export async function buscarComparacaoManual(
     errors,
   };
 }
+
 
