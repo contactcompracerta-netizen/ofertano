@@ -179,6 +179,12 @@ const TERMOS_ACESSORIOS_GERAIS = [
   "carregador",
   "adaptador",
   "suporte",
+  "base",
+  "bases",
+  "stand",
+  "stands",
+  "pedestal",
+  "pedestais",
   "protetor",
   "borracha",
   "anel de vedacao",
@@ -1137,6 +1143,3 @@ export async function buscarMercadoLivre(
     };
   }
 }
-
-
-

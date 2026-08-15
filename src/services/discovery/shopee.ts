@@ -29,6 +29,12 @@ const TERMOS_ACESSORIOS = [
   "adaptadores",
   "suporte",
   "suportes",
+  "base",
+  "bases",
+  "stand",
+  "stands",
+  "pedestal",
+  "pedestais",
   "protetor",
   "protetores",
   "bumper",
@@ -40,20 +46,58 @@ const TERMOS_ACESSORIOS = [
   "headset",
   "earphone",
   "borracha",
+  "borrachas",
   "vedacao",
+  "vedacoes",
+  "anel de vedacao",
+  "aneis de vedacao",
   "anel",
+  "aneis",
   "pino",
+  "pinos",
   "peso",
+  "pesos",
+  "peso regulador",
+  "pesos reguladores",
   "regulador",
+  "reguladores",
   "valvula",
+  "valvulas",
   "gaxeta",
+  "gaxetas",
   "guarnicao",
+  "guarnicoes",
   "reparo",
+  "reparos",
+  "kit reparo",
+  "kit de reparo",
   "reposicao",
+  "reposicoes",
+  "peca de reposicao",
+  "pecas de reposicao",
   "tampa",
+  "tampas",
   "alca",
+  "alcas",
   "antena",
+  "antenas",
   "flex",
+];
+
+const TERMOS_CONDICAO_NAO_NOVA = [
+  "usado",
+  "usada",
+  "usados",
+  "usadas",
+  "seminovo",
+  "seminova",
+  "seminovos",
+  "seminovas",
+  "recondicionado",
+  "recondicionada",
+  "recondicionados",
+  "recondicionadas",
+  "refurbished",
 ];
 
 const FAMILIAS_VARIANTE_ESTRITA = [
@@ -151,6 +195,21 @@ function calcularRelevancia(
   );
 }
 
+function contemExpressao(
+  textoNormalizado: string,
+  expressao: string,
+): boolean {
+  const texto =
+    ` ${textoNormalizado} `;
+
+  const termo =
+    ` ${normalizarTexto(expressao)} `;
+
+  return texto.includes(
+    termo,
+  );
+}
+
 function possuiAcessorioNaoSolicitado(
   titulo: string,
   consulta: string,
@@ -162,21 +221,32 @@ function possuiAcessorioNaoSolicitado(
     normalizarTexto(consulta);
 
   return TERMOS_ACESSORIOS.some(
-    (termo) => {
-      const termoNormalizado =
-        normalizarTexto(termo);
-
-      return (
-        tituloNormalizado.includes(
-          termoNormalizado,
-        ) &&
-        !consultaNormalizada.includes(
-          termoNormalizado,
-        )
-      );
-    },
+    (termo) =>
+      contemExpressao(
+        tituloNormalizado,
+        termo,
+      ) &&
+      !contemExpressao(
+        consultaNormalizada,
+        termo,
+      ),
   );
 }
+function possuiCondicaoNaoNova(
+  titulo: string,
+): boolean {
+  const tituloNormalizado =
+    normalizarTexto(titulo);
+
+  return TERMOS_CONDICAO_NAO_NOVA.some(
+    (termo) =>
+      contemExpressao(
+        tituloNormalizado,
+        termo,
+      ),
+  );
+}
+
 function usaFamiliaComVarianteEstrita(
   consulta: string,
 ): boolean {
@@ -348,6 +418,87 @@ function extrairCapacidades(
   return encontrados;
 }
 
+function extrairCapacidadesRam(
+  valor: string,
+): Set<string> {
+  const normalizado =
+    normalizarTexto(valor);
+
+  const encontrados =
+    new Set<string>();
+
+  const regex =
+    /\b(\d+(?:[.,]\d+)?)\s*(gb|tb)\b/gi;
+
+  for (
+    const match of normalizado.matchAll(
+      regex,
+    )
+  ) {
+    const inicio =
+      match.index ?? 0;
+
+    const fim =
+      inicio + match[0].length;
+
+    const antes =
+      normalizado.slice(
+        Math.max(0, inicio - 24),
+        inicio,
+      );
+
+    const depois =
+      normalizado.slice(
+        fim,
+        Math.min(
+          normalizado.length,
+          fim + 24,
+        ),
+      );
+
+    const ramAntes =
+      /(?:^|\s)(?:memoria\s+)?ram(?:\s+de)?\s*$/.test(
+        antes,
+      ) &&
+      !/\b\d+(?:[.,]\d+)?\s*(?:gb|tb)\s+(?:de\s+)?ram(?:\s+de)?\s*$/.test(
+        antes,
+      );
+
+    const ramDepois =
+      /^\s*(?:de\s+)?ram(?:\s|$)/.test(
+        depois,
+      );
+
+    if (
+      !ramAntes &&
+      !ramDepois
+    ) {
+      continue;
+    }
+
+    const numero =
+      match[1]
+        ?.replace(",", ".")
+        .trim();
+
+    const unidade =
+      match[2]
+        ?.toLowerCase()
+        .trim();
+
+    if (
+      numero &&
+      unidade
+    ) {
+      encontrados.add(
+        `${numero}${unidade}`,
+      );
+    }
+  }
+
+  return encontrados;
+}
+
 function capacidadeCompativel(
   titulo: string,
   consulta: string,
@@ -375,16 +526,62 @@ function capacidadeCompativel(
   }
 
   if (
-    candidato.size !==
-    referencia.size
+    conjuntosIguais(
+      referencia,
+      candidato,
+    )
   ) {
-    return false;
+    return true;
   }
 
-  return conjuntosIguais(
-    referencia,
-    candidato,
-  );
+  /*
+   * A Shopee costuma colocar RAM e armazenamento
+   * juntos no título, por exemplo:
+   * "8 GB RAM + 256 GB".
+   *
+   * A capacidade extra só é aceita quando estiver
+   * claramente identificada como RAM. Assim, uma
+   * listagem 128 GB / 256 GB continua sendo rejeitada
+   * quando a referência pede apenas 256 GB.
+   */
+  for (
+    const capacidade of referencia
+  ) {
+    if (
+      !candidato.has(
+        capacidade,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  const capacidadesRam =
+    extrairCapacidadesRam(
+      titulo,
+    );
+
+  for (
+    const capacidade of candidato
+  ) {
+    if (
+      referencia.has(
+        capacidade,
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      !capacidadesRam.has(
+        capacidade,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 function converterPreco(
   valor:
@@ -551,6 +748,14 @@ export async function buscarShopee(
 
       const titulo =
         oferta.productName.trim();
+
+      if (
+        possuiCondicaoNaoNova(
+          titulo,
+        )
+      ) {
+        continue;
+      }
 
       const relevancia =
         calcularRelevancia(
@@ -786,5 +991,3 @@ export async function buscarShopee(
     };
   }
 }
-
-
