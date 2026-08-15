@@ -1,6 +1,6 @@
-/*
+﻿/*
  * Descoberta de produtos Amazon pela busca ao vivo da SerpApi,
- * com validação de modelo exato, acessórios e disponibilidade.
+ * com validaÃ§Ã£o de modelo exato, acessÃ³rios e disponibilidade.
  */
 
 import type {
@@ -16,6 +16,23 @@ const MARKETPLACE = "AMAZON" as const;
 const MARKETPLACE_NAME = "Amazon" as const;
 const TIMEOUT_MS = 25_000;
 const MAX_RESULTS = 20;
+
+function criarLinkAfiliadoAmazon(
+  asin: string,
+): string | null {
+  const tag =
+    process.env.AMAZON_ASSOCIATE_TAG
+      ?.trim();
+
+  if (!tag) {
+    return null;
+  }
+
+  return (
+    `https://www.amazon.com.br/dp/${asin}` +
+    `/ref=nosim?tag=${encodeURIComponent(tag)}`
+  );
+}
 
 type SerpApiOrganicResult = {
   position?: number;
@@ -220,9 +237,9 @@ function possuiAcessorioNaoSolicitado(
   }
 
   /*
-   * Acessórios normalmente se identificam logo no
-   * começo do título: "Suporte para...", "Capa para..."
-   * ou após a marca do fabricante do acessório.
+   * AcessÃ³rios normalmente se identificam logo no
+   * comeÃ§o do tÃ­tulo: "Suporte para...", "Capa para..."
+   * ou apÃ³s a marca do fabricante do acessÃ³rio.
    */
   const inicioDoTitulo =
     tokenizar(title).slice(0, 6);
@@ -530,9 +547,9 @@ function tituloCompativel(
   }
 
   /*
-   * Números e códigos mistos normalmente identificam
-   * modelo, geração, tamanho ou versão. Todos eles
-   * precisam aparecer no título retornado.
+   * NÃºmeros e cÃ³digos mistos normalmente identificam
+   * modelo, geraÃ§Ã£o, tamanho ou versÃ£o. Todos eles
+   * precisam aparecer no tÃ­tulo retornado.
    */
   const modelTokens = queryTokens.filter(
     (token) =>
@@ -553,8 +570,8 @@ function tituloCompativel(
   }
 
   /*
-   * Os dois primeiros termos úteis formam a âncora
-   * principal do produto. Assim, "Echo Pop" não pode
+   * Os dois primeiros termos Ãºteis formam a Ã¢ncora
+   * principal do produto. Assim, "Echo Pop" nÃ£o pode
    * aceitar "Echo Dot" nem "Echo Spot".
    */
   const identityTokens =
@@ -799,7 +816,10 @@ function criarCandidatos(
       externalId: asin,
       sourceUrl:
         `https://www.amazon.com.br/dp/${asin}`,
-      affiliateLink: null,
+      affiliateLink:
+        criarLinkAfiliadoAmazon(
+          asin,
+        ),
       title,
       image,
       price,
@@ -985,7 +1005,7 @@ export async function buscarAmazon(
       candidates: [],
       scanned: 0,
       error:
-        "A variável SERPAPI_API_KEY não está configurada.",
+        "A variÃ¡vel SERPAPI_API_KEY nÃ£o estÃ¡ configurada.",
     };
   }
 
@@ -1013,7 +1033,7 @@ export async function buscarAmazon(
       error:
         candidates.length > 0
           ? null
-          : "A busca ao vivo terminou, mas não encontrou ofertas Amazon com ASIN, preço, imagem e disponibilidade confirmados.",
+          : "A busca ao vivo terminou, mas nÃ£o encontrou ofertas Amazon com ASIN, preÃ§o, imagem e disponibilidade confirmados.",
     };
   } catch (error) {
     console.error(
