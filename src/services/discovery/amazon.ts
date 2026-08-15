@@ -287,6 +287,81 @@ const QUALIFICADORES_MODELO = new Set([
   "lite",
 ]);
 
+const MARCAS_CONHECIDAS = new Set([
+  "samsung",
+  "lg",
+  "sony",
+  "philips",
+  "tcl",
+  "hisense",
+  "aoc",
+  "philco",
+  "panasonic",
+  "xiaomi",
+  "motorola",
+  "apple",
+  "lenovo",
+  "asus",
+  "acer",
+  "dell",
+  "hp",
+  "positivo",
+  "multilaser",
+  "electrolux",
+  "brastemp",
+  "consul",
+  "mondial",
+  "arno",
+  "oster",
+  "bosch",
+  "midea",
+  "gree",
+]);
+
+function marcaCompativel(
+  query: string,
+  title: string,
+  resultBrand?: string,
+): boolean {
+  const queryTokens = new Set(
+    tokenizar(query),
+  );
+
+  const marcaSolicitada =
+    Array.from(
+      MARCAS_CONHECIDAS,
+    ).find(
+      (marca) =>
+        queryTokens.has(marca),
+    );
+
+  if (!marcaSolicitada) {
+    return true;
+  }
+
+  const tituloTokens = new Set(
+    tokenizar(title),
+  );
+
+  if (
+    tituloTokens.has(
+      marcaSolicitada,
+    )
+  ) {
+    return true;
+  }
+
+  const brandTokens = new Set(
+    tokenizar(
+      resultBrand ?? "",
+    ),
+  );
+
+  return brandTokens.has(
+    marcaSolicitada,
+  );
+}
+
 function possuiCondicaoNaoNova(
   title: string,
 ): boolean {
@@ -380,6 +455,7 @@ function varianteModeloCompativel(
 function tituloCompativel(
   query: string,
   title: string,
+  resultBrand?: string,
 ): boolean {
   const queryTokens =
     tokenizar(query);
@@ -391,6 +467,16 @@ function tituloCompativel(
   if (
     queryTokens.length === 0 ||
     titleTokens.size === 0
+  ) {
+    return false;
+  }
+
+  if (
+    !marcaCompativel(
+      query,
+      title,
+      resultBrand,
+    )
   ) {
     return false;
   }
@@ -676,6 +762,7 @@ function criarCandidatos(
       !tituloCompativel(
         query,
         title,
+        result.brand,
       )
     ) {
       continue;

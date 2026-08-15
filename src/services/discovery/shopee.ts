@@ -81,6 +81,10 @@ const TERMOS_ACESSORIOS = [
   "alcas",
   "antena",
   "antenas",
+  "controle remoto",
+  "controles remotos",
+  "soundbar",
+  "soundbars",
   "flex",
 ];
 
