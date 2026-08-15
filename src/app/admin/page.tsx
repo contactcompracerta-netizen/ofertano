@@ -58,7 +58,7 @@ export default function AdminPage() {
           ]
             .filter(Boolean)
             .join("\n")
-        : data.message || "Produto importado com sucesso!";
+        : JSON.stringify(data, null, 2);
 
       alert(detalhes);
       setUrl("");
@@ -224,5 +224,6 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
