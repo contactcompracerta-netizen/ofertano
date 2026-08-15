@@ -49,6 +49,22 @@ export default function AdminPage() {
             `Candidatos analisados: ${comparison.scanned ?? 0}`,
             `Importados para validação: ${comparison.importedCandidates ?? 0}`,
             `Rejeitados: ${comparison.rejectedCandidates ?? 0}`,
+            comparison.rejections?.length
+              ? `Motivos das rejeições:` +
+                `\n${comparison.rejections
+                  .slice(0, 15)
+                  .map(
+                    (item: {
+                      marketplace?: string;
+                      name?: string;
+                      reason?: string;
+                    }) =>
+                      `${item.marketplace ?? "Loja"}: ` +
+                      `${item.name ?? "Produto"} — ` +
+                      `${item.reason ?? "sem motivo informado"}`,
+                  )
+                  .join("\n")}`
+              : null,
             comparison.errors?.length
               ? `Erros: ${comparison.errors.join(" | ")}`
               : null,
@@ -224,6 +240,7 @@ export default function AdminPage() {
     </main>
   );
 }
+
 
 
 
