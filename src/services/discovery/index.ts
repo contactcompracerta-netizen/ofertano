@@ -28,6 +28,165 @@ function normalizarTexto(
     .replace(/\s+/g, " ");
 }
 
+type ConectividadeSolicitada =
+  | "BLUETOOTH"
+  | "LTE"
+  | null;
+
+function ehConsultaDeSmartwatch(
+  valor: string,
+): boolean {
+  const tokens =
+    normalizarTexto(valor)
+      .split(" ")
+      .filter(Boolean);
+
+  return (
+    tokens.includes("smartwatch") ||
+    tokens.includes("watch") ||
+    tokens.includes("relogio")
+  );
+}
+
+function possuiBluetooth(
+  valor: string,
+): boolean {
+  const tokens =
+    normalizarTexto(valor)
+      .split(" ")
+      .filter(Boolean);
+
+  return tokens.some(
+    (token) =>
+      token === "bt" ||
+      token.startsWith(
+        "bluetooth",
+      ),
+  );
+}
+
+function possuiLte(
+  valor: string,
+): boolean {
+  const tokens =
+    normalizarTexto(valor)
+      .split(" ")
+      .filter(Boolean);
+
+  return (
+    tokens.includes("lte") ||
+    tokens.includes("4g")
+  );
+}
+
+function extrairConectividadeSolicitada(
+  consulta: string,
+): ConectividadeSolicitada {
+  if (
+    !ehConsultaDeSmartwatch(
+      consulta,
+    )
+  ) {
+    return null;
+  }
+
+  /*
+   * LTE/4G é a variante mais específica.
+   *
+   * Muitos títulos de relógios LTE também
+   * contêm a palavra Bluetooth porque o
+   * aparelho possui as duas tecnologias.
+   *
+   * Por isso:
+   *
+   * "Bluetooth LTE" => LTE
+   * "Bluetooth"     => BLUETOOTH
+   */
+  if (possuiLte(consulta)) {
+    return "LTE";
+  }
+
+  if (possuiBluetooth(consulta)) {
+    return "BLUETOOTH";
+  }
+
+  return null;
+}
+
+function candidatoCompativelComConectividade(
+  candidato: DiscoveryCandidate,
+  consulta: string,
+): boolean {
+  const conectividade =
+    extrairConectividadeSolicitada(
+      consulta,
+    );
+
+  if (!conectividade) {
+    return true;
+  }
+
+  const temBluetooth =
+    possuiBluetooth(
+      candidato.title,
+    );
+
+  const temLte =
+    possuiLte(
+      candidato.title,
+    );
+
+  if (
+    conectividade === "LTE"
+  ) {
+    /*
+     * Se o visitante pediu LTE/4G,
+     * só aceitamos anúncios que declarem
+     * explicitamente LTE ou 4G.
+     */
+    return temLte;
+  }
+
+  /*
+   * Se o visitante pediu somente Bluetooth,
+   * a oferta precisa declarar Bluetooth/BT
+   * e não pode ser a variante LTE/4G.
+   */
+  return (
+    temBluetooth &&
+    !temLte
+  );
+}
+
+function filtrarCandidatosPorConsulta(
+  candidatos: DiscoveryCandidate[],
+  consulta: string,
+): DiscoveryCandidate[] {
+  return candidatos.filter(
+    (candidato) =>
+      candidatoCompativelComConectividade(
+        candidato,
+        consulta,
+      ),
+  );
+}
+
+function filtrarResultadoPorConsulta(
+  resultado: MarketplaceDiscoveryResult,
+  consulta: string,
+): MarketplaceDiscoveryResult {
+  return {
+    ...resultado,
+
+    candidates:
+      filtrarCandidatosPorConsulta(
+        resultado.candidates,
+        consulta,
+      ),
+  };
+}
+
+
 function normalizarLimite(
   valor?: number,
 ): number {
@@ -228,7 +387,7 @@ function extrairArmazenamentoTitulo(
     }
 
     encontrados.add(
-      `${numero} ${unidade.toUpperCase()}`,
+      `${numero} ${unidade.toUpperCase()}`,       
     );
   }
 
@@ -323,7 +482,7 @@ function criarConsultasReferencia(
   /*
    * Mantemos sempre a busca original.
    * As referências canônicas entram como tentativas
-   * adicionais, nunca como substituição total.
+   * adicionais, nunca como substituição total.   
    */
   consultas.set(
     normalizarTexto(
@@ -459,7 +618,7 @@ async function executarAdapter(
   }
 }
 
-async function executarAdapterComReferencias(
+async function executarAdapterComReferencias(     
   adapter: DiscoveryAdapter,
   consultaOriginal: string,
   consultasReferencia: string[],
@@ -480,9 +639,12 @@ async function executarAdapterComReferencias(
   const candidatos =
     ordenarCandidatos(
       removerDuplicados(
-        resultados.flatMap(
-          (resultado) =>
-            resultado.candidates,
+        filtrarCandidatosPorConsulta(
+          resultados.flatMap(
+            (resultado) =>
+              resultado.candidates,
+          ),
+          consultaOriginal,
         ),
       ),
     ).slice(
@@ -622,10 +784,13 @@ export async function descobrirProdutos(
 
   if (referencia) {
     resultadoReferencia =
-      await executarAdapter(
-        referencia,
+      filtrarResultadoPorConsulta(
+        await executarAdapter(
+          referencia,
+          query,
+          limit,
+        ),
         query,
-        limit,
       );
 
     resultados.push(
@@ -665,8 +830,8 @@ export async function descobrirProdutos(
   );
 
   /*
-   * Caso o Mercado Livre não esteja habilitado,
-   * ainda permitimos que os demais adapters
+   * Caso o Mercado Livre não esteja habilitado,  
+   * ainda permitimos que os demais adapters      
    * trabalhem normalmente com a consulta original.
    */
   if (
@@ -681,9 +846,12 @@ export async function descobrirProdutos(
   const candidatos =
     ordenarCandidatos(
       removerDuplicados(
-        resultados.flatMap(
-          (resultado) =>
-            resultado.candidates,
+        filtrarCandidatosPorConsulta(
+          resultados.flatMap(
+            (resultado) =>
+              resultado.candidates,
+          ),
+          query,
         ),
       ),
     );
@@ -718,5 +886,4 @@ export async function descobrirProdutos(
       ).length,
   };
 }
-
 

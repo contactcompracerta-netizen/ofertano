@@ -330,7 +330,7 @@ function extrairCorDoTitulo(
       valor: "GRAFITE",
     },
     {
-      padrao: /\b(?:PRATA|SILVER)\b/,
+      padrao: /\b(?:PRATA|PRATEADO|PRATEADA|SILVER)\b/,
       valor: "PRATA",
     },
     {
@@ -729,7 +729,26 @@ function normalizarMarcaCanonical(
     .replace(/^MARCA[:\s]+/i, "")
     .trim();
 
-  return marca || null;
+  if (!marca) {
+    return null;
+  }
+
+  /*
+   * Alguns marketplaces retornam a linha/família
+   * junto com a marca.
+   *
+   * Precisamos manter a mesma marca canônica entre
+   * lojas para que o mesmo produto seja agrupado.
+   */
+  if (marca === "SAMSUNG GALAXY") {
+    return "SAMSUNG";
+  }
+
+  if (marca === "APPLE IPHONE") {
+    return "APPLE";
+  }
+
+  return marca;
 }
 
 
@@ -755,6 +774,55 @@ function tituloContemMarca(
   return ` ${texto} `.includes(
     ` ${marcaNormalizada} `,
   );
+}
+
+function inferirMarcaDoTitulo(
+  titulo: string,
+): string | null {
+  const marcasConhecidas = [
+    ["Samsung", "SAMSUNG"],
+    ["Apple", "APPLE"],
+    ["iPhone", "APPLE"],
+    ["Xiaomi", "XIAOMI"],
+    ["Motorola", "MOTOROLA"],
+    ["Lenovo", "LENOVO"],
+    ["Acer", "ACER"],
+    ["Asus", "ASUS"],
+    ["Dell", "DELL"],
+    ["HP", "HP"],
+    ["LG", "LG"],
+    ["Sony", "SONY"],
+    ["Philips", "PHILIPS"],
+    ["TCL", "TCL"],
+    ["Hisense", "HISENSE"],
+    ["Realme", "REALME"],
+    ["Positivo", "POSITIVO"],
+    ["JBL", "JBL"],
+    ["Electrolux", "ELECTROLUX"],
+    ["Brastemp", "BRASTEMP"],
+    ["Consul", "CONSUL"],
+    ["Mondial", "MONDIAL"],
+    ["Philco", "PHILCO"],
+    ["Midea", "MIDEA"],
+  ] as const;
+
+  for (
+    const [
+      termo,
+      marcaCanonical,
+    ] of marcasConhecidas
+  ) {
+    if (
+      tituloContemMarca(
+        titulo,
+        termo,
+      )
+    ) {
+      return marcaCanonical;
+    }
+  }
+
+  return null;
 }
 
 function normalizarCodigoNumerico(
@@ -1875,11 +1943,38 @@ export async function saveProduct(
         )
       : null;
 
+  /*
+   * Alguns marketplaces, principalmente em resultados
+   * de Discovery, podem não preencher product.brand.
+   *
+   * Quando isso ocorrer, usamos uma marca reconhecida
+   * diretamente no título.
+   *
+   * Exemplo:
+   * "Smartwatch Samsung Galaxy Watch8..."
+   * -> brand = Samsung
+   */
+  const marcaEfetiva =
+    product.brand?.trim() ||
+    inferirMarcaDoTitulo(
+      product.title,
+    );
+
+  const productComMarca: ProductImport =
+    marcaEfetiva
+      ? {
+          ...product,
+          brand: marcaEfetiva,
+        }
+      : product;
+
   const identificadores =
-    extrairIdentificadores(product);
+    extrairIdentificadores(
+      productComMarca,
+    );
 
   const canonicalKey = criarCanonicalKey(
-    product,
+    productComMarca,
     identificadores,
   );
 
@@ -1918,10 +2013,12 @@ export async function saveProduct(
         : null;
 
     const marcaOriginalParaMatching =
-      product.brand?.trim() || null;
+      productComMarca.brand?.trim() || null;
 
     const marcaNormalizadaParaMatching =
-      normalizarMarcaCanonical(product.brand);
+      normalizarMarcaCanonical(
+        productComMarca.brand,
+      );
 
     const marcasParaBusca = Array.from(
       new Set(
@@ -2116,7 +2213,7 @@ export async function saveProduct(
           ),
 
           video: null,
-          brand: product.brand,
+          brand: productComMarca.brand,
           description:
             product.description,
 
@@ -2250,7 +2347,8 @@ export async function saveProduct(
           ),
 
           brand:
-            saved.brand ?? product.brand,
+            saved.brand ??
+            productComMarca.brand,
 
           description:
             atualizarDadosPrincipais
@@ -2522,3 +2620,4 @@ export async function saveProduct(
     );
   });
 }
+

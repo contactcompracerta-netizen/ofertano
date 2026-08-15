@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import OffersSection from "@/components/OffersSection";
@@ -6,8 +7,11 @@ import AntiFraudNotice from "@/components/AntiFraudNotice";
 import Benefits from "@/components/Benefits";
 import Footer from "@/components/Footer";
 
+import { searchCatalogOrDiscover } from "@/services/search/searchCatalogOrDiscover";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 type HomePageProps = {
   searchParams: Promise<{
@@ -19,69 +23,80 @@ export default async function HomePage({
   searchParams,
 }: HomePageProps) {
   const parametros = await searchParams;
-  const busca = parametros.q?.trim() || "";
 
-  const produtos = await prisma.product.findMany({
-    where: {
-      active: true,
+  const busca =
+    parametros.q
+      ?.replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160) || "";
 
-      price: {
-        gt: 0,
-      },
+  /*
+   * Sem pesquisa:
+   * mantém o comportamento normal da Home,
+   * exibindo os produtos já publicados.
+   */
+  if (!busca) {
+    const produtos =
+      await prisma.product.findMany({
+        where: {
+          active: true,
 
-      image: {
-        not: "",
-      },
+          price: {
+            gt: 0,
+          },
 
-      ...(busca
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: busca,
-                  mode: "insensitive",
-                },
-              },
-              {
-                brand: {
-                  contains: busca,
-                  mode: "insensitive",
-                },
-              },
-              {
-                category: {
-                  contains: busca,
-                  mode: "insensitive",
-                },
-              },
-              {
-                store: {
-                  contains: busca,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    },
+          image: {
+            not: "",
+          },
+        },
 
-    orderBy: {
-      updatedAt: "desc",
-    },
-  });
+        orderBy: {
+          updatedAt: "desc",
+        },
+      });
+
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <Header />
+
+        <Hero />
+
+        <OffersSection
+          produtos={produtos}
+          busca=""
+        />
+
+        <AntiFraudNotice />
+
+        <Benefits />
+
+        <Footer />
+      </main>
+    );
+  }
+
+  /*
+   * Com pesquisa:
+   *
+   * 1. procura primeiro no catálogo;
+   * 2. se não existir, executa Discovery;
+   * 3. publica/agrupar canonicamente;
+   * 4. retorna os produtos encontrados.
+   */
+  const resultado =
+    await searchCatalogOrDiscover(
+      busca,
+      5,
+    );
 
   return (
     <main className="min-h-screen bg-slate-50">
       <Header />
 
-      {!busca && <Hero />}
-
       <OffersSection
-        produtos={produtos}
+        produtos={resultado.products}
         busca={busca}
       />
-
-      {!busca && <AntiFraudNotice />}
 
       <Benefits />
 
