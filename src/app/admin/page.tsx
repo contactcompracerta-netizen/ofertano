@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -39,7 +39,28 @@ export default function AdminPage() {
         return;
       }
 
-      alert("Produto importado com sucesso!");
+      const comparison = data.comparison;
+
+      const detalhes = comparison
+        ? [
+            data.message,
+            "",
+            `Encontradas: ${comparison.found ?? 0}`,
+            `Candidatos analisados: ${comparison.scanned ?? 0}`,
+            `Importados para validação: ${comparison.importedCandidates ?? 0}`,
+            `Rejeitados: ${comparison.rejectedCandidates ?? 0}`,
+            comparison.errors?.length
+              ? `Erros: ${comparison.errors.join(" | ")}`
+              : null,
+            data.comparisonError
+              ? `Erro da comparação: ${data.comparisonError}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : data.message || "Produto importado com sucesso!";
+
+      alert(detalhes);
       setUrl("");
     } catch (error) {
       console.error(error);
@@ -69,7 +90,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Gerencie oportunidades, descoberta e publicação de produtos.
+              Gerencie oportunidades, descoberta e publicaÃ§Ã£o de produtos.
             </p>
 
             <Link
@@ -90,7 +111,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Resolva em lote os links dos produtos que o robô importou automaticamente.
+              Resolva em lote os links dos produtos que o robÃ´ importou automaticamente.
             </p>
 
             <Link
@@ -107,18 +128,18 @@ export default function AdminPage() {
             </div>
 
             <h2 className="mt-3 text-xl font-bold text-gray-900">
-              Central de Integrações
+              Central de IntegraÃ§Ãµes
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Acompanhe conexões, credenciais, ofertas e status dos marketplaces.
+              Acompanhe conexÃµes, credenciais, ofertas e status dos marketplaces.
             </p>
 
             <Link
               href="/admin/integracoes"
               className="mt-5 block w-full rounded-xl bg-sky-600 px-5 py-4 text-center font-bold text-white transition hover:bg-sky-700"
             >
-              Abrir Integrações
+              Abrir IntegraÃ§Ãµes
             </Link>
           </div>
 
@@ -145,11 +166,11 @@ export default function AdminPage() {
 
           <div className="rounded-2xl bg-white p-6 shadow md:p-8">
             <h2 className="text-xl font-bold text-gray-900">
-              Fila de importação
+              Fila de importaÃ§Ã£o
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Acompanhe os produtos enviados para processamento automático.
+              Acompanhe os produtos enviados para processamento automÃ¡tico.
             </p>
 
             <Link
@@ -163,11 +184,11 @@ export default function AdminPage() {
 
         <div className="rounded-2xl bg-white p-6 shadow md:p-8">
           <h2 className="text-xl font-bold text-gray-900">
-            Importação manual
+            ImportaÃ§Ã£o manual
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-gray-600">
-            Cole o link de um produto para importá-lo manualmente.
+            Cole o link de um produto para importÃ¡-lo manualmente.
           </p>
 
           <label
@@ -203,4 +224,5 @@ export default function AdminPage() {
     </main>
   );
 }
+
 

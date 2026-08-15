@@ -33,19 +33,46 @@ function obterLinkAfiliadoAmazon(
       return null;
     }
 
-    const tag =
+    /*
+     * Se o administrador colou um link que já
+     * pertence ao Ofertano, preservamos o URL.
+     */
+    const tagAtual =
       url.searchParams.get("tag")?.trim();
 
-    if (tag !== "ofertano-20") {
+    const associateTag =
+      process.env.AMAZON_ASSOCIATE_TAG
+        ?.trim() || "ofertano-20";
+
+    if (tagAtual === associateTag) {
+      return rawUrl.trim();
+    }
+
+    /*
+     * Para qualquer URL comum da Amazon,
+     * extraímos o ASIN de /dp/ASIN ou /gp/product/ASIN
+     * e construímos automaticamente o link individual.
+     */
+    const match =
+      url.pathname.match(
+        /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i,
+      );
+
+    const asin =
+      match?.[1]?.toUpperCase() ?? null;
+
+    if (!asin) {
       return null;
     }
 
-    return rawUrl.trim();
+    return (
+      `https://www.amazon.com.br/dp/${asin}` +
+      `/ref=nosim?tag=${encodeURIComponent(associateTag)}`
+    );
   } catch {
     return null;
   }
 }
-
 export async function POST(
   request: Request,
 ) {
