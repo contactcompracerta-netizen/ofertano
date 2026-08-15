@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import SearchNavigationLoading from "@/components/search/SearchNavigationLoading";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,21 +19,21 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://ofertano.vercel.app"),
 
   title: {
-    default: "Ofertano | Compare preços antes de comprar",
+    default: "Ofertano | Compare preÃ§os antes de comprar",
     template: "%s | Ofertano",
   },
 
   description:
-    "Compare preços, encontre ofertas e compre diretamente em lojas parceiras como Mercado Livre, Amazon e Shopee.",
+    "Compare preÃ§os, encontre ofertas e compre diretamente em lojas parceiras como Mercado Livre, Amazon e Shopee.",
 
   applicationName: "Ofertano",
 
   keywords: [
     "Ofertano",
-    "comparador de preços",
-    "comparar preços",
+    "comparador de preÃ§os",
+    "comparar preÃ§os",
     "ofertas",
-    "promoções",
+    "promoÃ§Ãµes",
     "Mercado Livre",
     "Amazon",
     "Shopee",
@@ -58,16 +59,16 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     url: "/",
     siteName: "Ofertano",
-    title: "Ofertano | Compare preços antes de comprar",
+    title: "Ofertano | Compare preÃ§os antes de comprar",
     description:
-      "Compare preços, encontre ofertas e compre diretamente nas lojas parceiras.",
+      "Compare preÃ§os, encontre ofertas e compre diretamente nas lojas parceiras.",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Ofertano | Compare preços antes de comprar",
+    title: "Ofertano | Compare preÃ§os antes de comprar",
     description:
-      "Compare preços, encontre ofertas e compre diretamente nas lojas parceiras.",
+      "Compare preÃ§os, encontre ofertas e compre diretamente nas lojas parceiras.",
   },
 
   robots: {
@@ -105,6 +106,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-slate-50 text-gray-900">
+        <SearchNavigationLoading />
         {children}
       </body>
     </html>
