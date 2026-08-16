@@ -1424,25 +1424,51 @@ async function consultarAliExpress(
     const respCode =
       respResult.resp_code;
 
+    const respCodeTexto =
+      respCode !== undefined
+        ? String(respCode)
+        : "";
+
+    const respMensagem =
+      String(
+        respResult.resp_msg ?? "",
+      )
+        .trim()
+        .toLowerCase();
+
+    /*
+     * A AliExpress também pode informar
+     * "405 The result is empty" dentro de
+     * resp_result.
+     *
+     * Isso representa uma busca válida
+     * sem produtos encontrados.
+     */
     if (
-      respCode === undefined ||
+      respCodeTexto === "405" &&
+      respMensagem.includes(
+        "result is empty",
+      )
+    ) {
+      return [];
+    }
+
+    if (
+      !respCodeTexto ||
       ![
         "0",
         "200",
       ].includes(
-        String(respCode),
+        respCodeTexto,
       )
     ) {
       throw new Error(
         `AliExpress API: ${
-          respCode !== undefined
-            ? String(respCode)
-            : "sem cÃ³digo"
+          respCodeTexto || "sem codigo"
         } ${respResult.resp_msg ?? ""}`
           .trim(),
       );
     }
-
     const produtos =
       obterProdutos(
         resposta,
@@ -1857,4 +1883,5 @@ export async function buscarAliExpress(
     };
   }
 }
+
 
