@@ -1,5 +1,4 @@
-﻿import prisma from "@/lib/prisma";
-import { mercadoLivreFetch } from "@/lib/mercadolivre";
+﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
 import type {
   DiscoveryCandidate,
@@ -71,6 +70,7 @@ type CatalogProduct = {
 
 type CatalogOffer = {
   item_id?: string;
+  id?: string;
 
   seller_id?: number;
 
@@ -81,6 +81,11 @@ type CatalogOffer = {
   currency_id?: string;
 
   condition?: string;
+  status?: string;
+
+  permalink?: string;
+  thumbnail?: string;
+  secure_thumbnail?: string;
 
   listing_type_id?: string;
 
@@ -574,265 +579,169 @@ function obterImagem(
   );
 }
 
-function criarUrlCatalogo(
-  productId: string,
-  permalink?: string,
+function normalizarCodigoItem(
+  valor: string,
 ): string {
-  const url =
-    permalink?.trim();
-
-  if (url) {
-    return url;
-  }
-
-  return `https://www.mercadolivre.com.br/p/${productId}`;
+  return valor
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .trim();
 }
 
-const reputacaoVendedorCache =
-  new Map<
-    number,
-    Promise<boolean>
-  >();
+function criarUrlPublicaItem(
+  itemId: string,
+): string | null {
+  const codigo =
+    normalizarCodigoItem(itemId);
 
-async function buscarLinkAfiliadoConhecido(
-  externalId: string,
-): Promise<string | null> {
-  const id =
-    externalId.trim();
+  const match =
+    codigo.match(/^MLB(\d+)$/);
 
-  if (!id) {
+  if (!match?.[1]) {
     return null;
   }
 
-  try {
-    const oferta =
-      await prisma.marketplaceOffer.findFirst({
-        where: {
-          marketplace:
-            "MERCADO_LIVRE",
+  return (
+    `https://produto.mercadolivre.com.br/MLB-${match[1]}`
+  );
+}
 
-          externalId:
-            id,
+function obterUrlOfertaIndividual(
+  oferta: CatalogOffer,
+): string | null {
+  const itemId =
+    oferta.item_id?.trim();
 
-          status:
-            "ACTIVE",
+  if (!itemId) {
+    return null;
+  }
 
-          matchStatus:
-            "EXACT",
+  const permalink =
+    oferta.permalink?.trim();
 
-          affiliateLink: {
-            not: null,
-          },
-        },
-
-        orderBy: {
-          affiliateValidatedAt:
-            "desc",
-        },
-
-        select: {
-          affiliateLink: true,
-        },
-      });
-
-    const link =
-      oferta?.affiliateLink?.trim();
-
-    if (!link) {
-      return null;
-    }
-
-    /*
-     * Reutilizamos somente links oficiais
-     * previamente validados pelo Ofertano.
-     */
+  if (permalink) {
     try {
-      const url =
-        new URL(link);
+      const url = new URL(permalink);
 
-      const host =
-        url.hostname.toLowerCase();
+      const host = url.hostname
+        .toLowerCase()
+        .replace(/^www\./, "");
 
-      const mercadoLivre =
-        host ===
-          "mercadolivre.com.br" ||
-        host.endsWith(
-          ".mercadolivre.com.br",
-        );
+      const hostMercadoLivre =
+        host === "mercadolivre.com.br" ||
+        host.endsWith(".mercadolivre.com.br") ||
+        host === "mercadolibre.com" ||
+        host.endsWith(".mercadolibre.com");
 
-      const social =
-        url.pathname
-          .toLowerCase()
-          .startsWith("/social/");
+      if (hostMercadoLivre) {
+        /*
+         * /p/ é catálogo genérico e não representa
+         * a publicação individual escolhida.
+         */
+        if (!/^\/p\//i.test(url.pathname)) {
+          const codigoItem =
+            normalizarCodigoItem(itemId);
 
-      const etiqueta =
-        url.searchParams
-          .get("matt_word")
-          ?.toLowerCase();
+          const codigoUrl =
+            normalizarCodigoItem(
+              `${url.pathname}${url.search}`,
+            );
 
-      if (
-        mercadoLivre &&
-        social &&
-        etiqueta === "ofertano"
-      ) {
-        url.hash = "";
-
-        return url.toString();
+          if (
+            codigoItem &&
+            codigoUrl.includes(codigoItem)
+          ) {
+            return url.toString();
+          }
+        }
       }
     } catch {
-      return null;
+      // Continua para o fallback seguro pelo ITEM_ID.
     }
-
-    return null;
-  } catch (error) {
-    console.error(
-      `Falha ao consultar link afiliado conhecido de ${id}:`,
-      error,
-    );
-
-    /*
-     * Falha no cache nunca deve impedir
-     * a descoberta do produto.
-     */
-    return null;
   }
-}
-async function vendedorElegivelAfiliados(
-  sellerId: number,
-): Promise<boolean> {
-  const existente =
-    reputacaoVendedorCache.get(
-      sellerId,
-    );
-
-  if (existente) {
-    return existente;
-  }
-
-  const consulta =
-    (async () => {
-      try {
-        const usuario =
-          (await mercadoLivreFetch(
-            `/users/${sellerId}?attributes=seller_reputation`,
-          )) as {
-            seller_reputation?: {
-              level_id?: string | null;
-            };
-          };
-
-        const nivel =
-          usuario.seller_reputation
-            ?.level_id
-            ?.trim();
-
-        return (
-          nivel === "5_green" ||
-          nivel === "4_light_green"
-        );
-      } catch {
-        /*
-         * Se nao conseguimos comprovar
-         * reputacao verde, nao usamos
-         * a oferta no fluxo de afiliados.
-         */
-        return false;
-      }
-    })();
-
-  reputacaoVendedorCache.set(
-    sellerId,
-    consulta,
-  );
-
-  return consulta;
-}
-
-async function escolherOferta(
-  ofertas: CatalogOffer[],
-): Promise<CatalogOffer | null> {
-  const validas =
-    ofertas
-      .filter(
-        (oferta) => {
-          if (
-            typeof oferta.item_id !==
-              "string" ||
-            !oferta.item_id.trim()
-          ) {
-            return false;
-          }
-
-          if (
-            typeof oferta.price !==
-              "number" ||
-            !Number.isFinite(
-              oferta.price,
-            ) ||
-            oferta.price <= 0
-          ) {
-            return false;
-          }
-
-          if (
-            oferta.currency_id &&
-            oferta.currency_id !== "BRL"
-          ) {
-            return false;
-          }
-
-          if (
-            oferta.condition &&
-            oferta.condition !== "new"
-          ) {
-            return false;
-          }
-
-          if (
-            typeof oferta.seller_id !==
-              "number" ||
-            !Number.isFinite(
-              oferta.seller_id,
-            )
-          ) {
-            return false;
-          }
-
-          return true;
-        },
-      )
-      .sort(
-        (a, b) =>
-          (a.price ??
-            Number.POSITIVE_INFINITY) -
-          (b.price ??
-            Number.POSITIVE_INFINITY),
-      );
 
   /*
-   * Percorremos do menor para o maior preco.
+   * O endpoint /products/{CATALOG_ID}/items pode devolver
+   * um ITEM_ID real sem permalink. Nesses casos usamos
+   * a rota pública individual derivada do próprio ITEM_ID.
    *
-   * Assim que encontramos o primeiro vendedor
-   * com reputacao verde, essa ja e a oferta
-   * elegivel mais barata.
+   * Nunca usamos a URL /p/ do catálogo como oferta.
    */
-  for (const oferta of validas) {
-    const sellerId =
-      oferta.seller_id!;
+  return criarUrlPublicaItem(
+    itemId,
+  );
+}
 
-    if (
-      await vendedorElegivelAfiliados(
-        sellerId,
-      )
-    ) {
-      return oferta;
-    }
+function escolherOferta(
+  ofertas: CatalogOffer[],
+): CatalogOffer | null {
+  const validas =
+    ofertas.filter(
+      (oferta) => {
+        if (
+          typeof oferta.item_id !==
+            "string" ||
+          !oferta.item_id.trim()
+        ) {
+          return false;
+        }
+
+        /*
+         * A oferta precisa ter ITEM_ID e produzir uma URL
+         * individual. Se o Mercado Livre omitir permalink,
+         * usamos a rota pública derivada do ITEM_ID.
+         */
+        if (!obterUrlOfertaIndividual(oferta)) {
+          return false;
+        }
+
+        if (
+          typeof oferta.price !==
+            "number" ||
+          !Number.isFinite(
+            oferta.price,
+          ) ||
+          oferta.price <= 0
+        ) {
+          return false;
+        }
+
+        if (
+          oferta.status === "inactive" ||
+          oferta.status === "closed"
+        ) {
+          return false;
+        }
+
+        if (
+          oferta.currency_id &&
+          oferta.currency_id !== "BRL"
+        ) {
+          return false;
+        }
+
+        if (
+          oferta.condition &&
+          oferta.condition !== "new"
+        ) {
+          return false;
+        }
+
+        return true;
+      },
+    );
+
+  if (validas.length === 0) {
+    return null;
   }
 
-  /*
-   * Nenhuma oferta elegivel para afiliados.
-   */
-  return null;
+  return [...validas].sort(
+    (a, b) =>
+      (a.price ??
+        Number.POSITIVE_INFINITY) -
+      (b.price ??
+        Number.POSITIVE_INFINITY),
+  )[0];
 }
 
 async function descobrirDominio(
@@ -969,11 +878,23 @@ async function carregarCandidato(
     }
 
     const oferta =
-      await escolherOferta(
+      escolherOferta(
         ofertas.results ?? [],
       );
 
     if (!oferta) {
+      return null;
+    }
+
+    const itemId =
+      oferta.item_id?.trim();
+
+    const sourceUrl =
+      obterUrlOfertaIndividual(
+        oferta,
+      );
+
+    if (!itemId || !sourceUrl) {
       return null;
     }
 
@@ -1002,31 +923,22 @@ async function carregarCandidato(
           "Mercado Livre",
 
         /*
-         * O candidato representa o produto de catÃ¡logo.
-         * A oferta escolhida fornece o menor preÃ§o vÃ¡lido.
+         * O candidato persistido agora representa a publicação
+         * individual realmente comprável, não a página /p/ do
+         * catálogo. O productId de catálogo continua sendo usado
+         * apenas para localizar e validar a oferta.
          */
         externalId:
-          productId,
+          itemId,
 
-        /*
-         * NÃ£o dependemos de GET /items/{ITEM_ID},
-         * pois anÃºncios de terceiros podem retornar 403
-         * com o token atual.
-         */
-        sourceUrl:
-          criarUrlCatalogo(
-            productId,
-            produto.permalink,
-          ),
+        sourceUrl,
 
         /*
          * Link afiliado individual serÃ¡ resolvido
          * posteriormente pelo fluxo de afiliados.
          */
         affiliateLink:
-          await buscarLinkAfiliadoConhecido(
-            productId,
-          ),
+          null,
 
         title:
           titulo,
@@ -1337,4 +1249,3 @@ export async function buscarMercadoLivre(
     };
   }
 }
-

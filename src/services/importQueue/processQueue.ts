@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
 import { saveProduct } from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
 
@@ -139,6 +140,13 @@ export async function processImportQueue(
             : undefined,
         );
 
+      /*
+       * A publicação da oferta de origem é concluída
+       * antes da comparação Multi Loja.
+       *
+       * Assim, uma falha ou lentidão em outra marketplace
+       * nunca desfaz o produto que o robô já importou.
+       */
       const processedAt =
         new Date();
 
@@ -191,6 +199,52 @@ export async function processImportQueue(
           }
         },
       );
+
+      /*
+       * ETAPA MULTI LOJA
+       *
+       * Depois que a oferta de origem já está salva no
+       * Product canônico, executamos o mesmo comparador
+       * usado pela importação manual.
+       *
+       * O comparador:
+       * - consulta as marketplaces integradas;
+       * - ignora a marketplace de origem;
+       * - valida identidade/variante com matcher estrito;
+       * - aceita somente EXACT;
+       * - salva a oferta no mesmo targetProductId;
+       * - não força presença nas 5 lojas.
+       *
+       * Qualquer erro aqui é não fatal:
+       * o produto de origem continua publicado e poderá
+       * ser pesquisado novamente posteriormente.
+       */
+      try {
+        const comparison =
+          await buscarComparacaoManual(
+            imported,
+            saved.id,
+          );
+
+        console.log(
+          `[ImportQueue] Multi Loja concluído para ${saved.id}: ` +
+            `${comparison.found} oferta(s) EXACT encontrada(s).`,
+        );
+
+        if (
+          comparison.errors.length > 0
+        ) {
+          console.warn(
+            `[ImportQueue] Multi Loja de ${saved.id} terminou com avisos:`,
+            comparison.errors,
+          );
+        }
+      } catch (comparisonError) {
+        console.error(
+          `[ImportQueue] Falha não fatal no Multi Loja do produto ${saved.id}:`,
+          comparisonError,
+        );
+      }
 
       results.push({
         queueId:

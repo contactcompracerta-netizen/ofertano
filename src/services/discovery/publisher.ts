@@ -1,4 +1,5 @@
-﻿import { saveProduct } from "@/services/database/saveProduct";
+﻿import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
+import { saveProduct } from "@/services/database/saveProduct";
 
 import type {
   ProductImport,
@@ -19,91 +20,6 @@ const PRIORIDADE_MARKETPLACE: Record<
   SHOPEE: 3,
   ALIEXPRESS: 4,
 };
-
-const TERMOS_ACESSORIOS = [
-  "capa",
-  "capinha",
-  "case",
-  "pelicula",
-  "vidro temperado",
-  "cabo",
-  "carregador",
-  "adaptador",
-  "fonte",
-  "suporte",
-  "base",
-  "stand",
-  "pedestal",
-  "protetor",
-  "peca de reposicao",
-  "kit reparo",
-
-  "pen drive",
-  "pendrive",
-  "memoria usb",
-  "cartao de memoria",
-  "cartao memoria",
-  "micro sd",
-  "microsd",
-
-  "pulseira",
-  "bracelete",
-  "correia",
-
-  "protetor de camera",
-  "protetor de lente",
-  "protetor de tela",
-
-  "controle remoto",
-  "controle universal",
-  "soundbar",
-  "hub usb",
-  "dock",
-];
-
-function normalizarTextoFiltro(
-  valor: string,
-): string {
-  return valor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function contemExpressaoFiltro(
-  texto: string,
-  expressao: string,
-): boolean {
-  const textoNormalizado =
-    ` ${normalizarTextoFiltro(texto)} `;
-
-  const termoNormalizado =
-    ` ${normalizarTextoFiltro(expressao)} `;
-
-  return textoNormalizado.includes(
-    termoNormalizado,
-  );
-}
-
-function possuiAcessorioNaoSolicitado(
-  titulo: string,
-  consulta: string,
-): boolean {
-  return TERMOS_ACESSORIOS.some(
-    (termo) =>
-      contemExpressaoFiltro(
-        titulo,
-        termo,
-      ) &&
-      !contemExpressaoFiltro(
-        consulta,
-        termo,
-      ),
-  );
-}
 
 export type DiscoveryPublishItem = {
   marketplace: DiscoveryCandidate["marketplace"];
@@ -161,7 +77,6 @@ function calcularDesconto(
 
 function candidatoPublicavel(
   candidato: DiscoveryCandidate,
-  consulta: string,
 ): boolean {
   return (
     candidato.status === "FOUND" &&
@@ -181,11 +96,7 @@ function candidatoPublicavel(
     Number.isFinite(
       candidato.price,
     ) &&
-    candidato.price > 0 &&
-    !possuiAcessorioNaoSolicitado(
-      candidato.title,
-      consulta,
-    )
+    candidato.price > 0
   );
 }
 
@@ -200,7 +111,7 @@ function converterCandidato(
     candidato.price <= 0
   ) {
     throw new Error(
-      "Candidato sem preÃ§o vÃ¡lido.",
+      "Candidato sem preço válido.",
     );
   }
 
@@ -209,7 +120,7 @@ function converterCandidato(
 
   if (!image) {
     throw new Error(
-      "Candidato sem imagem vÃ¡lida.",
+      "Candidato sem imagem válida.",
     );
   }
 
@@ -322,11 +233,11 @@ function ordenarParaPersistencia(
 
       /*
        * Dentro do mesmo marketplace, processamos
-       * primeiro os preÃ§os maiores.
+       * primeiro os preços maiores.
        *
        * Se duas ofertas acabarem apontando para o
        * mesmo Product + marketplace, a mais barata
-       * serÃ¡ persistida por Ãºltimo.
+       * será persistida por último.
        */
       const precoPrimeiro =
         primeiro.price ??
@@ -431,11 +342,7 @@ export async function publicarResultadoDiscovery(
   const publicaveis =
     ordenarParaPersistencia(
       unicos.filter(
-        (candidato) =>
-          candidatoPublicavel(
-            candidato,
-            resultado.query,
-          ),
+        candidatoPublicavel,
       ),
     );
 
@@ -445,6 +352,17 @@ export async function publicarResultadoDiscovery(
 
   const productIds =
     new Set<string>();
+
+  /*
+   * Guarda apenas uma referência por Product criado/encontrado.
+   * Depois da persistência inicial, essa referência entra no mesmo
+   * fluxo Multi Loja usado pela importação manual.
+   */
+  const referenciasMultiloja =
+    new Map<
+      string,
+      ProductImport
+    >();
 
   let published = 0;
   let failed = 0;
@@ -459,10 +377,10 @@ export async function publicarResultadoDiscovery(
         );
 
       /*
-       * NÃ£o usamos targetProductId aqui.
+       * Não usamos targetProductId aqui.
        *
-       * O saveProduct jÃ¡ possui a regra canÃ´nica
-       * responsÃ¡vel por:
+       * O saveProduct já possui a regra canônica
+       * responsável por:
        * - localizar a oferta pelo marketplace/externalId;
        * - localizar Product por canonicalKey;
        * - comparar identidade/modelo/variante;
@@ -470,7 +388,7 @@ export async function publicarResultadoDiscovery(
        * - registrar PriceHistory;
        * - sincronizar a melhor oferta EXACT.
        *
-       * ForÃ§ar targetProductId neste estÃ¡gio poderia
+       * Forçar targetProductId neste estágio poderia
        * agrupar produtos diferentes em buscas amplas
        * como "Smartwatch".
        */
@@ -494,6 +412,17 @@ export async function publicarResultadoDiscovery(
       productIds.add(
         saved.id,
       );
+
+      if (
+        !referenciasMultiloja.has(
+          saved.id,
+        )
+      ) {
+        referenciasMultiloja.set(
+          saved.id,
+          productImport,
+        );
+      }
 
       published += 1;
 
@@ -545,6 +474,36 @@ export async function publicarResultadoDiscovery(
             1000,
           ),
       });
+    }
+  }
+
+  /*
+   * Etapa estrutural que faltava no robô automático:
+   * cada Product publicado passa agora pelo mesmo comparador
+   * Multi Loja da importação manual.
+   *
+   * O comparador mantém o targetProductId, valida EXACT e só então
+   * anexa as ofertas das outras lojas ao mesmo Product.
+   *
+   * A falha de uma comparação não desfaz a publicação de origem.
+   * Ela poderá ser repetida depois pelo monitor/discovery.
+   */
+  for (
+    const [
+      productId,
+      referencia,
+    ] of referenciasMultiloja
+  ) {
+    try {
+      await buscarComparacaoManual(
+        referencia,
+        productId,
+      );
+    } catch (error) {
+      console.error(
+        `[Discovery Publisher] Falha na comparação Multi Loja do produto ${productId}:`,
+        error,
+      );
     }
   }
 
