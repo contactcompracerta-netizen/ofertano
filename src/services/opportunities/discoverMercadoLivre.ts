@@ -67,6 +67,7 @@ export type DiscoveryResult = {
   scanned: number;
   eligible: number;
   added: number;
+  queued: number;
   ignored: number;
 };
 
@@ -87,7 +88,7 @@ function shuffle<T>(items: T[]): T[] {
     index -= 1
   ) {
     const randomIndex = Math.floor(
-      Math.random() * (index + 1)
+      Math.random() * (index + 1),
     );
 
     [result[index], result[randomIndex]] = [
@@ -99,49 +100,51 @@ function shuffle<T>(items: T[]): T[] {
   return result;
 }
 
+function getValidDiscountedOffers(
+  offers: CatalogOffer[],
+): CatalogOffer[] {
+  return offers
+    .filter((offer) => {
+      const price = offer.price;
+      const oldPrice = offer.original_price;
+
+      return (
+        typeof offer.item_id === "string" &&
+        typeof price === "number" &&
+        price > 0 &&
+        typeof oldPrice === "number" &&
+        oldPrice > price &&
+        offer.status !== "inactive" &&
+        offer.status !== "closed"
+      );
+    })
+    .sort((first, second) => {
+      const firstDiscount =
+        ((first.original_price! - first.price!) /
+          first.original_price!) *
+        100;
+
+      const secondDiscount =
+        ((second.original_price! - second.price!) /
+          second.original_price!) *
+        100;
+
+      return secondDiscount - firstDiscount;
+    });
+}
+
 function chooseDiscountedOffer(
-  offers: CatalogOffer[]
+  offers: CatalogOffer[],
 ): CatalogOffer | null {
-  const validOffers = offers.filter((offer) => {
-    const price = offer.price;
-    const oldPrice = offer.original_price;
-
-    return (
-      typeof offer.item_id === "string" &&
-      typeof price === "number" &&
-      price > 0 &&
-      typeof oldPrice === "number" &&
-      oldPrice > price &&
-      offer.status !== "inactive" &&
-      offer.status !== "closed"
-    );
-  });
-
-  if (validOffers.length === 0) {
-    return null;
-  }
-
-  return validOffers.sort((first, second) => {
-    const firstDiscount =
-      ((first.original_price! - first.price!) /
-        first.original_price!) *
-      100;
-
-    const secondDiscount =
-      ((second.original_price! - second.price!) /
-        second.original_price!) *
-      100;
-
-    return secondDiscount - firstDiscount;
-  })[0];
+  return getValidDiscountedOffers(offers)[0] ?? null;
 }
 
 function getProductImage(
   catalog: CatalogProduct,
-  offer: CatalogOffer
+  offer: CatalogOffer,
 ): string | null {
   const picture = catalog.pictures?.find(
-    (item) => item.secure_url || item.url
+    (item) => item.secure_url || item.url,
   );
 
   return (
@@ -153,10 +156,55 @@ function getProductImage(
   );
 }
 
+function criarUrlCatalogoParaImportacao(
+  catalogId: string,
+  itemId: string,
+): string {
+  const normalizedCatalogId =
+    catalogId.trim().toUpperCase();
+
+  const normalizedItemId =
+    itemId.trim().toUpperCase();
+
+  /*
+   * IMPORTANTE:
+   *
+   * Os highlights do Mercado Livre retornam ofertas públicas
+   * que aparecem normalmente em:
+   *
+   *   /products/{CATALOG_ID}/items
+   *
+   * mas muitos desses ITEM_ID respondem 403 tanto em:
+   *
+   *   /items/{ITEM_ID}
+   *   /items?ids={ITEM_ID}
+   *
+   * O importador de catálogo do Ofertano NÃO depende de
+   * /items/{ITEM_ID}; ele consegue montar o produto usando
+   * /products/{CATALOG_ID} + /products/{CATALOG_ID}/items.
+   *
+   * Por isso a fila recebe uma URL de CATÁLOGO, e não uma
+   * rota individual que sabemos que falhará com 403.
+   *
+   * Mantemos o wid na URL para preservar qual anúncio gerou
+   * a oportunidade. O importador atual identifica primeiro
+   * o /p/{CATALOG_ID}, portanto continuará usando o fluxo
+   * seguro de catálogo.
+   *
+   * Esta URL é fonte de importação. Ela NÃO substitui o link
+   * individual de afiliado. affiliateLink continua null.
+   */
+  return (
+    `https://www.mercadolivre.com.br/p/` +
+    `${encodeURIComponent(normalizedCatalogId)}` +
+    `?wid=${encodeURIComponent(normalizedItemId)}`
+  );
+}
+
 async function resolveCandidate(
   highlight: HighlightEntry,
   categoryId: string,
-  categoryName: string
+  categoryName: string,
 ): Promise<OpportunityCandidate | null> {
   if (
     highlight.type !== "PRODUCT" ||
@@ -169,19 +217,27 @@ async function resolveCandidate(
     const [catalog, catalogItems] =
       await Promise.all([
         mercadoLivreFetch(
-          `/products/${highlight.id}`
+          `/products/${highlight.id}`,
         ) as Promise<CatalogProduct>,
 
         mercadoLivreFetch(
-          `/products/${highlight.id}/items`
+          `/products/${highlight.id}/items`,
         ) as Promise<CatalogItemsResponse>,
       ]);
 
-    const offer = chooseDiscountedOffer(
-      catalogItems.results ?? []
-    );
+    const offer =
+      chooseDiscountedOffer(
+        catalogItems.results ?? [],
+      );
 
     if (!offer) {
+      return null;
+    }
+
+    const itemId =
+      offer.item_id?.trim();
+
+    if (!itemId) {
       return null;
     }
 
@@ -189,7 +245,7 @@ async function resolveCandidate(
     const oldPrice = offer.original_price!;
 
     const discount = Math.round(
-      ((oldPrice - price) / oldPrice) * 100
+      ((oldPrice - price) / oldPrice) * 100,
     );
 
     if (discount <= 0) {
@@ -205,8 +261,10 @@ async function resolveCandidate(
     }
 
     const sourceUrl =
-      offer.permalink?.trim() ||
-      `https://www.mercadolivre.com.br/p/${highlight.id}`;
+      criarUrlCatalogoParaImportacao(
+        highlight.id,
+        itemId,
+      );
 
     return {
       externalId: highlight.id,
@@ -214,7 +272,7 @@ async function resolveCandidate(
       title,
       image: getProductImage(
         catalog,
-        offer
+        offer,
       ),
       categoryId:
         offer.category_id || categoryId,
@@ -226,16 +284,113 @@ async function resolveCandidate(
   } catch (error) {
     console.error(
       `Falha ao analisar oportunidade ${highlight.id}:`,
-      error
+      error,
     );
 
     return null;
   }
 }
 
+async function criarOportunidadeNaFila(
+  opportunity: OpportunityCandidate,
+): Promise<boolean> {
+  return prisma.$transaction(
+    async (tx) => {
+      const existingOpportunity =
+        await tx.productOpportunity.findFirst({
+          where: {
+            marketplace:
+              "MERCADO_LIVRE",
+            externalId:
+              opportunity.externalId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (existingOpportunity) {
+        return false;
+      }
+
+      const existingQueue =
+        await tx.importQueue.findUnique({
+          where: {
+            url: opportunity.sourceUrl,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (existingQueue) {
+        return false;
+      }
+
+      /*
+       * O Mercado Livre entra diretamente na fila mesmo
+       * sem link individual de afiliado.
+       *
+       * O fallback temporário https://meli.la/1i7Te2C
+       * pertence somente à camada de apresentação da
+       * página do produto. Ele NÃO é salvo aqui como se
+       * fosse o link individual desta oferta.
+       */
+      const createdOpportunity =
+        await tx.productOpportunity.create({
+          data: {
+            marketplace:
+              "MERCADO_LIVRE",
+            externalId:
+              opportunity.externalId,
+            sourceType:
+              "PRODUCT",
+            sourceUrl:
+              opportunity.sourceUrl,
+            title:
+              opportunity.title,
+            image:
+              opportunity.image,
+            categoryId:
+              opportunity.categoryId,
+            categoryName:
+              opportunity.categoryName,
+            price:
+              opportunity.price,
+            oldPrice:
+              opportunity.oldPrice,
+            discount:
+              opportunity.discount,
+            affiliateLink:
+              null,
+            status:
+              "QUEUED",
+          },
+        });
+
+      await tx.importQueue.create({
+        data: {
+          url:
+            opportunity.sourceUrl,
+          marketplace:
+            "MERCADO_LIVRE",
+          status:
+            "PENDING",
+          affiliateLink:
+            null,
+          opportunityId:
+            createdOpportunity.id,
+        },
+      });
+
+      return true;
+    },
+  );
+}
+
 export async function discoverMercadoLivreOpportunities(
   rawCategoryId: string,
-  rawQuantity: number
+  rawQuantity: number,
 ): Promise<DiscoveryResult> {
   const categoryId =
     rawCategoryId.trim().toUpperCase();
@@ -246,11 +401,11 @@ export async function discoverMercadoLivreOpportunities(
   const [highlights, category] =
     await Promise.all([
       mercadoLivreFetch(
-        `/highlights/MLB/category/${categoryId}`
+        `/highlights/MLB/category/${categoryId}`,
       ) as Promise<HighlightsResponse>,
 
       mercadoLivreFetch(
-        `/categories/${categoryId}`
+        `/categories/${categoryId}`,
       ) as Promise<CategoryResponse>,
     ]);
 
@@ -261,17 +416,19 @@ export async function discoverMercadoLivreOpportunities(
     (highlights.content ?? []).filter(
       (entry) =>
         entry.type === "PRODUCT" &&
-        typeof entry.id === "string"
+        typeof entry.id === "string",
     );
 
   const externalIds = validHighlights.map(
-    (entry) => entry.id!
+    (entry) => entry.id!,
   );
 
   const existingOpportunities =
     externalIds.length > 0
       ? await prisma.productOpportunity.findMany({
           where: {
+            marketplace:
+              "MERCADO_LIVRE",
             externalId: {
               in: externalIds,
             },
@@ -285,15 +442,15 @@ export async function discoverMercadoLivreOpportunities(
   const existingIds = new Set(
     existingOpportunities.map(
       (opportunity) =>
-        opportunity.externalId
-    )
+        opportunity.externalId,
+    ),
   );
 
   const productHighlights = shuffle(
     validHighlights.filter(
       (entry) =>
-        !existingIds.has(entry.id!)
-    )
+        !existingIds.has(entry.id!),
+    ),
   );
 
   const opportunities: OpportunityCandidate[] =
@@ -310,7 +467,7 @@ export async function discoverMercadoLivreOpportunities(
     const batch =
       productHighlights.slice(
         index,
-        index + 4
+        index + 4,
       );
 
     scanned += batch.length;
@@ -320,9 +477,9 @@ export async function discoverMercadoLivreOpportunities(
         resolveCandidate(
           highlight,
           categoryId,
-          categoryName
-        )
-      )
+          categoryName,
+        ),
+      ),
     );
 
     for (const result of results) {
@@ -335,36 +492,25 @@ export async function discoverMercadoLivreOpportunities(
     }
   }
 
-  const creation =
-    opportunities.length > 0
-      ? await prisma.productOpportunity.createMany({
-          data: opportunities.map(
-            (opportunity) => ({
-              externalId:
-                opportunity.externalId,
-              sourceType: "PRODUCT",
-              sourceUrl:
-                opportunity.sourceUrl,
-              title: opportunity.title,
-              image: opportunity.image,
-              categoryId:
-                opportunity.categoryId,
-              categoryName:
-                opportunity.categoryName,
-              price: opportunity.price,
-              oldPrice:
-                opportunity.oldPrice,
-              discount:
-                opportunity.discount,
-              affiliateLink: null,
-              status: "WAITING_AFFILIATE",
-            })
-          ),
-          skipDuplicates: true,
-        })
-      : {
-          count: 0,
-        };
+  let added = 0;
+
+  for (const opportunity of opportunities) {
+    try {
+      const created =
+        await criarOportunidadeNaFila(
+          opportunity,
+        );
+
+      if (created) {
+        added += 1;
+      }
+    } catch (error) {
+      console.error(
+        `Falha ao criar oportunidade/fila ${opportunity.externalId}:`,
+        error,
+      );
+    }
+  }
 
   return {
     categoryId,
@@ -372,9 +518,9 @@ export async function discoverMercadoLivreOpportunities(
     requested: quantity,
     scanned,
     eligible: opportunities.length,
-    added: creation.count,
+    added,
+    queued: added,
     ignored:
-      opportunities.length -
-      creation.count,
+      opportunities.length - added,
   };
 }

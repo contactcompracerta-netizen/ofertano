@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -124,7 +124,7 @@ const statusLabels: Record<
   QUEUED: "Na fila",
   PUBLISHED: "Publicado",
   DISMISSED: "Descartado",
-  ERROR: "Erro — tentar novamente",
+  ERROR: "Erro â€” tentar novamente",
 };
 
 const statusClasses: Record<
@@ -174,7 +174,7 @@ const marketplaceOpenLabels: Record<
 
 function formatCurrency(value: number | null) {
   if (value === null) {
-    return "Preço não informado";
+    return "PreÃ§o nÃ£o informado";
   }
 
   return new Intl.NumberFormat("pt-BR", {
@@ -348,7 +348,7 @@ export default function OpportunitiesPage() {
         if (!response.ok || !data.success) {
           throw new Error(
             data.error ||
-              "Não foi possível carregar as categorias."
+              "NÃ£o foi possÃ­vel carregar as categorias."
           );
         }
 
@@ -402,7 +402,7 @@ export default function OpportunitiesPage() {
         if (!response.ok || !data.success) {
           throw new Error(
             data.error ||
-              "Não foi possível carregar as oportunidades."
+              "NÃ£o foi possÃ­vel carregar as oportunidades."
           );
         }
 
@@ -452,7 +452,7 @@ export default function OpportunitiesPage() {
       !/^MLB\d+$/.test(normalizedCategoryId)
     ) {
       setError(
-        "Selecione uma categoria válida do Mercado Livre."
+        "Selecione uma categoria vÃ¡lida do Mercado Livre."
       );
       return;
     }
@@ -478,12 +478,15 @@ export default function OpportunitiesPage() {
       return;
     }
 
-    if (pendingOpportunities.length > 0) {
-      setError(
-        "Publique ou corrija os produtos pendentes antes de fazer uma nova descoberta."
-      );
-      return;
-    }
+    if (
+    discoveryMarketplace === "AMAZON" &&
+    pendingOpportunities.length > 0
+  ) {
+    setError(
+      "Publique ou corrija os produtos pendentes antes de fazer uma nova descoberta."
+    );
+    return;
+  }
 
     try {
       setDiscovering(true);
@@ -525,7 +528,7 @@ export default function OpportunitiesPage() {
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "Não foi possível descobrir novas oportunidades."
+            "NÃ£o foi possÃ­vel descobrir novas oportunidades."
         );
       }
 
@@ -554,8 +557,8 @@ export default function OpportunitiesPage() {
     ) {
       setError(
         pendingOpportunities.length === 0
-          ? "Não existem oportunidades pendentes."
-          : "Todos os produtos pendentes já possuem link de afiliado."
+          ? "NÃ£o existem oportunidades pendentes."
+          : "Todos os produtos pendentes jÃ¡ possuem link de afiliado."
       );
       return;
     }
@@ -582,7 +585,7 @@ export default function OpportunitiesPage() {
       );
     } catch {
       setError(
-        "Não foi possível copiar as URLs automaticamente."
+        "NÃ£o foi possÃ­vel copiar as URLs automaticamente."
       );
     } finally {
       setCopyingUrls(false);
@@ -593,7 +596,7 @@ export default function OpportunitiesPage() {
     opportunity: Opportunity
   ) {
     const confirmed = window.confirm(
-      `Descartar "${opportunity.title}" por estar indisponível?`
+      `Descartar "${opportunity.title}" por estar indisponÃ­vel?`
     );
 
     if (!confirmed) {
@@ -617,7 +620,7 @@ export default function OpportunitiesPage() {
           body: JSON.stringify({
             id: opportunity.id,
             reason:
-              "Produto indisponível no marketplace.",
+              "Produto indisponÃ­vel no marketplace.",
           }),
         }
       );
@@ -628,7 +631,7 @@ export default function OpportunitiesPage() {
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "Não foi possível descartar o produto."
+            "NÃ£o foi possÃ­vel descartar o produto."
         );
       }
 
@@ -636,7 +639,7 @@ export default function OpportunitiesPage() {
 
       setMessage(
         data.message ||
-          "Produto indisponível descartado."
+          "Produto indisponÃ­vel descartado."
       );
 
       await loadOpportunities();
@@ -656,7 +659,7 @@ export default function OpportunitiesPage() {
       pendingOpportunities.length === 0
     ) {
       setError(
-        "Não existem oportunidades pendentes para publicar."
+        "NÃ£o existem oportunidades pendentes para publicar."
       );
       return;
     }
@@ -677,7 +680,7 @@ export default function OpportunitiesPage() {
       batchAffiliateLinks.length > 0
     ) {
       setError(
-        "Todos os produtos já possuem link salvo. Apague os links colados ou edite o campo do produto que deseja corrigir."
+        "Todos os produtos jÃ¡ possuem link salvo. Apague os links colados ou edite o campo do produto que deseja corrigir."
       );
       return;
     }
@@ -749,7 +752,7 @@ export default function OpportunitiesPage() {
       allLinks.length
     ) {
       setError(
-        "O mesmo link de afiliado está associado a mais de um produto."
+        "O mesmo link de afiliado estÃ¡ associado a mais de um produto."
       );
       return;
     }
@@ -786,13 +789,13 @@ export default function OpportunitiesPage() {
         throw new Error(
           data.error ||
             data.message ||
-            "Não foi possível publicar os produtos em lote."
+            "NÃ£o foi possÃ­vel publicar os produtos em lote."
         );
       }
 
       setMessage(
         data.message ||
-          "Publicação concluída com sucesso."
+          "PublicaÃ§Ã£o concluÃ­da com sucesso."
       );
 
       setBatchLinks("");
@@ -846,13 +849,13 @@ export default function OpportunitiesPage() {
             </p>
 
             <h1 className="text-3xl font-bold text-slate-900">
-              Importação rápida de produtos
+              ImportaÃ§Ã£o rÃ¡pida de produtos
             </h1>
 
             <p className="mt-2 text-slate-600">
               Descubra oportunidades, cole os
               links de afiliado e publique tudo
-              em uma única operação.
+              em uma Ãºnica operaÃ§Ã£o.
             </p>
           </div>
 
@@ -959,7 +962,7 @@ export default function OpportunitiesPage() {
                     </option>
                   ) : categories.length === 0 ? (
                     <option value="">
-                      Nenhuma categoria disponível
+                      Nenhuma categoria disponÃ­vel
                     </option>
                   ) : (
                     categories.map(
@@ -1061,7 +1064,8 @@ export default function OpportunitiesPage() {
                 loading ||
                 publishingBatch ||
                 dismissingId !== null ||
-                pendingOpportunities.length > 0 ||
+                (discoveryMarketplace === "AMAZON" &&
+                  pendingOpportunities.length > 0) ||
                 (discoveryMarketplace ===
                 "MERCADO_LIVRE"
                   ? loadingCategories ||
@@ -1111,7 +1115,7 @@ export default function OpportunitiesPage() {
               Copie as URLs, gere os links no
               programa de afiliados da loja
               indicada, cole todos abaixo e clique
-              uma única vez para validar, importar
+              uma Ãºnica vez para validar, importar
               e publicar.
             </p>
           </div>
@@ -1130,7 +1134,7 @@ export default function OpportunitiesPage() {
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-xl bg-white p-3">
                     <p className="text-xs font-semibold text-slate-500">
-                      Links necessários
+                      Links necessÃ¡rios
                     </p>
 
                     <p className="mt-1 text-xl font-black text-slate-900">
@@ -1140,7 +1144,7 @@ export default function OpportunitiesPage() {
 
                   <div className="rounded-xl bg-white p-3">
                     <p className="text-xs font-semibold text-slate-500">
-                      Links já preenchidos
+                      Links jÃ¡ preenchidos
                     </p>
 
                     <p className="mt-1 text-xl font-black text-slate-900">
@@ -1177,7 +1181,7 @@ export default function OpportunitiesPage() {
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-amber-800">
-                  O primeiro link gerado será
+                  O primeiro link gerado serÃ¡
                   associado ao primeiro produto
                   sem link, o segundo ao segundo
                   produto e assim por diante.
@@ -1209,7 +1213,7 @@ export default function OpportunitiesPage() {
                       : hasPendingAmazon
                         ? "Cole um link Amazon por linha:\nhttps://www.amazon.com.br/dp/ASIN?tag=ofertano-20"
                         : "Cole um link por linha:\nhttps://meli.la/...\nhttps://meli.la/..."
-                    : "Todos os produtos já possuem link. Clique em publicar."
+                    : "Todos os produtos jÃ¡ possuem link. Clique em publicar."
                 }
                 rows={9}
                 disabled={
@@ -1233,7 +1237,7 @@ export default function OpportunitiesPage() {
 
                 <span className="text-slate-500">
                   {linksMissing} link(s)
-                  necessário(s)
+                  necessÃ¡rio(s)
                 </span>
               </div>
 
@@ -1298,8 +1302,8 @@ export default function OpportunitiesPage() {
             </h2>
 
             <p className="mt-2 text-slate-600">
-              Os produtos publicados são removidos
-              automaticamente desta lista. Faça
+              Os produtos publicados sÃ£o removidos
+              automaticamente desta lista. FaÃ§a
               uma nova descoberta para buscar
               outros produtos.
             </p>
@@ -1335,7 +1339,7 @@ export default function OpportunitiesPage() {
                       />
                     ) : (
                       <span className="px-4 text-center text-sm text-slate-500">
-                        Imagem não disponível
+                        Imagem nÃ£o disponÃ­vel
                       </span>
                     )}
                   </div>
@@ -1395,13 +1399,13 @@ export default function OpportunitiesPage() {
                         ? `ASIN: ${opportunity.externalId}`
                         : opportunity.categoryName ||
                           opportunity.categoryId ||
-                          "Categoria não informada"}
+                          "Categoria nÃ£o informada"}
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-end gap-4">
                       <div>
                         <p className="text-sm text-slate-500">
-                          Preço atual
+                          PreÃ§o atual
                         </p>
 
                         <p className="text-2xl font-bold text-emerald-600">
@@ -1420,7 +1424,7 @@ export default function OpportunitiesPage() {
                       null ? (
                         <div>
                           <p className="text-sm text-slate-500">
-                            Preço anterior
+                            PreÃ§o anterior
                           </p>
 
                           <p className="text-base text-slate-500 line-through">
@@ -1465,7 +1469,7 @@ export default function OpportunitiesPage() {
                           {dismissingId ===
                           opportunity.id
                             ? "Descartando..."
-                            : "Descartar indisponível"}
+                            : "Descartar indisponÃ­vel"}
                         </button>
                       ) : null}
 
@@ -1524,7 +1528,7 @@ export default function OpportunitiesPage() {
                         {opportunity.marketplace ===
                         "AMAZON"
                           ? "Use o link individual do mesmo ASIN com a tag ofertano-20. O sistema confere o produto antes de publicar."
-                          : "Use este campo apenas para corrigir manualmente um link. Não é necessário salvar separadamente."}
+                          : "Use este campo apenas para corrigir manualmente um link. NÃ£o Ã© necessÃ¡rio salvar separadamente."}
                       </p>
 
                       {opportunity.errorMessage ? (
@@ -1545,3 +1549,4 @@ export default function OpportunitiesPage() {
     </main>
   );
 }
+
