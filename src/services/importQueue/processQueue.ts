@@ -98,6 +98,150 @@ export async function processImportQueue(
       continue;
     }
 
+    /*
+     * MODO COMPARACAO DE PRODUTO JA PUBLICADO
+     *
+     * Uma linha PENDING com productId preenchido e sem opportunityId
+     * representa um Product que já foi publicado pela busca do site
+     * e agora precisa receber o Multi Loja fora da requisição pública.
+     *
+     * Nesse modo:
+     * - o Product existente NÃO é recriado;
+     * - usamos a URL da oferta de referência apenas para reconstruir
+     *   o ProductImport necessário ao matcher;
+     * - o comparador salva somente ofertas EXACT no mesmo productId;
+     * - o trabalho pesado fica na fila e não segura a busca do cliente.
+     */
+    if (
+      item.productId &&
+      !item.opportunityId
+    ) {
+      try {
+        const produtoExistente =
+          await prisma.product.findUnique({
+            where: {
+              id: item.productId,
+            },
+
+            select: {
+              id: true,
+              name: true,
+            },
+          });
+
+        if (!produtoExistente) {
+          throw new Error(
+            `Produto ${item.productId} não encontrado para comparação Multi Loja.`,
+          );
+        }
+
+        const referencia =
+          await importarProduto(
+            item.url,
+          );
+
+        const comparison =
+          await buscarComparacaoManual(
+            referencia,
+            item.productId,
+          );
+
+        const processedAt =
+          new Date();
+
+        await prisma.importQueue.update({
+          where: {
+            id: item.id,
+          },
+
+          data: {
+            status: "SUCCESS",
+            errorMessage: null,
+            processedAt,
+          },
+        });
+
+        console.log(
+          `[ImportQueue] Multi Loja em fila concluído para ${item.productId}: ` +
+            `${comparison.found} oferta(s) EXACT encontrada(s).`,
+        );
+
+        if (
+          comparison.errors.length > 0
+        ) {
+          console.warn(
+            `[ImportQueue] Multi Loja em fila de ${item.productId} terminou com avisos:`,
+            comparison.errors,
+          );
+        }
+
+        results.push({
+          queueId:
+            item.id,
+
+          url:
+            item.url,
+
+          success:
+            true,
+
+          productId:
+            item.productId,
+
+          productName:
+            produtoExistente.name,
+        });
+      } catch (error) {
+        const mensagem =
+          error instanceof Error
+            ? error.message
+            : "Erro desconhecido ao processar comparação Multi Loja.";
+
+        const processedAt =
+          new Date();
+
+        const errorMessage =
+          mensagem.slice(
+            0,
+            2000,
+          );
+
+        await prisma.importQueue.update({
+          where: {
+            id: item.id,
+          },
+
+          data: {
+            status:
+              "ERROR",
+
+            errorMessage,
+
+            processedAt,
+          },
+        });
+
+        results.push({
+          queueId:
+            item.id,
+
+          url:
+            item.url,
+
+          success:
+            false,
+
+          productId:
+            item.productId,
+
+          error:
+            mensagem,
+        });
+      }
+
+      continue;
+    }
+
     try {
       const imported =
         await importarProduto(

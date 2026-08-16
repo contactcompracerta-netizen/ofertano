@@ -1,4 +1,4 @@
-﻿import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
+import prisma from "@/lib/prisma";
 import { saveProduct } from "@/services/database/saveProduct";
 
 import type {
@@ -43,6 +43,12 @@ export type DiscoveryPublishResult = {
   productIds: string[];
 
   items: DiscoveryPublishItem[];
+};
+
+type ReferenciaMultiloja = {
+  marketplace: DiscoveryCandidate["marketplace"];
+  sourceUrl: string;
+  affiliateLink: string | null;
 };
 
 function calcularDesconto(
@@ -328,6 +334,101 @@ function removerDuplicados(
   );
 }
 
+function criarUrlFilaMultiloja(
+  sourceUrl: string,
+  productId: string,
+): string {
+  const original =
+    sourceUrl.trim();
+
+  const marcador =
+    `ofertano-multiloja=${encodeURIComponent(
+      productId,
+    )}`;
+
+  try {
+    const url =
+      new URL(original);
+
+    const hashAtual =
+      url.hash
+        .replace(/^#/, "")
+        .trim();
+
+    url.hash =
+      hashAtual
+        ? `${hashAtual}&${marcador}`
+        : marcador;
+
+    return url.toString();
+  } catch {
+    return (
+      original +
+      (
+        original.includes("#")
+          ? "&"
+          : "#"
+      ) +
+      marcador
+    );
+  }
+}
+
+async function agendarComparacaoMultiloja(
+  productId: string,
+  referencia: ReferenciaMultiloja,
+): Promise<void> {
+  /*
+   * A ImportQueue já possui URL única.
+   *
+   * Para não colidir com uma eventual fila de importação
+   * da mesma oferta, usamos um fragmento interno determinístico.
+   * Fragmentos (#...) não são enviados ao servidor remoto e
+   * preservam a URL real que o importador utiliza.
+   */
+  const url =
+    criarUrlFilaMultiloja(
+      referencia.sourceUrl,
+      productId,
+    );
+
+  const existente =
+    await prisma.importQueue.findUnique({
+      where: {
+        url,
+      },
+
+      select: {
+        id: true,
+      },
+    });
+
+  /*
+   * A mesma combinação Product + referência é agendada uma vez.
+   * Retry continua sendo responsabilidade da própria fila/admin.
+   */
+  if (existente) {
+    return;
+  }
+
+  await prisma.importQueue.create({
+    data: {
+      url,
+
+      marketplace:
+        referencia.marketplace,
+
+      status:
+        "PENDING",
+
+      productId,
+
+      affiliateLink:
+        referencia.affiliateLink,
+    },
+  });
+}
+
 export async function publicarResultadoDiscovery(
   resultado: ProductDiscoveryResult,
 ): Promise<DiscoveryPublishResult> {
@@ -354,14 +455,21 @@ export async function publicarResultadoDiscovery(
     new Set<string>();
 
   /*
-   * Guarda apenas uma referência por Product criado/encontrado.
-   * Depois da persistência inicial, essa referência entra no mesmo
-   * fluxo Multi Loja usado pela importação manual.
+   * Guarda uma referência importável por Product.
+   *
+   * Diferente da implementação anterior, NÃO executamos
+   * buscarComparacaoManual() dentro da requisição pública.
+   *
+   * Depois que os candidatos da busca já foram persistidos,
+   * cada Product recebe uma tarefa PENDING na ImportQueue.
+   * O processador da fila executará o Multi Loja fora da
+   * requisição do cliente, evitando multiplicar buscas nas
+   * cinco marketplaces e estourar o tempo da Vercel.
    */
   const referenciasMultiloja =
     new Map<
       string,
-      ProductImport
+      ReferenciaMultiloja
     >();
 
   let published = 0;
@@ -420,7 +528,17 @@ export async function publicarResultadoDiscovery(
       ) {
         referenciasMultiloja.set(
           saved.id,
-          productImport,
+          {
+            marketplace:
+              candidato.marketplace,
+
+            sourceUrl:
+              candidato.sourceUrl.trim(),
+
+            affiliateLink:
+              candidato.affiliateLink?.trim() ||
+              null,
+          },
         );
       }
 
@@ -478,15 +596,19 @@ export async function publicarResultadoDiscovery(
   }
 
   /*
-   * Etapa estrutural que faltava no robô automático:
-   * cada Product publicado passa agora pelo mesmo comparador
-   * Multi Loja da importação manual.
+   * MULTI LOJA ASSÍNCRONO VIA FILA
    *
-   * O comparador mantém o targetProductId, valida EXACT e só então
-   * anexa as ofertas das outras lojas ao mesmo Product.
+   * Aqui só criamos tarefas rápidas no banco.
+   * Nenhuma nova chamada às marketplaces acontece
+   * dentro da pesquisa pública.
    *
-   * A falha de uma comparação não desfaz a publicação de origem.
-   * Ela poderá ser repetida depois pelo monitor/discovery.
+   * O processImportQueue reconhece essas tarefas por:
+   * - status = PENDING
+   * - productId preenchido
+   * - opportunityId ausente
+   *
+   * e executa buscarComparacaoManual() posteriormente,
+   * salvando apenas ofertas EXACT no mesmo Product.
    */
   for (
     const [
@@ -495,13 +617,13 @@ export async function publicarResultadoDiscovery(
     ] of referenciasMultiloja
   ) {
     try {
-      await buscarComparacaoManual(
-        referencia,
+      await agendarComparacaoMultiloja(
         productId,
+        referencia,
       );
     } catch (error) {
       console.error(
-        `[Discovery Publisher] Falha na comparação Multi Loja do produto ${productId}:`,
+        `[Discovery Publisher] Falha ao agendar Multi Loja do produto ${productId}:`,
         error,
       );
     }
