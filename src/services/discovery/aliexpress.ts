@@ -1364,17 +1364,43 @@ async function consultarAliExpress(
 
     if (
       resposta.code !==
-        undefined &&
-      String(
-        resposta.code,
-      ) !== "0"
+      undefined
     ) {
-      throw new Error(
-        `AliExpress API: ${String(
-          resposta.code,
-        )} ${resposta.message ?? ""}`
-          .trim(),
-      );
+      const codigoResposta =
+        String(resposta.code);
+
+      const mensagemResposta =
+        String(
+          resposta.message ?? "",
+        )
+          .trim()
+          .toLowerCase();
+
+      /*
+       * A AliExpress também pode retornar
+       * "405 The result is empty" no nível
+       * principal da resposta.
+       *
+       * Isso significa zero resultados,
+       * não falha da integração.
+       */
+      if (
+        codigoResposta === "405" &&
+        mensagemResposta.includes(
+          "result is empty",
+        )
+      ) {
+        return [];
+      }
+
+      if (
+        codigoResposta !== "0"
+      ) {
+        throw new Error(
+          `AliExpress API: ${codigoResposta} ${resposta.message ?? ""}`
+            .trim(),
+        );
+      }
     }
 
     const respResult =
@@ -1831,3 +1857,4 @@ export async function buscarAliExpress(
     };
   }
 }
+
