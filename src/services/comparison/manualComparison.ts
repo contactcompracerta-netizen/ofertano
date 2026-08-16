@@ -719,7 +719,7 @@ function inferirVoltagemPeloTitulo(
   return match?.[1] ? `${match[1]}v` : null;
 }
 
-function normalizarCor(color: string): string {
+function normalizarCorSimples(color: string): string {
   const normalized = normalizarTexto(color);
 
   const mapa: Record<string, string> = {
@@ -742,26 +742,30 @@ function normalizarCor(color: string): string {
   return mapa[normalized] ?? normalized;
 }
 
-function inferirCorPeloTitulo(
-  title: string,
-): string | null {
-  const texto = ` ${normalizarTexto(title)} `;
+function extrairCoresCanonicas(
+  value: string,
+): string[] {
+  const texto = ` ${normalizarTexto(value)} `;
 
   const encontradas = Array.from(
     new Set(
       CORES_CONHECIDAS
-        .filter((cor) => texto.includes(` ${normalizarTexto(cor)} `))
-        .map(normalizarCor),
+        .filter((cor) =>
+          texto.includes(
+            ` ${normalizarTexto(cor)} `,
+          ),
+        )
+        .map(normalizarCorSimples),
     ),
   );
 
   /*
-   * Uma cor composta deve prevalecer sobre sua cor base.
+   * Uma cor composta específica deve substituir
+   * sua cor base.
    *
    * Exemplo:
-   * "Azul Marinho" também contém "Azul".
-   * Isso não representa duas cores diferentes; é uma única
-   * variante mais específica.
+   * "Azul Marinho" também contém "Azul",
+   * mas representa uma única variante.
    */
   const especificas = encontradas.filter((cor) => {
     const tokensCor = normalizarTexto(cor)
@@ -786,11 +790,44 @@ function inferirCorPeloTitulo(
     });
   });
 
-  if (especificas.length !== 1) {
+  return especificas;
+}
+
+function normalizarCor(color: string): string {
+  const encontradas =
+    extrairCoresCanonicas(color);
+
+  if (encontradas.length > 0) {
+    /*
+     * A ordem vem de CORES_CONHECIDAS, não do texto.
+     * Assim "Branco e Roxo", "Roxo/Branco" e
+     * "Branco/Roxo" resultam na mesma variante.
+     */
+    return encontradas.join(" e ");
+  }
+
+  return normalizarTexto(color);
+}
+
+function inferirCorPeloTitulo(
+  title: string,
+): string | null {
+  const encontradas =
+    extrairCoresCanonicas(title);
+
+  if (encontradas.length === 0) {
     return null;
   }
 
-  return especificas[0] ?? null;
+  /*
+   * Cores compostas reais também são uma variante
+   * válida. Ex.: "Branco e Roxo".
+   *
+   * Isso mantém o matcher estrito: um candidato sem
+   * cor continua retornando null e uma combinação
+   * diferente continua produzindo valor diferente.
+   */
+  return encontradas.join(" e ");
 }
 
 function escolherCorProduto(
@@ -1361,6 +1398,420 @@ function compararMovelEstritamente(
       `Móvel confirmado por marca, linha/modelo e características: ${detalhes}.`,
   };
 }
+
+const TERMOS_CALCADOS = [
+  "tenis",
+  "sapato",
+  "sapatilha",
+  "sandalia",
+  "chinelo",
+  "bota",
+  "coturno",
+  "mocassim",
+  "sapatênis",
+  "sapatenis",
+] as const;
+
+const TOKENS_GENERICOS_CALCADO = new Set([
+  "tenis",
+  "sapato",
+  "sapatos",
+  "sapatilha",
+  "sapatilhas",
+  "sandalia",
+  "sandalias",
+  "chinelo",
+  "chinelos",
+  "bota",
+  "botas",
+  "coturno",
+  "coturnos",
+  "mocassim",
+  "mocassins",
+  "sapatenis",
+  "calcado",
+  "calcados",
+  "feminino",
+  "feminina",
+  "masculino",
+  "masculina",
+  "unissex",
+  "adulto",
+  "adulta",
+  "infantil",
+  "juvenil",
+  "original",
+  "novo",
+  "nova",
+  "com",
+  "sem",
+  "para",
+  "de",
+  "da",
+  "do",
+  "das",
+  "dos",
+  "em",
+  "e",
+  "cor",
+  "cores",
+  "branco",
+  "branca",
+  "preto",
+  "preta",
+  "azul",
+  "marinho",
+  "verde",
+  "vermelho",
+  "vermelha",
+  "rosa",
+  "roxo",
+  "roxa",
+  "lilas",
+  "cinza",
+  "grafite",
+  "bege",
+  "dourado",
+  "dourada",
+  "prata",
+  "prateado",
+  "prateada",
+]);
+
+function ehProdutoCalcado(
+  title: string,
+): boolean {
+  const texto = normalizarTexto(title);
+
+  return TERMOS_CALCADOS.some(
+    (termo) =>
+      texto.includes(
+        normalizarTexto(termo),
+      ),
+  );
+}
+
+function extrairGeneroCalcado(
+  product: ProductImport,
+): string | null {
+  const estruturado =
+    buscarAtributo(product, [
+      "GENDER",
+      "GENERO",
+      "SEXO",
+    ]);
+
+  const texto = normalizarTexto(
+    estruturado ?? product.title,
+  );
+
+  if (
+    /\bfeminin[oa]\b/.test(texto)
+  ) {
+    return "feminino";
+  }
+
+  if (
+    /\bmasculin[oa]\b/.test(texto)
+  ) {
+    return "masculino";
+  }
+
+  if (
+    /\bunissex\b/.test(texto)
+  ) {
+    return "unissex";
+  }
+
+  return null;
+}
+
+function extrairTamanhoExplicitoCalcado(
+  product: ProductImport,
+): string | null {
+  const texto =
+    normalizarTexto(product.title);
+
+  const patterns = [
+    /\b(?:tamanho|tam|numero)\s*(\d{2})\b/i,
+    /\b(\d{2})\s*(?:br|bra)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = texto.match(pattern);
+
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+function extrairTokensFortesCalcado(
+  title: string,
+  brand: string | null,
+): string[] {
+  const brandTokens =
+    new Set(
+      normalizarTexto(
+        brand ?? "",
+      )
+        .split(" ")
+        .filter(Boolean),
+    );
+
+  return Array.from(
+    new Set(
+      normalizarTexto(title)
+        .split(" ")
+        .filter(Boolean)
+        .filter((token) => {
+          if (
+            brandTokens.has(token) ||
+            TOKENS_GENERICOS_CALCADO.has(token)
+          ) {
+            return false;
+          }
+
+          /*
+           * Numeração de calçado não identifica a linha/modelo.
+           */
+          if (/^\d{2}$/.test(token)) {
+            return false;
+          }
+
+          return token.length >= 3;
+        }),
+    ),
+  );
+}
+
+function compararCalcadoEstritamente(
+  original: ProductImport,
+  candidate: ProductImport,
+  a: ProductIdentity,
+  b: ProductIdentity,
+): MatchResult | null {
+  if (!ehProdutoCalcado(original.title)) {
+    return null;
+  }
+
+  if (!ehProdutoCalcado(candidate.title)) {
+    return {
+      exact: false,
+      reason:
+        "O candidato não pertence à mesma família de calçados.",
+    };
+  }
+
+  if (!a.brand) {
+    return {
+      exact: false,
+      reason:
+        "Marca do calçado original insuficiente para confirmação automática.",
+    };
+  }
+
+  const marcaOriginal =
+    normalizarTexto(a.brand);
+
+  if (
+    b.brand &&
+    normalizarTexto(b.brand) !==
+      marcaOriginal
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Marca diferente: ${a.brand} x ${b.brand}.`,
+    };
+  }
+
+  if (!b.brand) {
+    const tituloCandidato =
+      ` ${normalizarTexto(candidate.title)} `;
+
+    if (
+      !tituloCandidato.includes(
+        ` ${marcaOriginal} `,
+      )
+    ) {
+      return {
+        exact: false,
+        reason:
+          `A marca ${a.brand} não foi confirmada no candidato.`,
+      };
+    }
+  }
+
+  /*
+   * Cor continua sendo variante forte de calçado.
+   * Se o original tem cor conhecida, o candidato também
+   * precisa confirmá-la.
+   */
+  if (a.variants.color) {
+    if (!b.variants.color) {
+      return {
+        exact: false,
+        reason:
+          "Cor do calçado não confirmada no candidato.",
+      };
+    }
+
+    if (
+      a.variants.color !==
+      b.variants.color
+    ) {
+      return {
+        exact: false,
+        reason:
+          `Cor diferente: ${a.variants.color} x ${b.variants.color}.`,
+      };
+    }
+  }
+
+  /*
+   * Numeração só é bloqueante quando estiver explícita
+   * no título das duas ofertas.
+   *
+   * Muitos marketplaces retornam SIZE estruturado da
+   * variação selecionada, enquanto o anúncio concorrente
+   * representa a página pai com seleção de tamanho.
+   * Não usamos essa assimetria oculta para descartar
+   * automaticamente a mesma linha/cor.
+   */
+  const tamanhoOriginal =
+    extrairTamanhoExplicitoCalcado(
+      original,
+    );
+
+  const tamanhoCandidato =
+    extrairTamanhoExplicitoCalcado(
+      candidate,
+    );
+
+  if (
+    tamanhoOriginal &&
+    tamanhoCandidato &&
+    tamanhoOriginal !==
+      tamanhoCandidato
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Tamanho diferente: ${tamanhoOriginal} x ${tamanhoCandidato}.`,
+    };
+  }
+
+  const generoOriginal =
+    extrairGeneroCalcado(original);
+
+  const generoCandidato =
+    extrairGeneroCalcado(candidate);
+
+  if (
+    generoOriginal &&
+    generoCandidato &&
+    generoOriginal !==
+      generoCandidato
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Gênero diferente: ${generoOriginal} x ${generoCandidato}.`,
+    };
+  }
+
+  /*
+   * Linhas de moda normalmente usam nomes textuais,
+   * não códigos alfanuméricos.
+   *
+   * Exemplo:
+   * "Puma Carina Street BDP".
+   *
+   * O matcher genérico exige letras + números nos tokens
+   * de modelo e, por isso, não consegue confirmar essa
+   * família. Para calçados usamos os tokens fortes da
+   * própria linha/modelo.
+   */
+  const tokensOriginal =
+    extrairTokensFortesCalcado(
+      original.title,
+      a.brand,
+    );
+
+  const tokensCandidato =
+    new Set(
+      extrairTokensFortesCalcado(
+        candidate.title,
+        b.brand ?? a.brand,
+      ),
+    );
+
+  if (tokensOriginal.length < 2) {
+    return {
+      exact: false,
+      reason:
+        "Linha/modelo do calçado insuficiente para confirmação automática.",
+    };
+  }
+
+  const tokensComuns =
+    tokensOriginal.filter(
+      (token) =>
+        tokensCandidato.has(token),
+    );
+
+  const minimoTokens =
+    tokensOriginal.length <= 3
+      ? tokensOriginal.length
+      : Math.max(
+          3,
+          Math.ceil(
+            tokensOriginal.length * 0.75,
+          ),
+        );
+
+  if (
+    tokensComuns.length <
+    minimoTokens
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Linha/modelo do calçado não coincide. ` +
+        `Original: ${tokensOriginal.join(", ")}.`,
+    };
+  }
+
+  const detalhes = [
+    `linha=${tokensComuns.join(" ")}`,
+    a.variants.color
+      ? `cor=${a.variants.color}`
+      : null,
+    generoOriginal &&
+    generoCandidato
+      ? `genero=${generoOriginal}`
+      : null,
+    tamanhoOriginal &&
+    tamanhoCandidato
+      ? `tamanho=${tamanhoOriginal}`
+      : null,
+  ]
+    .filter(
+      (value): value is string =>
+        Boolean(value),
+    )
+    .join(", ");
+
+  return {
+    exact: true,
+    reason:
+      `Calçado confirmado por marca, linha/modelo e variante(s): ${detalhes}.`,
+  };
+}
+
 function compararProdutoEstritamente(
   original: ProductImport,
   candidate: ProductImport,
@@ -1392,6 +1843,18 @@ function compararProdutoEstritamente(
 
   if (matchMovel) {
     return matchMovel;
+  }
+
+  const matchCalcado =
+    compararCalcadoEstritamente(
+      original,
+      candidate,
+      a,
+      b,
+    );
+
+  if (matchCalcado) {
+    return matchCalcado;
   }
 
   if (a.brand && b.brand && a.brand !== b.brand) {
@@ -2027,7 +2490,10 @@ export async function buscarComparacaoManual(
      *
      * Eletrônicos continuam com a proteção rígida.
      */
-    if (!ehProdutoMovel(original.title)) {
+    if (
+      !ehProdutoMovel(original.title) &&
+      !ehProdutoCalcado(original.title)
+    ) {
       for (
         const chave
         of variantesCriticas
