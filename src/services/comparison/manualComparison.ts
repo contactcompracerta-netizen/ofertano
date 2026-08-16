@@ -1,4 +1,4 @@
-﻿import prisma from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
 import { saveProduct } from "@/services/database/saveProduct";
@@ -155,6 +155,7 @@ const CORES_CONHECIDAS = [
   "preta",
   "branco",
   "branca",
+  "azul marinho",
   "azul",
   "verde",
   "vermelho",
@@ -600,6 +601,41 @@ function inferirRamPeloTitulo(
   return null;
 }
 
+function capacidadeEhRamNoTitulo(
+  texto: string,
+  candidate: CapacityCandidate,
+): boolean {
+  /*
+   * Vinculamos RAM somente à capacidade que está
+   * imediatamente associada à palavra RAM.
+   *
+   * Exemplo:
+   * "128GB 4GB RAM"
+   *
+   * 4GB é RAM. 128GB não deve ser descartado só
+   * porque a palavra RAM aparece alguns caracteres depois.
+   */
+  const depois = texto.slice(
+    candidate.index,
+    Math.min(texto.length, candidate.index + 48),
+  );
+
+  if (
+    /^\d+(?:[.,]\d+)?\s*(?:gb|mb)\s*(?:de\s*)?(?:ram|memoria\s+ram)\b/i.test(
+      depois,
+    )
+  ) {
+    return true;
+  }
+
+  const antes = texto.slice(
+    Math.max(0, candidate.index - 36),
+    candidate.index,
+  );
+
+  return /(?:ram|memoria\s+ram)\s*(?:de\s*)?$/i.test(antes);
+}
+
 function inferirArmazenamentoPeloTitulo(
   title: string,
 ): string | null {
@@ -614,13 +650,13 @@ function inferirArmazenamentoPeloTitulo(
     return null;
   }
 
-  const naoRam = candidatos.filter((candidate) => {
-    const inicio = Math.max(0, candidate.index - 16);
-    const fim = Math.min(texto.length, candidate.index + 18);
-    const contexto = texto.slice(inicio, fim);
-
-    return !/\b(?:ram|memoria\s+ram)\b/i.test(contexto);
-  });
+  const naoRam = candidatos.filter(
+    (candidate) =>
+      !capacidadeEhRamNoTitulo(
+        texto,
+        candidate,
+      ),
+  );
 
   if (naoRam.length === 0) {
     return null;
@@ -719,11 +755,88 @@ function inferirCorPeloTitulo(
     ),
   );
 
-  if (encontradas.length !== 1) {
+  /*
+   * Uma cor composta deve prevalecer sobre sua cor base.
+   *
+   * Exemplo:
+   * "Azul Marinho" também contém "Azul".
+   * Isso não representa duas cores diferentes; é uma única
+   * variante mais específica.
+   */
+  const especificas = encontradas.filter((cor) => {
+    const tokensCor = normalizarTexto(cor)
+      .split(" ")
+      .filter(Boolean);
+
+    return !encontradas.some((outra) => {
+      if (outra === cor) {
+        return false;
+      }
+
+      const tokensOutra = normalizarTexto(outra)
+        .split(" ")
+        .filter(Boolean);
+
+      return (
+        tokensOutra.length > tokensCor.length &&
+        tokensCor.every((token) =>
+          tokensOutra.includes(token),
+        )
+      );
+    });
+  });
+
+  if (especificas.length !== 1) {
     return null;
   }
 
-  return encontradas[0] ?? null;
+  return especificas[0] ?? null;
+}
+
+function escolherCorProduto(
+  colorStructured: string | null,
+  title: string,
+): string | null {
+  const estruturada = colorStructured
+    ? normalizarCor(colorStructured)
+    : null;
+
+  const peloTitulo =
+    inferirCorPeloTitulo(title);
+
+  if (!estruturada) {
+    return peloTitulo;
+  }
+
+  if (!peloTitulo || estruturada === peloTitulo) {
+    return estruturada;
+  }
+
+  const tokensEstruturada = normalizarTexto(estruturada)
+    .split(" ")
+    .filter(Boolean);
+
+  const tokensTitulo = normalizarTexto(peloTitulo)
+    .split(" ")
+    .filter(Boolean);
+
+  /*
+   * Alguns marketplaces enviam COLOR="Azul" enquanto o
+   * próprio título informa "Azul Marinho". Nesse caso,
+   * mantemos a informação mais específica do título.
+   *
+   * Cores realmente divergentes continuam usando o valor
+   * estruturado e serão barradas normalmente pelo matcher.
+   */
+  const tituloRefinaEstruturada =
+    tokensTitulo.length > tokensEstruturada.length &&
+    tokensEstruturada.every((token) =>
+      tokensTitulo.includes(token),
+    );
+
+  return tituloRefinaEstruturada
+    ? peloTitulo
+    : estruturada;
 }
 
 function extrairIdentidade(
@@ -813,9 +926,10 @@ function extrairIdentidade(
         normalizarValorVariante(networkStructured) ??
         normalizarValorVariante(inferirRedePeloTitulo(product.title)),
 
-      color: colorStructured
-        ? normalizarCor(colorStructured)
-        : inferirCorPeloTitulo(product.title),
+      color: escolherCorProduto(
+        colorStructured,
+        product.title,
+      ),
 
       size: normalizarValorVariante(sizeStructured),
     },
