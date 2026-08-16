@@ -17,6 +17,13 @@ type MercadoLivreUser = {
   };
 };
 
+type MercadoLivreApplicationGrant = {
+  user_id?: number | string;
+  app_id?: number | string;
+  date_created?: string;
+  scopes?: string[];
+};
+
 export async function GET() {
   try {
     const connection =
@@ -43,7 +50,11 @@ export async function GET() {
     const token =
       await getAccessToken();
 
-    const response = await fetch(
+    /*
+     * 1. Valida o token e identifica
+     *    o usuário autenticado.
+     */
+    const userResponse = await fetch(
       "https://api.mercadolibre.com/users/me",
       {
         method: "GET",
@@ -60,23 +71,22 @@ export async function GET() {
       },
     );
 
-    const texto =
-      await response.text();
+    const userText =
+      await userResponse.text();
 
-    let data:
+    let userData:
       | MercadoLivreUser
-      | string = texto;
+      | string = userText;
 
     try {
-      data = JSON.parse(
-        texto,
+      userData = JSON.parse(
+        userText,
       ) as MercadoLivreUser;
     } catch {
-      // Mantém o conteúdo como texto
-      // quando a resposta não for JSON.
+      // Mantém como texto.
     }
 
-    if (!response.ok) {
+    if (!userResponse.ok) {
       return NextResponse.json(
         {
           success: false,
@@ -86,22 +96,111 @@ export async function GET() {
             connection.sellerId,
 
           mercadoLivreStatus:
-            response.status,
+            userResponse.status,
 
           mercadoLivreResponse:
-            data,
+            userData,
         },
         {
-          status: response.status,
+          status: userResponse.status,
         },
       );
     }
 
     const authenticatedUserId =
-      typeof data === "object" &&
-      data.id !== undefined
-        ? String(data.id)
+      typeof userData === "object" &&
+      userData.id !== undefined
+        ? String(userData.id)
         : null;
+
+    /*
+     * 2. Consulta os Grants existentes
+     *    para este usuário.
+     *
+     * A resposta informa os scopes
+     * efetivamente concedidos.
+     */
+    let grants:
+      MercadoLivreApplicationGrant[] = [];
+
+    let grantsStatus:
+      number | null = null;
+
+    let grantsError:
+      string | null = null;
+
+    if (authenticatedUserId) {
+      try {
+        const grantsResponse =
+          await fetch(
+            `https://api.mercadolibre.com/users/${encodeURIComponent(
+              authenticatedUserId,
+            )}/applications`,
+            {
+              method: "GET",
+
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+
+                Accept:
+                  "application/json",
+              },
+
+              cache: "no-store",
+            },
+          );
+
+        grantsStatus =
+          grantsResponse.status;
+
+        const grantsText =
+          await grantsResponse.text();
+
+        if (grantsResponse.ok) {
+          const parsed =
+            JSON.parse(grantsText);
+
+          if (Array.isArray(parsed)) {
+            grants =
+              parsed as MercadoLivreApplicationGrant[];
+          }
+        } else {
+          grantsError =
+            grantsText;
+        }
+      } catch (error) {
+        grantsError =
+          error instanceof Error
+            ? error.message
+            : "Erro ao consultar Grants.";
+      }
+    }
+
+    /*
+     * 3. Localiza especificamente
+     *    o Grant da aplicação Ofertano.
+     */
+    const clientId =
+      process.env.MERCADO_LIVRE_CLIENT_ID ??
+      null;
+
+    const grantOfertano =
+      clientId
+        ? grants.find(
+            (grant) =>
+              String(
+                grant.app_id ?? "",
+              ) === String(clientId),
+          ) ?? null
+        : null;
+
+    const scopes =
+      Array.isArray(
+        grantOfertano?.scopes,
+      )
+        ? grantOfertano.scopes
+        : [];
 
     return NextResponse.json({
       success: true,
@@ -117,18 +216,40 @@ export async function GET() {
         connection.sellerId,
 
       nickname:
-        typeof data === "object"
-          ? data.nickname ?? null
+        typeof userData === "object"
+          ? userData.nickname ?? null
           : null,
 
       accountStatus:
-        typeof data === "object"
-          ? data.status
+        typeof userData === "object"
+          ? userData.status
               ?.site_status ?? null
           : null,
 
       tokenExpiresAt:
         connection.expiresAt.toISOString(),
+
+      grantDiagnostic: {
+        grantsStatus,
+
+        grantFound:
+          Boolean(grantOfertano),
+
+        scopes,
+
+        hasRead:
+          scopes.includes("read"),
+
+        hasWrite:
+          scopes.includes("write"),
+
+        hasOfflineAccess:
+          scopes.includes(
+            "offline_access",
+          ),
+
+        grantsError,
+      },
     });
   } catch (error) {
     const message =
