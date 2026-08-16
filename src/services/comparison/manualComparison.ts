@@ -229,6 +229,191 @@ function normalizarValorVariante(
   return normalized || null;
 }
 
+function inferirTamanhoGenericoPeloTitulo(
+  title: string,
+): string | null {
+  const texto = normalizarTexto(title);
+
+  const tamanhoExplicito = texto.match(
+    /\b(?:tamanho|tam)\s*(rn|xpp|pp|p|m|g|gg|xg|xgg|xxg|xxxg)\b/i,
+  );
+
+  if (tamanhoExplicito?.[1]) {
+    return tamanhoExplicito[1].toLowerCase();
+  }
+
+  /*
+   * Tamanhos mais específicos podem ser inferidos sem o prefixo
+   * "tamanho". Isso cobre, por exemplo, fraldas XGG.
+   * P/M/G isolados continuam exigindo contexto explícito para
+   * evitar falsos positivos com códigos genéricos.
+   */
+  const tamanhoForte = texto.match(
+    /\b(rn|xpp|pp|gg|xg|xgg|xxg|xxxg)\b/i,
+  );
+
+  return tamanhoForte?.[1]?.toLowerCase() ?? null;
+}
+
+function normalizarMarcadorPacote(
+  value: string,
+): string {
+  const mapa: Record<string, string> = {
+    unitario: "unitario",
+    unitaria: "unitario",
+    duplo: "duplo",
+    dupla: "duplo",
+    triplo: "triplo",
+    tripla: "triplo",
+    quadruplo: "quadruplo",
+    quadrupla: "quadruplo",
+    quintuplo: "quintuplo",
+    quintupla: "quintuplo",
+    sextuplo: "sextuplo",
+    sextupla: "sextuplo",
+  };
+
+  return mapa[value] ?? value;
+}
+
+function extrairAssinaturaPacote(
+  title: string,
+): string[] {
+  const texto = normalizarTexto(title);
+  const encontrados: string[] = [];
+
+  const palavras = [
+    "unitario",
+    "unitaria",
+    "duplo",
+    "dupla",
+    "triplo",
+    "tripla",
+    "quadruplo",
+    "quadrupla",
+    "quintuplo",
+    "quintupla",
+    "sextuplo",
+    "sextupla",
+  ];
+
+  for (const palavra of palavras) {
+    const pattern = new RegExp(`\\b${palavra}\\b`, "i");
+
+    if (pattern.test(texto)) {
+      encontrados.push(
+        normalizarMarcadorPacote(palavra),
+      );
+    }
+  }
+
+  const padroes = [
+    /\bkit\s+(\d{1,4})\b/gi,
+    /\b(\d{1,4})\s*(?:unidades?|unid\.?|unds?|un)\b/gi,
+  ];
+
+  for (const pattern of padroes) {
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(texto)) !== null) {
+      if (match[1]) {
+        encontrados.push(`qtd:${Number(match[1])}`);
+      }
+    }
+  }
+
+  return Array.from(new Set(encontrados)).sort();
+}
+
+function titulosComerciaisEquivalentes(
+  original: ProductImport,
+  candidate: ProductImport,
+  a: ProductIdentity,
+  b: ProductIdentity,
+): MatchResult | null {
+  const tituloA = normalizarTexto(original.title);
+  const tituloB = normalizarTexto(candidate.title);
+
+  if (!tituloA || !tituloB) {
+    return null;
+  }
+
+  if (a.brand && b.brand && a.brand !== b.brand) {
+    return null;
+  }
+
+  const variantesCriticas = [
+    "color",
+    "storage",
+    "voltage",
+    "size",
+  ] as const;
+
+  for (const chave of variantesCriticas) {
+    const valorA = a.variants[chave];
+    const valorB = b.variants[chave];
+
+    if (valorA && valorB && valorA !== valorB) {
+      return {
+        exact: false,
+        reason: `Variante ${chave} diferente: ${valorA} x ${valorB}.`,
+      };
+    }
+
+    if (Boolean(valorA) !== Boolean(valorB)) {
+      return null;
+    }
+  }
+
+  const tokensA = tituloA.split(" ").filter(Boolean);
+  const tokensB = tituloB.split(" ").filter(Boolean);
+  const menor = tituloA.length <= tituloB.length ? tituloA : tituloB;
+  const maior = tituloA.length > tituloB.length ? tituloA : tituloB;
+  const menorTokens = Math.min(tokensA.length, tokensB.length);
+  const proporcao = menor.length / maior.length;
+
+  /*
+   * Evidência forte, mas conservadora, para produtos sem MODEL/MPN
+   * confiável: o título completo é idêntico ou um título inteiro
+   * está contido no outro com pequena extensão (geralmente marca).
+   * Não aceitamos apenas similaridade ou reordenação de palavras.
+   */
+  const tituloForte =
+    tituloA === tituloB ||
+    (
+      menorTokens >= 5 &&
+      proporcao >= 0.72 &&
+      maior.includes(menor)
+    );
+
+  if (!tituloForte) {
+    return null;
+  }
+
+  const pacoteA = extrairAssinaturaPacote(original.title);
+  const pacoteB = extrairAssinaturaPacote(candidate.title);
+
+  if (
+    pacoteA.length > 0 &&
+    pacoteB.length > 0 &&
+    pacoteA.join("|") !== pacoteB.join("|")
+  ) {
+    return {
+      exact: false,
+      reason:
+        `Quantidade/pacote diferente: ${pacoteA.join(", ")} x ${pacoteB.join(", ")}.`,
+    };
+  }
+
+  return {
+    exact: true,
+    reason:
+      tituloA === tituloB
+        ? "Título comercial normalizado idêntico e variantes críticas compatíveis."
+        : "Título comercial completo equivalente por contenção e variantes críticas compatíveis.",
+  };
+}
+
 function buscarAtributo(
   product: ProductImport,
   aliases: readonly string[],
@@ -968,7 +1153,9 @@ function extrairIdentidade(
         product.title,
       ),
 
-      size: normalizarValorVariante(sizeStructured),
+      size:
+        normalizarValorVariante(sizeStructured) ??
+        inferirTamanhoGenericoPeloTitulo(product.title),
     },
   };
 }
@@ -1855,6 +2042,18 @@ function compararProdutoEstritamente(
 
   if (matchCalcado) {
     return matchCalcado;
+  }
+
+  const matchTituloComercial =
+    titulosComerciaisEquivalentes(
+      original,
+      candidate,
+      a,
+      b,
+    );
+
+  if (matchTituloComercial) {
+    return matchTituloComercial;
   }
 
   if (a.brand && b.brand && a.brand !== b.brand) {
