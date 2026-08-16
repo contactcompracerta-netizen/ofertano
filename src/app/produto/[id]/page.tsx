@@ -53,6 +53,79 @@ function formatarMarketplace(marketplace: string) {
   );
 }
 
+function ehMarketplaceMercadoLivre(marketplace: string | null | undefined) {
+  const valor = marketplace
+    ?.trim()
+    .toUpperCase()
+    .replaceAll(" ", "_");
+
+  return valor === "MERCADO_LIVRE";
+}
+
+function ehLinkIndividualMercadoLivre(
+  link: string | null | undefined,
+) {
+  const valor = link?.trim();
+
+  if (!valor) {
+    return false;
+  }
+
+  try {
+    const url = new URL(valor);
+    const host = url.hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
+
+    const hostMercadoLivre =
+      host === "mercadolivre.com.br" ||
+      host.endsWith(".mercadolivre.com.br") ||
+      host === "mercadolibre.com" ||
+      host.endsWith(".mercadolibre.com") ||
+      host === "meli.la" ||
+      host.endsWith(".meli.la");
+
+    if (!hostMercadoLivre) {
+      return false;
+    }
+
+    // Links curtos meli.la podem ser gerados pelo Link Builder.
+    // O antigo fallback genérico do Ofertano nunca deve voltar a ser tratado
+    // como link individual de afiliado.
+    if (host === "meli.la" || host.endsWith(".meli.la")) {
+      const caminhoCurto = url.pathname
+        .replace(/\/+$/, "")
+        .toLowerCase();
+
+      return caminhoCurto !== "/1i7te2c";
+    }
+
+    const caminho = decodeURIComponent(url.pathname);
+
+    // Catálogo e user-product não são tratados como links individuais de compra.
+    if (/\/p\/MLB\d+/i.test(caminho) || /\/up\/MLBU\d+/i.test(caminho)) {
+      return false;
+    }
+
+    if (/MLB-?\d+/i.test(caminho)) {
+      return true;
+    }
+
+    const itemId =
+      url.searchParams.get("item_id") ??
+      url.searchParams.get("wid");
+
+    return Boolean(
+      itemId && /^MLB-?\d+$/i.test(itemId.trim()),
+    );
+  } catch {
+    return false;
+  }
+}
+
+const LINK_AFILIADO_FALLBACK_MERCADO_LIVRE =
+  "https://meli.la/1i7Te2C";
+
 function limparMarca(marca: string | null | undefined) {
   const valor = marca?.trim();
 
@@ -928,8 +1001,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
    * - somente produto EXACT;
    * - oferta ACTIVE e disponível;
    * - preço válido;
-   * - link individual de afiliado presente;
-   * - entre as elegíveis, vence o menor preço.
+   * - Mercado Livre pode usar temporariamente o link afiliado fallback;
+   * - nas demais lojas, exige link individual de afiliado;
+   * - entre as ofertas elegíveis, vence sempre o menor preço.
    *
    * Product.affiliateLink permanece apenas como compatibilidade
    * para registros antigos que ainda não tenham MarketplaceOffer
@@ -938,11 +1012,21 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const ofertasCompraveisExact = ofertasComparador
     .filter((oferta) => {
       const link = oferta.affiliateLink?.trim();
+      const ofertaMercadoLivre =
+        ehMarketplaceMercadoLivre(oferta.marketplace);
+      const linkValido = ofertaMercadoLivre
+        ? ehLinkIndividualMercadoLivre(link) ||
+          Boolean(LINK_AFILIADO_FALLBACK_MERCADO_LIVRE)
+        : Boolean(link);
+      const statusValido = ofertaMercadoLivre
+        ? oferta.status !== "UNAVAILABLE" &&
+          oferta.status !== "ERROR"
+        : oferta.status === "ACTIVE";
 
       return (
         oferta.matchStatus === "EXACT" &&
-        Boolean(link) &&
-        oferta.status === "ACTIVE" &&
+        linkValido &&
+        statusValido &&
         oferta.available &&
         Number.isFinite(oferta.price) &&
         oferta.price > 0
@@ -953,11 +1037,32 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const ofertaPrincipalComLink =
     ofertasCompraveisExact[0] ?? null;
 
-  const linkLegadoPrincipal =
+  const linkLegadoPrincipalBruto =
     produto.affiliateLink?.trim() ?? "";
 
+  const linkOfertaPrincipal = ofertaPrincipalComLink
+    ? ehMarketplaceMercadoLivre(
+        ofertaPrincipalComLink.marketplace,
+      )
+      ? ehLinkIndividualMercadoLivre(
+          ofertaPrincipalComLink.affiliateLink,
+        )
+        ? ofertaPrincipalComLink.affiliateLink?.trim() || ""
+        : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
+      : ofertaPrincipalComLink.affiliateLink?.trim() || ""
+    : "";
+
+  const linkLegadoPrincipal =
+    ehMarketplaceMercadoLivre(produto.store)
+      ? ehLinkIndividualMercadoLivre(
+          linkLegadoPrincipalBruto,
+        )
+        ? linkLegadoPrincipalBruto
+        : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
+      : linkLegadoPrincipalBruto;
+
   const linkPrincipal =
-    ofertaPrincipalComLink?.affiliateLink?.trim() ||
+    linkOfertaPrincipal ||
     linkLegadoPrincipal;
 
   const marketplacePrincipal =
@@ -1276,10 +1381,28 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                 <div className={`min-w-0 grid gap-1.5 ${ofertasComparador.length === 1 ? "grid-cols-1" : "md:grid-cols-2 2xl:grid-cols-3"}`}>
                 {ofertasComparador.map((oferta) => {
                   const link = oferta.affiliateLink?.trim();
-                  const linkAtivo =
-                    Boolean(link) &&
-                    oferta.status === "ACTIVE" &&
-                    oferta.available;
+                  const ofertaMercadoLivre =
+                    ehMarketplaceMercadoLivre(oferta.marketplace);
+                  const linkIndividualValido = ofertaMercadoLivre
+                    ? ehLinkIndividualMercadoLivre(link)
+                    : Boolean(link);
+                  const ofertaDisponivel =
+                    oferta.available &&
+                    oferta.status !== "UNAVAILABLE" &&
+                    oferta.status !== "ERROR";
+                  const linkDestino = ofertaMercadoLivre
+                    ? ofertaDisponivel
+                      ? linkIndividualValido && link
+                        ? link
+                        : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
+                      : null
+                    : linkIndividualValido &&
+                        oferta.status === "ACTIVE" &&
+                        oferta.available &&
+                        link
+                      ? link
+                      : null;
+                  const linkAtivo = Boolean(linkDestino);
                   const marketplace = formatarMarketplace(
                     oferta.marketplace,
                   );
@@ -1332,15 +1455,16 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                             <ExternalLinkIcon className="h-3 w-3" />
                           </p>
                         )}
+
                       </div>
                     </div>
                   );
 
-                  if (linkAtivo && link) {
+                  if (linkAtivo && linkDestino) {
                     return (
                       <a
                         key={oferta.id}
-                        href={link}
+                        href={linkDestino}
                         target="_blank"
                         rel="noopener noreferrer sponsored"
                         className="rounded-lg border border-slate-200 px-2.5 py-2 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:shadow-sm"
