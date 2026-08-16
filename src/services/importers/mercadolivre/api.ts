@@ -11,12 +11,107 @@ import type {
   MercadoLivreUserProductItemSearch,
 } from "./types";
 
+type MercadoLivreMultigetItem = {
+  code?: number;
+  body?: MercadoLivreItem & {
+    message?: string;
+    error?: string;
+    status?: number;
+  };
+};
+
 export async function getItem(
   itemId: string
 ): Promise<MercadoLivreItem> {
-  return mercadoLivreFetch(
-    `/items/${itemId}`
-  ) as Promise<MercadoLivreItem>;
+  /*
+   * Alguns anúncios públicos podem responder 403
+   * na consulta individual:
+   *
+   * /items/{ITEM_ID}
+   *
+   * Nesses casos tentamos o Multiget oficial:
+   *
+   * /items?ids={ITEM_ID}
+   *
+   * O Multiget retorna uma lista no formato:
+   *
+   * [
+   *   {
+   *     code: 200,
+   *     body: { ...item }
+   *   }
+   * ]
+   */
+  let erroConsultaIndividual: unknown = null;
+
+  try {
+    return await mercadoLivreFetch(
+      `/items/${encodeURIComponent(itemId)}`
+    ) as MercadoLivreItem;
+  } catch (error) {
+    erroConsultaIndividual = error;
+  }
+
+  try {
+    const resposta = await mercadoLivreFetch(
+      `/items?ids=${encodeURIComponent(itemId)}`
+    ) as MercadoLivreMultigetItem[];
+
+    if (
+      !Array.isArray(resposta) ||
+      resposta.length === 0
+    ) {
+      throw new Error(
+        `Mercado Livre Multiget não retornou o item ${itemId}.`
+      );
+    }
+
+    const resultado = resposta.find(
+      (entrada) =>
+        entrada.body?.id === itemId
+    ) ?? resposta[0];
+
+    if (
+      resultado?.code === 200 &&
+      resultado.body?.id
+    ) {
+      return resultado.body;
+    }
+
+    const detalhes =
+      resultado?.body
+        ? JSON.stringify(resultado.body)
+        : "sem detalhes";
+
+    throw new Error(
+      `Mercado Livre Multiget para ${itemId} retornou ` +
+        `${resultado?.code ?? "código desconhecido"}: ${detalhes}`
+    );
+  } catch (erroMultiget) {
+    /*
+     * Se o próprio Multiget informou uma resposta
+     * estruturada, ela é mais útil para diagnóstico.
+     */
+    if (
+      erroMultiget instanceof Error &&
+      erroMultiget.message.includes(
+        "Mercado Livre Multiget"
+      )
+    ) {
+      throw erroMultiget;
+    }
+
+    /*
+     * Caso o fallback nem consiga ser executado,
+     * preservamos o erro original da consulta
+     * individual.
+     */
+    if (erroConsultaIndividual instanceof Error) {
+      throw erroConsultaIndividual;
+    }
+
+    throw erroMultiget;
+  }
 }
 
 export async function getCatalogProduct(
