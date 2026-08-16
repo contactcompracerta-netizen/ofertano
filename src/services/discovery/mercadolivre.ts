@@ -1,4 +1,5 @@
-﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
+﻿import prisma from "@/lib/prisma";
+import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
 import type {
   DiscoveryCandidate,
@@ -593,6 +594,109 @@ const reputacaoVendedorCache =
     Promise<boolean>
   >();
 
+async function buscarLinkAfiliadoConhecido(
+  externalId: string,
+): Promise<string | null> {
+  const id =
+    externalId.trim();
+
+  if (!id) {
+    return null;
+  }
+
+  try {
+    const oferta =
+      await prisma.marketplaceOffer.findFirst({
+        where: {
+          marketplace:
+            "MERCADO_LIVRE",
+
+          externalId:
+            id,
+
+          status:
+            "ACTIVE",
+
+          matchStatus:
+            "EXACT",
+
+          affiliateLink: {
+            not: null,
+          },
+        },
+
+        orderBy: {
+          affiliateValidatedAt:
+            "desc",
+        },
+
+        select: {
+          affiliateLink: true,
+        },
+      });
+
+    const link =
+      oferta?.affiliateLink?.trim();
+
+    if (!link) {
+      return null;
+    }
+
+    /*
+     * Reutilizamos somente links oficiais
+     * previamente validados pelo Ofertano.
+     */
+    try {
+      const url =
+        new URL(link);
+
+      const host =
+        url.hostname.toLowerCase();
+
+      const mercadoLivre =
+        host ===
+          "mercadolivre.com.br" ||
+        host.endsWith(
+          ".mercadolivre.com.br",
+        );
+
+      const social =
+        url.pathname
+          .toLowerCase()
+          .startsWith("/social/");
+
+      const etiqueta =
+        url.searchParams
+          .get("matt_word")
+          ?.toLowerCase();
+
+      if (
+        mercadoLivre &&
+        social &&
+        etiqueta === "ofertano"
+      ) {
+        url.hash = "";
+
+        return url.toString();
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error(
+      `Falha ao consultar link afiliado conhecido de ${id}:`,
+      error,
+    );
+
+    /*
+     * Falha no cache nunca deve impedir
+     * a descoberta do produto.
+     */
+    return null;
+  }
+}
 async function vendedorElegivelAfiliados(
   sellerId: number,
 ): Promise<boolean> {
@@ -920,7 +1024,9 @@ async function carregarCandidato(
          * posteriormente pelo fluxo de afiliados.
          */
         affiliateLink:
-          null,
+          await buscarLinkAfiliadoConhecido(
+            productId,
+          ),
 
         title:
           titulo,
@@ -1231,3 +1337,4 @@ export async function buscarMercadoLivre(
     };
   }
 }
+
