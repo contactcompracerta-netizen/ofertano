@@ -128,6 +128,8 @@ const BRAND_ALIASES: Array<{
   { canonical: "asus", aliases: ["asus"] },
   { canonical: "dell", aliases: ["dell"] },
   { canonical: "hp", aliases: ["hp"] },
+  { canonical: "notavel", aliases: ["notavel", "notável"] },
+  { canonical: "aramoveis", aliases: ["aramoveis", "aramóveis"] },
   { canonical: "lg", aliases: ["lg"] },
   { canonical: "sony", aliases: ["sony"] },
   { canonical: "philips", aliases: ["philips"] },
@@ -260,6 +262,29 @@ function normalizarMarca(
     return null;
   }
 
+  /*
+   * Marketplaces podem retornar valores genéricos
+   * no campo de marca. Esses valores não devem
+   * participar da identidade do produto.
+   */
+  const marcasInvalidas = new Set([
+    "generico",
+    "generica",
+    "generic",
+    "sem marca",
+    "nao definido",
+    "nao definida",
+    "nao informado",
+    "nao informada",
+    "unknown",
+    "not defined",
+    "unbranded",
+  ]);
+
+  if (marcasInvalidas.has(normalized)) {
+    return null;
+  }
+
   const padded = ` ${normalized} `;
 
   for (const brand of BRAND_ALIASES) {
@@ -281,6 +306,29 @@ function inferirMarcaPeloTitulo(
   const normalized = normalizarTexto(title);
 
   if (!normalized) {
+    return null;
+  }
+
+  /*
+   * Marketplaces podem retornar valores genéricos
+   * no campo de marca. Esses valores não devem
+   * participar da identidade do produto.
+   */
+  const marcasInvalidas = new Set([
+    "generico",
+    "generica",
+    "generic",
+    "sem marca",
+    "nao definido",
+    "nao definida",
+    "nao informado",
+    "nao informada",
+    "unknown",
+    "not defined",
+    "unbranded",
+  ]);
+
+  if (marcasInvalidas.has(normalized)) {
     return null;
   }
 
@@ -2057,6 +2105,7 @@ export async function buscarComparacaoManual(
     errors,
   };
 }
+
 
 
 

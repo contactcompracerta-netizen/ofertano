@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+﻿import { createHmac } from "node:crypto";
 
 import type {
   DiscoveryCandidate,
@@ -1114,7 +1114,7 @@ function obterVariavelAmbiente(
 
   if (!valor) {
     throw new Error(
-      `A variável ${nome} não está configurada.`,
+      `A variÃ¡vel ${nome} nÃ£o estÃ¡ configurada.`,
     );
   }
 
@@ -1303,7 +1303,7 @@ async function consultarAliExpress(
           AliExpressResponse;
     } catch {
       throw new Error(
-        `AliExpress API retornou resposta inválida. HTTP ${response.status}.`,
+        `AliExpress API retornou resposta invÃ¡lida. HTTP ${response.status}.`,
       );
     }
 
@@ -1319,12 +1319,40 @@ async function consultarAliExpress(
       const erro =
         resposta.error_response;
 
+      const codigoErro =
+        erro.code !== undefined
+          ? String(erro.code)
+          : "";
+
+      const mensagemErro = [
+        erro.msg ?? "",
+        erro.sub_msg ?? "",
+      ]
+        .join(" ")
+        .trim()
+        .toLowerCase();
+
+      /*
+       * A AliExpress usa o código 405 com
+       * "The result is empty" quando a consulta
+       * simplesmente não encontrou produtos.
+       *
+       * Isso não é falha de integração.
+       * Tratamos como busca válida com zero resultados.
+       */
+      if (
+        codigoErro === "405" &&
+        mensagemErro.includes(
+          "result is empty",
+        )
+      ) {
+        return [];
+      }
+
       throw new Error(
         [
           "AliExpress API:",
-          erro.code !== undefined
-            ? String(erro.code)
-            : "",
+          codigoErro,
           erro.msg ?? "",
           erro.sub_code ?? "",
           erro.sub_msg ?? "",
@@ -1383,7 +1411,7 @@ async function consultarAliExpress(
         `AliExpress API: ${
           respCode !== undefined
             ? String(respCode)
-            : "sem código"
+            : "sem cÃ³digo"
         } ${respResult.resp_msg ?? ""}`
           .trim(),
       );
@@ -1407,7 +1435,7 @@ async function consultarAliExpress(
       produtos.length === 0
     ) {
       throw new Error(
-        "AliExpress informou produtos na resposta, mas o formato recebido não pôde ser interpretado.",
+        "AliExpress informou produtos na resposta, mas o formato recebido nÃ£o pÃ´de ser interpretado.",
       );
     }
 
