@@ -158,6 +158,319 @@ function candidatoCompativelComConectividade(
   );
 }
 
+const STOP_WORDS_INTENCAO = new Set([
+  "a",
+  "as",
+  "o",
+  "os",
+  "de",
+  "da",
+  "das",
+  "do",
+  "dos",
+  "e",
+  "em",
+  "na",
+  "nas",
+  "no",
+  "nos",
+  "para",
+  "por",
+  "com",
+  "sem",
+  "um",
+  "uma",
+]);
+
+/*
+ * Termos que normalmente revelam que o anúncio é de
+ * outro produto relacionado à busca principal.
+ *
+ * Eles só bloqueiam quando NÃO foram pedidos na consulta.
+ */
+const TERMOS_CONTEXTO_SECUNDARIO = new Set([
+  "acessorio",
+  "acessorios",
+  "adaptador",
+  "adaptadores",
+  "adesivo",
+  "adesivos",
+  "afinador",
+  "afinadores",
+  "amplificador",
+  "amplificadores",
+  "blusa",
+  "blusas",
+  "cabo",
+  "cabos",
+  "camisa",
+  "camisas",
+  "camiseta",
+  "camisetas",
+  "capa",
+  "capas",
+  "captador",
+  "captadores",
+  "case",
+  "cases",
+  "corda",
+  "cordas",
+  "correia",
+  "correias",
+  "estojo",
+  "estojos",
+  "ferramenta",
+  "ferramentas",
+  "medidor",
+  "medidores",
+  "palheta",
+  "palhetas",
+  "peca",
+  "pecas",
+  "pedal",
+  "pedais",
+  "pedaleira",
+  "pedaleiras",
+  "pickguard",
+  "plectro",
+  "receptor",
+  "receptores",
+  "reposicao",
+  "sistema",
+  "suporte",
+  "suportes",
+  "transmissor",
+  "transmissores",
+]);
+
+/*
+ * Estes termos indicam mudança clara da classe do produto
+ * mesmo quando aparecem depois das palavras pesquisadas.
+ */
+const TERMOS_CLASSE_INCOMPATIVEL = new Set([
+  "bicicleta",
+  "bicicletas",
+  "blusa",
+  "blusas",
+  "brinquedo",
+  "brinquedos",
+  "camisa",
+  "camisas",
+  "camiseta",
+  "camisetas",
+  "moletom",
+  "moletons",
+]);
+
+function tokenizarIntencao(
+  valor: string,
+): string[] {
+  return normalizarTexto(valor)
+    .split(" ")
+    .filter(
+      (token) =>
+        Boolean(token) &&
+        !STOP_WORDS_INTENCAO.has(token) &&
+        (
+          token.length >= 2 ||
+          /^\d+$/.test(token)
+        ),
+    );
+}
+
+function candidatoCompativelComIntencao(
+  candidato: DiscoveryCandidate,
+  consulta: string,
+): boolean {
+  const consultaTokens =
+    tokenizarIntencao(consulta);
+
+  const tituloTokens =
+    tokenizarIntencao(
+      candidato.title,
+    );
+
+  if (
+    consultaTokens.length === 0 ||
+    tituloTokens.length === 0
+  ) {
+    return false;
+  }
+
+  const consultaSet =
+    new Set(consultaTokens);
+
+  const tituloSet =
+    new Set(tituloTokens);
+
+  /*
+   * Para buscas curtas de 1 ou 2 termos,
+   * todos os termos são obrigatórios.
+   *
+   * "guitarra elétrica":
+   * guitarra + elétrica precisam existir.
+   */
+  const encontrados =
+    consultaTokens.filter(
+      (token) =>
+        tituloSet.has(token),
+    ).length;
+
+  const minimo =
+    consultaTokens.length <= 2
+      ? consultaTokens.length
+      : Math.ceil(
+          consultaTokens.length *
+            0.7,
+        );
+
+  if (encontrados < minimo) {
+    return false;
+  }
+
+  /*
+   * Exemplo:
+   *
+   * "pedal de guitarra elétrica"
+   * possui guitarra + elétrica,
+   * porém o produto principal é PEDAL.
+   *
+   * Se um termo secundário aparece antes
+   * do primeiro termo solicitado, rejeitamos.
+   */
+  const indicePrimeiroTermoConsulta =
+    tituloTokens.findIndex(
+      (token) =>
+        consultaSet.has(token),
+    );
+
+  if (
+    indicePrimeiroTermoConsulta < 0
+  ) {
+    return false;
+  }
+
+  for (
+    let indice = 0;
+    indice <
+    indicePrimeiroTermoConsulta;
+    indice += 1
+  ) {
+    const token =
+      tituloTokens[indice];
+
+    if (
+      token &&
+      TERMOS_CONTEXTO_SECUNDARIO.has(
+        token,
+      ) &&
+      !consultaSet.has(token)
+    ) {
+      return false;
+    }
+  }
+
+
+    /*
+     * Barreira global de acessório forte.
+     *
+     * Evita que uma busca pelo produto principal aceite:
+     * - bolsa/saco para o produto
+     * - pedal/pedaleira
+     * - dispositivo de efeito
+     * - transmissor/receptor
+     * - palheta/afinador
+     *
+     * Se o termo vier claramente como item acompanhado
+     * ("com", "inclui", "acompanha"), não bloqueamos.
+     */
+    const termosAcessorioForte =
+      new Set([
+        "afinador",
+        "afinadores",
+        "bolsa",
+        "bolsas",
+        "dispositivo",
+        "dispositivos",
+        "efeito",
+        "efeitos",
+        "palheta",
+        "palhetas",
+        "pedal",
+        "pedais",
+        "pedaleira",
+        "pedaleiras",
+        "pickguard",
+        "receptor",
+        "receptores",
+        "saco",
+        "sacos",
+        "transmissor",
+        "transmissores",
+      ]);
+
+    const tituloOriginalTokens =
+      normalizarTexto(
+        candidato.title,
+      )
+        .split(" ")
+        .filter(Boolean);
+
+    for (
+      let indice = 0;
+      indice < tituloOriginalTokens.length;
+      indice += 1
+    ) {
+      const token =
+        tituloOriginalTokens[indice];
+
+      if (
+        !token ||
+        consultaSet.has(token) ||
+        !termosAcessorioForte.has(token)
+      ) {
+        continue;
+      }
+
+      const contextoAnterior =
+        tituloOriginalTokens.slice(
+          Math.max(0, indice - 5),
+          indice,
+        );
+
+      const acompanhaProduto =
+        contextoAnterior.includes("com") ||
+        contextoAnterior.includes("inclui") ||
+        contextoAnterior.includes("acompanha");
+
+      if (!acompanhaProduto) {
+        return false;
+      }
+    }
+
+  /*
+   * Classes claramente incompatíveis
+   * são bloqueadas em qualquer posição.
+   *
+   * Exemplo:
+   * "guitarra elétrica ... brinquedo"
+   * não entra numa busca normal por guitarra.
+   */
+  const possuiClasseIncompativel =
+    tituloTokens.some(
+      (token) =>
+        TERMOS_CLASSE_INCOMPATIVEL.has(
+          token,
+        ) &&
+        !consultaSet.has(token),
+    );
+
+  if (possuiClasseIncompativel) {
+    return false;
+  }
+
+  return true;
+}
 function filtrarCandidatosPorConsulta(
   candidatos: DiscoveryCandidate[],
   consulta: string,
@@ -165,6 +478,10 @@ function filtrarCandidatosPorConsulta(
   return candidatos.filter(
     (candidato) =>
       candidatoCompativelComConectividade(
+        candidato,
+        consulta,
+      ) &&
+      candidatoCompativelComIntencao(
         candidato,
         consulta,
       ),
@@ -886,4 +1203,5 @@ export async function descobrirProdutos(
       ).length,
   };
 }
+
 

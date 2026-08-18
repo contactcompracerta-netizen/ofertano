@@ -807,8 +807,17 @@ async function carregarCandidato(
         titulo,
         query,
       );
-
-    if (relevancia < 0.5) {
+    /*
+     * Busca automática exige correspondência forte.
+     *
+     * "guitarra elétrica" não pode aceitar:
+     * - bicicleta elétrica
+     * - blusa com guitarra
+     * - acessórios relacionados apenas a um termo
+     */
+    if (
+      relevancia < 0.8
+    ) {
       return null;
     }
 

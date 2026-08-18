@@ -1,7 +1,11 @@
-import prisma from "@/lib/prisma";
+﻿import prisma from "@/lib/prisma";
 import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
 import { saveProduct } from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
+import type {
+  ProductImport,
+  MarketplaceName,
+} from "@/services/importers/core/types";
 
 export type QueueProcessResult = {
   success: boolean;
@@ -60,7 +64,7 @@ export async function processImportQueue(
     return {
       success: true,
       message:
-        "Não há produtos pendentes na fila.",
+        "NÃ£o hÃ¡ produtos pendentes na fila.",
       processed: 0,
       imported: 0,
       errors: 0,
@@ -102,15 +106,15 @@ export async function processImportQueue(
      * MODO COMPARACAO DE PRODUTO JA PUBLICADO
      *
      * Uma linha PENDING com productId preenchido e sem opportunityId
-     * representa um Product que já foi publicado pela busca do site
-     * e agora precisa receber o Multi Loja fora da requisição pública.
+     * representa um Product que jÃ¡ foi publicado pela busca do site
+     * e agora precisa receber o Multi Loja fora da requisiÃ§Ã£o pÃºblica.
      *
      * Nesse modo:
-     * - o Product existente NÃO é recriado;
-     * - usamos a URL da oferta de referência apenas para reconstruir
-     *   o ProductImport necessário ao matcher;
+     * - o Product existente NÃƒO Ã© recriado;
+     * - usamos a URL da oferta de referÃªncia apenas para reconstruir
+     *   o ProductImport necessÃ¡rio ao matcher;
      * - o comparador salva somente ofertas EXACT no mesmo productId;
-     * - o trabalho pesado fica na fila e não segura a busca do cliente.
+     * - o trabalho pesado fica na fila e nÃ£o segura a busca do cliente.
      */
     if (
       item.productId &&
@@ -126,6 +130,29 @@ export async function processImportQueue(
             select: {
               id: true,
               name: true,
+              canonicalName: true,
+              brand: true,
+              description: true,
+              category: true,
+              image: true,
+              images: true,
+              price: true,
+              oldPrice: true,
+              discount: true,
+              installments: true,
+              rating: true,
+              reviews: true,
+              sales: true,
+              stock: true,
+              affiliateLink: true,
+              specifications: true,
+              modelNumber: true,
+              ean: true,
+              gtin: true,
+              mpn: true,
+              color: true,
+              voltage: true,
+              size: true,
             },
           });
 
@@ -135,10 +162,215 @@ export async function processImportQueue(
           );
         }
 
-        const referencia =
-          await importarProduto(
-            item.url,
+        /*
+         * Para um Product que já existe no Ofertano não
+         * precisamos raspar novamente a página da loja de
+         * origem apenas para reconstruir a referência.
+         *
+         * A MarketplaceOffer já contém:
+         * - marketplace;
+         * - código externo;
+         * - URL;
+         * - link afiliado;
+         * - vendedor;
+         * - preço/estoque da oferta de origem.
+         */
+        const ofertaReferencia =
+          await prisma.marketplaceOffer.findFirst({
+            where: {
+              productId: item.productId,
+              marketplace: item.marketplace,
+            },
+
+            orderBy: {
+              updatedAt: "desc",
+            },
+
+            select: {
+              marketplace: true,
+              externalId: true,
+              sourceUrl: true,
+              affiliateLink: true,
+              seller: true,
+              price: true,
+              oldPrice: true,
+              installments: true,
+              stock: true,
+            },
+          });
+
+        if (!ofertaReferencia) {
+          throw new Error(
+            `Oferta de referência ${item.marketplace} não encontrada para o produto ${item.productId}.`,
           );
+        }
+
+        const externalIdReferencia =
+          ofertaReferencia.externalId?.trim();
+
+        if (!externalIdReferencia) {
+          throw new Error(
+            `Oferta de referência ${item.marketplace} sem externalId para o produto ${item.productId}.`,
+          );
+        }
+
+        let marketplaceName: MarketplaceName;
+
+        switch (String(ofertaReferencia.marketplace)) {
+          case "MERCADO_LIVRE":
+            marketplaceName = "Mercado Livre";
+            break;
+
+          case "AMAZON":
+            marketplaceName = "Amazon";
+            break;
+
+          case "SHOPEE":
+            marketplaceName = "Shopee";
+            break;
+
+          case "MAGAZINE_LUIZA":
+            marketplaceName = "Magazine Luiza";
+            break;
+
+          case "ALIEXPRESS":
+          case "ALI_EXPRESS":
+            marketplaceName = "AliExpress";
+            break;
+
+          default:
+            throw new Error(
+              `Marketplace de referência desconhecido: ${ofertaReferencia.marketplace}.`,
+            );
+        }
+
+        const attributes: Record<string, string> = {};
+
+        if (
+          produtoExistente.specifications &&
+          typeof produtoExistente.specifications === "object" &&
+          !Array.isArray(produtoExistente.specifications)
+        ) {
+          for (
+            const [key, value]
+            of Object.entries(
+              produtoExistente.specifications,
+            )
+          ) {
+            if (
+              typeof value === "string" ||
+              typeof value === "number" ||
+              typeof value === "boolean"
+            ) {
+              attributes[key] =
+                String(value);
+            }
+          }
+        }
+
+        if (produtoExistente.modelNumber) {
+          attributes.MODEL =
+            produtoExistente.modelNumber;
+        }
+
+        if (produtoExistente.ean) {
+          attributes.EAN =
+            produtoExistente.ean;
+        }
+
+        if (produtoExistente.gtin) {
+          attributes.GTIN =
+            produtoExistente.gtin;
+        }
+
+        if (produtoExistente.mpn) {
+          attributes.MPN =
+            produtoExistente.mpn;
+        }
+
+        if (produtoExistente.color) {
+          attributes.COLOR =
+            produtoExistente.color;
+        }
+
+        if (produtoExistente.voltage) {
+          attributes.VOLTAGE =
+            produtoExistente.voltage;
+        }
+
+        if (produtoExistente.size) {
+          attributes.SIZE =
+            produtoExistente.size;
+        }
+
+        const referencia: ProductImport = {
+          marketplace:
+            marketplaceName,
+
+          externalId:
+            externalIdReferencia,
+
+          url:
+            ofertaReferencia.sourceUrl ||
+            item.url,
+
+          affiliateLink:
+            ofertaReferencia.affiliateLink ||
+            produtoExistente.affiliateLink ||
+            null,
+
+          title:
+            produtoExistente.canonicalName?.trim() ||
+            produtoExistente.name,
+
+          description:
+            produtoExistente.description,
+
+          brand:
+            produtoExistente.brand,
+
+          category:
+            produtoExistente.category,
+
+          image:
+            produtoExistente.image,
+
+          images:
+            produtoExistente.images,
+
+          price:
+            ofertaReferencia.price ??
+            produtoExistente.price,
+
+          oldPrice:
+            ofertaReferencia.oldPrice ??
+            produtoExistente.oldPrice,
+
+          discount:
+            produtoExistente.discount,
+
+          installments:
+            ofertaReferencia.installments ??
+            produtoExistente.installments,
+
+          rating:
+            produtoExistente.rating,
+
+          reviews:
+            produtoExistente.reviews,
+
+          sales:
+            produtoExistente.sales,
+
+          stock:
+            ofertaReferencia.stock ??
+            produtoExistente.stock,
+
+          seller:
+            ofertaReferencia.seller,
+
+          attributes,
+        };
 
         const comparison =
           await buscarComparacaoManual(
@@ -162,7 +394,7 @@ export async function processImportQueue(
         });
 
         console.log(
-          `[ImportQueue] Multi Loja em fila concluído para ${item.productId}: ` +
+          `[ImportQueue] Multi Loja em fila concluÃ­do para ${item.productId}: ` +
             `${comparison.found} oferta(s) EXACT encontrada(s).`,
         );
 
@@ -195,7 +427,7 @@ export async function processImportQueue(
         const mensagem =
           error instanceof Error
             ? error.message
-            : "Erro desconhecido ao processar comparação Multi Loja.";
+            : "Erro desconhecido ao processar comparaÃ§Ã£o Multi Loja.";
 
         const processedAt =
           new Date();
@@ -251,7 +483,7 @@ export async function processImportQueue(
       /*
        * Prioridade do link:
        *
-       * 1. Link individual já salvo na fila;
+       * 1. Link individual jÃ¡ salvo na fila;
        * 2. Link individual retornado pelo importador;
        * 3. null -> oferta fica pendente de afiliado.
        */
@@ -262,14 +494,14 @@ export async function processImportQueue(
 
       /*
        * Se existe opportunityId, o item foi criado
-       * pelo sistema automático de oportunidades.
+       * pelo sistema automÃ¡tico de oportunidades.
        *
        * Nesse caso:
        * - Product.autoCreated = true
        * - discoverySource = OPPORTUNITY
        *
-       * Itens adicionados manualmente à fila continuam
-       * usando o comportamento padrão do saveProduct.
+       * Itens adicionados manualmente Ã  fila continuam
+       * usando o comportamento padrÃ£o do saveProduct.
        */
       const saved =
         await saveProduct(
@@ -285,11 +517,11 @@ export async function processImportQueue(
         );
 
       /*
-       * A publicação da oferta de origem é concluída
-       * antes da comparação Multi Loja.
+       * A publicaÃ§Ã£o da oferta de origem Ã© concluÃ­da
+       * antes da comparaÃ§Ã£o Multi Loja.
        *
-       * Assim, uma falha ou lentidão em outra marketplace
-       * nunca desfaz o produto que o robô já importou.
+       * Assim, uma falha ou lentidÃ£o em outra marketplace
+       * nunca desfaz o produto que o robÃ´ jÃ¡ importou.
        */
       const processedAt =
         new Date();
@@ -347,9 +579,9 @@ export async function processImportQueue(
       /*
        * ETAPA MULTI LOJA
        *
-       * Depois que a oferta de origem já está salva no
-       * Product canônico, executamos o mesmo comparador
-       * usado pela importação manual.
+       * Depois que a oferta de origem jÃ¡ estÃ¡ salva no
+       * Product canÃ´nico, executamos o mesmo comparador
+       * usado pela importaÃ§Ã£o manual.
        *
        * O comparador:
        * - consulta as marketplaces integradas;
@@ -357,10 +589,10 @@ export async function processImportQueue(
        * - valida identidade/variante com matcher estrito;
        * - aceita somente EXACT;
        * - salva a oferta no mesmo targetProductId;
-       * - não força presença nas 5 lojas.
+       * - nÃ£o forÃ§a presenÃ§a nas 5 lojas.
        *
-       * Qualquer erro aqui é não fatal:
-       * o produto de origem continua publicado e poderá
+       * Qualquer erro aqui Ã© nÃ£o fatal:
+       * o produto de origem continua publicado e poderÃ¡
        * ser pesquisado novamente posteriormente.
        */
       try {
@@ -371,7 +603,7 @@ export async function processImportQueue(
           );
 
         console.log(
-          `[ImportQueue] Multi Loja concluído para ${saved.id}: ` +
+          `[ImportQueue] Multi Loja concluÃ­do para ${saved.id}: ` +
             `${comparison.found} oferta(s) EXACT encontrada(s).`,
         );
 
@@ -385,7 +617,7 @@ export async function processImportQueue(
         }
       } catch (comparisonError) {
         console.error(
-          `[ImportQueue] Falha não fatal no Multi Loja do produto ${saved.id}:`,
+          `[ImportQueue] Falha nÃ£o fatal no Multi Loja do produto ${saved.id}:`,
           comparisonError,
         );
       }
@@ -512,3 +744,5 @@ export async function processImportQueue(
     results,
   };
 }
+
+
