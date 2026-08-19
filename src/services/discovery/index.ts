@@ -14,6 +14,12 @@ const LIMITE_MAXIMO = 20;
 
 const MAX_CONSULTAS_REFERENCIA = 4;
 
+export type DiscoveryOptions = {
+  excludeMarketplace?:
+    DiscoveryCandidate["marketplace"] |
+    null;
+};
+
 function normalizarTexto(
   valor: string,
 ): string {
@@ -1030,6 +1036,7 @@ async function executarAdapterComReferencias(
 export async function descobrirProdutos(
   rawQuery: string,
   rawLimit?: number,
+  options: DiscoveryOptions = {},
 ): Promise<ProductDiscoveryResult> {
   const query =
     rawQuery.trim();
@@ -1060,7 +1067,11 @@ export async function descobrirProdutos(
     new Date();
 
   const adapters =
-    listarDiscoveryAdaptersAtivos();
+    listarDiscoveryAdaptersAtivos().filter(
+      (adapter) =>
+        adapter.marketplace !==
+        options.excludeMarketplace,
+    );
 
   if (
     adapters.length === 0

@@ -1197,32 +1197,195 @@ import type {
       : 0;
   }
   
-  function obterBuildId(): string {
-    const valor =
-      process.env
-        .MAGAZINE_LUIZA_BUILD_ID
-        ?.trim();
   
-    if (!valor) {
+let magazineLuizaBuildIdCache:
+  string | null = null;
+
+function validarBuildId(
+  valor:
+    string |
+    null |
+    undefined,
+): string | null {
+  const buildId =
+    valor?.trim() ?? "";
+
+  if (
+    !buildId ||
+    !/^[A-Za-z0-9_-]+$/.test(
+      buildId,
+    )
+  ) {
+    return null;
+  }
+
+  return buildId;
+}
+
+function obterBuildIdInicial():
+  string | null {
+  if (
+    magazineLuizaBuildIdCache
+  ) {
+    return magazineLuizaBuildIdCache;
+  }
+
+  const buildId =
+    validarBuildId(
+      process.env
+        .MAGAZINE_LUIZA_BUILD_ID,
+    );
+
+  if (buildId) {
+    magazineLuizaBuildIdCache =
+      buildId;
+  }
+
+  return buildId;
+}
+
+async function descobrirBuildIdAtual():
+  Promise<string> {
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      TIMEOUT_MS,
+    );
+
+  try {
+    const url =
+      `https://${MAGAZINE_VOCE_HOST}/${MAGAZINE_VOCE_STORE}/`;
+
+    const response =
+      await fetch(
+        url,
+        {
+          method: "GET",
+
+          cache:
+            "no-store",
+
+          redirect:
+            "follow",
+
+          headers: {
+            Accept:
+              "text/html,application/xhtml+xml",
+
+            "Accept-Language":
+              "pt-BR,pt;q=0.9,en;q=0.8",
+
+            "Cache-Control":
+              "no-cache",
+
+            Pragma:
+              "no-cache",
+
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+          },
+
+          signal:
+            controller.signal,
+        },
+      );
+
+    if (!response.ok) {
       throw new Error(
-        "A variável MAGAZINE_LUIZA_BUILD_ID não está configurada.",
+        `Magazine Luiza: n?o foi poss?vel descobrir o buildId atual. HTTP ${response.status}.`,
       );
     }
-  
+
+    const html =
+      await response.text();
+
+    /*
+     * Fonte principal:
+     * __NEXT_DATA__ da aplica??o Next.js.
+     */
+    const nextDataMatch =
+      html.match(
+        /<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
+      );
+
     if (
-      !/^[A-Za-z0-9_-]+$/.test(
-        valor,
-      )
+      nextDataMatch?.[1]
+    ) {
+      try {
+        const nextData =
+          JSON.parse(
+            nextDataMatch[1],
+          ) as {
+            buildId?:
+              string;
+          };
+
+        const buildId =
+          validarBuildId(
+            nextData.buildId,
+          );
+
+        if (buildId) {
+          magazineLuizaBuildIdCache =
+            buildId;
+
+          return buildId;
+        }
+      } catch {
+        /*
+         * Se o JSON mudar, tentamos os manifests
+         * est?ticos abaixo.
+         */
+      }
+    }
+
+    /*
+     * Fallback:
+     * o buildId tamb?m costuma aparecer nas URLs
+     * dos manifests est?ticos do Next.js.
+     */
+    const manifestMatch =
+      html.match(
+        /\/_next\/static\/([^/"']+)\/(?:_buildManifest|_ssgManifest)\.js/i,
+      );
+
+    const buildId =
+      validarBuildId(
+        manifestMatch?.[1],
+      );
+
+    if (buildId) {
+      magazineLuizaBuildIdCache =
+        buildId;
+
+      return buildId;
+    }
+
+    throw new Error(
+      "Magazine Luiza: n?o foi poss?vel identificar automaticamente o buildId atual.",
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name ===
+        "AbortError"
     ) {
       throw new Error(
-        "MAGAZINE_LUIZA_BUILD_ID possui formato inválido.",
+        "A descoberta do buildId do Magazine Luiza ultrapassou 25 segundos.",
       );
     }
-  
-    return valor;
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  
-  function criarUrlBusca(
+}
+
+function criarUrlBusca(
     query: string,
     buildId: string,
   ): URL {
@@ -1254,133 +1417,189 @@ import type {
     return url;
   }
   
-  async function consultarMagazineLuiza(
-    query: string,
-  ): Promise<MagazineVoceProduct[]> {
-    const buildId =
-      obterBuildId();
   
-    const url =
-      criarUrlBusca(
-        query,
-        buildId,
-      );
-  
-    const controller =
-      new AbortController();
-  
-    const timeout =
-      setTimeout(
-        () =>
-          controller.abort(),
-        TIMEOUT_MS,
-      );
-  
-    try {
-      const response =
-        await fetch(
-          url.toString(),
-          {
-            method:
-              "GET",
-  
-            cache:
-              "no-store",
-  
-            redirect:
-              "follow",
-  
-            headers: {
-              Accept:
-                "application/json",
-  
-              "Accept-Language":
-                "pt-BR,pt;q=0.9,en;q=0.8",
-  
-              "Cache-Control":
-                "no-cache",
-  
-              Pragma:
-                "no-cache",
-  
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-            },
-  
-            signal:
-              controller.signal,
+async function consultarMagazineLuizaComBuildId(
+  query: string,
+  buildId: string,
+): Promise<
+  MagazineVoceProduct[] |
+  null
+> {
+  const url =
+    criarUrlBusca(
+      query,
+      buildId,
+    );
+
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      TIMEOUT_MS,
+    );
+
+  try {
+    const response =
+      await fetch(
+        url.toString(),
+        {
+          method:
+            "GET",
+
+          cache:
+            "no-store",
+
+          redirect:
+            "follow",
+
+          headers: {
+            Accept:
+              "application/json",
+
+            "Accept-Language":
+              "pt-BR,pt;q=0.9,en;q=0.8",
+
+            "Cache-Control":
+              "no-cache",
+
+            Pragma:
+              "no-cache",
+
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
           },
-        );
-  
-      if (
-        response.status === 404
-      ) {
-        throw new Error(
-          "Magazine Luiza: o buildId expirou. Atualize MAGAZINE_LUIZA_BUILD_ID.",
-        );
-      }
-  
-      if (!response.ok) {
-        throw new Error(
-          `Magazine Luiza respondeu HTTP ${response.status}.`,
-        );
-      }
-  
-      const contentType =
-        response.headers.get(
-          "content-type",
-        ) ?? "";
-  
-      if (
-        !contentType
-          .toLowerCase()
-          .includes(
-            "application/json",
-          )
-      ) {
-        throw new Error(
-          "Magazine Luiza não retornou JSON na busca.",
-        );
-      }
-  
-      const resposta =
-        await response.json() as
-          MagazineVoceResponse;
-  
-      const produtos =
-        resposta
-          .pageProps
-          ?.data
-          ?.search
-          ?.products;
-  
-      if (
-        !Array.isArray(produtos)
-      ) {
-        throw new Error(
-          "Magazine Luiza retornou JSON sem a lista de produtos esperada.",
-        );
-      }
-  
+
+          signal:
+            controller.signal,
+        },
+      );
+
+    /*
+     * 404 neste endpoint normalmente significa
+     * que o buildId usado j? n?o ? o build atual.
+     */
+    if (
+      response.status === 404
+    ) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `Magazine Luiza respondeu HTTP ${response.status}.`,
+      );
+    }
+
+    const contentType =
+      response.headers.get(
+        "content-type",
+      ) ?? "";
+
+    if (
+      !contentType
+        .toLowerCase()
+        .includes(
+          "application/json",
+        )
+    ) {
+      throw new Error(
+        "Magazine Luiza n?o retornou JSON na busca.",
+      );
+    }
+
+    const resposta =
+      await response.json() as
+        MagazineVoceResponse;
+
+    const produtos =
+      resposta
+        .pageProps
+        ?.data
+        ?.search
+        ?.products;
+
+    if (
+      !Array.isArray(
+        produtos,
+      )
+    ) {
+      throw new Error(
+        "Magazine Luiza retornou JSON sem a lista de produtos esperada.",
+      );
+    }
+
+    return produtos;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name ===
+        "AbortError"
+    ) {
+      throw new Error(
+        "A busca do Magazine Luiza ultrapassou 25 segundos.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function consultarMagazineLuiza(
+  query: string,
+): Promise<MagazineVoceProduct[]> {
+  /*
+   * Primeiro usamos cache/env para evitar
+   * buscar a p?gina inicial toda vez.
+   */
+  const buildIdInicial =
+    obterBuildIdInicial();
+
+  if (buildIdInicial) {
+    const produtos =
+      await consultarMagazineLuizaComBuildId(
+        query,
+        buildIdInicial,
+      );
+
+    if (produtos) {
       return produtos;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.name ===
-          "AbortError"
-      ) {
-        throw new Error(
-          "A busca do Magazine Luiza ultrapassou 25 segundos.",
-        );
-      }
-  
-      throw error;
-    } finally {
-      clearTimeout(timeout);
     }
   }
-  
-  export async function buscarMagazineLuiza(
+
+  /*
+   * O ID expirou ou n?o estava configurado.
+   * Descobrimos automaticamente o build atual.
+   */
+  magazineLuizaBuildIdCache =
+    null;
+
+  const buildIdAtual =
+    await descobrirBuildIdAtual();
+
+  const produtos =
+    await consultarMagazineLuizaComBuildId(
+      query,
+      buildIdAtual,
+    );
+
+  if (!produtos) {
+    magazineLuizaBuildIdCache =
+      null;
+
+    throw new Error(
+      "Magazine Luiza: o buildId rec?m-descoberto n?o foi aceito pelo endpoint de busca.",
+    );
+  }
+
+  return produtos;
+}
+
+export async function buscarMagazineLuiza(
     request: DiscoveryQuery,
   ): Promise<MarketplaceDiscoveryResult> {
     const query =

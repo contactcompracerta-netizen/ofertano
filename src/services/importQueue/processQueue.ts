@@ -1,6 +1,9 @@
-﻿import prisma from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
-import { saveProduct } from "@/services/database/saveProduct";
+import {
+  corrigirLinksAmazonPendentes,
+  saveProduct,
+} from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
 import type {
   ProductImport,
@@ -45,18 +48,63 @@ export async function processImportQueue(
   const limit =
     limitarQuantidade(quantidade);
 
-  const pendentes =
+  try {
+    const linksAmazonCorrigidos =
+      await corrigirLinksAmazonPendentes(25);
+
+    if (linksAmazonCorrigidos > 0) {
+      console.log(
+        `[ImportQueue] ${linksAmazonCorrigidos} link(s) Amazon corrigido(s) automaticamente.`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      "[ImportQueue] Falha não fatal ao corrigir links Amazon:",
+      error,
+    );
+  }
+
+  const pendentesNovos =
     await prisma.importQueue.findMany({
       where: {
         status: "PENDING",
       },
-
       orderBy: {
         createdAt: "asc",
       },
-
       take: limit,
     });
+
+  const vagasRestantes =
+    Math.max(
+      0,
+      limit - pendentesNovos.length,
+    );
+
+  const errosRetentaveis =
+    vagasRestantes > 0
+      ? await prisma.importQueue.findMany({
+          where: {
+            status: "ERROR",
+            attempts: {
+              lt: 3,
+            },
+            productId: {
+              not: null,
+            },
+            opportunityId: null,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+          take: vagasRestantes,
+        })
+      : [];
+
+  const pendentes = [
+    ...pendentesNovos,
+    ...errosRetentaveis,
+  ];
 
   if (
     pendentes.length === 0
@@ -82,7 +130,7 @@ export async function processImportQueue(
       await prisma.importQueue.updateMany({
         where: {
           id: item.id,
-          status: "PENDING",
+          status: item.status,
         },
 
         data: {
@@ -378,7 +426,11 @@ export async function processImportQueue(
             item.productId,
           );
 
-        const processedAt =
+
+        
+
+
+const processedAt =
           new Date();
 
         await prisma.importQueue.update({

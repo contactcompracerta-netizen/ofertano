@@ -1,4 +1,4 @@
-﻿import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 
@@ -71,6 +71,53 @@ function normalizarLinkAfiliado(
   }
 
   return link;
+}
+
+function extrairAsinAmazon(
+  externalId: string,
+  sourceUrl: string,
+): string | null {
+  const codigo = externalId
+    .trim()
+    .toUpperCase();
+
+  if (/^[A-Z0-9]{10}$/.test(codigo)) {
+    return codigo;
+  }
+
+  try {
+    const url = new URL(sourceUrl);
+    const match = url.pathname.match(
+      /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i,
+    );
+
+    return match?.[1]?.toUpperCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function criarLinkAfiliadoAmazon(
+  externalId: string,
+  sourceUrl: string,
+): string | null {
+  const asin = extrairAsinAmazon(
+    externalId,
+    sourceUrl,
+  );
+
+  if (!asin) {
+    return null;
+  }
+
+  const associateTag =
+    process.env.AMAZON_ASSOCIATE_TAG?.trim() ||
+    "ofertano-20";
+
+  return (
+    `https://www.amazon.com.br/dp/${asin}` +
+    `/ref=nosim?tag=${encodeURIComponent(associateTag)}`
+  );
 }
 
 function converterMarketplace(
@@ -1941,6 +1988,102 @@ export async function sincronizarMelhorOfertaDoProduto(
   });
 }
 
+export async function corrigirLinksAmazonPendentes(
+  limite = 25,
+): Promise<number> {
+  const quantidade = Math.min(
+    Math.max(
+      Math.trunc(limite),
+      1,
+    ),
+    100,
+  );
+
+  const ofertas =
+    await prisma.marketplaceOffer.findMany({
+      where: {
+        marketplace: "AMAZON",
+        externalId: {
+          not: null,
+        },
+        OR: [
+          {
+            affiliateLink: null,
+          },
+          {
+            affiliateLink: "",
+          },
+        ],
+      },
+      orderBy: {
+        updatedAt: "asc",
+      },
+      take: quantidade,
+      select: {
+        id: true,
+        productId: true,
+        externalId: true,
+        sourceUrl: true,
+        active: true,
+        available: true,
+      },
+    });
+
+  let corrigidos = 0;
+
+  for (const oferta of ofertas) {
+    const externalId =
+      oferta.externalId?.trim();
+
+    if (!externalId) {
+      continue;
+    }
+
+    const affiliateLink =
+      criarLinkAfiliadoAmazon(
+        externalId,
+        oferta.sourceUrl ?? "",
+      );
+
+    if (!affiliateLink) {
+      continue;
+    }
+
+    const agora = new Date();
+
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.marketplaceOffer.update({
+          where: {
+            id: oferta.id,
+          },
+          data: {
+            affiliateLink,
+            status:
+              oferta.active &&
+              oferta.available
+                ? "ACTIVE"
+                : undefined,
+            reviewReason: null,
+            errorMessage: null,
+            affiliateValidatedAt: agora,
+            reviewedAt: agora,
+          },
+        });
+
+        await sincronizarMelhorOfertaDoProduto(
+          tx,
+          oferta.productId,
+        );
+      },
+    );
+
+    corrigidos += 1;
+  }
+
+  return corrigidos;
+}
+
 export async function saveProduct(
   product: ProductImport,
   affiliateLinkOverride?: string | null,
@@ -1976,12 +2119,26 @@ export async function saveProduct(
     );
   }
 
-  const linkInformado =
-    affiliateLinkOverride?.trim()
-      ? normalizarLinkAfiliado(
-          affiliateLinkOverride,
+  const linkAmazonAutomatico =
+    marketplace === "AMAZON"
+      ? criarLinkAfiliadoAmazon(
+          externalId,
+          sourceUrl,
         )
       : null;
+
+  const linkOriginal =
+    affiliateLinkOverride?.trim() ||
+    product.affiliateLink?.trim() ||
+    null;
+
+  const linkInformado =
+    linkAmazonAutomatico ||
+    (linkOriginal
+      ? normalizarLinkAfiliado(
+          linkOriginal,
+        )
+      : null);
 
   /*
    * Alguns marketplaces, principalmente em resultados

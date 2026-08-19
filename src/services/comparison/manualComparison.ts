@@ -1,12 +1,10 @@
-﻿import prisma from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
 import {
   saveProduct,
   sincronizarMelhorOfertaDoProduto,
 } from "@/services/database/saveProduct";
-import { importarMercadoLivre } from "@/services/importers/mercadolivre";
-
 import type {
   MarketplaceName,
   ProductImport,
@@ -131,8 +129,8 @@ const BRAND_ALIASES: Array<{
   { canonical: "asus", aliases: ["asus"] },
   { canonical: "dell", aliases: ["dell"] },
   { canonical: "hp", aliases: ["hp"] },
-  { canonical: "notavel", aliases: ["notavel", "notÃ¡vel"] },
-  { canonical: "aramoveis", aliases: ["aramoveis", "aramÃ³veis"] },
+  { canonical: "notavel", aliases: ["notavel", "notÃƒÂ¡vel"] },
+  { canonical: "aramoveis", aliases: ["aramoveis", "aramÃƒÂ³veis"] },
   { canonical: "lg", aliases: ["lg"] },
   { canonical: "sony", aliases: ["sony"] },
   { canonical: "philips", aliases: ["philips"] },
@@ -246,10 +244,10 @@ function inferirTamanhoGenericoPeloTitulo(
   }
 
   /*
-   * Tamanhos mais especÃ­ficos podem ser inferidos sem o prefixo
+   * Tamanhos mais especÃƒÂ­ficos podem ser inferidos sem o prefixo
    * "tamanho". Isso cobre, por exemplo, fraldas XGG.
-   * P/M/G isolados continuam exigindo contexto explÃ­cito para
-   * evitar falsos positivos com cÃ³digos genÃ©ricos.
+   * P/M/G isolados continuam exigindo contexto explÃƒÂ­cito para
+   * evitar falsos positivos com cÃƒÂ³digos genÃƒÂ©ricos.
    */
   const tamanhoForte = texto.match(
     /\b(rn|xpp|pp|gg|xg|xgg|xxg|xxxg)\b/i,
@@ -376,10 +374,10 @@ function titulosComerciaisEquivalentes(
   const proporcao = menor.length / maior.length;
 
   /*
-   * EvidÃªncia forte, mas conservadora, para produtos sem MODEL/MPN
-   * confiÃ¡vel: o tÃ­tulo completo Ã© idÃªntico ou um tÃ­tulo inteiro
-   * estÃ¡ contido no outro com pequena extensÃ£o (geralmente marca).
-   * NÃ£o aceitamos apenas similaridade ou reordenaÃ§Ã£o de palavras.
+   * EvidÃƒÂªncia forte, mas conservadora, para produtos sem MODEL/MPN
+   * confiÃƒÂ¡vel: o tÃƒÂ­tulo completo ÃƒÂ© idÃƒÂªntico ou um tÃƒÂ­tulo inteiro
+   * estÃƒÂ¡ contido no outro com pequena extensÃƒÂ£o (geralmente marca).
+   * NÃƒÂ£o aceitamos apenas similaridade ou reordenaÃƒÂ§ÃƒÂ£o de palavras.
    */
   const tituloForte =
     tituloA === tituloB ||
@@ -412,8 +410,8 @@ function titulosComerciaisEquivalentes(
     exact: true,
     reason:
       tituloA === tituloB
-        ? "TÃ­tulo comercial normalizado idÃªntico e variantes crÃ­ticas compatÃ­veis."
-        : "TÃ­tulo comercial completo equivalente por contenÃ§Ã£o e variantes crÃ­ticas compatÃ­veis.",
+        ? "TÃƒÂ­tulo comercial normalizado idÃƒÂªntico e variantes crÃƒÂ­ticas compatÃƒÂ­veis."
+        : "TÃƒÂ­tulo comercial completo equivalente por contenÃƒÂ§ÃƒÂ£o e variantes crÃƒÂ­ticas compatÃƒÂ­veis.",
   };
 }
 
@@ -452,8 +450,8 @@ function normalizarMarca(
   }
 
   /*
-   * Marketplaces podem retornar valores genÃ©ricos
-   * no campo de marca. Esses valores nÃ£o devem
+   * Marketplaces podem retornar valores genÃƒÂ©ricos
+   * no campo de marca. Esses valores nÃƒÂ£o devem
    * participar da identidade do produto.
    */
   const marcasInvalidas = new Set([
@@ -499,8 +497,8 @@ function inferirMarcaPeloTitulo(
   }
 
   /*
-   * Marketplaces podem retornar valores genÃ©ricos
-   * no campo de marca. Esses valores nÃ£o devem
+   * Marketplaces podem retornar valores genÃƒÂ©ricos
+   * no campo de marca. Esses valores nÃƒÂ£o devem
    * participar da identidade do produto.
    */
   const marcasInvalidas = new Set([
@@ -794,13 +792,13 @@ function capacidadeEhRamNoTitulo(
   candidate: CapacityCandidate,
 ): boolean {
   /*
-   * Vinculamos RAM somente Ã  capacidade que estÃ¡
-   * imediatamente associada Ã  palavra RAM.
+   * Vinculamos RAM somente ÃƒÂ  capacidade que estÃƒÂ¡
+   * imediatamente associada ÃƒÂ  palavra RAM.
    *
    * Exemplo:
    * "128GB 4GB RAM"
    *
-   * 4GB Ã© RAM. 128GB nÃ£o deve ser descartado sÃ³
+   * 4GB ÃƒÂ© RAM. 128GB nÃƒÂ£o deve ser descartado sÃƒÂ³
    * porque a palavra RAM aparece alguns caracteres depois.
    */
   const depois = texto.slice(
@@ -873,7 +871,7 @@ function inferirArmazenamentoPeloTitulo(
   }
 
   /*
-   * Sem um rÃ³tulo explÃ­cito, sÃ³ tratamos como armazenamento
+   * Sem um rÃƒÂ³tulo explÃƒÂ­cito, sÃƒÂ³ tratamos como armazenamento
    * capacidades a partir de 64 GB. Isso reduz o risco de
    * interpretar RAM como armazenamento.
    */
@@ -948,12 +946,12 @@ function extrairCoresCanonicas(
   );
 
   /*
-   * Uma cor composta especÃ­fica deve substituir
+   * Uma cor composta especÃƒÂ­fica deve substituir
    * sua cor base.
    *
    * Exemplo:
-   * "Azul Marinho" tambÃ©m contÃ©m "Azul",
-   * mas representa uma Ãºnica variante.
+   * "Azul Marinho" tambÃƒÂ©m contÃƒÂ©m "Azul",
+   * mas representa uma ÃƒÂºnica variante.
    */
   const especificas = encontradas.filter((cor) => {
     const tokensCor = normalizarTexto(cor)
@@ -987,7 +985,7 @@ function normalizarCor(color: string): string {
 
   if (encontradas.length > 0) {
     /*
-     * A ordem vem de CORES_CONHECIDAS, nÃ£o do texto.
+     * A ordem vem de CORES_CONHECIDAS, nÃƒÂ£o do texto.
      * Assim "Branco e Roxo", "Roxo/Branco" e
      * "Branco/Roxo" resultam na mesma variante.
      */
@@ -1008,11 +1006,11 @@ function inferirCorPeloTitulo(
   }
 
   /*
-   * Cores compostas reais tambÃ©m sÃ£o uma variante
-   * vÃ¡lida. Ex.: "Branco e Roxo".
+   * Cores compostas reais tambÃƒÂ©m sÃƒÂ£o uma variante
+   * vÃƒÂ¡lida. Ex.: "Branco e Roxo".
    *
-   * Isso mantÃ©m o matcher estrito: um candidato sem
-   * cor continua retornando null e uma combinaÃ§Ã£o
+   * Isso mantÃƒÂ©m o matcher estrito: um candidato sem
+   * cor continua retornando null e uma combinaÃƒÂ§ÃƒÂ£o
    * diferente continua produzindo valor diferente.
    */
   return encontradas.join(" e ");
@@ -1037,6 +1035,25 @@ function escolherCorProduto(
     return estruturada;
   }
 
+  /*
+   * Quando o tÃƒÂ­tulo anuncia alternativas de variaÃƒÂ§ÃƒÂ£o,
+   * a cor estruturada representa a variante selecionada.
+   *
+   * Exemplo real:
+   * "Mouse Logitech M170 Preto ou Cinza"
+   * com COLOR="PRETO" deve ser tratado como PRETO, e nÃƒÂ£o
+   * como uma variante inexistente "preto e cinza".
+   */
+  const tituloNormalizado =
+    normalizarTexto(title);
+
+  if (
+    tituloNormalizado.includes(" ou ") &&
+    extrairCoresCanonicas(title).length > 1
+  ) {
+    return estruturada;
+  }
+
   const tokensEstruturada = normalizarTexto(estruturada)
     .split(" ")
     .filter(Boolean);
@@ -1047,11 +1064,11 @@ function escolherCorProduto(
 
   /*
    * Alguns marketplaces enviam COLOR="Azul" enquanto o
-   * prÃ³prio tÃ­tulo informa "Azul Marinho". Nesse caso,
-   * mantemos a informaÃ§Ã£o mais especÃ­fica do tÃ­tulo.
+   * prÃƒÂ³prio tÃƒÂ­tulo informa "Azul Marinho". Nesse caso,
+   * mantemos a informaÃƒÂ§ÃƒÂ£o mais especÃƒÂ­fica do tÃƒÂ­tulo.
    *
    * Cores realmente divergentes continuam usando o valor
-   * estruturado e serÃ£o barradas normalmente pelo matcher.
+   * estruturado e serÃƒÂ£o barradas normalmente pelo matcher.
    */
   const tituloRefinaEstruturada =
     tokensTitulo.length > tokensEstruturada.length &&
@@ -1259,7 +1276,7 @@ const TOKENS_GENERICOS_MOVEL = new Set([
   "cores",
 
   /*
-   * Acabamentos comuns nÃ£o identificam a linha/modelo.
+   * Acabamentos comuns nÃƒÂ£o identificam a linha/modelo.
    */
   "preto",
   "preta",
@@ -1354,9 +1371,9 @@ function extrairTokensFortesMovel(
           }
 
           /*
-           * Numeros pequenos normalmente sÃ£o
+           * Numeros pequenos normalmente sÃƒÂ£o
            * quantidade de portas/gavetas.
-           * CÃ³digos longos continuam vÃ¡lidos
+           * CÃƒÂ³digos longos continuam vÃƒÂ¡lidos
            * como identificadores de modelo.
            */
           if (/^\d+$/.test(token)) {
@@ -1383,21 +1400,21 @@ function compararMovelEstritamente(
     return {
       exact: false,
       reason:
-        "O candidato nÃ£o pertence Ã  mesma famÃ­lia de mÃ³veis.",
+        "O candidato nÃƒÂ£o pertence ÃƒÂ  mesma famÃƒÂ­lia de mÃƒÂ³veis.",
     };
   }
 
   /*
-   * A marca do produto original continua obrigatÃ³ria.
-   * Caso a outra loja nÃ£o forneÃ§a brand estruturada,
+   * A marca do produto original continua obrigatÃƒÂ³ria.
+   * Caso a outra loja nÃƒÂ£o forneÃƒÂ§a brand estruturada,
    * aceitamos a marca somente se ela estiver escrita
-   * explicitamente no tÃ­tulo.
+   * explicitamente no tÃƒÂ­tulo.
    */
   if (!a.brand) {
     return {
       exact: false,
       reason:
-        "Marca do mÃ³vel original insuficiente para confirmaÃ§Ã£o automÃ¡tica.",
+        "Marca do mÃƒÂ³vel original insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.",
     };
   }
 
@@ -1428,7 +1445,7 @@ function compararMovelEstritamente(
       return {
         exact: false,
         reason:
-          `A marca ${a.brand} nÃ£o foi confirmada no candidato.`,
+          `A marca ${a.brand} nÃƒÂ£o foi confirmada no candidato.`,
       };
     }
   }
@@ -1450,7 +1467,7 @@ function compararMovelEstritamente(
       return {
         exact: false,
         reason:
-          `${portasOriginal} porta(s) no original, mas quantidade nÃ£o confirmada no candidato.`,
+          `${portasOriginal} porta(s) no original, mas quantidade nÃƒÂ£o confirmada no candidato.`,
       };
     }
 
@@ -1483,7 +1500,7 @@ function compararMovelEstritamente(
       return {
         exact: false,
         reason:
-          `${gavetasOriginal} gaveta(s) no original, mas quantidade nÃ£o confirmada no candidato.`,
+          `${gavetasOriginal} gaveta(s) no original, mas quantidade nÃƒÂ£o confirmada no candidato.`,
       };
     }
 
@@ -1540,13 +1557,13 @@ function compararMovelEstritamente(
   /*
    * Para "Kit Mega", por exemplo, Mega vira
    * um identificador forte. Atenas, Nanda,
-   * Luana etc. nÃ£o passam.
+   * Luana etc. nÃƒÂ£o passam.
    */
   if (tokensOriginal.length === 0) {
     return {
       exact: false,
       reason:
-        "Linha/modelo do mÃ³vel insuficiente para confirmaÃ§Ã£o automÃ¡tica.",
+        "Linha/modelo do mÃƒÂ³vel insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.",
     };
   }
 
@@ -1562,8 +1579,8 @@ function compararMovelEstritamente(
     return {
       exact: false,
       reason:
-        `Linha/modelo do mÃ³vel nÃ£o coincide. ` +
-        `Original: ${tokensOriginal.join(", ") || "nÃ£o identificado"}.`,
+        `Linha/modelo do mÃƒÂ³vel nÃƒÂ£o coincide. ` +
+        `Original: ${tokensOriginal.join(", ") || "nÃƒÂ£o identificado"}.`,
     };
   }
 
@@ -1585,7 +1602,7 @@ function compararMovelEstritamente(
   return {
     exact: true,
     reason:
-      `MÃ³vel confirmado por marca, linha/modelo e caracterÃ­sticas: ${detalhes}.`,
+      `MÃƒÂ³vel confirmado por marca, linha/modelo e caracterÃƒÂ­sticas: ${detalhes}.`,
   };
 }
 
@@ -1598,7 +1615,7 @@ const TERMOS_CALCADOS = [
   "bota",
   "coturno",
   "mocassim",
-  "sapatÃªnis",
+  "sapatÃƒÂªnis",
   "sapatenis",
 ] as const;
 
@@ -1765,7 +1782,7 @@ function extrairTokensFortesCalcado(
           }
 
           /*
-           * NumeraÃ§Ã£o de calÃ§ado nÃ£o identifica a linha/modelo.
+           * NumeraÃƒÂ§ÃƒÂ£o de calÃƒÂ§ado nÃƒÂ£o identifica a linha/modelo.
            */
           if (/^\d{2}$/.test(token)) {
             return false;
@@ -1791,7 +1808,7 @@ function compararCalcadoEstritamente(
     return {
       exact: false,
       reason:
-        "O candidato nÃ£o pertence Ã  mesma famÃ­lia de calÃ§ados.",
+        "O candidato nÃƒÂ£o pertence ÃƒÂ  mesma famÃƒÂ­lia de calÃƒÂ§ados.",
     };
   }
 
@@ -1799,7 +1816,7 @@ function compararCalcadoEstritamente(
     return {
       exact: false,
       reason:
-        "Marca do calÃ§ado original insuficiente para confirmaÃ§Ã£o automÃ¡tica.",
+        "Marca do calÃƒÂ§ado original insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.",
     };
   }
 
@@ -1830,22 +1847,22 @@ function compararCalcadoEstritamente(
       return {
         exact: false,
         reason:
-          `A marca ${a.brand} nÃ£o foi confirmada no candidato.`,
+          `A marca ${a.brand} nÃƒÂ£o foi confirmada no candidato.`,
       };
     }
   }
 
   /*
-   * Cor continua sendo variante forte de calÃ§ado.
-   * Se o original tem cor conhecida, o candidato tambÃ©m
-   * precisa confirmÃ¡-la.
+   * Cor continua sendo variante forte de calÃƒÂ§ado.
+   * Se o original tem cor conhecida, o candidato tambÃƒÂ©m
+   * precisa confirmÃƒÂ¡-la.
    */
   if (a.variants.color) {
     if (!b.variants.color) {
       return {
         exact: false,
         reason:
-          "Cor do calÃ§ado nÃ£o confirmada no candidato.",
+          "Cor do calÃƒÂ§ado nÃƒÂ£o confirmada no candidato.",
       };
     }
 
@@ -1862,13 +1879,13 @@ function compararCalcadoEstritamente(
   }
 
   /*
-   * NumeraÃ§Ã£o sÃ³ Ã© bloqueante quando estiver explÃ­cita
-   * no tÃ­tulo das duas ofertas.
+   * NumeraÃƒÂ§ÃƒÂ£o sÃƒÂ³ ÃƒÂ© bloqueante quando estiver explÃƒÂ­cita
+   * no tÃƒÂ­tulo das duas ofertas.
    *
    * Muitos marketplaces retornam SIZE estruturado da
-   * variaÃ§Ã£o selecionada, enquanto o anÃºncio concorrente
-   * representa a pÃ¡gina pai com seleÃ§Ã£o de tamanho.
-   * NÃ£o usamos essa assimetria oculta para descartar
+   * variaÃƒÂ§ÃƒÂ£o selecionada, enquanto o anÃƒÂºncio concorrente
+   * representa a pÃƒÂ¡gina pai com seleÃƒÂ§ÃƒÂ£o de tamanho.
+   * NÃƒÂ£o usamos essa assimetria oculta para descartar
    * automaticamente a mesma linha/cor.
    */
   const tamanhoOriginal =
@@ -1909,21 +1926,21 @@ function compararCalcadoEstritamente(
     return {
       exact: false,
       reason:
-        `GÃªnero diferente: ${generoOriginal} x ${generoCandidato}.`,
+        `GÃƒÂªnero diferente: ${generoOriginal} x ${generoCandidato}.`,
     };
   }
 
   /*
    * Linhas de moda normalmente usam nomes textuais,
-   * nÃ£o cÃ³digos alfanumÃ©ricos.
+   * nÃƒÂ£o cÃƒÂ³digos alfanumÃƒÂ©ricos.
    *
    * Exemplo:
    * "Puma Carina Street BDP".
    *
-   * O matcher genÃ©rico exige letras + nÃºmeros nos tokens
-   * de modelo e, por isso, nÃ£o consegue confirmar essa
-   * famÃ­lia. Para calÃ§ados usamos os tokens fortes da
-   * prÃ³pria linha/modelo.
+   * O matcher genÃƒÂ©rico exige letras + nÃƒÂºmeros nos tokens
+   * de modelo e, por isso, nÃƒÂ£o consegue confirmar essa
+   * famÃƒÂ­lia. Para calÃƒÂ§ados usamos os tokens fortes da
+   * prÃƒÂ³pria linha/modelo.
    */
   const tokensOriginal =
     extrairTokensFortesCalcado(
@@ -1943,7 +1960,7 @@ function compararCalcadoEstritamente(
     return {
       exact: false,
       reason:
-        "Linha/modelo do calÃ§ado insuficiente para confirmaÃ§Ã£o automÃ¡tica.",
+        "Linha/modelo do calÃƒÂ§ado insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.",
     };
   }
 
@@ -1970,7 +1987,7 @@ function compararCalcadoEstritamente(
     return {
       exact: false,
       reason:
-        `Linha/modelo do calÃ§ado nÃ£o coincide. ` +
+        `Linha/modelo do calÃƒÂ§ado nÃƒÂ£o coincide. ` +
         `Original: ${tokensOriginal.join(", ")}.`,
     };
   }
@@ -1998,7 +2015,7 @@ function compararCalcadoEstritamente(
   return {
     exact: true,
     reason:
-      `CalÃ§ado confirmado por marca, linha/modelo e variante(s): ${detalhes}.`,
+      `CalÃƒÂ§ado confirmado por marca, linha/modelo e variante(s): ${detalhes}.`,
   };
 }
 
@@ -2010,12 +2027,12 @@ function compararProdutoEstritamente(
   const b = extrairIdentidade(candidate);
 
   /*
-   * Proteção semântica:
+   * ProteÃ§Ã£o semÃ¢ntica:
    * produto principal nunca pode ser agrupado automaticamente
-   * com acessório, peça ou item de reposição.
+   * com acessÃ³rio, peÃ§a ou item de reposiÃ§Ã£o.
    *
    * Exemplo:
-   * JBL Tune 520BT != almofada de reposição para JBL Tune 520BT.
+   * JBL Tune 520BT != almofada de reposiÃ§Ã£o para JBL Tune 520BT.
    */
   const termosAcessorio = [
     /\balmofad(?:a|as)\b/,
@@ -2054,7 +2071,7 @@ function compararProdutoEstritamente(
     return {
       exact: false,
       reason:
-        "Produto principal e acessório/peça de reposição não podem ser agrupados automaticamente.",
+        "Produto principal e acessÃ³rio/peÃ§a de reposiÃ§Ã£o nÃ£o podem ser agrupados automaticamente.",
     };
   }
 
@@ -2062,7 +2079,7 @@ function compararProdutoEstritamente(
     if (a.gtin === b.gtin) {
       return {
         exact: true,
-        reason: "GTIN/EAN idÃªntico.",
+        reason: "GTIN/EAN idÃƒÂªntico.",
       };
     }
 
@@ -2118,7 +2135,7 @@ function compararProdutoEstritamente(
   if (!a.brand || !b.brand) {
     return {
       exact: false,
-      reason: "Marca insuficiente para confirmaÃ§Ã£o automÃ¡tica.",
+      reason: "Marca insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.",
     };
   }
 
@@ -2134,7 +2151,7 @@ function compararProdutoEstritamente(
   if (!modeloEmComum) {
     return {
       exact: false,
-      reason: "Modelo/cÃ³digo insuficiente para confirmaÃ§Ã£o automÃ¡tica.",
+      reason: "Modelo/cÃƒÂ³digo insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.",
     };
   }
 
@@ -2168,18 +2185,22 @@ function compararProdutoEstritamente(
   }
 
   if (agreements === 0) {
+    /*
+     * Marca + modelo/codigo forte sao suficientes
+     * quando nenhuma variante informada entra em conflito.
+     */
     return {
-      exact: false,
+      exact: true,
       reason:
-        `Marca e modelo/cÃ³digo ${modeloEmComum} coincidem, ` +
-        "mas falta uma variante forte para confirmar automaticamente.",
+        `Marca e modelo/codigo ${modeloEmComum} coincidem ` +
+        "e nao ha variante explicitamente conflitante.",
     };
   }
 
   return {
     exact: true,
     reason:
-      `Marca ${a.brand}, modelo/cÃ³digo ${modeloEmComum} e ` +
+      `Marca ${a.brand}, modelo/cÃƒÂ³digo ${modeloEmComum} e ` +
       `variante(s) forte(s) ${acordos.join(", ")} coincidem.`,
   };
 }
@@ -2188,15 +2209,15 @@ function criarTermoBusca(
   product: ProductImport,
 ): string {
   /*
-   * MÃ³veis dependem muito de nome da linha,
+   * MÃƒÂ³veis dependem muito de nome da linha,
    * quantidade de portas/gavetas e marca.
    *
    * Exemplo:
-   * AramÃ³veis Kit Mega 9 Portas 2 Gavetas.
+   * AramÃƒÂ³veis Kit Mega 9 Portas 2 Gavetas.
    *
-   * Por isso preservamos o tÃ­tulo completo
+   * Por isso preservamos o tÃƒÂ­tulo completo
    * como consulta em vez de reduzir a um
-   * token genÃ©rico.
+   * token genÃƒÂ©rico.
    */
   if (ehProdutoMovel(product.title)) {
     return normalizarTexto(
@@ -2212,27 +2233,192 @@ function criarTermoBusca(
     identity.modelTokens[0] ??
     null;
 
-  const partes = [
+  /*
+   * A busca deve priorizar identidade estÃƒÂ¡vel, nÃƒÂ£o cor.
+   *
+   * Cor ÃƒÂ© validada depois pelo matcher estrito. ColocÃƒÂ¡-la
+   * na consulta reduz demais o recall entre marketplaces,
+   * principalmente quando uma loja anuncia vÃƒÂ¡rias cores no
+   * mesmo tÃƒÂ­tulo e outra publica uma cor por anÃƒÂºncio.
+   *
+   * Exemplo:
+   * "Logitech M170 Preto ou Cinza" => busca "logitech m170".
+   */
+  const partesFortes = [
     identity.brand,
     modeloBusca,
     identity.variants.network,
     identity.variants.storage,
     identity.variants.ram,
     identity.variants.voltage,
-    identity.variants.color,
   ]
     .filter((value): value is string => Boolean(value?.trim()))
     .map((value) => value.trim());
 
-  const unique = Array.from(
-    new Set(partes.map((value) => normalizarTexto(value))),
+  const fortes = Array.from(
+    new Set(
+      partesFortes.map((value) =>
+        normalizarTexto(value),
+      ),
+    ),
   ).filter(Boolean);
 
-  if (unique.length >= 2) {
-    return unique.join(" ").slice(0, 180);
+  if (identity.brand && modeloBusca) {
+    return fortes.join(" ").slice(0, 180);
+  }
+
+  const fallback = Array.from(
+    new Set([
+      ...fortes,
+      identity.variants.color
+        ? normalizarTexto(identity.variants.color)
+        : "",
+    ]),
+  ).filter(Boolean);
+
+  if (fallback.length >= 2) {
+    return fallback.join(" ").slice(0, 180);
   }
 
   return product.title.trim().slice(0, 180);
+}
+
+
+function criarTermosBuscaMultiloja(
+  product: ProductImport,
+  termoPrincipal: string,
+): string[] {
+  /*
+   * Produtos com marca + modelo forte ja possuem
+   * uma consulta precisa. Mantemos esse comportamento,
+   * que foi validado com Logitech M170.
+   */
+  const identity =
+    extrairIdentidade(product);
+
+  const modeloBusca =
+    extrairModeloDescritivoDoTitulo(
+      product.title,
+    ) ??
+    buscarModeloEstruturado(product) ??
+    identity.modelTokens[0] ??
+    null;
+
+  if (
+    identity.brand &&
+    modeloBusca
+  ) {
+    return [termoPrincipal];
+  }
+
+  /*
+   * Moveis continuam usando o titulo completo.
+   * Neles, linha, portas, gavetas etc. podem fazer
+   * parte essencial da identidade.
+   */
+  if (
+    ehProdutoMovel(product.title)
+  ) {
+    return [termoPrincipal];
+  }
+
+  const tituloNormalizado =
+    normalizarTexto(
+      product.title,
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+
+  /*
+   * Remove apenas caudas claramente promocionais.
+   *
+   * Exemplo:
+   * "caixa bob ... ekipsom + brinde pendrive"
+   * vira:
+   * "caixa bob ... ekipsom"
+   */
+  const tituloSemPromocao =
+    tituloNormalizado
+      .replace(
+        /\b(?:brinde|frete\s+gratis|envio\s+imediato|oferta\s+imperdivel|promocao\s+imperdivel)\b.*$/i,
+        " ",
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const palavrasDescartaveis =
+    new Set([
+      "a",
+      "as",
+      "o",
+      "os",
+      "de",
+      "da",
+      "das",
+      "do",
+      "dos",
+      "e",
+      "em",
+      "para",
+      "por",
+      "com",
+      "sem",
+      "gamer",
+      "premium",
+      "profissional",
+      "profissionais",
+      "completo",
+      "completa",
+      "novo",
+      "nova",
+      "original",
+      "oficial",
+    ]);
+
+  const tokensEssenciais =
+    tituloSemPromocao
+      .split(" ")
+      .filter(Boolean)
+      .filter(
+        (token) =>
+          !palavrasDescartaveis.has(
+            token,
+          ),
+      );
+
+  /*
+   * Uma busca curta melhora recall quando lojas
+   * usam titulos comerciais muito diferentes.
+   *
+   * O matcher EXACT continua sendo responsavel
+   * por impedir a uniao de produtos diferentes.
+   */
+  const termoCurto =
+    tokensEssenciais
+      .slice(0, 8)
+      .join(" ")
+      .trim();
+
+  return Array.from(
+    new Set(
+      [
+        termoPrincipal,
+        tituloSemPromocao,
+        termoCurto,
+      ]
+        .map(
+          (value) =>
+            value
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 180),
+        )
+        .filter(
+          (value) =>
+            value.length >= 3,
+        ),
+    ),
+  ).slice(0, 3);
 }
 
 async function preverDominioMercadoLivre(
@@ -2261,7 +2447,7 @@ async function preverDominioMercadoLivre(
     return response[0] ?? null;
   } catch (error) {
     console.warn(
-      "NÃ£o foi possÃ­vel prever o domÃ­nio do Mercado Livre. A busca continuarÃ¡ sem domÃ­nio.",
+      "NÃƒÂ£o foi possÃƒÂ­vel prever o domÃƒÂ­nio do Mercado Livre. A busca continuarÃƒÂ¡ sem domÃƒÂ­nio.",
       error,
     );
 
@@ -2385,8 +2571,8 @@ async function pesquisarCatalogoMercadoLivre(
   const resultados: MercadoLivreSearchResult[] = [];
 
   /*
-   * Primeira tentativa: busca por atributos previstos pelo prÃ³prio
-   * Mercado Livre. A documentaÃ§Ã£o exige ao menos trÃªs atributos.
+   * Primeira tentativa: busca por atributos previstos pelo prÃƒÂ³prio
+   * Mercado Livre. A documentaÃƒÂ§ÃƒÂ£o exige ao menos trÃƒÂªs atributos.
    */
   const atributos = prepararAtributosPreditos(prediction);
 
@@ -2411,7 +2597,7 @@ async function pesquisarCatalogoMercadoLivre(
       adicionarResultadosSemDuplicar(resultados, response);
     } catch (error) {
       console.warn(
-        "Busca por atributos do Mercado Livre falhou. A busca continuarÃ¡ por texto.",
+        "Busca por atributos do Mercado Livre falhou. A busca continuarÃƒÂ¡ por texto.",
         error,
       );
     }
@@ -2419,7 +2605,7 @@ async function pesquisarCatalogoMercadoLivre(
 
   /*
    * Segunda tentativa: consulta curta e objetiva, restringida ao
-   * domÃ­nio previsto quando ele estiver disponÃ­vel.
+   * domÃƒÂ­nio previsto quando ele estiver disponÃƒÂ­vel.
    */
   if (resultados.length < MAX_MERCADO_LIVRE_CANDIDATES) {
     const endpoint =
@@ -2441,9 +2627,9 @@ async function pesquisarCatalogoMercadoLivre(
   }
 
   /*
-   * Fallback: se o domÃ­nio previsto trouxe poucos candidatos,
-   * repetimos a mesma consulta sem restringir o domÃ­nio.
-   * O matcher estrito continua sendo a barreira de seguranÃ§a.
+   * Fallback: se o domÃƒÂ­nio previsto trouxe poucos candidatos,
+   * repetimos a mesma consulta sem restringir o domÃƒÂ­nio.
+   * O matcher estrito continua sendo a barreira de seguranÃƒÂ§a.
    */
   if (
     domainId &&
@@ -2472,13 +2658,13 @@ export async function buscarComparacaoManual(
   targetProductId: string,
 ): Promise<ManualComparisonSummary> {
   /*
-   * O produto importado manualmente Ã© a referÃªncia.
+   * O produto importado manualmente ÃƒÂ© a referÃƒÂªncia.
    *
    * A descoberta das outras lojas usa o mesmo
-   * Marketplace Discovery da busca pÃºblica.
+   * Marketplace Discovery da busca pÃƒÂºblica.
    *
    * Antes de anexar qualquer oferta ao Product
-   * principal, mantemos uma validaÃ§Ã£o estrita de
+   * principal, mantemos uma validaÃƒÂ§ÃƒÂ£o estrita de
    * identidade e variante.
    */
   const query =
@@ -2490,11 +2676,154 @@ export async function buscarComparacaoManual(
     "@/services/discovery"
   );
 
-  const resultado =
-    await descobrirProdutos(
+  const marketplaceOrigemDiscovery:
+    | "MERCADO_LIVRE"
+    | "AMAZON"
+    | "SHOPEE"
+    | "MAGAZINE_LUIZA"
+    | "ALIEXPRESS" =
+    original.marketplace === "Mercado Livre"
+      ? "MERCADO_LIVRE"
+      : original.marketplace === "Amazon"
+        ? "AMAZON"
+        : original.marketplace === "Shopee"
+          ? "SHOPEE"
+          : original.marketplace === "Magazine Luiza"
+            ? "MAGAZINE_LUIZA"
+            : "ALIEXPRESS";
+
+  const termosBusca =
+    criarTermosBuscaMultiloja(
+      original,
       query,
-      5,
     );
+
+  type ResultadoDescoberta =
+    Awaited<
+      ReturnType<
+        typeof descobrirProdutos
+      >
+    >;
+
+  type CandidatoDescoberta =
+    ResultadoDescoberta[
+      "candidates"
+    ][number];
+
+  type ResultadoMarketplaceDescoberta =
+    ResultadoDescoberta[
+      "results"
+    ][number];
+
+  const resultadosDescoberta:
+    ResultadoDescoberta[] = [];
+
+  /*
+   * Executamos sequencialmente para nao pressionar
+   * simultaneamente as APIs das marketplaces.
+   */
+  for (
+    const termoBusca of termosBusca
+  ) {
+    const busca =
+      await descobrirProdutos(
+        termoBusca,
+        5,
+        {
+          excludeMarketplace:
+            marketplaceOrigemDiscovery,
+        },
+      );
+
+    resultadosDescoberta.push(
+      busca,
+    );
+  }
+
+  /*
+   * Uma mesma oferta pode aparecer em duas ou tres
+   * consultas. Mantemos apenas uma copia.
+   */
+  const candidatosUnicos =
+    new Map<
+      string,
+      CandidatoDescoberta
+    >();
+
+  const resultadosPorMarketplace =
+    new Map<
+      string,
+      ResultadoMarketplaceDescoberta
+    >();
+
+  for (
+    const busca of resultadosDescoberta
+  ) {
+    for (
+      const candidato of busca.candidates
+    ) {
+      const chave =
+        `${candidato.marketplace}:${candidato.externalId}`;
+
+      if (
+        !candidatosUnicos.has(
+          chave,
+        )
+      ) {
+        candidatosUnicos.set(
+          chave,
+          candidato,
+        );
+      }
+    }
+
+    for (
+      const marketplace of busca.results
+    ) {
+      const atual =
+        resultadosPorMarketplace.get(
+          marketplace.marketplace,
+        );
+
+      if (!atual) {
+        resultadosPorMarketplace.set(
+          marketplace.marketplace,
+          {
+            ...marketplace,
+          },
+        );
+
+        continue;
+      }
+
+      resultadosPorMarketplace.set(
+        marketplace.marketplace,
+        {
+          ...atual,
+
+          scanned:
+            (atual.scanned ?? 0) +
+            (marketplace.scanned ?? 0),
+
+          error:
+            atual.error ??
+            marketplace.error,
+        },
+      );
+    }
+  }
+
+  const resultado = {
+    candidates:
+      Array.from(
+        candidatosUnicos.values(),
+      ),
+
+    results:
+      Array.from(
+        resultadosPorMarketplace.values(),
+      ),
+  };
 
   const marketplacesDisponiveis = [
     "Mercado Livre",
@@ -2550,11 +2879,11 @@ export async function buscarComparacaoManual(
     );
 
   /*
-   * Processamos primeiro as ofertas de menor preÃ§o.
+   * Processamos primeiro as ofertas de menor preÃƒÂ§o.
    *
-   * Como o schema mantÃ©m uma oferta por
+   * Como o schema mantÃƒÂ©m uma oferta por
    * marketplace/Product, a primeira oferta EXACT
-   * de cada loja serÃ¡ a mais barata encontrada.
+   * de cada loja serÃƒÂ¡ a mais barata encontrada.
    */
   const candidatos =
     [...resultado.candidates].sort(
@@ -2580,8 +2909,8 @@ export async function buscarComparacaoManual(
       original.marketplace
     ) {
       /*
-       * A oferta original jÃ¡ foi salva pela rota.
-       * NÃ£o permitimos que o Discovery substitua
+       * A oferta original jÃƒÂ¡ foi salva pela rota.
+       * NÃƒÂ£o permitimos que o Discovery substitua
        * o link manual/afiliado informado.
        */
       continue;
@@ -2709,15 +3038,15 @@ export async function buscarComparacaoManual(
       );
 
     /*
-     * Para variantes crÃ­ticas, ausÃªncia de
-     * informaÃ§Ã£o de apenas um lado tambÃ©m impede
-     * agrupamento automÃ¡tico.
+     * Para variantes crÃƒÂ­ticas, ausÃƒÂªncia de
+     * informaÃƒÂ§ÃƒÂ£o de apenas um lado tambÃƒÂ©m impede
+     * agrupamento automÃƒÂ¡tico.
      *
      * Exemplo:
-     * - iPhone Azul nÃ£o pode receber oferta sem cor;
-     * - 128 GB nÃ£o pode receber oferta sem capacidade;
-     * - eletrodomÃ©stico 127V nÃ£o pode receber 220V
-     *   ou tensÃ£o desconhecida.
+     * - iPhone Azul nÃƒÂ£o pode receber oferta sem cor;
+     * - 128 GB nÃƒÂ£o pode receber oferta sem capacidade;
+     * - eletrodomÃƒÂ©stico 127V nÃƒÂ£o pode receber 220V
+     *   ou tensÃƒÂ£o desconhecida.
      */
     const variantesCriticas = [
       "color",
@@ -2730,16 +3059,16 @@ export async function buscarComparacaoManual(
       string | null = null;
 
     /*
-     * O matcher especÃ­fico de mÃ³veis jÃ¡ valida
+     * O matcher especÃƒÂ­fico de mÃƒÂ³veis jÃƒÂ¡ valida
      * marca, linha/modelo, portas, gavetas e
-     * divergÃªncia de cor quando ambos os lados
+     * divergÃƒÂªncia de cor quando ambos os lados
      * informam a cor.
      *
-     * Portanto, ausÃªncia de uma variante em uma
-     * das lojas nÃ£o deve impedir o mÃ³vel de chegar
-     * ao matcher especÃ­fico.
+     * Portanto, ausÃƒÂªncia de uma variante em uma
+     * das lojas nÃƒÂ£o deve impedir o mÃƒÂ³vel de chegar
+     * ao matcher especÃƒÂ­fico.
      *
-     * EletrÃ´nicos continuam com a proteÃ§Ã£o rÃ­gida.
+     * EletrÃƒÂ´nicos continuam com a proteÃƒÂ§ÃƒÂ£o rÃƒÂ­gida.
      */
     if (
       !ehProdutoMovel(original.title) &&
@@ -2762,7 +3091,7 @@ export async function buscarComparacaoManual(
           Boolean(candidataValor)
         ) {
           varianteInsegura =
-            `Variante ${chave} insuficiente para confirmaÃ§Ã£o automÃ¡tica.`;
+            `Variante ${chave} insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.`;
 
           break;
         }
@@ -2837,11 +3166,42 @@ export async function buscarComparacaoManual(
         saved.id !==
         targetProductId
       ) {
-        errors.push(
-          `${candidato.marketplaceName}: a oferta pertence a outro Product do Ofertano.`,
-        );
+        /*
+         * O matcher ja confirmou esta oferta como EXACT.
+         * Se ela pertence a outro Product, unificamos
+         * somente esta MarketplaceOffer validada.
+         */
+        const movida =
+          await prisma.marketplaceOffer.updateMany({
+            where: {
+              productId:
+                saved.id,
 
-        continue;
+              marketplace:
+                candidato.marketplace,
+
+              externalId:
+                candidato.externalId,
+            },
+
+            data: {
+              productId:
+                targetProductId,
+
+              matchStatus:
+                "EXACT",
+
+              matchScore: 1,
+            },
+          });
+
+        if (movida.count === 0) {
+          errors.push(
+            `${candidato.marketplaceName}: oferta EXACT encontrada em outro Product, mas nao foi possivel unifica-la.`,
+          );
+
+          continue;
+        }
       }
 
       await prisma.$transaction(
@@ -2925,7 +3285,7 @@ export async function buscarComparacaoManual(
     });
   } catch (error) {
     console.error(
-      "Erro ao registrar comparaÃ§Ã£o manual:",
+      "Erro ao registrar comparaÃƒÂ§ÃƒÂ£o manual:",
       error,
     );
   }
@@ -2944,6 +3304,7 @@ export async function buscarComparacaoManual(
     errors,
   };
 }
+
 
 
 
