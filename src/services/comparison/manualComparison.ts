@@ -5,6 +5,13 @@ import {
   saveProduct,
   sincronizarMelhorOfertaDoProduto,
 } from "@/services/database/saveProduct";
+
+import {
+  avaliarCompatibilidadeExataEntreImports,
+  ehProdutoCalcado as ehProdutoCalcadoCentral,
+  ehProdutoMovel as ehProdutoMovelCentral,
+  resolverIdentidadeProduto,
+} from "@/services/identity";
 import type {
   MarketplaceName,
   ProductImport,
@@ -360,10 +367,11 @@ function titulosComerciaisEquivalentes(
         reason: `Variante ${chave} diferente: ${valorA} x ${valorB}.`,
       };
     }
+    /*
+     * Ausencia de variante em apenas um lado
+     * nao representa conflito.
+     */
 
-    if (Boolean(valorA) !== Boolean(valorB)) {
-      return null;
-    }
   }
 
   const tokensA = tituloA.split(" ").filter(Boolean);
@@ -443,7 +451,17 @@ function buscarAtributo(
 function normalizarMarca(
   value: string | null | undefined,
 ): string | null {
-  const normalized = normalizarTexto(value);
+  const normalized =
+    normalizarTexto(value)
+      .replace(
+        /^visite\s+a\s+loja\s+/i,
+        "",
+      )
+      .replace(
+        /^marca[:\s]+/i,
+        "",
+      )
+      .trim();
 
   if (!normalized) {
     return null;
@@ -1081,7 +1099,7 @@ function escolherCorProduto(
     : estruturada;
 }
 
-function extrairIdentidade(
+function extrairIdentidadeLegado(
   product: ProductImport,
 ): ProductIdentity {
   const brandStructured = buscarMarcaEstruturada(product);
@@ -1178,6 +1196,16 @@ function extrairIdentidade(
         inferirTamanhoGenericoPeloTitulo(product.title),
     },
   };
+}
+
+/*
+ * The search layer still consumes the compact ProductIdentity shape below,
+ * but its values now always come from the shared Identity Resolver.
+ */
+function extrairIdentidade(
+  product: ProductImport,
+): ProductIdentity {
+  return resolverIdentidadeProduto(product);
 }
 
 function encontrarModeloEmComum(
@@ -1302,7 +1330,7 @@ const TOKENS_GENERICOS_MOVEL = new Set([
   "prata",
 ]);
 
-function ehProdutoMovel(
+function ehProdutoMovelLegado(
   title: string,
 ): boolean {
   const texto =
@@ -1314,6 +1342,12 @@ function ehProdutoMovel(
         normalizarTexto(termo),
       ),
   );
+}
+
+function ehProdutoMovel(
+  title: string,
+): boolean {
+  return ehProdutoMovelCentral(title);
 }
 
 function extrairContagemMovel(
@@ -1685,7 +1719,7 @@ const TOKENS_GENERICOS_CALCADO = new Set([
   "prateada",
 ]);
 
-function ehProdutoCalcado(
+function ehProdutoCalcadoLegado(
   title: string,
 ): boolean {
   const texto = normalizarTexto(title);
@@ -1696,6 +1730,12 @@ function ehProdutoCalcado(
         normalizarTexto(termo),
       ),
   );
+}
+
+function ehProdutoCalcado(
+  title: string,
+): boolean {
+  return ehProdutoCalcadoCentral(title);
 }
 
 function extrairGeneroCalcado(
@@ -2019,7 +2059,7 @@ function compararCalcadoEstritamente(
   };
 }
 
-function compararProdutoEstritamente(
+function compararProdutoEstritamenteLegado(
   original: ProductImport,
   candidate: ProductImport,
 ): MatchResult {
@@ -2035,7 +2075,8 @@ function compararProdutoEstritamente(
    * JBL Tune 520BT != almofada de reposiÃ§Ã£o para JBL Tune 520BT.
    */
   const termosAcessorio = [
-    /\balmofad(?:a|as)\b/,
+    /\balmofad(?:a|as)\s+(?:de\s+)?reposicao\b/,
+    /\balmofad(?:a|as)\s+para\b/,
     /\bear\s*pad(?:s)?\b/,
     /\bearpad(?:s)?\b/,
     /\bsubstituicao\s+de\b/,
@@ -2205,6 +2246,27 @@ function compararProdutoEstritamente(
   };
 }
 
+/*
+ * There is one Exact Matcher for every entry point.  The legacy routine above
+ * remains only as historical context while this debug package is being
+ * applied; it is no longer called by the Multi Loja flow.
+ */
+function compararProdutoEstritamente(
+  original: ProductImport,
+  candidate: ProductImport,
+): MatchResult {
+  const result =
+    avaliarCompatibilidadeExataEntreImports(
+      original,
+      candidate,
+    );
+
+  return {
+    exact: result.exact,
+    reason: result.reason,
+  };
+}
+
 function criarTermoBusca(
   product: ProductImport,
 ): string {
@@ -2228,8 +2290,7 @@ function criarTermoBusca(
   const identity = extrairIdentidade(product);
 
   const modeloBusca =
-    extrairModeloDescritivoDoTitulo(product.title) ??
-    buscarModeloEstruturado(product) ??
+    identity.model ??
     identity.modelTokens[0] ??
     null;
 
@@ -2297,30 +2358,32 @@ function criarTermosBuscaMultiloja(
     extrairIdentidade(product);
 
   const modeloBusca =
-    extrairModeloDescritivoDoTitulo(
-      product.title,
-    ) ??
-    buscarModeloEstruturado(product) ??
+    identity.model ??
     identity.modelTokens[0] ??
     null;
 
-  if (
-    identity.brand &&
-    modeloBusca
-  ) {
-    return [termoPrincipal];
-  }
+  /*
+   * Marca + modelo continua sendo a consulta prioritaria.
+   *
+   * Nao retornamos aqui:
+   * se outras lojas usam titulo diferente, as consultas
+   * progressivas abaixo aumentam o recall.
+   *
+   * O matcher EXACT continua sendo a barreira final.
+   */
 
   /*
    * Moveis continuam usando o titulo completo.
    * Neles, linha, portas, gavetas etc. podem fazer
    * parte essencial da identidade.
    */
-  if (
-    ehProdutoMovel(product.title)
-  ) {
-    return [termoPrincipal];
-  }
+  /*
+   * Moveis continuam priorizando o titulo completo,
+   * mas nao bloqueiam mais os fallbacks progressivos.
+   *
+   * Quantidade, linha, variante e demais caracteristicas
+   * continuam sendo validadas pelo matcher.
+   */
 
   const tituloNormalizado =
     normalizarTexto(
@@ -2653,9 +2716,21 @@ async function pesquisarCatalogoMercadoLivre(
   return resultados.slice(0, MAX_MERCADO_LIVRE_CANDIDATES);
 }
 
+export type ManualComparisonOptions = {
+  /*
+   * Quando true, o matcher grava todas as ofertas EXACT,
+   * mas nao sincroniza/publica o Product durante a busca.
+   *
+   * O pipeline central fara uma unica sincronizacao
+   * depois que toda a comparacao terminar.
+   */
+  suppressProductSync?: boolean;
+};
+
 export async function buscarComparacaoManual(
   original: ProductImport,
   targetProductId: string,
+  options: ManualComparisonOptions = {},
 ): Promise<ManualComparisonSummary> {
   /*
    * O produto importado manualmente ÃƒÂ© a referÃƒÂªncia.
@@ -2727,13 +2802,68 @@ export async function buscarComparacaoManual(
   ) {
     const busca =
       await descobrirProdutos(
-        termoBusca,
-        5,
-        {
+termoBusca,
+5,
+{
           excludeMarketplace:
             marketplaceOrigemDiscovery,
+          mode: "MULTILOJA",
         },
       );
+
+
+    console.log(
+      "[MULTILOJA-DISCOVERY]",
+      JSON.stringify(
+        {
+          termoBusca,
+
+          totalCandidates:
+            busca.candidates.length,
+
+          candidates:
+            busca.candidates.map(
+              (candidato) => ({
+                marketplace:
+                  candidato.marketplace,
+
+                title:
+                  candidato.title,
+
+                externalId:
+                  candidato.externalId,
+
+                price:
+                  candidato.price,
+              }
+),
+            ),
+
+          marketplaces:
+            busca.results.map(
+              (marketplace) => ({
+                marketplace:
+                  marketplace.marketplace,
+
+                success:
+                  marketplace.success,
+
+                scanned:
+                  marketplace.scanned,
+
+                candidates:
+                  marketplace.candidates
+                    ?.length ?? 0,
+
+                error:
+                  marketplace.error,
+              }),
+            ),
+        },
+        null,
+        2,
+      ),
+    );
 
     resultadosDescoberta.push(
       busca,
@@ -2898,11 +3028,6 @@ export async function buscarComparacaoManual(
         ),
     );
 
-  const identidadeOriginal =
-    extrairIdentidade(
-      original,
-    );
-
   for (const candidato of candidatos) {
     if (
       candidato.marketplaceName ===
@@ -3032,92 +3157,6 @@ export async function buscarComparacaoManual(
         {},
     };
 
-    const identidadeCandidata =
-      extrairIdentidade(
-        candidateProduct,
-      );
-
-    /*
-     * Para variantes crÃƒÂ­ticas, ausÃƒÂªncia de
-     * informaÃƒÂ§ÃƒÂ£o de apenas um lado tambÃƒÂ©m impede
-     * agrupamento automÃƒÂ¡tico.
-     *
-     * Exemplo:
-     * - iPhone Azul nÃƒÂ£o pode receber oferta sem cor;
-     * - 128 GB nÃƒÂ£o pode receber oferta sem capacidade;
-     * - eletrodomÃƒÂ©stico 127V nÃƒÂ£o pode receber 220V
-     *   ou tensÃƒÂ£o desconhecida.
-     */
-    const variantesCriticas = [
-      "color",
-      "storage",
-      "voltage",
-      "size",
-    ] as const;
-
-    let varianteInsegura:
-      string | null = null;
-
-    /*
-     * O matcher especÃƒÂ­fico de mÃƒÂ³veis jÃƒÂ¡ valida
-     * marca, linha/modelo, portas, gavetas e
-     * divergÃƒÂªncia de cor quando ambos os lados
-     * informam a cor.
-     *
-     * Portanto, ausÃƒÂªncia de uma variante em uma
-     * das lojas nÃƒÂ£o deve impedir o mÃƒÂ³vel de chegar
-     * ao matcher especÃƒÂ­fico.
-     *
-     * EletrÃƒÂ´nicos continuam com a proteÃƒÂ§ÃƒÂ£o rÃƒÂ­gida.
-     */
-    if (
-      !ehProdutoMovel(original.title) &&
-      !ehProdutoCalcado(original.title)
-    ) {
-      for (
-        const chave
-        of variantesCriticas
-      ) {
-        const originalValor =
-          identidadeOriginal
-            .variants[chave];
-
-        const candidataValor =
-          identidadeCandidata
-            .variants[chave];
-
-        if (
-          Boolean(originalValor) !==
-          Boolean(candidataValor)
-        ) {
-          varianteInsegura =
-            `Variante ${chave} insuficiente para confirmaÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica.`;
-
-          break;
-        }
-      }
-    }
-
-    if (varianteInsegura) {
-      rejectedCandidates += 1;
-
-      rejections.push({
-        marketplace:
-          candidato.marketplaceName,
-
-        catalogId:
-          candidato.externalId,
-
-        name:
-          candidato.title,
-
-        reason:
-          varianteInsegura,
-      });
-
-      continue;
-    }
-
     const match =
       compararProdutoEstritamente(
         original,
@@ -3153,12 +3192,16 @@ export async function buscarComparacaoManual(
             null,
           {
             targetProductId,
+            verifiedExactMatch: true,
             discoverySource:
               "ON_DEMAND_SEARCH",
             sourceQuery:
               query,
             autoCreated:
               false,
+
+            suppressPublicationSync:
+              true,
           },
         );
 
@@ -3225,10 +3268,12 @@ export async function buscarComparacaoManual(
             },
           });
 
-          await sincronizarMelhorOfertaDoProduto(
-            tx,
-            targetProductId,
-          );
+          if (!options.suppressProductSync) {
+            await sincronizarMelhorOfertaDoProduto(
+              tx,
+              targetProductId,
+            );
+          }
         },
       );
 

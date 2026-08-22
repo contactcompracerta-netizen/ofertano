@@ -4,6 +4,13 @@ import prisma from "@/lib/prisma";
 
 import type { ProductImport } from "@/services/importers/core/types";
 
+import {
+  avaliarCompatibilidadeExataEntreImports,
+  criarCanonicalKeyDaIdentidade,
+  normalizarMarcaIdentidade,
+  resolverIdentidadeProduto,
+} from "@/services/identity";
+
 type MarketplaceDatabase =
   | "MERCADO_LIVRE"
   | "AMAZON"
@@ -20,9 +27,17 @@ type DiscoverySourceDatabase =
 
 export type SaveProductOptions = {
   targetProductId?: string | null;
+  /*
+   * targetProductId can only be used after the shared Exact Matcher has
+   * approved the pair.  This closes the old bypass that could attach an
+   * arbitrary Discovery candidate to a Product.
+   */
+  verifiedExactMatch?: boolean;
   discoverySource?: DiscoverySourceDatabase;
   autoCreated?: boolean;
   sourceQuery?: string | null;
+  deferPublication?: boolean;
+  suppressPublicationSync?: boolean;
 };
 
 function criarSlug(
@@ -1108,7 +1123,7 @@ function encontrarCapacidadeArmazenamento(
   return null;
 }
 
-function extrairIdentificadores(
+function extrairIdentificadoresLegado(
   product: ProductImport,
 ) {
   const eanEncontrado = encontrarAtributo(
@@ -1302,6 +1317,35 @@ function extrairIdentificadores(
   };
 }
 
+/*
+ * Single Identity Resolver adapter for persistence.  The database keeps the
+ * fields separately for indexing, while their meaning is defined only by the
+ * resolver in services/identity.
+ */
+function extrairIdentificadores(
+  product: ProductImport,
+) {
+  const identity =
+    resolverIdentidadeProduto(product);
+
+  return {
+    ean: identity.ean,
+    gtin: identity.gtin,
+    mpn: identity.mpn,
+    modelNumber:
+      identity.modelNumber ??
+      identity.model,
+    color: identity.variants.color,
+    voltage: identity.variants.voltage,
+    size: identity.variants.size,
+    capacity: identity.variants.capacity,
+    ram: identity.variants.ram,
+    storage: identity.variants.storage,
+    kitQuantity: identity.variants.kitQuantity,
+    connectivity: identity.variants.network,
+  };
+}
+
 type ProdutoParaMatching = {
   id: string;
   name: string;
@@ -1483,7 +1527,7 @@ function extrairIdentidadeProdutoExistente(
   };
 }
 
-function calcularCompatibilidadeExata(
+function calcularCompatibilidadeExataLegada(
   produtoExistente: ProdutoParaMatching,
   product: ProductImport,
   identificadores: ReturnType<
@@ -1664,7 +1708,58 @@ function calcularCompatibilidadeExata(
   );
 }
 
-function criarCanonicalKey(
+function calcularCompatibilidadeExata(
+  produtoExistente: ProdutoParaMatching,
+  product: ProductImport,
+  _identificadores: ReturnType<
+    typeof extrairIdentificadores
+  >,
+): number | null {
+  const attributes = {
+    ...converterEspecificacoesParaAtributos(
+      produtoExistente.specifications,
+    ),
+    ...(produtoExistente.ean
+      ? { EAN: produtoExistente.ean }
+      : {}),
+    ...(produtoExistente.gtin
+      ? { GTIN: produtoExistente.gtin }
+      : {}),
+    ...(produtoExistente.mpn
+      ? { MPN: produtoExistente.mpn }
+      : {}),
+    ...(produtoExistente.modelNumber
+      ? { MODEL: produtoExistente.modelNumber }
+      : {}),
+    ...(produtoExistente.color
+      ? { COLOR: produtoExistente.color }
+      : {}),
+    ...(produtoExistente.voltage
+      ? { VOLTAGE: produtoExistente.voltage }
+      : {}),
+    ...(produtoExistente.size
+      ? { SIZE: produtoExistente.size }
+      : {}),
+  };
+
+  const result =
+    avaliarCompatibilidadeExataEntreImports(
+      {
+        title:
+          produtoExistente.canonicalName?.trim() ||
+          produtoExistente.name,
+        brand: produtoExistente.brand,
+        attributes,
+      },
+      product,
+    );
+
+  return result.exact
+    ? result.score
+    : null;
+}
+
+function criarCanonicalKeyLegada(
   product: ProductImport,
   identificadores: ReturnType<
     typeof extrairIdentificadores
@@ -1748,6 +1843,17 @@ function criarCanonicalKey(
     codigoFabricante,
     ...partesVariantes,
   ].join(":");
+}
+
+function criarCanonicalKey(
+  product: ProductImport,
+  _identificadores: ReturnType<
+    typeof extrairIdentificadores
+  >,
+): string | null {
+  return criarCanonicalKeyDaIdentidade(
+    resolverIdentidadeProduto(product),
+  );
 }
 
 function calcularDesconto(
@@ -2151,13 +2257,14 @@ export async function saveProduct(
    * "Smartwatch Samsung Galaxy Watch8..."
    * -> brand = Samsung
    */
+  const identidadeImportada =
+    resolverIdentidadeProduto(product);
+
   const marcaEfetiva =
-    normalizarMarcaCanonical(
-      product.brand,
-    ) ||
-    inferirMarcaDoTitulo(
-      product.title,
-    );
+    product.brand?.trim() &&
+    normalizarMarcaIdentidade(product.brand)
+      ? product.brand.trim()
+      : identidadeImportada.brand;
 
   const productComMarca: ProductImport =
     marcaEfetiva
@@ -2215,9 +2322,7 @@ export async function saveProduct(
       productComMarca.brand?.trim() || null;
 
     const marcaNormalizadaParaMatching =
-      normalizarMarcaCanonical(
-        productComMarca.brand,
-      );
+      identidadeImportada.brand;
 
     const marcasParaBusca = Array.from(
       new Set(
@@ -2353,7 +2458,8 @@ export async function saveProduct(
 
     if (
       !saved &&
-      options.targetProductId
+      options.targetProductId &&
+      options.verifiedExactMatch
     ) {
       saved = await tx.product.findUnique({
         where: {
@@ -2660,6 +2766,10 @@ export async function saveProduct(
         ? 1
         : produtoCriadoAgora
           ? 1
+          : options.verifiedExactMatch &&
+                options.targetProductId ===
+                  saved.id
+            ? 1
           : produtoPeloCanonicalKey?.id ===
                 saved.id
             ? 1
@@ -2824,6 +2934,43 @@ export async function saveProduct(
       });
     }
 
+    /*
+     * PUBLICACAO CONTROLADA MULTI LOJA
+     *
+     * Produto principal e ofertas descobertas permanecem
+     * invisiveis enquanto a comparacao esta em andamento.
+     */
+    if (
+      options.deferPublication
+    ) {
+      return tx.product.update({
+        where: {
+          id: saved.id,
+        },
+        data: {
+          publicationStatus: "DRAFT",
+          active: false,
+        },
+      });
+    }
+
+    if (
+      options.suppressPublicationSync
+    ) {
+      /*
+       * Apenas grava a MarketplaceOffer.
+       * Nao altera o estado de publicacao do Product.
+       *
+       * Produto novo ja esta DRAFT por deferPublication.
+       * Produto existente continua no estado em que estava.
+       */
+      return tx.product.findUniqueOrThrow({
+        where: {
+          id: saved.id,
+        },
+      });
+    }
+
     return sincronizarMelhorOfertaDoProduto(
       tx,
       saved.id,
@@ -2835,5 +2982,3 @@ export async function saveProduct(
     );
   });
 }
-
-
