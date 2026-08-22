@@ -180,23 +180,20 @@ export default function ProductCard({ produto }: ProductCardProps) {
             href={`/produto/${produto.id}`}
             className="mt-2 flex h-9 items-center justify-center gap-1 rounded-lg bg-[#087A55] px-2 text-[11px] font-black text-white shadow-sm shadow-emerald-900/10 transition hover:bg-[#066747] focus:outline-none focus:ring-4 focus:ring-emerald-200 sm:mt-3 sm:h-11 sm:gap-2 sm:rounded-xl sm:px-4 sm:text-sm"
           >
-            <span className="sm:hidden">Comparar</span>
-            <span className="hidden sm:inline">Comparar oferta</span>
+            <span>Ver preços</span>
 
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"
-              className="hidden h-4 w-4 sm:block"
+              className="h-3.5 w-3.5 sm:h-4 sm:w-4"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M7 7H17" />
-              <path d="M14 4L17 7L14 10" />
-              <path d="M17 17H7" />
-              <path d="M10 14L7 17L10 20" />
+              <path d="M5 12H19" />
+              <path d="M13 6L19 12L13 18" />
             </svg>
           </Link>
 

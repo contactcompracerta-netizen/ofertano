@@ -1,0 +1,10 @@
+.compact {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+}
+
+.compact,
+.compact * {
+  box-sizing: border-box;
+}

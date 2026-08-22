@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -1364,130 +1364,171 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </div>
 
           {possuiComparacaoEntreLojas && (
-            <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
-              <div className="grid gap-2 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-center lg:gap-5">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
-                    Comparador Ofertano
-                  </p>
-                  <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl lg:text-[18px] lg:leading-6 xl:text-xl xl:whitespace-nowrap">
-                    Compare preços em outras lojas
-                  </h2>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-500 lg:hidden">
-                    Confira preço, parcelamento e disponibilidade antes de concluir a compra.
+            <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:mt-3 sm:p-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
+                      Comparador Ofertano
+                    </p>
+
+                    <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl">
+                      Compare preços em outras lojas
+                    </h2>
+                  </div>
+
+                  <p className="max-w-xl text-[10px] leading-4 text-slate-500 sm:text-xs">
+                    O mesmo produto em lojas diferentes. O menor preço encontrado ganha destaque.
                   </p>
                 </div>
 
-                <div className={`min-w-0 grid gap-1.5 ${ofertasComparador.length === 1 ? "grid-cols-1" : "md:grid-cols-2 2xl:grid-cols-3"}`}>
-                {ofertasComparador.map((oferta) => {
-                  const link = oferta.affiliateLink?.trim();
-                  const ofertaMercadoLivre =
-                    ehMarketplaceMercadoLivre(oferta.marketplace);
-                  const linkIndividualValido = ofertaMercadoLivre
-                    ? ehLinkIndividualMercadoLivre(link)
-                    : Boolean(link);
-                  const ofertaDisponivel =
-                    oferta.available &&
-                    oferta.status !== "UNAVAILABLE" &&
-                    oferta.status !== "ERROR";
-                  const linkDestino = ofertaMercadoLivre
-                    ? ofertaDisponivel
-                      ? linkIndividualValido && link
+                <div
+                  className={`grid min-w-0 gap-2 ${
+                    ofertasComparador.length === 1
+                      ? "grid-cols-1"
+                      : "md:grid-cols-2 2xl:grid-cols-3"
+                  }`}
+                >
+                  {ofertasComparador.map((oferta) => {
+                    const link = oferta.affiliateLink?.trim();
+
+                    const ofertaMercadoLivre =
+                      ehMarketplaceMercadoLivre(oferta.marketplace);
+
+                    const linkIndividualValido = ofertaMercadoLivre
+                      ? ehLinkIndividualMercadoLivre(link)
+                      : Boolean(link);
+
+                    const ofertaDisponivel =
+                      oferta.available &&
+                      oferta.status !== "UNAVAILABLE" &&
+                      oferta.status !== "ERROR";
+
+                    const linkDestino = ofertaMercadoLivre
+                      ? ofertaDisponivel
+                        ? linkIndividualValido && link
+                          ? link
+                          : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
+                        : null
+                      : linkIndividualValido &&
+                          oferta.status === "ACTIVE" &&
+                          oferta.available &&
+                          link
                         ? link
-                        : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
-                      : null
-                    : linkIndividualValido &&
-                        oferta.status === "ACTIVE" &&
-                        oferta.available &&
-                        link
-                      ? link
-                      : null;
-                  const linkAtivo = Boolean(linkDestino);
-                  const marketplace = formatarMarketplace(
-                    oferta.marketplace,
-                  );
-                  const menorPrecoEncontrado =
-                    menorPrecoComparador !== null &&
-                    oferta.available &&
-                    oferta.status !== "UNAVAILABLE" &&
-                    oferta.status !== "ERROR" &&
-                    Math.abs(oferta.price - menorPrecoComparador) < 0.01;
+                        : null;
 
-                  const conteudoOferta = (
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="text-sm font-black text-slate-950">
-                            {marketplace}
-                          </p>
+                    const linkAtivo = Boolean(linkDestino);
 
-                          {menorPrecoEncontrado && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">
-                              Menor preço encontrado
+                    const marketplace = formatarMarketplace(
+                      oferta.marketplace,
+                    );
+
+                    const menorPrecoEncontrado =
+                      menorPrecoComparador !== null &&
+                      oferta.available &&
+                      oferta.status !== "UNAVAILABLE" &&
+                      oferta.status !== "ERROR" &&
+                      Math.abs(
+                        oferta.price - menorPrecoComparador,
+                      ) < 0.01;
+
+                    const conteudoOferta = (
+                      <div className="flex h-full flex-col">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            {menorPrecoEncontrado && (
+                              <span className="inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm sm:text-[10px]">
+                                Melhor preço
+                              </span>
+                            )}
+
+                            <p
+                              className={`${
+                                menorPrecoEncontrado
+                                  ? "mt-1 text-xl text-emerald-700 sm:text-2xl"
+                                  : "text-lg text-slate-950 sm:text-xl"
+                              } font-black leading-none tracking-tight`}
+                            >
+                              {formatarPreco(oferta.price)}
+                            </p>
+
+                            {oferta.installments && (
+                              <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-500 sm:text-[11px]">
+                                {oferta.installments}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 shrink-0 text-right">
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">
+                              Disponível em
+                            </p>
+
+                            <p className="mt-0.5 max-w-32 truncate text-[12px] font-black text-slate-800 sm:text-sm">
+                              {marketplace}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex min-h-7 items-end justify-between gap-2 border-t border-slate-200/80 pt-2">
+                          {!linkAtivo ? (
+                            <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800 sm:text-[10px]">
+                              {obterTextoOfertaPendente(
+                                oferta.status,
+                                oferta.available,
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-slate-500">
+                              Comprar na loja
+                            </span>
+                          )}
+
+                          {linkAtivo && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 sm:text-xs">
+                              Ver oferta
+                              <ExternalLinkIcon className="h-3.5 w-3.5" />
                             </span>
                           )}
                         </div>
-
-                        {oferta.installments && (
-                          <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
-                            {oferta.installments}
-                          </p>
-                        )}
-
-                        {!linkAtivo && (
-                          <span className="mt-1.5 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">
-                            {obterTextoOfertaPendente(
-                              oferta.status,
-                              oferta.available,
-                            )}
-                          </span>
-                        )}
                       </div>
+                    );
 
-                      <div className="shrink-0 text-right">
-                        <p className="text-base font-black text-emerald-700 sm:text-lg">
-                          {formatarPreco(oferta.price)}
-                        </p>
+                    if (linkAtivo && linkDestino) {
+                      return (
+                        <a
+                          key={oferta.id}
+                          href={linkDestino}
+                          target="_blank"
+                          rel="noopener noreferrer sponsored"
+                          className={`rounded-xl p-3 transition hover:-translate-y-0.5 hover:shadow-md ${
+                            menorPrecoEncontrado
+                              ? "border-2 border-emerald-300 bg-emerald-50/60 shadow-sm hover:border-emerald-400"
+                              : "border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/40"
+                          }`}
+                        >
+                          {conteudoOferta}
+                        </a>
+                      );
+                    }
 
-                        {linkAtivo && (
-                          <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-black text-emerald-700">
-                            Ver oferta
-                            <ExternalLinkIcon className="h-3 w-3" />
-                          </p>
-                        )}
-
-                      </div>
-                    </div>
-                  );
-
-                  if (linkAtivo && linkDestino) {
                     return (
-                      <a
+                      <div
                         key={oferta.id}
-                        href={linkDestino}
-                        target="_blank"
-                        rel="noopener noreferrer sponsored"
-                        className="rounded-lg border border-slate-200 px-2.5 py-2 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:shadow-sm"
+                        className={`rounded-xl p-3 ${
+                          menorPrecoEncontrado
+                            ? "border-2 border-emerald-300 bg-emerald-50/50"
+                            : "border border-amber-200 bg-amber-50/60"
+                        }`}
                       >
                         {conteudoOferta}
-                      </a>
+                      </div>
                     );
-                  }
-
-                  return (
-                    <div
-                      key={oferta.id}
-                      className="rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2"
-                    >
-                      {conteudoOferta}
-                    </div>
-                  );
-                })}
+                  })}
                 </div>
               </div>
             </section>
           )}
-
           {pontosHistorico.length > 0 && (
             <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
@@ -1545,7 +1586,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </p>
 
                   <span
-                    className={`mt-1.5 block rounded-md px-2 py-1 text-[10px] font-black leading-4 ${analisePreco.badgeClassName}`}
+                    className={`mt-1.5 block rounded-lg px-3 py-2 text-[12px] font-black leading-5 sm:text-sm ${analisePreco.badgeClassName}`}
                   >
                     {analisePreco.titulo}
                   </span>
