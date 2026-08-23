@@ -209,6 +209,331 @@ assert.ok(
   "Os links afiliados das ofertas EXACT devem ser preservados.",
 );
 
+const CONCEPT_QUERY = "Smartphone Aurora Pulse AX90 256GB";
+const CONCEPT_PHONE_A =
+  "Smartphone Aurora Pulse AX90 256GB";
+const CONCEPT_PHONE_B =
+  "Aurora Pulse AX90 5G 256GB Smartphone";
+const CONCEPT_CASE = "Capa Aurora Pulse AX90";
+const CONCEPT_FILM = "Pelicula Aurora Pulse AX90";
+
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    CONCEPT_QUERY,
+    listing(CONCEPT_PHONE_A, "Aurora"),
+  ).compatible,
+  true,
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    CONCEPT_QUERY,
+    listing(CONCEPT_PHONE_B, "Aurora"),
+  ).compatible,
+  true,
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    CONCEPT_QUERY,
+    listing(CONCEPT_CASE, "Aurora"),
+  ).compatible,
+  false,
+  "Capa sem 'para' nao pode passar no filtro da consulta do aparelho.",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    CONCEPT_QUERY,
+    listing(CONCEPT_FILM, "Aurora"),
+  ).compatible,
+  false,
+  "Pelicula nao pode passar no filtro da consulta do aparelho.",
+);
+
+assert.equal(
+  avaliarCompatibilidadeExataEntreImports(
+    listing(CONCEPT_PHONE_A, "Aurora"),
+    listing(CONCEPT_PHONE_B, "Aurora"),
+  ).exact,
+  true,
+  "Smartphones equivalentes com titulos diferentes devem ser EXACT.",
+);
+assert.equal(
+  avaliarCompatibilidadeExataEntreImports(
+    listing(CONCEPT_PHONE_A, "Aurora"),
+    listing(CONCEPT_CASE, "Aurora"),
+  ).exact,
+  false,
+);
+
+const conceptualCluster = escolherClusterExatoDaPesquisaPublica(
+  CONCEPT_QUERY,
+  [
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-ax90",
+      title: CONCEPT_PHONE_A,
+      price: 1899,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-ax90",
+      title: CONCEPT_PHONE_B,
+      price: 1749,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-ax90",
+      title: "Aurora Pulse AX90 Smartphone 256GB Dual Chip",
+      price: 1990,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-ax90",
+      title: "Smartphone Aurora Pulse AX90 256 GB 5G",
+      price: 1810,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-capa",
+      title: CONCEPT_CASE,
+      price: 10,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-pelicula",
+      title: CONCEPT_FILM,
+      price: 18.99,
+      brand: "Aurora",
+    }),
+  ],
+);
+
+assert.equal(
+  conceptualCluster.length,
+  4,
+  "Quatro lojas do mesmo smartphone devem formar um unico cluster.",
+);
+assert.equal(
+  new Set(conceptualCluster.map((item) => item.product.marketplace)).size,
+  4,
+);
+assert.ok(
+  conceptualCluster.every((item) => item.product.price >= 1700),
+  "Acessorio barato nao pode entrar no cluster nem virar identidade.",
+);
+assert.ok(
+  conceptualCluster.every(
+    (item) =>
+      !/capa|pelicula/i.test(item.product.title),
+  ),
+);
+
+const queryWithoutStorage = "Smartphone Aurora Pulse AX90";
+const clusterWithoutStorage = escolherClusterExatoDaPesquisaPublica(
+  queryWithoutStorage,
+  [
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-ax90-main",
+      title: CONCEPT_PHONE_A,
+      price: 1899,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-capa-barata",
+      title: CONCEPT_CASE,
+      price: 9.46,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-cabo",
+      title: "Cabo carregador Aurora Pulse AX90",
+      price: 18.99,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-ax90-main",
+      title: CONCEPT_PHONE_B,
+      price: 1749,
+      brand: "Aurora",
+    }),
+  ],
+);
+
+assert.equal(
+  clusterWithoutStorage.length,
+  2,
+  "Sem armazenamento na consulta, o cluster ainda deve ser so do aparelho.",
+);
+assert.ok(
+  clusterWithoutStorage.every((item) => item.product.price >= 1700),
+  "Preco baixo de acessorio nao pode definir o Product principal.",
+);
+
+const headphoneQuery = "Fone Aurora Tune ZX20";
+const headphoneCluster = escolherClusterExatoDaPesquisaPublica(
+  headphoneQuery,
+  [
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-zx20",
+      title: "Fone de Ouvido Aurora Tune ZX20 Bluetooth",
+      price: 231.92,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-zx20",
+      title: "Aurora Tune ZX20 Headset Bluetooth",
+      price: 219,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-zx20",
+      title: "Headphone Aurora Tune ZX20",
+      price: 249,
+      brand: "Aurora",
+    }),
+  ],
+);
+
+assert.ok(
+  headphoneCluster.length >= 2,
+  "Fones equivalentes com titulos diferentes devem formar Multi Loja.",
+);
+
+const HEADPHONE_QUERY = "Headphone Aurora ZX100";
+const HEADPHONE_MAIN_A = "Headphone Aurora ZX100 Bluetooth";
+const HEADPHONE_MAIN_B = "Fone Bluetooth Aurora ZX100";
+const HEADPHONE_PADS =
+  "Almofadas de substituicao para Aurora ZX90 ZX100 ZX200 ZX300 JR10";
+const HEADPHONE_CASE = "Case compativel Aurora ZX100";
+
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    HEADPHONE_QUERY,
+    listing(HEADPHONE_MAIN_A, "Aurora"),
+  ).compatible,
+  true,
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    HEADPHONE_QUERY,
+    listing(HEADPHONE_MAIN_B, "Aurora"),
+  ).compatible,
+  true,
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    HEADPHONE_QUERY,
+    listing(HEADPHONE_PADS, "Aurora"),
+  ).compatible,
+  false,
+  "Almofada de varios modelos nao disputa a referencia MAIN.",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    HEADPHONE_QUERY,
+    listing(HEADPHONE_CASE, "Aurora"),
+  ).compatible,
+  false,
+);
+
+const headphoneAccessoryCluster = escolherClusterExatoDaPesquisaPublica(
+  HEADPHONE_QUERY,
+  [
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-zx100",
+      title: HEADPHONE_MAIN_A,
+      price: 900,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-zx100",
+      title: HEADPHONE_MAIN_B,
+      price: 870,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-zx100",
+      title: "Aurora ZX100 Headset",
+      price: 920,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-pads",
+      title: HEADPHONE_PADS,
+      price: 20,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-case",
+      title: HEADPHONE_CASE,
+      price: 18,
+      brand: "Aurora",
+    }),
+  ],
+);
+
+assert.equal(
+  headphoneAccessoryCluster.length,
+  3,
+  "Tres lojas MAIN equivalentes formam o cluster; AliExpress so com peca nao entra.",
+);
+assert.deepEqual(
+  headphoneAccessoryCluster.map((item) => item.product.marketplace).sort(),
+  ["Amazon", "Magazine Luiza", "Shopee"],
+);
+assert.ok(
+  headphoneAccessoryCluster.every((item) => item.product.price >= 800),
+  "Preco da peca nao interfere na identidade do cluster.",
+);
+assert.ok(
+  headphoneAccessoryCluster.every(
+    (item) => !/almofad|case/i.test(item.product.title),
+  ),
+);
+
+const padQueryCluster = escolherClusterExatoDaPesquisaPublica(
+  "almofada Aurora ZX100",
+  [
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-pad-query",
+      title: HEADPHONE_PADS,
+      price: 20,
+      brand: "Aurora",
+    }),
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-headphone-query",
+      title: HEADPHONE_MAIN_A,
+      price: 900,
+      brand: "Aurora",
+    }),
+  ],
+);
+
+assert.equal(
+  padQueryCluster.length,
+  1,
+  "Consulta de peca deve persistir a peca, nao o headphone.",
+);
+assert.match(padQueryCluster[0]!.product.title, /almofad/i);
+
 const queryPlan = criarConsultasGlobaisDeIdentidade(
   `${QUERY} 7891234567895`,
 );
@@ -356,6 +681,9 @@ async function runAsyncCases() {
           }),
         ],
       })),
+      adapter("ALIEXPRESS", "AliExpress", async () => {
+        throw new Error("aliexpress down");
+      }),
     ],
     5,
     { mode: "MULTILOJA" },
@@ -375,6 +703,12 @@ async function runAsyncCases() {
   assert.equal(
     discovery.results.find((result) => result.marketplace === "SHOPEE")?.success,
     true,
+  );
+  assert.equal(
+    discovery.results.find((result) => result.marketplace === "ALIEXPRESS")
+      ?.success,
+    false,
+    "A falha de uma loja nao pode impedir o Discovery das demais.",
   );
   assert.ok(
     discovery.candidates.some(
@@ -410,7 +744,334 @@ async function runAsyncCases() {
     new Set(clusterAposDiscovery.map((item) => item.product.marketplace)).size,
     clusterAposDiscovery.length,
   );
+
+  const LONG_QUERY =
+    "Headphone MarcaR Wave Wireless Rosa Resistente à Água";
+  const seenQueries: string[] = [];
+
+  const progressiveDiscovery = await descobrirProdutosComAdapters(
+    LONG_QUERY,
+    [
+      adapter("MERCADO_LIVRE", "Mercado Livre", async ({ query }) => {
+        seenQueries.push(query);
+        const compact = query.replace(/\s+/g, " ").trim();
+
+        if (compact === LONG_QUERY) {
+          return {
+            marketplace: "MERCADO_LIVRE",
+            query,
+            success: true,
+            scanned: 20,
+            candidates: [],
+          };
+        }
+
+        if (/marcar/.test(query.toLowerCase()) || /wave/.test(query.toLowerCase())) {
+          return {
+            marketplace: "MERCADO_LIVRE",
+            query,
+            success: true,
+            scanned: 8,
+            candidates: [
+              {
+                marketplace: "MERCADO_LIVRE",
+                marketplaceName: "Mercado Livre",
+                externalId: "MLB-WAVE",
+                sourceUrl: "https://loja.example/MLB-WAVE",
+                affiliateLink: "https://aff.example/MLB-WAVE",
+                title: LONG_QUERY,
+                image: "https://img.example/wave.jpg",
+                price: 189,
+                oldPrice: null,
+                brand: null,
+                attributes: {},
+                status: "FOUND",
+              },
+            ],
+          };
+        }
+
+        return {
+          marketplace: "MERCADO_LIVRE",
+          query,
+          success: true,
+          scanned: 3,
+          candidates: [],
+        };
+      }),
+      adapter("AMAZON", "Amazon", async ({ query }) => ({
+        marketplace: "AMAZON",
+        query,
+        success: true,
+        scanned: 0,
+        candidates: [],
+      })),
+    ],
+    5,
+    { mode: "MULTILOJA" },
+  );
+
+  assert.ok(
+    seenQueries.some((item) => item === LONG_QUERY),
+    "A consulta completa deve ir para o adapter.",
+  );
+  assert.ok(
+    seenQueries.some(
+      (item) =>
+        item.length < LONG_QUERY.length &&
+        /marcar|wave/.test(item.toLowerCase()),
+    ),
+    "O plano deve enviar fallback progressivo com termos distintivos.",
+  );
+  assert.ok(
+    progressiveDiscovery.candidates.some(
+      (item) => item.externalId === "MLB-WAVE",
+    ),
+    "O produto do fallback deve ser validado e preservado.",
+  );
+
+  const isolatedZero = await descobrirProdutosComAdapters(
+    LONG_QUERY,
+    [
+      adapter("MERCADO_LIVRE", "Mercado Livre", async ({ query }) => ({
+        marketplace: "MERCADO_LIVRE",
+        query,
+        success: true,
+        scanned: 16,
+        candidates: [],
+      })),
+      adapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => ({
+        marketplace: "MAGAZINE_LUIZA",
+        query: LONG_QUERY,
+        success: true,
+        scanned: 4,
+        candidates: [
+          {
+            marketplace: "MAGAZINE_LUIZA",
+            marketplaceName: "Magazine Luiza",
+            externalId: "mag-wave",
+            sourceUrl: "https://loja.example/mag-wave",
+            affiliateLink: "https://aff.example/mag-wave",
+            title: LONG_QUERY,
+            image: "https://img.example/wave.jpg",
+            price: 199,
+            oldPrice: null,
+            brand: null,
+            attributes: {},
+            status: "FOUND",
+          },
+        ],
+      })),
+    ],
+    5,
+    { mode: "MULTILOJA" },
+  );
+
+  assert.equal(
+    isolatedZero.results.find((item) => item.marketplace === "MERCADO_LIVRE")
+      ?.success,
+    true,
+  );
+  assert.equal(
+    isolatedZero.results.find((item) => item.marketplace === "MERCADO_LIVRE")
+      ?.candidates.length,
+    0,
+  );
+  assert.ok(
+    isolatedZero.candidates.some((item) => item.externalId === "mag-wave"),
+    "Zero candidatos em uma loja nao pode impedir as demais.",
+  );
 }
+
+const STRUCTURAL_QUERY = "Headphone MarcaX ZX100";
+const STRUCTURAL_MAIN_A = "Headphone MarcaX ZX100 Bluetooth";
+const STRUCTURAL_MAIN_B = "Fone Bluetooth MarcaX ZX100";
+const STRUCTURAL_MAIN_C = "Headphone MarcaX ZX100 Preto";
+const STRUCTURAL_CASE =
+  "Estojo de armazenamento de headphone para MarcaX ZX100 ZX200 ZX300 ZX400 ZX500 ZX600 bolsa rigida de transporte";
+
+const structuralCluster = escolherClusterExatoDaPesquisaPublica(
+  STRUCTURAL_QUERY,
+  [
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-zx100-main",
+      title: STRUCTURAL_MAIN_A,
+      price: 280,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-zx100-main",
+      title: STRUCTURAL_MAIN_B,
+      price: 250,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-zx100-main",
+      title: STRUCTURAL_MAIN_C,
+      price: 300,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-zx100-case",
+      title: STRUCTURAL_CASE,
+      price: 20,
+      brand: "MarcaX",
+    }),
+  ],
+);
+
+assert.equal(
+  structuralCluster.length,
+  3,
+  "Tres MAIN inequívocos formam o cluster; o estojo de 6 modelos nao disputa referencia.",
+);
+assert.ok(
+  structuralCluster.every((item) => item.product.price >= 200),
+  "Acessorio barato nao vira referencia MAIN independentemente do preco.",
+);
+assert.ok(
+  structuralCluster.every(
+    (item) => !/estojo|bolsa|transporte/i.test(item.product.title),
+  ),
+);
+assert.ok(
+  structuralCluster.some((item) => item.product.title === STRUCTURAL_MAIN_A),
+);
+
+const CONSENSUS_QUERY = "Headphone MarcaX ZX100";
+const consensusCluster = escolherClusterExatoDaPesquisaPublica(
+  CONSENSUS_QUERY,
+  [
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-zx100-a",
+      title: "Headphone MarcaX ZX100 Bluetooth",
+      price: 280,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-zx100-b",
+      title: "Headphone MarcaX ZX100 Preto",
+      price: 275,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-zx100-a",
+      title: "Fone Bluetooth MarcaX ZX100",
+      price: 250,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-zx100-b",
+      title: "Headphone MarcaX ZX100",
+      price: 255,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-zx100-a",
+      title: "Headphone MarcaX ZX100 Headset",
+      price: 300,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-zx100-b",
+      title: "MarcaX ZX100 Headphone",
+      price: 290,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-zx100-a",
+      title: "Headphone MarcaX ZX100 Azul",
+      price: 270,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-zx100-b",
+      title: "Headphone MarcaX ZX100 Bluetooth 5.3",
+      price: 268,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-zx100-sku",
+      title: "Headphone MarcaX ZX100 MXZX100 Branco - REEMBALADO",
+      price: 199,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "AliExpress",
+      externalId: "ali-zx100-amb",
+      title: "Headphone MarcaX ZX100 ZX200 kit",
+      price: 210,
+      brand: "MarcaX",
+    }),
+  ],
+);
+
+assert.ok(
+  consensusCluster.length >= 3,
+  "Consenso ZX100 em varias lojas deve formar Multi Loja.",
+);
+assert.ok(
+  new Set(consensusCluster.map((item) => item.product.marketplace)).size >= 3,
+);
+const consensusReference = consensusCluster[0];
+assert.ok(consensusReference);
+assert.equal(
+  /REEMBALADO/i.test(consensusReference.product.title),
+  false,
+  "REEMBALADO nao vira ancora quando existem anuncios novos equivalentes.",
+);
+assert.ok(
+  /ZX100/i.test(consensusReference.product.title),
+  "Referencia deve permanecer no grupo comercial ZX100.",
+);
+
+const distinctivePersistQuery = "Headphone MarcaR Wireless Rosa";
+const distinctivePersistCluster = escolherClusterExatoDaPesquisaPublica(
+  distinctivePersistQuery,
+  [
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-p47",
+      title: "Headphone Wireless Rosa P47",
+      price: 79,
+      brand: "Generica",
+    }),
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-marcas",
+      title: "Headphone MarcaS Wireless Rosa",
+      price: 899,
+      brand: "MarcaS",
+    }),
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-marcar",
+      title: "Headphone MarcaR Wireless Rosa",
+      price: 149,
+      brand: "MarcaR",
+    }),
+  ],
+);
+
+assert.equal(
+  distinctivePersistCluster.length,
+  1,
+  "Persistencia publica nao pode aceitar produto sem a entidade distintiva da consulta.",
+);
+assert.match(distinctivePersistCluster[0]!.product.title, /MarcaR/i);
 
 void runAsyncCases()
   .then(() => {

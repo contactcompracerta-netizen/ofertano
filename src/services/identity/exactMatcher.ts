@@ -3,7 +3,8 @@ import type {
 } from "@/services/importers/core/types";
 
 import {
-  ehCodigoSkuEspecifico,
+  codigosDeIdentidadeDoItemVendido,
+  ehPapelNaoPrincipal,
   normalizarCodigoIdentidade,
   normalizarTextoIdentidade,
   resolverIdentidadeProduto,
@@ -38,7 +39,6 @@ const HARD_VARIANT_KEYS: IdentityVariantKey[] = [
 ];
 
 const ASYMMETRIC_VARIANT_KEYS: IdentityVariantKey[] = [
-  "condition",
   "bundle",
 ];
 
@@ -173,10 +173,10 @@ function codigoModeloEmComum(
   first: ProductIdentity,
   second: ProductIdentity,
 ): string | null {
-  const secondCodes = new Set(second.searchCodes);
+  const secondCodes = new Set(codigosDeIdentidadeDoItemVendido(second));
 
   return (
-    first.searchCodes.find((code) =>
+    codigosDeIdentidadeDoItemVendido(first).find((code) =>
       secondCodes.has(code),
     ) ?? null
   );
@@ -192,8 +192,8 @@ function conflitoDeSubmodelo(
   first: ProductIdentity,
   second: ProductIdentity,
 ): string | null {
-  const firstCodes = Array.from(new Set(first.searchCodes));
-  const secondCodes = Array.from(new Set(second.searchCodes));
+  const firstCodes = Array.from(new Set(codigosDeIdentidadeDoItemVendido(first)));
+  const secondCodes = Array.from(new Set(codigosDeIdentidadeDoItemVendido(second)));
   const secondSet = new Set(secondCodes);
 
   const commonBases = firstCodes
@@ -274,14 +274,18 @@ function conflitoDeVariantes(
   return null;
 }
 
-function skusEspecificos(
+function skusDoFabricante(
   identity: ProductIdentity,
 ): string[] {
+  const commercial = normalizarCodigoIdentidade(
+    identity.commercialModel ?? identity.model,
+  );
   return Array.from(
     new Set(
-      identity.searchCodes
+      [identity.manufacturerSku, identity.mpn]
         .map((code) => normalizarCodigoIdentidade(code))
-        .filter((code): code is string => ehCodigoSkuEspecifico(code)),
+        .filter((code): code is string => Boolean(code))
+        .filter((code) => code !== commercial),
     ),
   ).sort((first, second) => second.length - first.length);
 }
@@ -300,12 +304,15 @@ function skusEspecificosCompativeis(
 function conflitoDeSkuEspecifico(
   first: ProductIdentity,
   second: ProductIdentity,
-): string | null {
-  const firstSkus = skusEspecificos(first);
-  const secondSkus = skusEspecificos(second);
+): {
+  conflict: string | null;
+  missingOnly: boolean;
+} {
+  const firstSkus = skusDoFabricante(first);
+  const secondSkus = skusDoFabricante(second);
 
   if (firstSkus.length === 0 && secondSkus.length === 0) {
-    return null;
+    return { conflict: null, missingOnly: false };
   }
 
   if (firstSkus.length > 0 && secondSkus.length > 0) {
@@ -316,15 +323,20 @@ function conflitoDeSkuEspecifico(
     );
 
     if (!compatible) {
-      return `SKU especifico diferente: ${firstSkus[0]} x ${secondSkus[0]}.`;
+      return {
+        conflict: `SKU especifico diferente: ${firstSkus[0]} x ${secondSkus[0]}.`,
+        missingOnly: false,
+      };
     }
 
-    return null;
+    return { conflict: null, missingOnly: false };
   }
 
-  const only = firstSkus[0] ?? secondSkus[0]!;
-
-  return `SKU especifico ${only} nao confirmado no outro anuncio.`;
+  /*
+   * SKU presente em um lado e ausente no outro nao prova produto diferente.
+   * So ha conflito quando os dois anuncios declaram part numbers incompativeis.
+   */
+  return { conflict: null, missingOnly: true };
 }
 
 
@@ -552,6 +564,19 @@ function compararCalcados(
   return null;
 }
 
+function tokensComerciais(
+  identity: ProductIdentity,
+): string[] {
+  return identity.normalizedTitle
+    .split(" ")
+    .filter(
+      (token) =>
+        Boolean(token) &&
+        token.length >= 2 &&
+        !COMMERCIAL_STOP_WORDS.has(token),
+    );
+}
+
 function titulosComerciaisEquivalentes(
   first: ProductIdentity,
   second: ProductIdentity,
@@ -567,36 +592,74 @@ function titulosComerciaisEquivalentes(
     return firstTitle.split(" ").length >= 3;
   }
 
-  const shorter =
-    firstTitle.length <= secondTitle.length
-      ? firstTitle
-      : secondTitle;
-  const longer =
-    firstTitle.length > secondTitle.length
-      ? firstTitle
-      : secondTitle;
-  const shorterTokens = shorter.split(" ").filter(Boolean);
+  const firstTokens = tokensComerciais(first);
+  const secondTokens = tokensComerciais(second);
 
-  return (
-    shorterTokens.length >= 5 &&
-    shorter.length / longer.length >= 0.72 &&
-    longer.includes(shorter)
-  );
+  if (firstTokens.length < 3 || secondTokens.length < 3) {
+    return false;
+  }
+
+  const [shorter, longer] =
+    firstTokens.length <= secondTokens.length
+      ? [firstTokens, secondTokens]
+      : [secondTokens, firstTokens];
+  const longerSet = new Set(longer);
+  const covered = shorter.filter((token) => longerSet.has(token)).length;
+  const coverage = covered / shorter.length;
+  const sizeRatio = shorter.length / longer.length;
+
+  /*
+   * Equivalencia estrutural de titulo: o anuncio mais curto precisa ter
+   * quase todos os tokens comerciais presentes no mais longo, sem exigir
+   * substring literal. Isso une "Lanterna Tatica LED X" e
+   * "Lanterna Tatica LED Recarregavel X" sem juntar produtos que so
+   * compartilham uma palavra isolada.
+   */
+  return coverage >= 0.8 && sizeRatio >= 0.5;
 }
 
 export function avaliarIdentidadesExatas(
   first: ProductIdentity,
   second: ProductIdentity,
 ): ExactMatchResult {
-  const firstIsAccessory =
-    first.kind === "ACCESSORY";
-  const secondIsAccessory =
-    second.kind === "ACCESSORY";
+  const firstAccessoryLike = ehPapelNaoPrincipal(first.kind);
+  const secondAccessoryLike = ehPapelNaoPrincipal(second.kind);
 
-  if (firstIsAccessory !== secondIsAccessory) {
+  if (firstAccessoryLike !== secondAccessoryLike) {
     return reject(
       "Produto principal e acessorio/peca de reposicao nao podem ser agrupados automaticamente.",
     );
+  }
+
+  if (
+    firstAccessoryLike &&
+    secondAccessoryLike &&
+    first.kind !== second.kind
+  ) {
+    return reject(
+      "Acessorio e peca de reposicao nao podem ser agrupados automaticamente.",
+    );
+  }
+
+  if (first.multiModelCompatibility || second.multiModelCompatibility) {
+    if (!firstAccessoryLike || !secondAccessoryLike) {
+      return reject(
+        "Lista de compatibilidade com varios modelos nao pode identificar o produto principal.",
+      );
+    }
+  }
+
+  if (
+    (first.hostModelCandidates.length > 0 &&
+      first.identityModelCandidates.length === 0) ||
+    (second.hostModelCandidates.length > 0 &&
+      second.identityModelCandidates.length === 0)
+  ) {
+    if (!firstAccessoryLike || !secondAccessoryLike) {
+      return reject(
+        "Modelos de hospedeiro nao podem identificar o item vendido.",
+      );
+    }
   }
 
   const firstGlobalCode = globalCode(first);
@@ -644,13 +707,31 @@ export function avaliarIdentidadesExatas(
     return reject(submodelConflict);
   }
 
-  const skuConflict = conflitoDeSkuEspecifico(first, second);
+  const skuCheck = conflitoDeSkuEspecifico(first, second);
 
-  if (skuConflict) {
-    return reject(skuConflict);
+  if (skuCheck.conflict) {
+    return reject(skuCheck.conflict);
   }
 
-  const commonModel = codigoModeloEmComum(first, second);
+  const firstCommercial =
+    first.commercialModel ?? first.model;
+  const secondCommercial =
+    second.commercialModel ?? second.model;
+
+  if (
+    firstCommercial &&
+    secondCommercial &&
+    firstCommercial !== secondCommercial
+  ) {
+    return reject(
+      `Modelo comercial diferente: ${firstCommercial} x ${secondCommercial}.`,
+    );
+  }
+
+  const commonModel =
+    firstCommercial && secondCommercial
+      ? firstCommercial
+      : codigoModeloEmComum(first, second);
   const firstStructuredModel = modeloEstruturado(first);
   const secondStructuredModel = modeloEstruturado(second);
 

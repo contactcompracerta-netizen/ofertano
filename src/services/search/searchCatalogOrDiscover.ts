@@ -11,6 +11,7 @@ import { persistPublicSearchCluster } from "@/services/search/persistPublicSearc
 import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
 import type { DiscoveryCandidate } from "@/services/discovery/core/types";
 import type { ProductImport } from "@/services/importers/core/types";
+import { traceMultiloja } from "@/services/multiloja/trace";
 
 function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -358,6 +359,8 @@ export async function searchCatalogOrDiscover(
       products: [],
     };
   }
+
+  traceMultiloja("query", { query: search });
 
   /*
    * MULTI LOJA DA PESQUISA PUBLICA

@@ -36,15 +36,35 @@ export function pontuarEvidenciaIdentidade(
     score += 100;
   }
 
-  if (identity.mpn || identity.modelNumber) {
+  if (identity.mpn && identity.mpn === (identity.commercialModel ?? identity.model)) {
+    score += 50;
+  } else if (identity.modelNumber && identity.modelNumber === (identity.commercialModel ?? identity.model)) {
     score += 50;
   }
 
-  if (identity.modelTokens.length > 0) {
-    score += Math.min(
-      25,
-      identity.modelTokens.length * 5,
-    );
+  if (identity.kind === "ACCESSORY" || identity.kind === "REPLACEMENT_PART") {
+    score -= 80;
+  }
+
+  if (
+    identity.multiModelCompatibility ||
+    (
+      identity.hostModelCandidates.length > 0 &&
+      identity.identityModelCandidates.length === 0
+    )
+  ) {
+    score -= 200;
+  } else if (
+    identity.model &&
+    identity.identityModelCandidates.length <= 1
+  ) {
+    score += 40;
+  } else if (identity.identityModelCandidates.length === 1) {
+    score += 20;
+  }
+
+  if (identity.modelAmbiguous) {
+    score -= 80;
   }
 
   if (identity.brand) {
@@ -54,14 +74,6 @@ export function pontuarEvidenciaIdentidade(
   score += Object.values(identity.variants)
     .filter(Boolean)
     .length * 4;
-
-  score += Math.min(
-    10,
-    identity.normalizedTitle
-      .split(" ")
-      .filter(Boolean)
-      .length,
-  );
 
   return score;
 }

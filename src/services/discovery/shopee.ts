@@ -8,6 +8,7 @@ import type {
   DiscoveryQuery,
   MarketplaceDiscoveryResult,
 } from "./core/types";
+import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
 
 const TERMOS_ACESSORIOS = [
   "capa",
@@ -41,10 +42,6 @@ const TERMOS_ACESSORIOS = [
   "skin",
   "adesivo",
   "adesivos",
-  "fone",
-  "fones",
-  "headset",
-  "earphone",
   "borracha",
   "borrachas",
   "vedacao",
@@ -231,6 +228,10 @@ function possuiAcessorioNaoSolicitado(
   titulo: string,
   consulta: string,
 ): boolean {
+  if (ehAcessorioNaoSolicitadoPelaConsulta(consulta, titulo)) {
+    return true;
+  }
+
   const tituloNormalizado =
     normalizarTexto(titulo);
 

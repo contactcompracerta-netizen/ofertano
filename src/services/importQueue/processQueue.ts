@@ -1,8 +1,8 @@
 import prisma from "@/lib/prisma";
 import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
+import { publicarProdutoComMultiloja } from "@/services/multiloja/publishWithMultiloja";
 import {
   corrigirLinksAmazonPendentes,
-  saveProduct,
 } from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
 import type {
@@ -112,7 +112,7 @@ export async function processImportQueue(
     return {
       success: true,
       message:
-        "NÃ£o hÃ¡ produtos pendentes na fila.",
+        "Não há produtos pendentes na fila.",
       processed: 0,
       imported: 0,
       errors: 0,
@@ -154,15 +154,15 @@ export async function processImportQueue(
      * MODO COMPARACAO DE PRODUTO JA PUBLICADO
      *
      * Uma linha PENDING com productId preenchido e sem opportunityId
-     * representa um Product que jÃ¡ foi publicado pela busca do site
-     * e agora precisa receber o Multi Loja fora da requisiÃ§Ã£o pÃºblica.
+     * representa um Product que já foi publicado pela busca do site
+     * e agora precisa receber o Multi Loja fora da requisição pública.
      *
      * Nesse modo:
-     * - o Product existente NÃƒO Ã© recriado;
-     * - usamos a URL da oferta de referÃªncia apenas para reconstruir
-     *   o ProductImport necessÃ¡rio ao matcher;
+     * - o Product existente NÃO é recriado;
+     * - usamos a URL da oferta de referência apenas para reconstruir
+     *   o ProductImport necessário ao matcher;
      * - o comparador salva somente ofertas EXACT no mesmo productId;
-     * - o trabalho pesado fica na fila e nÃ£o segura a busca do cliente.
+     * - o trabalho pesado fica na fila e não segura a busca do cliente.
      */
     if (
       item.productId &&
@@ -446,7 +446,7 @@ const processedAt =
         });
 
         console.log(
-          `[ImportQueue] Multi Loja em fila concluÃ­do para ${item.productId}: ` +
+          `[ImportQueue] Multi Loja em fila concluído para ${item.productId}: ` +
             `${comparison.found} oferta(s) EXACT encontrada(s).`,
         );
 
@@ -479,7 +479,7 @@ const processedAt =
         const mensagem =
           error instanceof Error
             ? error.message
-            : "Erro desconhecido ao processar comparaÃ§Ã£o Multi Loja.";
+            : "Erro desconhecido ao processar comparação Multi Loja.";
 
         const processedAt =
           new Date();
@@ -535,7 +535,7 @@ const processedAt =
       /*
        * Prioridade do link:
        *
-       * 1. Link individual jÃ¡ salvo na fila;
+       * 1. Link individual já salvo na fila;
        * 2. Link individual retornado pelo importador;
        * 3. null -> oferta fica pendente de afiliado.
        */
@@ -546,34 +546,45 @@ const processedAt =
 
       /*
        * Se existe opportunityId, o item foi criado
-       * pelo sistema automÃ¡tico de oportunidades.
+       * pelo sistema automático de oportunidades.
        *
        * Nesse caso:
        * - Product.autoCreated = true
        * - discoverySource = OPPORTUNITY
        *
-       * Itens adicionados manualmente Ã  fila continuam
-       * usando o comportamento padrÃ£o do saveProduct.
+       * Itens adicionados manualmente à fila continuam
+       * usando o comportamento padrão do saveProduct.
        */
-      const saved =
-        await saveProduct(
-          imported,
-          affiliateLink,
-          item.opportunityId
-            ? {
-                autoCreated: true,
-                discoverySource:
-                  "OPPORTUNITY",
-              }
-            : undefined,
-        );
+      const {
+        product: saved,
+        comparison,
+      } = await publicarProdutoComMultiloja(
+        imported,
+        affiliateLink,
+        {
+          autoCreated:
+            Boolean(item.opportunityId),
+
+          discoverySource:
+            item.opportunityId
+              ? "OPPORTUNITY"
+              : "MANUAL",
+
+          queueOnFailure: true,
+        },
+      );
+
+      console.log(
+        `[ImportQueue] Produto ${saved.id} publicado com Multi Loja: ` +
+          `${comparison.found} oferta(s) EXACT adicional(is).`,
+      );
 
       /*
-       * A publicaÃ§Ã£o da oferta de origem Ã© concluÃ­da
-       * antes da comparaÃ§Ã£o Multi Loja.
+       * A publicação da oferta de origem é concluída
+       * antes da comparação Multi Loja.
        *
-       * Assim, uma falha ou lentidÃ£o em outra marketplace
-       * nunca desfaz o produto que o robÃ´ jÃ¡ importou.
+       * Assim, uma falha ou lentidão em outra marketplace
+       * nunca desfaz o produto que o robô já importou.
        */
       const processedAt =
         new Date();
@@ -627,52 +638,6 @@ const processedAt =
           }
         },
       );
-
-      /*
-       * ETAPA MULTI LOJA
-       *
-       * Depois que a oferta de origem jÃ¡ estÃ¡ salva no
-       * Product canÃ´nico, executamos o mesmo comparador
-       * usado pela importaÃ§Ã£o manual.
-       *
-       * O comparador:
-       * - consulta as marketplaces integradas;
-       * - ignora a marketplace de origem;
-       * - valida identidade/variante com matcher estrito;
-       * - aceita somente EXACT;
-       * - salva a oferta no mesmo targetProductId;
-       * - nÃ£o forÃ§a presenÃ§a nas 5 lojas.
-       *
-       * Qualquer erro aqui Ã© nÃ£o fatal:
-       * o produto de origem continua publicado e poderÃ¡
-       * ser pesquisado novamente posteriormente.
-       */
-      try {
-        const comparison =
-          await buscarComparacaoManual(
-            imported,
-            saved.id,
-          );
-
-        console.log(
-          `[ImportQueue] Multi Loja concluÃ­do para ${saved.id}: ` +
-            `${comparison.found} oferta(s) EXACT encontrada(s).`,
-        );
-
-        if (
-          comparison.errors.length > 0
-        ) {
-          console.warn(
-            `[ImportQueue] Multi Loja de ${saved.id} terminou com avisos:`,
-            comparison.errors,
-          );
-        }
-      } catch (comparisonError) {
-        console.error(
-          `[ImportQueue] Falha nÃ£o fatal no Multi Loja do produto ${saved.id}:`,
-          comparisonError,
-        );
-      }
 
       results.push({
         queueId:

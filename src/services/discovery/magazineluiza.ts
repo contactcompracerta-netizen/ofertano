@@ -3,6 +3,7 @@ import type {
     DiscoveryQuery,
     MarketplaceDiscoveryResult,
   } from "./core/types";
+  import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
   
   const MARKETPLACE = "MAGAZINE_LUIZA" as const;
   const MARKETPLACE_NAME = "Magazine Luiza" as const;
@@ -47,11 +48,6 @@ import type {
     "skin",
     "adesivo",
     "adesivos",
-    "fone",
-    "fones",
-    "headset",
-    "earphone",
-    "earphones",
     "borracha",
     "borrachas",
     "vedacao",
@@ -341,6 +337,10 @@ import type {
     titulo: string,
     consulta: string,
   ): boolean {
+    if (ehAcessorioNaoSolicitadoPelaConsulta(consulta, titulo)) {
+      return true;
+    }
+
     const tituloNormalizado =
       normalizarTexto(titulo);
   
@@ -1681,13 +1681,11 @@ export async function buscarMagazineLuiza(
         }
   
         if (
-        !modoMultiloja && (
           possuiAcessorioNaoSolicitado(
             titulo,
             query,
           )
-        
-        )) {
+        ) {
           continue;
         }
   

@@ -1,5 +1,13 @@
-import prisma from "@/lib/prisma";
 import { saveProduct } from "@/services/database/saveProduct";
+import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
+import {
+  agruparPorIdentidadeExata,
+  pontuarEvidenciaIdentidade,
+} from "@/services/identity";
+import {
+  agendarComparacaoMultiloja,
+  type ReferenciaMultiloja,
+} from "@/services/multiloja/orchestrator";
 
 import type {
   ProductImport,
@@ -9,17 +17,6 @@ import type {
   DiscoveryCandidate,
   ProductDiscoveryResult,
 } from "./core/types";
-
-const PRIORIDADE_MARKETPLACE: Record<
-  DiscoveryCandidate["marketplace"],
-  number
-> = {
-  MERCADO_LIVRE: 0,
-  MAGAZINE_LUIZA: 1,
-  AMAZON: 2,
-  SHOPEE: 3,
-  ALIEXPRESS: 4,
-};
 
 export type DiscoveryPublishItem = {
   marketplace: DiscoveryCandidate["marketplace"];
@@ -32,23 +29,41 @@ export type DiscoveryPublishItem = {
 
 export type DiscoveryPublishResult = {
   query: string;
-
   received: number;
   publishable: number;
-
   published: number;
   failed: number;
   skipped: number;
-
   productIds: string[];
-
   items: DiscoveryPublishItem[];
 };
 
-type ReferenciaMultiloja = {
-  marketplace: DiscoveryCandidate["marketplace"];
-  sourceUrl: string;
-  affiliateLink: string | null;
+export type DiscoveryPublishOptions = {
+  /*
+   * Mantido por compatibilidade com os chamadores existentes.
+   * O Publisher global nao depende mais de uma ancora do Mercado Livre.
+   */
+  comparisonOnly?: boolean;
+
+  /*
+   * A pesquisa publica ja consultou todas as lojas; nela nao faz sentido
+   * disparar imediatamente uma segunda rodada do Multi Loja pela fila.
+   * Outros fluxos podem manter o follow-up assincrono quando desejarem.
+   */
+  scheduleMultiloja?: boolean;
+
+  /*
+   * Quando true, cada Product publicado recebe imediatamente uma rodada
+   * completa de comparacao nas outras marketplaces antes do retorno.
+   * As ofertas EXACT sao gravadas no MESMO productId e o Product termina
+   * sincronizado com o menor preco encontrado.
+   */
+  completeMultiloja?: boolean;
+};
+
+type CandidateEvidence = {
+  candidate: DiscoveryCandidate;
+  product: ProductImport;
 };
 
 function calcularDesconto(
@@ -66,19 +81,13 @@ function calcularDesconto(
     return null;
   }
 
-  const percentual =
-    Math.round(
-      ((oldPrice - price) / oldPrice) * 100,
-    );
+  const percentual = Math.round(
+    ((oldPrice - price) / oldPrice) * 100,
+  );
 
-  if (
-    percentual <= 0 ||
-    percentual >= 100
-  ) {
-    return null;
-  }
-
-  return percentual;
+  return percentual > 0 && percentual < 100
+    ? percentual
+    : null;
 }
 
 function candidatoPublicavel(
@@ -86,22 +95,12 @@ function candidatoPublicavel(
 ): boolean {
   return (
     candidato.status === "FOUND" &&
-    Boolean(
-      candidato.externalId.trim(),
-    ) &&
-    Boolean(
-      candidato.sourceUrl.trim(),
-    ) &&
-    Boolean(
-      candidato.title.trim(),
-    ) &&
-    Boolean(
-      candidato.image?.trim(),
-    ) &&
+    Boolean(candidato.externalId.trim()) &&
+    Boolean(candidato.sourceUrl.trim()) &&
+    Boolean(candidato.title.trim()) &&
+    Boolean(candidato.image?.trim()) &&
     candidato.price !== null &&
-    Number.isFinite(
-      candidato.price,
-    ) &&
+    Number.isFinite(candidato.price) &&
     candidato.price > 0
   );
 }
@@ -111,547 +110,421 @@ function converterCandidato(
 ): ProductImport {
   if (
     candidato.price === null ||
-    !Number.isFinite(
-      candidato.price,
-    ) ||
+    !Number.isFinite(candidato.price) ||
     candidato.price <= 0
   ) {
-    throw new Error(
-      "Candidato sem preço válido.",
-    );
+    throw new Error("Candidato sem preco valido.");
   }
 
-  const image =
-    candidato.image?.trim();
+  const image = candidato.image?.trim();
 
   if (!image) {
-    throw new Error(
-      "Candidato sem imagem válida.",
-    );
+    throw new Error("Candidato sem imagem valida.");
   }
 
   const oldPrice =
     candidato.oldPrice !== null &&
-    Number.isFinite(
-      candidato.oldPrice,
-    ) &&
-    candidato.oldPrice >
-      candidato.price
+    Number.isFinite(candidato.oldPrice) &&
+    candidato.oldPrice > candidato.price
       ? candidato.oldPrice
       : null;
 
   return {
-    marketplace:
-      candidato.marketplaceName,
-
-    externalId:
-      candidato.externalId.trim(),
-
-    url:
-      candidato.sourceUrl.trim(),
-
-    affiliateLink:
-      candidato.affiliateLink?.trim() ||
-      null,
-
-    title:
-      candidato.title.trim(),
-
-    description:
-      null,
-
-    brand:
-      candidato.brand?.trim() ||
-      null,
-
-    category:
-      candidato.category?.trim() ||
-      null,
-
+    marketplace: candidato.marketplaceName,
+    externalId: candidato.externalId.trim(),
+    url: candidato.sourceUrl.trim(),
+    affiliateLink: candidato.affiliateLink?.trim() || null,
+    title: candidato.title.trim(),
+    description: null,
+    brand: candidato.brand?.trim() || null,
+    category: candidato.category?.trim() || null,
     image,
-
-    images: [
-      image,
-    ],
-
-    price:
-      candidato.price,
-
+    images: [image],
+    price: candidato.price,
     oldPrice,
-
-    discount:
-      calcularDesconto(
-        oldPrice,
-        candidato.price,
-      ),
-
-    installments:
-      null,
-
-    rating:
-      null,
-
-    reviews:
-      null,
-
-    sales:
-      null,
-
-    stock:
-      null,
-
-    seller:
-      candidato.seller?.trim() ||
-      null,
-
-    attributes:
-      {},
+    discount: calcularDesconto(oldPrice, candidato.price),
+    installments: null,
+    rating: null,
+    reviews: null,
+    sales: null,
+    stock: null,
+    seller: candidato.seller?.trim() || null,
+    attributes: candidato.attributes ?? {},
   };
 }
 
-function ordenarParaPersistencia(
-  candidatos: DiscoveryCandidate[],
-): DiscoveryCandidate[] {
-  return [...candidatos].sort(
-    (
-      primeiro,
-      segundo,
-    ) => {
-      const prioridadePrimeiro =
-        PRIORIDADE_MARKETPLACE[
-          primeiro.marketplace
-        ];
-
-      const prioridadeSegundo =
-        PRIORIDADE_MARKETPLACE[
-          segundo.marketplace
-        ];
-
-      if (
-        prioridadePrimeiro !==
-        prioridadeSegundo
-      ) {
-        return (
-          prioridadePrimeiro -
-          prioridadeSegundo
-        );
-      }
-
-      /*
-       * Dentro do mesmo marketplace, processamos
-       * primeiro os preços maiores.
-       *
-       * Se duas ofertas acabarem apontando para o
-       * mesmo Product + marketplace, a mais barata
-       * será persistida por último.
-       */
-      const precoPrimeiro =
-        primeiro.price ??
-        Number.POSITIVE_INFINITY;
-
-      const precoSegundo =
-        segundo.price ??
-        Number.POSITIVE_INFINITY;
-
-      return (
-        precoSegundo -
-        precoPrimeiro
-      );
-    },
-  );
+function chaveCandidato(
+  candidato: DiscoveryCandidate,
+): string {
+  return [
+    candidato.marketplace,
+    candidato.externalId.trim().toLowerCase(),
+  ].join(":");
 }
 
 function removerDuplicados(
   candidatos: DiscoveryCandidate[],
 ): DiscoveryCandidate[] {
-  const mapa =
-    new Map<
-      string,
-      DiscoveryCandidate
-    >();
+  const mapa = new Map<string, DiscoveryCandidate>();
 
-  for (
-    const candidato of candidatos
-  ) {
-    const chave = [
-      candidato.marketplace,
-      candidato.externalId
-        .trim()
-        .toLowerCase(),
-    ].join(":");
-
-    const atual =
-      mapa.get(chave);
+  for (const candidato of candidatos) {
+    const chave = chaveCandidato(candidato);
+    const atual = mapa.get(chave);
 
     if (!atual) {
-      mapa.set(
-        chave,
-        candidato,
-      );
-
+      mapa.set(chave, candidato);
       continue;
     }
 
-    const atualTemLink =
-      Boolean(
-        atual.affiliateLink?.trim(),
-      );
+    const novoTemLink = Boolean(candidato.affiliateLink?.trim());
+    const atualTemLink = Boolean(atual.affiliateLink?.trim());
 
-    const novoTemLink =
-      Boolean(
-        candidato.affiliateLink?.trim(),
-      );
-
-    if (
-      novoTemLink &&
-      !atualTemLink
-    ) {
-      mapa.set(
-        chave,
-        candidato,
-      );
-
+    if (novoTemLink && !atualTemLink) {
+      mapa.set(chave, candidato);
       continue;
     }
 
     if (
       candidato.price !== null &&
-      (
-        atual.price === null ||
-        candidato.price <
-          atual.price
-      )
+      (atual.price === null || candidato.price < atual.price)
     ) {
-      mapa.set(
-        chave,
-        candidato,
-      );
+      mapa.set(chave, candidato);
     }
   }
 
-  return Array.from(
-    mapa.values(),
+  return Array.from(mapa.values());
+}
+
+function melhorOfertaDaMesmaLoja(
+  first: CandidateEvidence,
+  second: CandidateEvidence,
+): CandidateEvidence {
+  const firstHasLink = Boolean(
+    first.candidate.affiliateLink?.trim(),
   );
+  const secondHasLink = Boolean(
+    second.candidate.affiliateLink?.trim(),
+  );
+
+  if (firstHasLink !== secondHasLink) {
+    return secondHasLink ? second : first;
+  }
+
+  const firstPrice = first.candidate.price ?? Number.POSITIVE_INFINITY;
+  const secondPrice = second.candidate.price ?? Number.POSITIVE_INFINITY;
+
+  if (firstPrice !== secondPrice) {
+    return secondPrice < firstPrice ? second : first;
+  }
+
+  return pontuarEvidenciaIdentidade(second) >
+    pontuarEvidenciaIdentidade(first)
+    ? second
+    : first;
 }
 
-function criarUrlFilaMultiloja(
-  sourceUrl: string,
-  productId: string,
-): string {
-  const original =
-    sourceUrl.trim();
+function umaOfertaPorMarketplace(
+  members: CandidateEvidence[],
+): CandidateEvidence[] {
+  const byMarketplace = new Map<
+    DiscoveryCandidate["marketplace"],
+    CandidateEvidence
+  >();
 
-  const marcador =
-    `ofertano-multiloja=${encodeURIComponent(
-      productId,
-    )}`;
+  for (const member of members) {
+    const current = byMarketplace.get(
+      member.candidate.marketplace,
+    );
 
-  try {
-    const url =
-      new URL(original);
+    byMarketplace.set(
+      member.candidate.marketplace,
+      current
+        ? melhorOfertaDaMesmaLoja(current, member)
+        : member,
+    );
+  }
 
-    const hashAtual =
-      url.hash
-        .replace(/^#/, "")
-        .trim();
+  return Array.from(byMarketplace.values());
+}
 
-    url.hash =
-      hashAtual
-        ? `${hashAtual}&${marcador}`
-        : marcador;
+function ordenarClusterParaPersistencia(
+  members: CandidateEvidence[],
+): CandidateEvidence[] {
+  return [...members].sort((first, second) => {
+    const identityDifference =
+      pontuarEvidenciaIdentidade(second) -
+      pontuarEvidenciaIdentidade(first);
 
-    return url.toString();
-  } catch {
+    if (identityDifference !== 0) {
+      return identityDifference;
+    }
+
+    const firstHasLink = Boolean(
+      first.candidate.affiliateLink?.trim(),
+    );
+    const secondHasLink = Boolean(
+      second.candidate.affiliateLink?.trim(),
+    );
+
+    if (firstHasLink !== secondHasLink) {
+      return Number(secondHasLink) - Number(firstHasLink);
+    }
+
     return (
-      original +
-      (
-        original.includes("#")
-          ? "&"
-          : "#"
-      ) +
-      marcador
+      (first.candidate.price ?? Number.POSITIVE_INFINITY) -
+      (second.candidate.price ?? Number.POSITIVE_INFINITY)
     );
-  }
+  });
 }
 
-async function agendarComparacaoMultiloja(
-  productId: string,
-  referencia: ReferenciaMultiloja,
-): Promise<void> {
-  /*
-   * A ImportQueue já possui URL única.
-   *
-   * Para não colidir com uma eventual fila de importação
-   * da mesma oferta, usamos um fragmento interno determinístico.
-   * Fragmentos (#...) não são enviados ao servidor remoto e
-   * preservam a URL real que o importador utiliza.
-   */
-  const url =
-    criarUrlFilaMultiloja(
-      referencia.sourceUrl,
-      productId,
+function ordenarClusters(
+  clusters: Array<{
+    members: CandidateEvidence[];
+  }>,
+) {
+  return [...clusters].sort((first, second) => {
+    const firstStores = new Set(
+      first.members.map((item) => item.candidate.marketplace),
+    ).size;
+    const secondStores = new Set(
+      second.members.map((item) => item.candidate.marketplace),
+    ).size;
+
+    if (firstStores !== secondStores) {
+      return secondStores - firstStores;
+    }
+
+    const firstPrice = Math.min(
+      ...first.members.map(
+        (item) => item.candidate.price ?? Number.POSITIVE_INFINITY,
+      ),
+    );
+    const secondPrice = Math.min(
+      ...second.members.map(
+        (item) => item.candidate.price ?? Number.POSITIVE_INFINITY,
+      ),
     );
 
-  const existente =
-    await prisma.importQueue.findUnique({
-      where: {
-        url,
-      },
-
-      select: {
-        id: true,
-      },
-    });
-
-  /*
-   * A mesma combinação Product + referência é agendada uma vez.
-   * Retry continua sendo responsabilidade da própria fila/admin.
-   */
-  if (existente) {
-    return;
-  }
-
-  await prisma.importQueue.create({
-    data: {
-      url,
-
-      marketplace:
-        referencia.marketplace,
-
-      status:
-        "PENDING",
-
-      productId,
-
-      affiliateLink:
-        referencia.affiliateLink,
-    },
+    return firstPrice - secondPrice;
   });
 }
 
 export async function publicarResultadoDiscovery(
   resultado: ProductDiscoveryResult,
+  options: DiscoveryPublishOptions = {},
 ): Promise<DiscoveryPublishResult> {
-  const recebidos =
-    resultado.candidates;
+  const recebidos = resultado.candidates;
+  const unicos = removerDuplicados(recebidos);
+  const publicaveis = unicos.filter(candidatoPublicavel);
 
-  const unicos =
-    removerDuplicados(
-      recebidos,
-    );
+  const items: DiscoveryPublishItem[] = [];
+  const productIds = new Set<string>();
+  const referenciasMultiloja = new Map<
+    string,
+    ReferenciaMultiloja
+  >();
 
-  const publicaveis =
-    ordenarParaPersistencia(
-      unicos.filter(
-        candidatoPublicavel,
-      ),
-    );
+  const referenciasComparacao = new Map<
+    string,
+    ProductImport
+  >();
 
-  const items:
-    DiscoveryPublishItem[] =
-      [];
-
-  const productIds =
-    new Set<string>();
-
-  /*
-   * Guarda uma referência importável por Product.
-   *
-   * Diferente da implementação anterior, NÃO executamos
-   * buscarComparacaoManual() dentro da requisição pública.
-   *
-   * Depois que os candidatos da busca já foram persistidos,
-   * cada Product recebe uma tarefa PENDING na ImportQueue.
-   * O processador da fila executará o Multi Loja fora da
-   * requisição do cliente, evitando multiplicar buscas nas
-   * cinco marketplaces e estourar o tempo da Vercel.
-   */
-  const referenciasMultiloja =
-    new Map<
-      string,
-      ReferenciaMultiloja
-    >();
-
-  let published = 0;
+  const evidencias: CandidateEvidence[] = [];
   let failed = 0;
 
-  for (
-    const candidato of publicaveis
-  ) {
+  for (const candidato of publicaveis) {
     try {
-      const productImport =
-        converterCandidato(
-          candidato,
-        );
-
-      /*
-       * Não usamos targetProductId aqui.
-       *
-       * O saveProduct já possui a regra canônica
-       * responsável por:
-       * - localizar a oferta pelo marketplace/externalId;
-       * - localizar Product por canonicalKey;
-       * - comparar identidade/modelo/variante;
-       * - criar ou atualizar MarketplaceOffer;
-       * - registrar PriceHistory;
-       * - sincronizar a melhor oferta EXACT.
-       *
-       * Forçar targetProductId neste estágio poderia
-       * agrupar produtos diferentes em buscas amplas
-       * como "Smartwatch".
-       */
-      const saved =
-        await saveProduct(
-          productImport,
-          candidato.affiliateLink?.trim() ||
-            null,
-          {
-            discoverySource:
-              "ON_DEMAND_SEARCH",
-
-            autoCreated:
-              true,
-
-            sourceQuery:
-              resultado.query,
-          },
-        );
-
-      productIds.add(
-        saved.id,
-      );
-
-      if (
-        !referenciasMultiloja.has(
-          saved.id,
-        )
-      ) {
-        referenciasMultiloja.set(
-          saved.id,
-          {
-            marketplace:
-              candidato.marketplace,
-
-            sourceUrl:
-              candidato.sourceUrl.trim(),
-
-            affiliateLink:
-              candidato.affiliateLink?.trim() ||
-              null,
-          },
-        );
-      }
-
-      published += 1;
-
-      items.push({
-        marketplace:
-          candidato.marketplace,
-
-        externalId:
-          candidato.externalId,
-
-        title:
-          candidato.title,
-
-        productId:
-          saved.id,
-
-        success:
-          true,
-
-        error:
-          null,
+      evidencias.push({
+        candidate: candidato,
+        product: converterCandidato(candidato),
       });
     } catch (error) {
       failed += 1;
-
       items.push({
-        marketplace:
-          candidato.marketplace,
-
-        externalId:
-          candidato.externalId,
-
-        title:
-          candidato.title,
-
-        productId:
-          null,
-
-        success:
-          false,
-
-        error:
-          (
-            error instanceof Error
-              ? error.message
-              : "Erro desconhecido ao publicar candidato."
-          ).slice(
-            0,
-            1000,
-          ),
+        marketplace: candidato.marketplace,
+        externalId: candidato.externalId,
+        title: candidato.title,
+        productId: null,
+        success: false,
+        error: (
+          error instanceof Error
+            ? error.message
+            : "Erro ao preparar candidato para identidade global."
+        ).slice(0, 1000),
       });
     }
   }
 
   /*
-   * MULTI LOJA ASSÍNCRONO VIA FILA
+   * CLUSTER GLOBAL DE IDENTIDADE
    *
-   * Aqui só criamos tarefas rápidas no banco.
-   * Nenhuma nova chamada às marketplaces acontece
-   * dentro da pesquisa pública.
-   *
-   * O processImportQueue reconhece essas tarefas por:
-   * - status = PENDING
-   * - productId preenchido
-   * - opportunityId ausente
-   *
-   * e executa buscarComparacaoManual() posteriormente,
-   * salvando apenas ofertas EXACT no mesmo Product.
+   * Nenhuma loja e ancora. Cada candidato e comparado pelo resolver +
+   * Exact Matcher central. Um membro so entra em um cluster se for EXACT
+   * com todos os membros ja presentes, evitando fusao transitiva insegura.
    */
-  for (
-    const [
-      productId,
-      referencia,
-    ] of referenciasMultiloja
-  ) {
-    try {
-      await agendarComparacaoMultiloja(
-        productId,
-        referencia,
-      );
-    } catch (error) {
-      console.error(
-        `[Discovery Publisher] Falha ao agendar Multi Loja do produto ${productId}:`,
-        error,
-      );
+  const clustersBrutos = agruparPorIdentidadeExata(
+    evidencias.map((evidence) => ({
+      item: evidence,
+      product: evidence.product,
+    })),
+  ).map((cluster) => ({
+    members: cluster.members.map((member) => member.item),
+  }));
+
+  const clusters = ordenarClusters(clustersBrutos);
+  let published = 0;
+  let duplicateMarketplaceSkipped = 0;
+
+  for (const cluster of clusters) {
+    const selected = umaOfertaPorMarketplace(cluster.members);
+    duplicateMarketplaceSkipped +=
+      cluster.members.length - selected.length;
+
+    const ordered = ordenarClusterParaPersistencia(selected);
+    let clusterProductId: string | null = null;
+
+    for (const evidence of ordered) {
+      const { candidate, product } = evidence;
+
+      try {
+        const saved = await saveProduct(
+          product,
+          candidate.affiliateLink?.trim() || null,
+          clusterProductId
+            ? {
+                targetProductId: clusterProductId,
+                verifiedExactMatch: true,
+                discoverySource: "ON_DEMAND_SEARCH",
+                autoCreated: true,
+                sourceQuery: resultado.query,
+              }
+            : {
+                discoverySource: "ON_DEMAND_SEARCH",
+                autoCreated: true,
+                sourceQuery: resultado.query,
+              },
+        );
+
+        clusterProductId = saved.id;
+        productIds.add(saved.id);
+        published += 1;
+
+        if (!referenciasMultiloja.has(saved.id)) {
+          referenciasMultiloja.set(saved.id, {
+            marketplace: candidate.marketplace,
+            sourceUrl: candidate.sourceUrl.trim(),
+            affiliateLink:
+              candidate.affiliateLink?.trim() || null,
+          });
+        }
+
+        if (!referenciasComparacao.has(saved.id)) {
+          referenciasComparacao.set(saved.id, product);
+        }
+
+        items.push({
+          marketplace: candidate.marketplace,
+          externalId: candidate.externalId,
+          title: candidate.title,
+          productId: saved.id,
+          success: true,
+          error: null,
+        });
+      } catch (error) {
+        failed += 1;
+        items.push({
+          marketplace: candidate.marketplace,
+          externalId: candidate.externalId,
+          title: candidate.title,
+          productId: null,
+          success: false,
+          error: (
+            error instanceof Error
+              ? error.message
+              : "Erro desconhecido ao publicar cluster global."
+          ).slice(0, 1000),
+        });
+      }
+    }
+  }
+
+  const multiStoreClusters = clusters.filter(
+    (cluster) =>
+      new Set(
+        cluster.members.map(
+          (item) => item.candidate.marketplace,
+        ),
+      ).size >= 2,
+  ).length;
+
+  console.log(
+    "[Discovery Publisher] Resumo identidade global:",
+    {
+      received: recebidos.length,
+      publishable: publicaveis.length,
+      clusters: clusters.length,
+      multiStoreClusters,
+      singleStoreClusters:
+        clusters.length - multiStoreClusters,
+      duplicateMarketplaceSkipped,
+      published,
+      failed,
+      productIds: Array.from(productIds),
+    },
+  );
+
+  if (options.completeMultiloja === true) {
+    for (const [productId, referencia] of referenciasComparacao) {
+      try {
+        const comparison = await buscarComparacaoManual(
+          referencia,
+          productId,
+        );
+
+        console.log(
+          `[Discovery Publisher] Multi Loja concluido para ${productId}: ` +
+            `${comparison.found} oferta(s) EXACT adicional(is).`,
+        );
+
+        if (comparison.errors.length > 0) {
+          console.warn(
+            `[Discovery Publisher] Multi Loja de ${productId} terminou com avisos:`,
+            comparison.errors,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[Discovery Publisher] Falha nao fatal ao completar Multi Loja de ${productId}:`,
+          error,
+        );
+      }
+    }
+  } else if (options.scheduleMultiloja !== false) {
+    for (const [productId, referencia] of referenciasMultiloja) {
+      try {
+        await agendarComparacaoMultiloja(
+          productId,
+          referencia,
+        );
+      } catch (error) {
+        console.error(
+          `[Discovery Publisher] Falha ao agendar Multi Loja do produto ${productId}:`,
+          error,
+        );
+      }
     }
   }
 
   return {
-    query:
-      resultado.query,
-
-    received:
-      recebidos.length,
-
-    publishable:
-      publicaveis.length,
-
+    query: resultado.query,
+    received: recebidos.length,
+    publishable: publicaveis.length,
     published,
-
     failed,
-
     skipped:
-      recebidos.length -
-      publicaveis.length,
-
-    productIds:
-      Array.from(
-        productIds,
-      ),
-
+      recebidos.length - publicaveis.length +
+      duplicateMarketplaceSkipped,
+    productIds: Array.from(productIds),
     items,
   };
 }

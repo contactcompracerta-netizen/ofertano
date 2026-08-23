@@ -41,9 +41,7 @@ export interface MercadoLivreCatalogProduct {
   status?: string;
   pictures?: MercadoLivrePicture[];
   attributes?: MercadoLivreAttribute[];
-  buy_box_winner?: {
-    item_id?: string;
-  } | null;
+  buy_box_winner?: MercadoLivreCatalogOffer | null;
 }
 
 export interface MercadoLivreCatalogOffer {

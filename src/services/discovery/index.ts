@@ -11,8 +11,15 @@ import type {
 
 import {
   avaliarCompatibilidadeComConsulta,
+  criarCanonicalKeyDaIdentidade,
   criarConsultasGlobaisDeIdentidade,
+  papelDaIdentidade,
+  pontuarEspecificidadeDaConsulta,
+  pontuarEvidenciaIdentidade,
+  resolverIdentidadeProduto,
 } from "@/services/identity";
+import { rastrearFiltrosMarketplace } from "./marketplaceTrace";
+import { traceMultiloja } from "@/services/multiloja/trace";
 
 const LIMITE_PADRAO = 5;
 const LIMITE_MAXIMO = 20;
@@ -120,6 +127,7 @@ function removerDuplicados(
 
 function ordenarCandidatos(
   candidatos: DiscoveryCandidate[],
+  consulta?: string,
 ): DiscoveryCandidate[] {
   return [...candidatos].sort(
     (primeiro, segundo) => {
@@ -136,6 +144,63 @@ function ordenarCandidatos(
           segundoDisponivel -
           primeiroDisponivel
         );
+      }
+
+      if (consulta) {
+        const primeiroMatch =
+          avaliarCandidatoContraConsulta(
+            primeiro,
+            consulta,
+          );
+        const segundoMatch =
+          avaliarCandidatoContraConsulta(
+            segundo,
+            consulta,
+          );
+
+        if (primeiroMatch.score !== segundoMatch.score) {
+          return segundoMatch.score - primeiroMatch.score;
+        }
+
+        const primeiraEspecificidade = pontuarEspecificidadeDaConsulta(
+          consulta,
+          {
+            title: primeiro.title,
+            brand: primeiro.brand ?? null,
+            attributes: primeiro.attributes ?? {},
+          },
+        );
+        const segundaEspecificidade = pontuarEspecificidadeDaConsulta(
+          consulta,
+          {
+            title: segundo.title,
+            brand: segundo.brand ?? null,
+            attributes: segundo.attributes ?? {},
+          },
+        );
+
+        if (primeiraEspecificidade !== segundaEspecificidade) {
+          return segundaEspecificidade - primeiraEspecificidade;
+        }
+
+        const primeiraIdentidade = pontuarEvidenciaIdentidade({
+          product: {
+            title: primeiro.title,
+            brand: primeiro.brand ?? null,
+            attributes: primeiro.attributes ?? {},
+          },
+        });
+        const segundaIdentidade = pontuarEvidenciaIdentidade({
+          product: {
+            title: segundo.title,
+            brand: segundo.brand ?? null,
+            attributes: segundo.attributes ?? {},
+          },
+        });
+
+        if (primeiraIdentidade !== segundaIdentidade) {
+          return segundaIdentidade - primeiraIdentidade;
+        }
       }
 
       return (
@@ -164,13 +229,50 @@ function filtrarCandidatosPorConsulta(
   candidatos: DiscoveryCandidate[],
   consulta: string,
 ): DiscoveryCandidate[] {
-  return candidatos.filter(
-    (candidato) =>
-      avaliarCandidatoContraConsulta(
-        candidato,
-        consulta,
-      ).compatible,
-  );
+  const kept: DiscoveryCandidate[] = [];
+  const byMarketplace = new Map<
+    DiscoveryCandidate["marketplace"],
+    Array<{
+      title: string;
+      externalId: string;
+      stage: string;
+      status: "KEPT" | "DROPPED";
+      reason: string;
+      lexicalScore: number;
+    }>
+  >();
+
+  for (const candidato of candidatos) {
+    const match = avaliarCandidatoContraConsulta(
+      candidato,
+      consulta,
+    );
+    const events = byMarketplace.get(candidato.marketplace) ?? [];
+
+    events.push({
+      title: candidato.title,
+      externalId: candidato.externalId,
+      stage: "query-identity",
+      status: match.compatible ? "KEPT" : "DROPPED",
+      reason: match.reason,
+      lexicalScore: match.textRelevance,
+    });
+    byMarketplace.set(candidato.marketplace, events);
+
+    if (match.compatible) {
+      kept.push(candidato);
+    }
+  }
+
+  for (const [marketplace, events] of byMarketplace) {
+    rastrearFiltrosMarketplace({
+      marketplace,
+      query: consulta,
+      events: events.filter((event) => event.status === "DROPPED"),
+    });
+  }
+
+  return kept;
 }
 
 function erroTemporarioDiscovery(
@@ -330,7 +432,7 @@ async function executarAdapterComPlanoGlobal(
       : limit;
 
   const candidatos =
-    ordenarCandidatos(posDedup)
+    ordenarCandidatos(posDedup, consultaOriginal)
       .slice(0, limiteSaida);
 
   const sucessos =
@@ -427,6 +529,13 @@ export async function descobrirProdutosComAdapters(
       ? consultasGlobais
       : [query];
 
+  traceMultiloja("discovery-start", {
+    query,
+    marketplaces: adaptersAtivos.map((adapter) => adapter.marketplace),
+    plan: consultas,
+    mode,
+  });
+
   const resultados = await Promise.all(
     adaptersAtivos.map((adapter) =>
       executarAdapterComPlanoGlobal(
@@ -438,6 +547,53 @@ export async function descobrirProdutosComAdapters(
       ),
     ),
   );
+
+  for (const resultado of resultados) {
+    traceMultiloja("marketplace", {
+      marketplace: resultado.marketplace,
+      success: resultado.success,
+      candidates: resultado.candidates.length,
+      scanned: resultado.scanned,
+      error: resultado.error,
+    });
+
+    for (const candidato of resultado.candidates) {
+      const identity = resolverIdentidadeProduto({
+        title: candidato.title,
+        brand: candidato.brand ?? null,
+        attributes: candidato.attributes ?? {},
+      });
+      const match = avaliarCandidatoContraConsulta(candidato, query);
+
+      traceMultiloja("candidate", {
+        marketplace: resultado.marketplace,
+        title: candidato.title,
+        externalId: candidato.externalId,
+        price: candidato.price,
+        sourceUrl: candidato.sourceUrl,
+        productRole: papelDaIdentidade(identity),
+        roleReason: identity.roleReason,
+        soldItemType: identity.soldItemType,
+        hostItemType: identity.hostItemType,
+        compatibilityRelation: identity.compatibilityRelation,
+        hostModelCandidates: identity.hostModelCandidates,
+        identityModelCandidates: identity.identityModelCandidates,
+        modelCandidates: identity.compatibleModels,
+        selectedModel: identity.model,
+        commercialModel: identity.commercialModel,
+        manufacturerSku: identity.manufacturerSku,
+        variantCodes: identity.variantCodes,
+        condition: identity.variants.condition ?? "new",
+        modelAmbiguous: identity.modelAmbiguous,
+        identityConfidence: identity.identityConfidence,
+        multiModelCompatibility: identity.multiModelCompatibility,
+        queryTextRelevance: match.textRelevance,
+        queryRoleCompatibility: match.roleCompatible,
+        queryRelevance: match.compatible ? match.score : 0,
+        canonicalKey: criarCanonicalKeyDaIdentidade(identity),
+      });
+    }
+  }
 
   /*
    * Segunda barreira global depois de unir todas as lojas. Isso impede que
@@ -454,6 +610,7 @@ export async function descobrirProdutosComAdapters(
           query,
         ),
       ),
+      query,
     );
 
   const completedAt = new Date();

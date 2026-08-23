@@ -5,6 +5,7 @@ import type {
   DiscoveryQuery,
   MarketplaceDiscoveryResult,
 } from "./core/types";
+import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
 
 const MARKETPLACE = "ALIEXPRESS" as const;
 const MARKETPLACE_NAME = "AliExpress" as const;
@@ -45,16 +46,11 @@ const TERMOS_ACESSORIOS = [
   "pedestais",
   "protetor",
   "protetores",
-  "bumper",
-  "skin",
-  "adesivo",
-  "adesivos",
-  "fone",
-  "fones",
-  "headset",
-  "earphone",
-  "earphones",
-  "borracha",
+    "bumper",
+    "skin",
+    "adesivo",
+    "adesivos",
+    "borracha",
   "borrachas",
   "vedacao",
   "vedacoes",
@@ -359,6 +355,10 @@ function possuiAcessorioNaoSolicitado(
   titulo: string,
   consulta: string,
 ): boolean {
+  if (ehAcessorioNaoSolicitadoPelaConsulta(consulta, titulo)) {
+    return true;
+  }
+
   const tituloNormalizado =
     normalizarTexto(titulo);
 
@@ -1114,7 +1114,7 @@ function obterVariavelAmbiente(
 
   if (!valor) {
     throw new Error(
-      `A variÃ¡vel ${nome} nÃ£o estÃ¡ configurada.`,
+      `A variável ${nome} não está configurada.`,
     );
   }
 
@@ -1303,7 +1303,7 @@ async function consultarAliExpress(
           AliExpressResponse;
     } catch {
       throw new Error(
-        `AliExpress API retornou resposta invÃ¡lida. HTTP ${response.status}.`,
+        `AliExpress API retornou resposta inválida. HTTP ${response.status}.`,
       );
     }
 
@@ -1487,7 +1487,7 @@ async function consultarAliExpress(
       produtos.length === 0
     ) {
       throw new Error(
-        "AliExpress informou produtos na resposta, mas o formato recebido nÃ£o pÃ´de ser interpretado.",
+        "AliExpress informou produtos na resposta, mas o formato recebido não pôde ser interpretado.",
       );
     }
 
@@ -1636,13 +1636,11 @@ export async function buscarAliExpress(
       }
 
       if (
-        !modoMultiloja && (
         possuiAcessorioNaoSolicitado(
           titulo,
           query,
         )
-      
-        )) {
+      ) {
         continue;
       }
 

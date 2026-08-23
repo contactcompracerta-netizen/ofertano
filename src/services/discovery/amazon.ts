@@ -1,6 +1,6 @@
 /*
  * Descoberta de produtos Amazon pela busca ao vivo da SerpApi,
- * com validaÃ§Ã£o de modelo exato, acessÃ³rios e disponibilidade.
+ * com validação de modelo exato, acessórios e disponibilidade.
  */
 
 import type {
@@ -8,6 +8,7 @@ import type {
   DiscoveryQuery,
   MarketplaceDiscoveryResult,
 } from "./core/types";
+import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
 
 const SERPAPI_ENDPOINT =
   "https://serpapi.com/search.json";
@@ -223,6 +224,9 @@ function possuiAcessorioNaoSolicitado(
   query: string,
   title: string,
 ): boolean {
+  if (ehAcessorioNaoSolicitadoPelaConsulta(query, title)) {
+    return true;
+  }
   const queryTokens = new Set(
     tokenizar(query),
   );
@@ -240,9 +244,9 @@ function possuiAcessorioNaoSolicitado(
   }
 
   /*
-   * AcessÃ³rios normalmente se identificam logo no
-   * comeÃ§o do tÃ­tulo: "Suporte para...", "Capa para..."
-   * ou apÃ³s a marca do fabricante do acessÃ³rio.
+   * Acessórios normalmente se identificam logo no
+   * começo do título: "Suporte para...", "Capa para..."
+   * ou após a marca do fabricante do acessório.
    */
   const inicioDoTitulo =
     tokenizar(title).slice(0, 6);
@@ -550,9 +554,9 @@ function tituloCompativel(
   }
 
   /*
-   * NÃºmeros e cÃ³digos mistos normalmente identificam
-   * modelo, geraÃ§Ã£o, tamanho ou versÃ£o. Todos eles
-   * precisam aparecer no tÃ­tulo retornado.
+   * Números e códigos mistos normalmente identificam
+   * modelo, geração, tamanho ou versão. Todos eles
+   * precisam aparecer no título retornado.
    */
   const modelTokens = queryTokens.filter(
     (token) =>
@@ -573,8 +577,8 @@ function tituloCompativel(
   }
 
   /*
-   * Os dois primeiros termos Ãºteis formam a Ã¢ncora
-   * principal do produto. Assim, "Echo Pop" nÃ£o pode
+   * Os dois primeiros termos úteis formam a âncora
+   * principal do produto. Assim, "Echo Pop" não pode
    * aceitar "Echo Dot" nem "Echo Spot".
    */
   const identityTokens =

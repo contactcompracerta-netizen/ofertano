@@ -24,9 +24,16 @@ export type IdentityVariantKey =
 
 export type ProductKind =
   | "ACCESSORY"
+  | "REPLACEMENT_PART"
   | "FURNITURE"
   | "FOOTWEAR"
   | "GENERIC";
+
+export type ProductRole =
+  | "MAIN"
+  | "ACCESSORY"
+  | "REPLACEMENT_PART"
+  | "UNKNOWN";
 
 export type ProductIdentity = {
   title: string;
@@ -37,9 +44,23 @@ export type ProductIdentity = {
   mpn: string | null;
   modelNumber: string | null;
   model: string | null;
+  commercialModel: string | null;
+  manufacturerSku: string | null;
+  variantCodes: string[];
   modelTokens: string[];
   searchCodes: string[];
   kind: ProductKind;
+  role: ProductRole;
+  roleReason: string;
+  soldItemType: "ACCESSORY" | "REPLACEMENT_PART" | "PRIMARY" | null;
+  hostItemType: "ACCESSORY" | "REPLACEMENT_PART" | "PRIMARY" | null;
+  compatibilityRelation: string | null;
+  hostModelCandidates: string[];
+  identityModelCandidates: string[];
+  modelAmbiguous: boolean;
+  identityConfidence: number;
+  multiModelCompatibility: boolean;
+  compatibleModels: string[];
   variants: Record<IdentityVariantKey, string | null>;
 };
 
@@ -130,18 +151,171 @@ const FOOTWEAR_TERMS = [
   "sapatilha",
 ];
 
-const ACCESSORY_PATTERNS = [
-  /\balmofad(?:a|as)\s+(?:de\s+)?reposicao\b/,
-  /\balmofad(?:a|as)\s+para\b/,
+/*
+ * Papel estrutural do anuncio. Estas palavras descrevem o TIPO do item
+ * vendido (capa, cabo, pelicula), nunca uma marca ou modelo concreto.
+ * Fone, smartphone, pendrive e lanterna ficam de fora de proposito:
+ * sao categorias de produto principal, nao envelopadores de outro item.
+ */
+const ACCESSORY_HEAD_TOKENS = new Set([
+  "capa",
+  "capas",
+  "capinha",
+  "capinhas",
+  "case",
+  "cases",
+  "cover",
+  "covers",
+  "pelicula",
+  "peliculas",
+  "cabo",
+  "cabos",
+  "cable",
+  "cables",
+  "carregador",
+  "carregadores",
+  "charger",
+  "chargers",
+  "adaptador",
+  "adaptadores",
+  "adapter",
+  "adapters",
+  "suporte",
+  "suportes",
+  "stand",
+  "stands",
+  "holder",
+  "holders",
+  "mount",
+  "mounts",
+  "protetor",
+  "protetores",
+  "estojo",
+  "estojos",
+  "bolsa",
+  "bolsas",
+  "bumper",
+  "skin",
+  "skins",
+  "adesivo",
+  "adesivos",
+  "pulseira",
+  "pulseiras",
+  "correia",
+  "alca",
+  "alcas",
+  "peca",
+  "pecas",
+  "refil",
+  "refis",
+  "reposicao",
+  "earpad",
+  "earpads",
+  "dock",
+  "docks",
+  "fonte",
+  "fontes",
+  "tampa",
+  "tampas",
+]);
+
+const PRIMARY_PHRASES = [
+  "caixa de som",
+  "caixa de audio",
+  "sound box",
+  "fone de ouvido",
+];
+
+const CONTAINER_PHRASES = [
+  "estojo de armazenamento",
+  "estojo de transporte",
+  "bolsa de transporte",
+  "bolsa de armazenamento",
+  "caixa de transporte",
+  "caixa de armazenamento",
+  "caixa protetora",
+  "saco rigido",
+  "hard case",
+  "carrying case",
+  "storage case",
+];
+
+const CONTAINER_CONTEXT = new Set([
+  "armazenamento",
+  "transporte",
+  "protetor",
+  "protetora",
+  "protetores",
+  "rigido",
+  "rigida",
+  "storage",
+  "carrying",
+  "travel",
+]);
+
+const PRIMARY_HEAD_TOKENS = new Set([
+  "smartphone",
+  "celular",
+  "telefone",
+  "iphone",
+  "fone",
+  "fones",
+  "headphone",
+  "headphones",
+  "headset",
+  "earbuds",
+  "earphone",
+  "earphones",
+  "auricular",
+  "notebook",
+  "laptop",
+  "tablet",
+  "televisao",
+  "tv",
+  "monitor",
+  "mouse",
+  "teclado",
+  "keyboard",
+  "pendrive",
+  "lanterna",
+  "camera",
+  "relogio",
+  "smartwatch",
+  "console",
+  "videogame",
+  "microfone",
+  "speaker",
+]);
+
+const REPLACEMENT_HEAD_TOKENS = new Set([
+  "almofada",
+  "almofadas",
+  "earpad",
+  "earpads",
+  "cushion",
+  "cushions",
+  "espuma",
+  "espumas",
+  "foam",
+  "substituicao",
+  "replacement",
+  "reposicao",
+  "peca",
+  "pecas",
+  "refil",
+  "refis",
+]);
+
+const ACCESSORY_RELATIONAL_PATTERNS = [
+  /\balmofad(?:a|as)\b/,
   /\bear\s*pad(?:s)?\b/,
   /\bearpad(?:s)?\b/,
-  /\bsubstituicao\s+de\b/,
+  /\bespuma(?:s)?\b/,
+  /\bfoam\b/,
+  /\bcushion(?:s)?\b/,
+  /\bsubstituicao\b/,
   /\breplacement\b/,
-  /\bcapa\s+para\b/,
-  /\bcase\s+para\b/,
-  /\bestojo\s+para\b/,
-  /\bprotetor(?:a)?\s+para\b/,
-  /\bpelicula\s+para\b/,
+  /\breposicao\b/,
   /\bpeca(?:s)?\s+de\s+reposicao\b/,
   /\bkit\s+de\s+reposicao\b/,
   /\brefil(?:s)?\b/,
@@ -149,12 +323,35 @@ const ACCESSORY_PATTERNS = [
   /\bpano(?:s)?\s+para\b/,
   /\bfiltro(?:s)?\s+para\b/,
   /\bescova(?:s)?\s+para\b/,
-  /\bacessorio(?:s)?\s+para\b/,
-  /\badaptador\s+para\b/,
-  /\bsuporte\s+para\b/,
-  /\bpulseira\s+para\b/,
-  /\bcorreia\s+para\b/,
+  /\bscreen\s+protector\b/,
+  /\bvidro\s+temperado\b/,
+  /\bcompativel\s+com\b/,
+  /\bcompatible\s+with\b/,
+  /\bfits\b/,
+  /\b(?:capa|capinha|case|cover|estojo|pelicula|protetor|cabo|cable|carregador|charger|adaptador|adapter|suporte|stand|holder|pulseira|acessorio|acessorios|bolsa|controle)\s+(?:para|for)\b/,
 ];
+
+const HOST_RELATION_PATTERN =
+  /\s+(?:compativel\s+com|compatible\s+with|de\s+substituicao(?:\s+para)?|de\s+reposicao(?:\s+para)?|replacement(?:\s+for)?|para|for|fits)\s+/;
+
+const TITLE_STOP_WORDS = new Set([
+  "de",
+  "da",
+  "do",
+  "das",
+  "dos",
+  "e",
+  "em",
+  "com",
+  "sem",
+  "para",
+  "por",
+  "um",
+  "uma",
+  "the",
+  "and",
+  "for",
+]);
 
 const TECHNICAL_MODEL_TOKENS = new Set([
   "WIFI",
@@ -211,6 +408,11 @@ export function normalizarTextoIdentidade(
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\bpen\s+drive\b/g, "pendrive")
+    .replace(/\bsmart\s+phone\b/g, "smartphone")
+    .replace(/\bnote\s+book\b/g, "notebook")
+    .replace(/\bscreen\s+protector\b/g, "pelicula")
+    .replace(/\bear\s+pads?\b/g, "earpad")
     .trim()
     .replace(/\s+/g, " ");
 }
@@ -576,6 +778,14 @@ function extrairCondicao(
 
   if (/\b(?:recondicionado|remanufaturado|refurbished|renewed)\b/.test(normalized)) {
     return "refurbished";
+  }
+
+  if (
+    /\b(?:reembalad[oa]|re\s+embalad[oa]|repackaged|repack)\b/.test(
+      normalized,
+    )
+  ) {
+    return "repackaged";
   }
 
   if (/\b(?:caixa aberta|open box|openbox)\b/.test(normalized)) {
@@ -1202,7 +1412,11 @@ function extrairTokensModelo(
   title: string,
   structuredModel: string | null,
   brand: string | null,
+  options?: {
+    concatenarMarca?: boolean;
+  },
 ): string[] {
+  const concatenarMarca = options?.concatenarMarca !== false;
   const tokens = new Set<string>();
   const normalizedTitle = normalizarTextoIdentidade(title);
 
@@ -1236,7 +1450,9 @@ function extrairTokensModelo(
 
     if (match?.[1]) {
       adicionarModelo(tokens, match[1], true);
-      adicionarModelo(tokens, `${brand}${match[1]}`, true);
+      if (concatenarMarca) {
+        adicionarModelo(tokens, `${brand}${match[1]}`, true);
+      }
     }
   }
 
@@ -1254,7 +1470,9 @@ function extrairTokensModelo(
       }
 
       adicionarModelo(tokens, word, true);
-      adicionarModelo(tokens, `${brand}${word}`, true);
+      if (concatenarMarca) {
+        adicionarModelo(tokens, `${brand}${word}`, true);
+      }
     }
   }
 
@@ -1363,8 +1581,18 @@ function extrairTokensModelo(
       if (
         !/^[a-z][a-z0-9+]{1,20}$/.test(family) ||
         !/^\d{2,4}$/.test(number) ||
-        contextosTecnicos.has(family)
+        contextosTecnicos.has(family) ||
+        /\d/.test(family)
       ) {
+        continue;
+      }
+
+      /*
+       * "AX90 256 GB" e capacidade, nao submodelo AX90256. A familia
+       * comercial so recebe o numero seguinte quando ele nao e unidade
+       * tecnica (Edge 60, iPhone 15).
+       */
+      if (unidadesTecnicas.has(suffix)) {
         continue;
       }
 
@@ -1436,15 +1664,328 @@ function extrairTokensModelo(
   return Array.from(tokens);
 }
 
-function resolverTipoProduto(
+export function familiasModeloDistintas(
+  codes: string[],
+  brand?: string | null,
+): string[] {
+  const brandCode = normalizarCodigoIdentidade(brand);
+  const normalized = Array.from(
+    new Set(
+      codes
+        .map((code) => normalizarCodigoIdentidade(code))
+        .filter((code): code is string => Boolean(code))
+        .filter(
+          (code) =>
+            code.length >= 3 &&
+            /[A-Z]/.test(code) &&
+            /\d/.test(code),
+        ),
+    ),
+  );
+  const stripped = normalized.map((code) => {
+    if (
+      !brandCode ||
+      !code.startsWith(brandCode) ||
+      code.length <= brandCode.length + 2
+    ) {
+      return code;
+    }
+
+    const remainder = code.slice(brandCode.length);
+    return normalized.includes(remainder) ? remainder : code;
+  });
+  const unique = Array.from(new Set(stripped));
+
+  return unique.filter(
+    (code) =>
+      !unique.some(
+        (other) =>
+          other !== code &&
+          other.length > code.length &&
+          (other.startsWith(code) || other.endsWith(code)),
+      ),
+  );
+}
+
+function ehEnvelopeDeSku(
+  longer: string,
+  shorter: string,
+): boolean {
+  const specific = normalizarCodigoIdentidade(longer);
+  const model = normalizarCodigoIdentidade(shorter);
+
+  if (!specific || !model || specific === model || model.length < 3) {
+    return false;
+  }
+
+  /*
+   * ZX100PRO comeca com ZX100: submodelo comercial, nao SKU envelopado.
+   * MXZX100 contem ZX100 sem ser prefixo: part number composto.
+   */
+  if (specific.startsWith(model)) {
+    return false;
+  }
+
+  return specific.includes(model);
+}
+
+function classificarModelosESkus(
+  commercialTokens: string[],
+  allTokens: string[],
+  brand: string | null,
+  structuredMpn: string | null,
+): {
+  commercialModels: string[];
+  manufacturerSku: string | null;
+  variantCodes: string[];
+} {
+  const brandCode = normalizarCodigoIdentidade(brand);
+  const explicit = Array.from(
+    new Set(
+      commercialTokens
+        .map((code) => normalizarCodigoIdentidade(code))
+        .filter((code): code is string => Boolean(code)),
+    ),
+  );
+  const extras = Array.from(
+    new Set(
+      [
+        ...allTokens,
+        structuredMpn,
+      ]
+        .map((code) => normalizarCodigoIdentidade(code))
+        .filter((code): code is string => Boolean(code)),
+    ),
+  );
+  const skuCodes = extras.filter((code) => {
+    const remainder =
+      brandCode &&
+      code.startsWith(brandCode) &&
+      code.length > brandCode.length + 2
+        ? code.slice(brandCode.length)
+        : null;
+    const remainderNaoEhModeloExplicito =
+      remainder !== null && !explicit.includes(remainder);
+    const envolveModeloExplicito = explicit.some((model) =>
+      ehEnvelopeDeSku(code, model),
+    );
+
+    return remainderNaoEhModeloExplicito || envolveModeloExplicito;
+  });
+  const commercial = selecionarCodigosModeloMaisEspecificos(
+    familiasModeloDistintas(
+      explicit.filter((code) => !skuCodes.includes(code)),
+      null,
+    ),
+  );
+  const manufacturerSku =
+    skuCodes
+      .filter((code) => explicit.includes(code))
+      .sort((first, second) => second.length - first.length)[0] ??
+    null;
+  const variantCodes = extras.filter(
+    (code) =>
+      code !== manufacturerSku &&
+      !commercial.includes(code),
+  );
+
+  return {
+    commercialModels: commercial,
+    manufacturerSku,
+    variantCodes,
+  };
+}
+
+type SoldClass = "ACCESSORY" | "REPLACEMENT_PART" | "PRIMARY";
+
+type ClassHit = {
+  cls: SoldClass;
+  token: string;
+  index: number;
+};
+
+function findPhraseHits(
   normalizedTitle: string,
-): ProductKind {
-  if (
-    ACCESSORY_PATTERNS.some((pattern) =>
-      pattern.test(normalizedTitle),
-    )
-  ) {
-    return "ACCESSORY";
+  phrases: string[],
+  cls: SoldClass,
+): ClassHit[] {
+  return phrases.flatMap((phrase) => {
+    const index = normalizedTitle.indexOf(phrase);
+
+    if (index < 0) {
+      return [];
+    }
+
+    return [
+      {
+        cls,
+        token: phrase,
+        index,
+      },
+    ];
+  });
+}
+
+function findTokenHits(
+  normalizedTitle: string,
+  tokens: Set<string>,
+  cls: SoldClass,
+): ClassHit[] {
+  const hits: ClassHit[] = [];
+  let cursor = 0;
+
+  for (const token of normalizedTitle.split(" ")) {
+    if (tokens.has(token)) {
+      hits.push({
+        cls,
+        token,
+        index: cursor,
+      });
+    }
+
+    cursor += token.length + 1;
+  }
+
+  return hits;
+}
+
+function primeiraClasseDoTrecho(
+  normalizedTitle: string,
+): ClassHit | null {
+  const hits = [
+    ...findPhraseHits(normalizedTitle, PRIMARY_PHRASES, "PRIMARY"),
+    ...findPhraseHits(normalizedTitle, CONTAINER_PHRASES, "ACCESSORY"),
+    ...findTokenHits(normalizedTitle, REPLACEMENT_HEAD_TOKENS, "REPLACEMENT_PART"),
+    ...findTokenHits(normalizedTitle, ACCESSORY_HEAD_TOKENS, "ACCESSORY"),
+    ...findTokenHits(normalizedTitle, PRIMARY_HEAD_TOKENS, "PRIMARY"),
+  ]
+    .filter((hit) => {
+      if (hit.token !== "caixa") {
+        return true;
+      }
+
+      const after = normalizedTitle.slice(hit.index + hit.token.length);
+      return /^(?:\s+(?:de\s+)?(?:transporte|armazenamento|protetor|protetora|rigid[oa]))|\s+para\s+/.test(
+        after,
+      );
+    })
+    .sort(
+      (first, second) =>
+        first.index - second.index ||
+        second.token.length - first.token.length,
+    );
+
+  return hits[0] ?? null;
+}
+
+function textoComHifensPreservados(value: string): string {
+  return canonizarHifensModelo(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function detectarRelacaoDeHospedeiro(
+  normalizedTitle: string,
+): {
+  sold: string;
+  host: string | null;
+  relation: string | null;
+} {
+  const match = normalizedTitle.match(HOST_RELATION_PATTERN);
+
+  if (!match || match.index === undefined) {
+    return {
+      sold: normalizedTitle,
+      host: null,
+      relation: null,
+    };
+  }
+
+  return {
+    sold: normalizedTitle.slice(0, match.index).trim() || normalizedTitle,
+    host: normalizedTitle.slice(match.index + match[0].length).trim() || null,
+    relation: match[0].trim(),
+  };
+}
+
+type RoleAnalysis = {
+  kind: ProductKind;
+  role: ProductRole;
+  reason: string;
+  soldItemType: SoldClass | null;
+  hostItemType: SoldClass | null;
+  compatibilityRelation: string | null;
+  soldText: string;
+  hostText: string | null;
+};
+
+function analisarPapelDoTitulo(
+  normalizedTitle: string,
+): RoleAnalysis {
+  const structure = detectarRelacaoDeHospedeiro(normalizedTitle);
+  const soldHit = primeiraClasseDoTrecho(structure.sold);
+  const hostHit = structure.host
+    ? primeiraClasseDoTrecho(structure.host)
+    : null;
+  const hostPrimaryHit = structure.host
+    ? [
+        ...findPhraseHits(structure.host, PRIMARY_PHRASES, "PRIMARY"),
+        ...findTokenHits(structure.host, PRIMARY_HEAD_TOKENS, "PRIMARY"),
+      ].sort((first, second) => first.index - second.index)[0] ?? null
+    : null;
+  const soldItemType = soldHit?.cls ?? null;
+  const hostItemType =
+    hostPrimaryHit?.cls ??
+    (structure.host && hostHit?.cls !== "ACCESSORY" && hostHit?.cls !== "REPLACEMENT_PART"
+      ? hostHit?.cls
+      : null) ??
+    (structure.host ? "PRIMARY" : null);
+
+  if (soldItemType === "REPLACEMENT_PART") {
+    return {
+      kind: "REPLACEMENT_PART",
+      role: "REPLACEMENT_PART",
+      reason:
+        "O nucleo do titulo e uma peca de reposicao; categorias MAIN posteriores sao hospedeiro.",
+      soldItemType,
+      hostItemType: hostItemType ?? (structure.host ? "PRIMARY" : null),
+      compatibilityRelation: structure.relation,
+      soldText: structure.sold,
+      hostText: structure.host,
+    };
+  }
+
+  if (soldItemType === "ACCESSORY") {
+    return {
+      kind: "ACCESSORY",
+      role: "ACCESSORY",
+      reason: structure.relation
+        ? "Nucleo do item vendido e acessorio/continente; o trecho apos a relacao e o hospedeiro."
+        : "O primeiro tipo estrutural do titulo e um acessorio/continente, nao o produto principal.",
+      soldItemType,
+      hostItemType: hostItemType ?? (structure.host ? "PRIMARY" : null),
+      compatibilityRelation: structure.relation,
+      soldText: structure.sold,
+      hostText: structure.host,
+    };
+  }
+
+  if (structure.relation && !soldItemType) {
+    return {
+      kind: "ACCESSORY",
+      role: "ACCESSORY",
+      reason:
+        "Relacao para/compativel-com sem nucleo MAIN no item vendido.",
+      soldItemType,
+      hostItemType: hostItemType ?? "PRIMARY",
+      compatibilityRelation: structure.relation,
+      soldText: structure.sold,
+      hostText: structure.host,
+    };
   }
 
   if (
@@ -1452,7 +1993,16 @@ function resolverTipoProduto(
       containsPhrase(normalizedTitle, term),
     )
   ) {
-    return "FURNITURE";
+    return {
+      kind: "FURNITURE",
+      role: "MAIN",
+      reason: "Categoria estrutural de movel.",
+      soldItemType: soldItemType ?? "PRIMARY",
+      hostItemType: hostItemType ?? (structure.host ? "PRIMARY" : null),
+      compatibilityRelation: structure.relation,
+      soldText: structure.sold,
+      hostText: structure.host,
+    };
   }
 
   if (
@@ -1460,10 +2010,152 @@ function resolverTipoProduto(
       containsPhrase(normalizedTitle, term),
     )
   ) {
-    return "FOOTWEAR";
+    return {
+      kind: "FOOTWEAR",
+      role: "MAIN",
+      reason: "Categoria estrutural de calcado.",
+      soldItemType: soldItemType ?? "PRIMARY",
+      hostItemType: hostItemType ?? (structure.host ? "PRIMARY" : null),
+      compatibilityRelation: structure.relation,
+      soldText: structure.sold,
+      hostText: structure.host,
+    };
   }
 
-  return "GENERIC";
+  return {
+    kind: "GENERIC",
+    role: "MAIN",
+    reason: soldItemType === "PRIMARY"
+      ? "O nucleo do titulo e o produto principal; acessorios depois de 'com' nao mudam o papel."
+      : "Sem sinal estrutural de acessorio ou peca no nucleo vendido.",
+    soldItemType,
+    hostItemType: hostItemType ?? (structure.host ? "PRIMARY" : null),
+    compatibilityRelation: structure.relation,
+    soldText: structure.sold,
+    hostText: structure.host,
+  };
+}
+
+function resolverTipoProduto(
+  normalizedTitle: string,
+): ProductKind {
+  return analisarPapelDoTitulo(normalizedTitle).kind;
+}
+
+export function ehPapelNaoPrincipal(
+  kind: ProductKind | ProductRole,
+): boolean {
+  return kind === "ACCESSORY" || kind === "REPLACEMENT_PART";
+}
+
+export function codigosDeIdentidadeDoItemVendido(
+  identity: Pick<
+    ProductIdentity,
+    | "mpn"
+    | "modelNumber"
+    | "model"
+    | "identityModelCandidates"
+    | "searchCodes"
+  >,
+): string[] {
+  return Array.from(
+    new Set(
+      [
+        identity.mpn,
+        identity.modelNumber,
+        identity.model,
+        ...identity.identityModelCandidates,
+        ...identity.searchCodes,
+      ]
+        .map((code) => normalizarCodigoIdentidade(code))
+        .filter((code): code is string => Boolean(code)),
+    ),
+  );
+}
+
+function modelosDoTrecho(
+  text: string | null,
+  structuredModel: string | null,
+  brand: string | null,
+): string[] {
+  if (!text?.trim()) {
+    return [];
+  }
+
+  return familiasModeloDistintas(
+    extrairTokensModelo(text, structuredModel, brand),
+    brand,
+  );
+}
+
+function calcularConfiancaIdentidade(input: {
+  kind: ProductKind;
+  selectedModel: string | null;
+  identityModelCandidates: string[];
+  hostModelCandidates: string[];
+  multiModelCompatibility: boolean;
+  modelAmbiguous: boolean;
+  modelsBelongToHost: boolean;
+  brand: string | null;
+}): number {
+  if (input.multiModelCompatibility || input.modelsBelongToHost) {
+    return 0.15;
+  }
+
+  if (ehPapelNaoPrincipal(input.kind)) {
+    return 0.3;
+  }
+
+  if (input.modelAmbiguous) {
+    return 0.35;
+  }
+
+  if (
+    input.selectedModel &&
+    input.identityModelCandidates.length <= 1
+  ) {
+    return input.brand ? 0.92 : 0.8;
+  }
+
+  if (input.selectedModel) {
+    return 0.7;
+  }
+
+  return input.brand ? 0.45 : 0.3;
+}
+
+export function papelDaIdentidade(
+  identity: Pick<
+    ProductIdentity,
+    "kind" | "role" | "normalizedTitle"
+  >,
+): ProductRole {
+  if (!identity.normalizedTitle.trim()) {
+    return "UNKNOWN";
+  }
+
+  return identity.role;
+}
+
+export function ehAcessorioNaoSolicitadoPelaConsulta(
+  query: string,
+  title: string,
+): boolean {
+  const queryIdentity = resolverIdentidadeProduto({
+    title: query,
+    brand: null,
+    attributes: {},
+  });
+  const candidateIdentity = resolverIdentidadeProduto({
+    title,
+    brand: null,
+    attributes: {},
+  });
+
+  return (
+    !ehPapelNaoPrincipal(queryIdentity.kind) &&
+    ehPapelNaoPrincipal(candidateIdentity.kind)
+  );
 }
 
 export function ehProdutoMovel(
@@ -1518,10 +2210,93 @@ export function resolverIdentidadeProduto(
     ]),
   );
   const modelNumber = normalizarCodigoIdentidade(modelStructured);
-  const modelTokens = extrairTokensModelo(
-    title,
-    modelStructured,
+  const roleAnalysis = analisarPapelDoTitulo(normalizedTitle);
+  const structuredPertenceAoVendido =
+    Boolean(modelStructured) &&
+    (
+      !roleAnalysis.hostText ||
+      roleAnalysis.soldText.includes(
+        normalizarTextoIdentidade(modelStructured),
+      )
+    );
+  const modelSlices = detectarRelacaoDeHospedeiro(
+    textoComHifensPreservados(title),
+  );
+  const soldTitleForModels = modelSlices.host ? modelSlices.sold : title;
+  const hostTitleForModels = modelSlices.host;
+  const soldModelTokens = extrairTokensModelo(
+    soldTitleForModels,
+    structuredPertenceAoVendido ? modelStructured : null,
     brand,
+  );
+  const commercialTokens = extrairTokensModelo(
+    soldTitleForModels,
+    structuredPertenceAoVendido ? modelStructured : null,
+    brand,
+    { concatenarMarca: false },
+  );
+  const classified = classificarModelosESkus(
+    commercialTokens,
+    soldModelTokens,
+    brand,
+    roleAnalysis.compatibilityRelation ? null : (mpn ?? modelNumber),
+  );
+  const identityModelCandidates = classified.commercialModels;
+  const hostModelCandidates = modelosDoTrecho(
+    hostTitleForModels,
+    null,
+    brand,
+  ).filter((code) => !identityModelCandidates.includes(code));
+  const modelsBelongToHost =
+    Boolean(roleAnalysis.compatibilityRelation) &&
+    hostModelCandidates.length > 0 &&
+    identityModelCandidates.length === 0;
+  const multiModelCompatibility = hostModelCandidates.length >= 2;
+  const commercialModel =
+    multiModelCompatibility || modelsBelongToHost
+      ? null
+      : identityModelCandidates[0] ?? null;
+  const manufacturerSku =
+    modelsBelongToHost || multiModelCompatibility
+      ? null
+      : classified.manufacturerSku &&
+          classified.manufacturerSku !== commercialModel
+        ? classified.manufacturerSku
+        : null;
+  const variantCodes = modelsBelongToHost ? [] : classified.variantCodes;
+  const selectedModel = commercialModel;
+  const modelAmbiguous =
+    modelsBelongToHost ||
+    multiModelCompatibility ||
+    (
+      identityModelCandidates.length > 1 &&
+      !identityModelCandidates.some(
+        (code) =>
+          selectedModel &&
+          (code === selectedModel ||
+            code.startsWith(selectedModel) ||
+            selectedModel.startsWith(code)),
+      )
+    );
+  const identityConfidence = calcularConfiancaIdentidade({
+    kind: roleAnalysis.kind,
+    selectedModel,
+    identityModelCandidates,
+    hostModelCandidates,
+    multiModelCompatibility,
+    modelAmbiguous,
+    modelsBelongToHost,
+    brand,
+  });
+  const soldSearchCodes = Array.from(
+    new Set(
+      [
+        commercialModel,
+        manufacturerSku,
+        ...identityModelCandidates,
+        ...soldModelTokens,
+      ].filter((value): value is string => Boolean(value)),
+    ),
   );
 
   const ean = normalizarCodigoGlobal(
@@ -1543,12 +2318,6 @@ export function resolverIdentidadeProduto(
       "ISBN",
     ]),
   );
-
-  const model =
-    mpn ??
-    modelNumber ??
-    modelTokens[0] ??
-    null;
 
   const variants: ProductIdentity["variants"] = {
     voltage: extrairVoltagem(
@@ -1635,24 +2404,39 @@ export function resolverIdentidadeProduto(
     bundle: extrairBundleSignature(title),
   };
 
+  const identityMpn = modelsBelongToHost ? null : mpn;
+  const identityModelNumber = modelsBelongToHost ? null : modelNumber;
+
   return {
     title,
     normalizedTitle,
     brand,
     ean,
     gtin,
-    mpn,
-    modelNumber,
-    model,
-    modelTokens,
-    searchCodes: Array.from(
-      new Set(
-        [mpn, modelNumber, model, ...modelTokens].filter(
-          (value): value is string => Boolean(value),
-        ),
-      ),
-    ),
-    kind: resolverTipoProduto(normalizedTitle),
+    mpn: identityMpn,
+    modelNumber: identityModelNumber,
+    model: selectedModel,
+    commercialModel: selectedModel,
+    manufacturerSku,
+    variantCodes,
+    modelTokens: soldModelTokens,
+    searchCodes: soldSearchCodes,
+    kind: roleAnalysis.kind,
+    role: roleAnalysis.role,
+    roleReason: multiModelCompatibility
+      ? `${roleAnalysis.reason} Lista de compatibilidade de hospedeiro com ${hostModelCandidates.length} modelos.`
+      : roleAnalysis.reason,
+    soldItemType: roleAnalysis.soldItemType,
+    hostItemType: roleAnalysis.hostItemType,
+    compatibilityRelation: roleAnalysis.compatibilityRelation,
+    hostModelCandidates,
+    identityModelCandidates,
+    modelAmbiguous,
+    identityConfidence,
+    multiModelCompatibility,
+    compatibleModels: hostModelCandidates.length > 0
+      ? hostModelCandidates
+      : identityModelCandidates,
     variants,
   };
 }
@@ -1660,39 +2444,26 @@ export function resolverIdentidadeProduto(
 export function criarCanonicalKeyDaIdentidade(
   identity: ProductIdentity,
 ): string | null {
+  if (
+    identity.multiModelCompatibility ||
+    (
+      identity.hostModelCandidates.length > 0 &&
+      identity.identityModelCandidates.length === 0
+    )
+  ) {
+    return null;
+  }
+
   const globalCode = identity.gtin ?? identity.ean;
 
   if (globalCode) {
     return `gtin:${globalCode}`;
   }
 
-  /*
-   * Para codigos inferidos do titulo, usamos o submodelo MAIS especifico
-   * que estende o modelo-base. Isso evita colisao de canonicalKey entre
-   * variantes como EDGE60FUSION e EDGE60PRO ou IPHONE15PRO e
-   * IPHONE15PROMAX. Prefixos de marca/familia alternativos continuam
-   * disponiveis no matcher, mas nao dominam a chave canonica.
-   */
   const baseModel =
-    normalizarCodigoIdentidade(identity.model);
+    normalizarCodigoIdentidade(identity.commercialModel ?? identity.model);
 
-  const inferredModelCode =
-    identity.modelTokens
-      .map((token) => normalizarCodigoIdentidade(token))
-      .filter((token): token is string => Boolean(token))
-      .filter((token) =>
-        baseModel
-          ? token === baseModel || token.startsWith(baseModel)
-          : token.length >= 3,
-      )
-      .sort((first, second) => second.length - first.length)[0] ??
-    baseModel ??
-    null;
-
-  const code =
-    identity.mpn ??
-    identity.modelNumber ??
-    inferredModelCode;
+  const code = baseModel;
 
   if (!identity.brand || !code) {
     return null;
@@ -1706,7 +2477,9 @@ export function criarCanonicalKeyDaIdentidade(
   const variantParts = variantEntries
     .filter(
       (entry): entry is [IdentityVariantKey, string] =>
-        Boolean(entry[1]) && entry[0] !== "color",
+        Boolean(entry[1]) &&
+        entry[0] !== "color" &&
+        entry[0] !== "condition",
     )
     .map(([key, value]) => `${key}=${value}`);
 
@@ -1720,6 +2493,7 @@ export function criarCanonicalKeyDaIdentidade(
     "brand-model-v6",
     normalizarCodigoIdentidade(identity.brand),
     code,
+    `role=${identity.kind}`,
     ...variantParts.sort(),
   ].join(":");
 }

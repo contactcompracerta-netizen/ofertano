@@ -5,6 +5,16 @@ import type {
   DiscoveryQuery,
   MarketplaceDiscoveryResult,
 } from "./core/types";
+import {
+  candidatoPodeSeguirNoDiscovery,
+  ehAcessorioNaoSolicitadoPelaConsulta,
+  pontuarCoberturaLexicalPonderada,
+} from "@/services/identity";
+import type { MarketplaceFilterEvent } from "./marketplaceTrace";
+import {
+  rastrearBuscaBrutaMarketplace,
+  rastrearFiltrosMarketplace,
+} from "./marketplaceTrace";
 
 type DomainDiscoveryResult = {
   domain_id?: string;
@@ -112,6 +122,43 @@ type CatalogItemsResponse = {
   results?: CatalogOffer[];
 };
 
+type SiteSearchItem = {
+  id?: string;
+  title?: string;
+  price?: number;
+  original_price?: number | null;
+  permalink?: string;
+  thumbnail?: string;
+  condition?: string;
+  currency_id?: string;
+  category_id?: string;
+  seller?: {
+    id?: number;
+    nickname?: string;
+  };
+  attributes?: Array<{
+    id?: string;
+    name?: string;
+    value_name?: string;
+  }>;
+  tags?: string[];
+  shipping?: {
+    logistic_type?: string;
+    tags?: string[];
+  };
+};
+
+type SiteSearchResponse = {
+  results?: SiteSearchItem[];
+};
+
+type CandidateEvaluation = MarketplaceFilterEvent & {
+  kept?: {
+    candidate: DiscoveryCandidate;
+    relevance: number;
+  };
+};
+
 function limitarQuantidade(
   valor: number,
 ): number {
@@ -141,40 +188,6 @@ function normalizarTexto(
     .trim()
     .replace(/\s+/g, " ");
 }
-
-function calcularRelevancia(
-  titulo: string,
-  consulta: string,
-): number {
-  const tituloNormalizado =
-    normalizarTexto(titulo);
-
-  const termos =
-    normalizarTexto(consulta)
-      .split(" ")
-      .filter(
-        (termo) =>
-          termo.length >= 2,
-      );
-
-  if (termos.length === 0) {
-    return 0;
-  }
-
-  const encontrados =
-    termos.filter(
-      (termo) =>
-        tituloNormalizado.includes(
-          termo,
-        ),
-    ).length;
-
-  return (
-    encontrados /
-    termos.length
-  );
-}
-
 
 const TERMOS_ACESSORIOS_GERAIS = [
   "capa",
@@ -224,6 +237,10 @@ function possuiAcessorioNaoSolicitado(
   titulo: string,
   consulta: string,
 ): boolean {
+  if (ehAcessorioNaoSolicitadoPelaConsulta(consulta, titulo)) {
+    return true;
+  }
+
   const tituloNormalizado =
     normalizarTexto(
       titulo,
@@ -763,7 +780,7 @@ async function descobrirDominio(
     );
   } catch (error) {
     console.error(
-      "Falha ao descobrir domÃ­nio do Mercado Livre:",
+      "Falha ao descobrir domínio do Mercado Livre:",
       error,
     );
 
@@ -771,16 +788,260 @@ async function descobrirDominio(
   }
 }
 
+function recusarCandidato(
+  title: string,
+  externalId: string,
+  stage: string,
+  reason: string,
+  lexicalScore: number,
+): CandidateEvaluation {
+  return {
+    title,
+    externalId,
+    stage,
+    status: "DROPPED",
+    reason,
+    lexicalScore,
+  };
+}
+
+function avaliarTituloParaDiscovery(
+  query: string,
+  titulo: string,
+  externalId: string,
+): CandidateEvaluation | null {
+  const lexical =
+    pontuarCoberturaLexicalPonderada(
+      query,
+      titulo,
+    );
+  const portao =
+    candidatoPodeSeguirNoDiscovery(
+      query,
+      titulo,
+    );
+
+  if (!portao.keep) {
+    return recusarCandidato(
+      titulo,
+      externalId,
+      "lexical",
+      portao.reason,
+      lexical.score,
+    );
+  }
+
+  if (
+    possuiAcessorioNaoSolicitado(
+      titulo,
+      query,
+    )
+  ) {
+    return recusarCandidato(
+      titulo,
+      externalId,
+      "accessory",
+      "Acessorio nao solicitado pela consulta.",
+      lexical.score,
+    );
+  }
+
+  if (
+    !varianteCompativel(
+      titulo,
+      query,
+    )
+  ) {
+    return recusarCandidato(
+      titulo,
+      externalId,
+      "variant",
+      "Qualificador de familia incompativel com a consulta.",
+      lexical.score,
+    );
+  }
+
+  if (
+    !modeloNumericoCompativel(
+      titulo,
+      query,
+    )
+  ) {
+    return recusarCandidato(
+      titulo,
+      externalId,
+      "model-number",
+      "Numero de modelo da consulta ausente no titulo.",
+      lexical.score,
+    );
+  }
+
+  return null;
+}
+
+async function pesquisarCatalogo(
+  query: string,
+  searchLimit: number,
+  domainId: string | null,
+): Promise<ProductSearchResult[]> {
+  const parametros =
+    new URLSearchParams({
+      status: "active",
+      site_id: "MLB",
+      limit: String(searchLimit),
+      q: query,
+    });
+
+  if (domainId) {
+    parametros.set("domain_id", domainId);
+  }
+
+  const pesquisa =
+    (await mercadoLivreFetch(
+      `/products/search?${parametros.toString()}`,
+    )) as ProductSearchResponse;
+
+  return (pesquisa.results ?? []).filter(
+    (produto) =>
+      typeof produto.id === "string" &&
+      Boolean(produto.id.trim()) &&
+      produto.status !== "inactive",
+  );
+}
+
+async function pesquisarItens(
+  query: string,
+  searchLimit: number,
+): Promise<SiteSearchItem[]> {
+  const parametros =
+    new URLSearchParams({
+      q: query,
+      limit: String(Math.min(searchLimit, 50)),
+    });
+
+  const pesquisa =
+    (await mercadoLivreFetch(
+      `/sites/MLB/search?${parametros.toString()}`,
+    )) as SiteSearchResponse;
+
+  return pesquisa.results ?? [];
+}
+
+function converterItemBusca(
+  item: SiteSearchItem,
+  query: string,
+): CandidateEvaluation {
+  const titulo = item.title?.trim() ?? "";
+  const itemId = item.id?.trim() ?? "";
+  const lexical =
+    pontuarCoberturaLexicalPonderada(query, titulo);
+
+  if (!titulo || !itemId) {
+    return recusarCandidato(
+      titulo || "(sem titulo)",
+      itemId || "(sem id)",
+      "normalize",
+      "Item sem titulo ou id.",
+      lexical.score,
+    );
+  }
+
+  const recusaTitulo =
+    avaliarTituloParaDiscovery(query, titulo, itemId);
+
+  if (recusaTitulo) {
+    return recusaTitulo;
+  }
+
+  /*
+   * Anuncios internacionais/CBT entram se forem compraveis.
+   * Nao filtramos tags, logistic_type, catalogo vs item ou seller.
+   */
+  if (
+    typeof item.price !== "number" ||
+    !Number.isFinite(item.price) ||
+    item.price <= 0
+  ) {
+    return recusarCandidato(
+      titulo,
+      itemId,
+      "price",
+      "Item sem preco compravel.",
+      lexical.score,
+    );
+  }
+
+  if (item.currency_id && item.currency_id !== "BRL") {
+    return recusarCandidato(
+      titulo,
+      itemId,
+      "currency",
+      `Moeda ${item.currency_id} fora do marketplace MLB.`,
+      lexical.score,
+    );
+  }
+
+  if (item.condition && item.condition !== "new") {
+    return recusarCandidato(
+      titulo,
+      itemId,
+      "condition",
+      `Condicao ${item.condition} nao e oferta nova compravel.`,
+      lexical.score,
+    );
+  }
+
+  const sourceUrl =
+    item.permalink?.trim() ||
+    `https://www.mercadolivre.com.br/item/${itemId}`;
+
+  const brand =
+    item.attributes?.find((attribute) => attribute.id === "BRAND")
+      ?.value_name?.trim() || null;
+
+  const oldPrice =
+    typeof item.original_price === "number" &&
+    Number.isFinite(item.original_price) &&
+    item.original_price > item.price
+      ? item.original_price
+      : null;
+
+  return {
+    title: titulo,
+    externalId: itemId,
+    stage: "candidate",
+    status: "KEPT",
+    reason: "Item compravel preservado pelo Discovery.",
+    lexicalScore: lexical.score,
+    kept: {
+      relevance: lexical.score,
+      candidate: {
+        marketplace: "MERCADO_LIVRE",
+        marketplaceName: "Mercado Livre",
+        externalId: itemId,
+        sourceUrl,
+        affiliateLink: null,
+        title: titulo,
+        image: item.thumbnail?.trim() || null,
+        price: item.price,
+        oldPrice,
+        category: item.category_id ?? null,
+        brand,
+        seller:
+          typeof item.seller?.id === "number"
+            ? String(item.seller.id)
+            : item.seller?.nickname ?? null,
+        status: "FOUND",
+        error: null,
+      },
+    },
+  };
+}
+
 async function carregarCandidato(
   productId: string,
   query: string,
-): Promise<
-  | {
-      candidate: DiscoveryCandidate;
-      relevance: number;
-    }
-  | null
-> {
+): Promise<CandidateEvaluation> {
   try {
     const produto =
       (await mercadoLivreFetch(
@@ -791,7 +1052,13 @@ async function carregarCandidato(
       produto.status &&
       produto.status !== "active"
     ) {
-      return null;
+      return recusarCandidato(
+        produto.name?.trim() || productId,
+        productId,
+        "catalog-status",
+        `Produto de catalogo ${produto.status}.`,
+        0,
+      );
     }
 
     const titulo =
@@ -799,53 +1066,22 @@ async function carregarCandidato(
       produto.family_name?.trim();
 
     if (!titulo) {
-      return null;
-    }
-
-    const relevancia =
-      calcularRelevancia(
-        titulo,
-        query,
+      return recusarCandidato(
+        productId,
+        productId,
+        "normalize",
+        "Produto de catalogo sem titulo.",
+        0,
       );
-    /*
-     * Busca automática exige correspondência forte.
-     *
-     * "guitarra elétrica" não pode aceitar:
-     * - bicicleta elétrica
-     * - blusa com guitarra
-     * - acessórios relacionados apenas a um termo
-     */
-    if (
-      relevancia < 0.8
-    ) {
-      return null;
     }
 
-    if (
-      possuiAcessorioNaoSolicitado(
-        titulo,
-        query,
-      )
-    ) {
-      return null;
-    }
+    const lexical =
+      pontuarCoberturaLexicalPonderada(query, titulo);
+    const recusaTitulo =
+      avaliarTituloParaDiscovery(query, titulo, productId);
 
-    if (
-      !varianteCompativel(
-        titulo,
-        query,
-      )
-    ) {
-      return null;
-    }
-
-    if (
-      !modeloNumericoCompativel(
-        titulo,
-        query,
-      )
-    ) {
-      return null;
+    if (recusaTitulo) {
+      return recusaTitulo;
     }
 
     if (
@@ -855,7 +1091,13 @@ async function carregarCandidato(
         query,
       )
     ) {
-      return null;
+      return recusarCandidato(
+        titulo,
+        productId,
+        "capacity",
+        "Capacidade da consulta incompativel com o anuncio.",
+        lexical.score,
+      );
     }
 
     let ofertas:
@@ -868,22 +1110,28 @@ async function carregarCandidato(
         )) as CatalogItemsResponse;
     } catch (error) {
       /*
-       * Alguns produtos ativos de catÃ¡logo nÃ£o possuem
-       * publicaÃ§Ãµes disponÃ­veis naquele momento.
+       * Alguns produtos ativos de catálogo não possuem
+       * publicações disponíveis naquele momento.
        *
        * Nesse caso o Mercado Livre pode responder
        * 404 "No winners found".
        *
-       * Isso nÃ£o deve interromper a descoberta inteira.
+       * Isso não deve interromper a descoberta inteira.
        */
       console.warn(
-        `Produto ${productId} sem ofertas disponÃ­veis:`,
+        `Produto ${productId} sem ofertas disponíveis:`,
         error instanceof Error
           ? error.message
           : error,
       );
 
-      return null;
+      return recusarCandidato(
+        titulo,
+        productId,
+        "offers-fetch",
+        "Catalogo sem publicacao compravel no momento.",
+        lexical.score,
+      );
     }
 
     const oferta =
@@ -892,7 +1140,13 @@ async function carregarCandidato(
       );
 
     if (!oferta) {
-      return null;
+      return recusarCandidato(
+        titulo,
+        productId,
+        "offer-select",
+        "Nenhuma oferta compravel (preco, URL, status, moeda ou condicao).",
+        lexical.score,
+      );
     }
 
     const itemId =
@@ -904,7 +1158,13 @@ async function carregarCandidato(
       );
 
     if (!itemId || !sourceUrl) {
-      return null;
+      return recusarCandidato(
+        titulo,
+        productId,
+        "url",
+        "Oferta sem item_id ou URL individual.",
+        lexical.score,
+      );
     }
 
     const preco =
@@ -922,69 +1182,53 @@ async function carregarCandidato(
         : null;
 
     return {
-      relevance: relevancia,
-
-      candidate: {
-        marketplace:
-          "MERCADO_LIVRE",
-
-        marketplaceName:
-          "Mercado Livre",
-
-        /*
-         * O candidato persistido agora representa a publicação
-         * individual realmente comprável, não a página /p/ do
-         * catálogo. O productId de catálogo continua sendo usado
-         * apenas para localizar e validar a oferta.
-         */
-        externalId:
-          itemId,
-
-        sourceUrl,
-
-        /*
-         * Link afiliado individual serÃ¡ resolvido
-         * posteriormente pelo fluxo de afiliados.
-         */
-        affiliateLink:
-          null,
-
-        title:
-          titulo,
-
-        image:
-          obterImagem(
-            produto,
-          ),
-
-        price:
-          preco,
-
-        oldPrice:
-          precoAntigo,
-
-        category:
-          oferta.category_id ??
-          null,
-
-        brand:
-          obterMarca(
-            produto,
-          ),
-
-        seller:
-          typeof oferta.seller_id ===
-            "number"
-            ? String(
-                oferta.seller_id,
-              )
-            : null,
-
-        status:
-          "FOUND",
-
-        error:
-          null,
+      title: titulo,
+      externalId: itemId,
+      stage: "candidate",
+      status: "KEPT",
+      reason: "Oferta de catalogo compravel preservada pelo Discovery.",
+      lexicalScore: lexical.score,
+      kept: {
+        relevance: lexical.score,
+        candidate: {
+          marketplace:
+            "MERCADO_LIVRE",
+          marketplaceName:
+            "Mercado Livre",
+          externalId:
+            itemId,
+          sourceUrl,
+          affiliateLink:
+            null,
+          title:
+            titulo,
+          image:
+            obterImagem(
+              produto,
+            ),
+          price:
+            preco,
+          oldPrice:
+            precoAntigo,
+          category:
+            oferta.category_id ??
+            null,
+          brand:
+            obterMarca(
+              produto,
+            ),
+          seller:
+            typeof oferta.seller_id ===
+              "number"
+              ? String(
+                  oferta.seller_id,
+                )
+              : null,
+          status:
+            "FOUND",
+          error:
+            null,
+        },
       },
     };
   } catch (error) {
@@ -993,7 +1237,15 @@ async function carregarCandidato(
       error,
     );
 
-    return null;
+    return recusarCandidato(
+      productId,
+      productId,
+      "error",
+      error instanceof Error
+        ? error.message.slice(0, 180)
+        : "Falha ao carregar produto de catalogo.",
+      0,
+    );
   }
 }
 
@@ -1030,15 +1282,6 @@ export async function buscarMercadoLivre(
   }
 
   try {
-    /*
-     * Primeiro descobrimos o domÃ­nio correto.
-     *
-     * Exemplo:
-     * "iPhone 15" -> MLB-CELLPHONES
-     *
-     * Isso evita retornar capas e acessÃ³rios
-     * quando o usuÃ¡rio procura pelo aparelho.
-     */
     const domainId =
       await descobrirDominio(
         query,
@@ -1053,181 +1296,125 @@ export async function buscarMercadoLivre(
         50,
       );
 
-    const parametros =
-      new URLSearchParams({
-        status: "active",
-        site_id: "MLB",
-        limit:
-          String(
-            searchLimit,
-          ),
-        q: query,
-      });
-
-    if (domainId) {
-      parametros.set(
-        "domain_id",
+    let catalogResults =
+      await pesquisarCatalogo(
+        query,
+        searchLimit,
         domainId,
       );
+    let catalogSource =
+      domainId
+        ? "catalog"
+        : "catalog-no-domain";
+
+    rastrearBuscaBrutaMarketplace({
+      marketplace: "MERCADO_LIVRE",
+      query,
+      rawCount: catalogResults.length,
+      source: catalogSource,
+    });
+
+    if (catalogResults.length === 0 && domainId) {
+      catalogResults =
+        await pesquisarCatalogo(
+          query,
+          searchLimit,
+          null,
+        );
+      catalogSource = "catalog-no-domain";
+
+      rastrearBuscaBrutaMarketplace({
+        marketplace: "MERCADO_LIVRE",
+        query,
+        rawCount: catalogResults.length,
+        source: catalogSource,
+      });
     }
 
-    const pesquisa =
-      (await mercadoLivreFetch(
-        `/products/search?${parametros.toString()}`,
-      )) as ProductSearchResponse;
+    const evaluations: CandidateEvaluation[] = [];
+    let scanned = 0;
+    const productIds = Array.from(
+      new Set(
+        catalogResults
+          .map((produto) => produto.id?.trim())
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
 
-    const productIds =
-      Array.from(
-        new Set(
-          (
-            pesquisa.results ??
-            []
-          )
-            .filter(
-              (produto) =>
-                typeof produto.id ===
-                  "string" &&
-                Boolean(
-                  produto.id.trim(),
-                ) &&
-                produto.status !==
-                  "inactive",
-            )
-            .map(
-              (produto) =>
-                produto.id!.trim(),
-            ),
-        ),
+    for (let index = 0; index < productIds.length; index += 4) {
+      const lote = productIds.slice(index, index + 4);
+      scanned += lote.length;
+
+      const resultados = await Promise.all(
+        lote.map((productId) => carregarCandidato(productId, query)),
       );
 
-    if (
-      productIds.length ===
-      0
-    ) {
-      return {
-        marketplace:
-          "MERCADO_LIVRE",
-
-        query,
-
-        success:
-          true,
-
-        candidates:
-          [],
-
-        scanned:
-          0,
-
-        error:
-          null,
-      };
-    }
-
-    const encontrados: Array<{
-      candidate: DiscoveryCandidate;
-      relevance: number;
-    }> = [];
-
-    let scanned =
-      0;
-
-    /*
-     * Pequenos lotes para nÃ£o bombardear
-     * a API do Mercado Livre.
-     */
-    for (
-      let index = 0;
-      index <
-      productIds.length;
-      index += 4
-    ) {
-      const lote =
-        productIds.slice(
-          index,
-          index + 4,
-        );
-
-      scanned +=
-        lote.length;
-
-      const resultados =
-        await Promise.all(
-          lote.map(
-            (productId) =>
-              carregarCandidato(
-                productId,
-                query,
-              ),
-          ),
-        );
-
-      for (
-        const resultado of
-          resultados
-      ) {
-        if (resultado) {
-          encontrados.push(
-            resultado,
-          );
-        }
-      }
+      evaluations.push(...resultados);
 
       if (
-        encontrados.length >=
-        limit
+        evaluations.filter((item) => item.status === "KEPT").length >= limit
       ) {
         break;
       }
     }
 
-    const candidatos =
-      encontrados
-        .sort(
-          (a, b) => {
-            if (
-              b.relevance !==
-              a.relevance
-            ) {
-              return (
-                b.relevance -
-                a.relevance
-              );
-            }
+    let kept = evaluations.filter((item) => item.kept);
 
-            return (
-              (a.candidate.price ??
-                Number.POSITIVE_INFINITY) -
-              (b.candidate.price ??
-                Number.POSITIVE_INFINITY)
-            );
-          },
-        )
-        .slice(
-          0,
-          limit,
-        )
-        .map(
-          (resultado) =>
-            resultado.candidate,
+    if (kept.length === 0) {
+      try {
+        const items = await pesquisarItens(query, searchLimit);
+
+        rastrearBuscaBrutaMarketplace({
+          marketplace: "MERCADO_LIVRE",
+          query,
+          rawCount: items.length,
+          source: "items",
+        });
+
+        for (const item of items) {
+          scanned += 1;
+          evaluations.push(converterItemBusca(item, query));
+        }
+
+        kept = evaluations.filter((item) => item.kept);
+      } catch (error) {
+        console.warn(
+          "Fallback de itens do Mercado Livre indisponivel:",
+          error instanceof Error ? error.message : error,
         );
+      }
+    }
+
+    rastrearFiltrosMarketplace({
+      marketplace: "MERCADO_LIVRE",
+      query,
+      events: evaluations,
+    });
+
+    const candidatos = kept
+      .sort((first, second) => {
+        const firstRelevance = first.kept?.relevance ?? 0;
+        const secondRelevance = second.kept?.relevance ?? 0;
+
+        if (secondRelevance !== firstRelevance) {
+          return secondRelevance - firstRelevance;
+        }
+
+        return (
+          (first.kept?.candidate.price ?? Number.POSITIVE_INFINITY) -
+          (second.kept?.candidate.price ?? Number.POSITIVE_INFINITY)
+        );
+      })
+      .slice(0, limit)
+      .map((item) => item.kept!.candidate);
 
     return {
-      marketplace:
-        "MERCADO_LIVRE",
-
+      marketplace: "MERCADO_LIVRE",
       query,
-
-      success:
-        true,
-
-      candidates:
-        candidatos,
-
+      success: true,
+      candidates: candidatos,
       scanned,
-
-      error:
-        null,
+      error: null,
     };
   } catch (error) {
     const mensagem =
@@ -1236,25 +1423,12 @@ export async function buscarMercadoLivre(
         : "Erro desconhecido.";
 
     return {
-      marketplace:
-        "MERCADO_LIVRE",
-
+      marketplace: "MERCADO_LIVRE",
       query,
-
-      success:
-        false,
-
-      candidates:
-        [],
-
-      scanned:
-        0,
-
-      error:
-        mensagem.slice(
-          0,
-          1000,
-        ),
+      success: false,
+      candidates: [],
+      scanned: 0,
+      error: mensagem.slice(0, 1000),
     };
   }
 }
