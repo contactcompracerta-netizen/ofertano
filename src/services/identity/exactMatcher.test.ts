@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 
 import { avaliarCompatibilidadeExataEntreImports } from "./exactMatcher";
-import { pontuarEspecificidadeDaConsulta, criarConsultasGlobaisDeIdentidade, avaliarCompatibilidadeComConsulta, candidatoPodeSeguirNoDiscovery, tokensDistintivosDaConsulta } from "./queryMatcher";
+import { pontuarEspecificidadeDaConsulta, criarConsultasGlobaisDeIdentidade, avaliarCompatibilidadeComConsulta, candidatoPodeSeguirNoDiscovery, tokensDistintivosDaConsulta, matchQueryToCandidate, pontuarCoberturaLexicalPonderada } from "./queryMatcher";
 import { criarCanonicalKeyDaIdentidade, papelDaIdentidade, resolverIdentidadeProduto, codigosDeIdentidadeDoItemVendido } from "./resolver";
+import { classificarClasseProduto } from "./productClass";
 
 function listing(
   title: string,
@@ -528,8 +529,9 @@ assert.ok(
 );
 assert.equal(matchOtherBrand.compatible, false);
 assert.ok(
-  matchOtherBrand.conflicts.some((item) => item.startsWith("brand:")),
-  "Marca/entidade distinta deve gerar conflito de marca.",
+  matchOtherBrand.conflicts.some((item) => item.startsWith("brand:")) ||
+    matchOtherBrand.reason.includes("distintivo"),
+  "Entidade distinta rejeita por marca confiavel ou termo distintivo, sem inventar brand.",
 );
 assert.equal(matchGenericCode.compatible, false);
 assert.ok(
@@ -618,6 +620,327 @@ assert.equal(otherEntity.compatible, false);
 assert.ok(
   otherEntity.conflicts.some((item) => item.startsWith("brand:")) ||
     otherEntity.reason.includes("distintivo"),
+);
+
+const classQuery = "Headphone Sony Wireless Rosa";
+const classConflict = avaliarCompatibilidadeComConsulta(
+  classQuery,
+  listing("Caixa de Som Sony Wireless Rosa", "Sony"),
+);
+assert.equal(classConflict.compatible, false, "TESTE 1: classe errada deve ser rejeitada.");
+assert.equal(classConflict.productClassCompatibility, "CONFLICT");
+assert.ok(
+  classConflict.conflicts.some((item) => item.startsWith("productClass:")),
+);
+
+const brandConflict = avaliarCompatibilidadeComConsulta(
+  classQuery,
+  listing(
+    "Headphone JBL Wireless Rosa compativel com Sony",
+    "JBL",
+  ),
+);
+assert.equal(brandConflict.compatible, false, "TESTE 2: marca resolvida diferente deve ser rejeitada.");
+assert.equal(brandConflict.brandCompatibility, "CONFLICT");
+assert.equal(brandConflict.queryBrand, "sony");
+assert.equal(brandConflict.candidateBrand, "jbl");
+
+const classSynonym = avaliarCompatibilidadeComConsulta(
+  classQuery,
+  listing("Fone sem fio Sony Rosa", "Sony"),
+);
+assert.equal(classSynonym.compatible, true, "TESTE 3: sinonimo de classe + marca + atributos.");
+assert.equal(classSynonym.productClassCompatibility, "MATCH");
+assert.equal(classSynonym.brandCompatibility, "MATCH");
+assert.ok(classSynonym.attributeMatches.includes("color"));
+assert.ok(classSynonym.attributeMatches.includes("wireless"));
+
+const fullAttributeQuery =
+  "Headphone MarcaR Wireless Rosa Resistente a Agua";
+const fullMatch = avaliarCompatibilidadeComConsulta(
+  fullAttributeQuery,
+  listing("Headphone MarcaR Wireless Rosa Resistente a Agua", "MarcaR"),
+);
+const missingAttributes = avaliarCompatibilidadeComConsulta(
+  fullAttributeQuery,
+  listing("Headphone MarcaR", "MarcaR"),
+);
+assert.equal(
+  missingAttributes.compatible,
+  true,
+  "TESTE 4: atributos ausentes nao sao conflito.",
+);
+assert.equal(missingAttributes.attributeConflicts.length, 0);
+assert.ok(missingAttributes.attributeMissing.length > 0);
+assert.ok(
+  missingAttributes.score < fullMatch.score,
+  "TESTE 4: cobertura parcial nao pode ter a mesma confianca do titulo completo.",
+);
+
+const colorConflict = avaliarCompatibilidadeComConsulta(
+  "Headphone MarcaR Wireless Rosa",
+  listing("Headphone MarcaR Wireless Azul", "MarcaR"),
+);
+assert.equal(colorConflict.compatible, false, "TESTE 5: cor conflitante.");
+assert.ok(
+  colorConflict.attributeConflicts.some((item) => item.startsWith("color:")),
+);
+
+const scaleMain = resolverIdentidadeProduto(
+  listing("Balanca MarcaR Digital", "MarcaR"),
+);
+const headphoneMainRole = resolverIdentidadeProduto(
+  listing("Headphone MarcaR Wireless", "MarcaR"),
+);
+assert.equal(scaleMain.role, "MAIN", "TESTE 7: balanca tambem pode ser MAIN.");
+assert.equal(headphoneMainRole.role, "MAIN");
+assert.notEqual(
+  classificarClasseProduto("Headphone MarcaR"),
+  classificarClasseProduto("Balanca MarcaR"),
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    "Headphone MarcaR",
+    listing("Balanca MarcaR Digital", "MarcaR"),
+  ).compatible,
+  false,
+  "TESTE 7: MAIN nao unifica classes diferentes.",
+);
+
+const accessoryHost = avaliarCompatibilidadeComConsulta(
+  "Headphone MarcaR",
+  listing("Estojo MarcaS para Headphone MarcaR", "MarcaS"),
+);
+assert.equal(
+  accessoryHost.compatible,
+  false,
+  "TESTE 8: acessorio de outra marca nao passa so porque o hospedeiro cita a marca da consulta.",
+);
+assert.ok(
+  accessoryHost.brandCompatibility === "CONFLICT" ||
+    accessoryHost.roleCompatible === false ||
+    accessoryHost.productClassCompatibility === "CONFLICT",
+);
+
+const iHomeQuery = "Headphone iHome";
+const iHomeClassConflicts = [
+  ["Lustre iHome Cristal", "LIGHTING"],
+  ["Jogo infantil iHome", "GAME"],
+  ["Colher medidora iHome", "CUTLERY"],
+  ["Balanca iHome Digital", "SCALE"],
+  ["Webcam iHome HD", "CAMERA"],
+  ["Espelho iHome LED", "MIRROR"],
+] as const;
+
+for (const [title, expectedClass] of iHomeClassConflicts) {
+  const match = avaliarCompatibilidadeComConsulta(
+    iHomeQuery,
+    listing(title, "iHome"),
+  );
+  assert.equal(
+    match.compatible,
+    false,
+    `Consulta de headphone iHome nao pode aceitar ${title}.`,
+  );
+  assert.equal(match.status, "REJECTED");
+  assert.equal(match.productClassCompatibility, "CONFLICT");
+  assert.ok(
+    match.hardConflicts.some((item) => item.startsWith("productClass:")),
+  );
+  assert.equal(match.candidateProductClass, expectedClass);
+}
+
+const genericPencil = avaliarCompatibilidadeComConsulta(
+  "lapis",
+  listing("Lapis grafite HB", null),
+);
+assert.equal(genericPencil.queryBrand, null);
+assert.equal(genericPencil.status, "INSUFFICIENT");
+
+const queriesSemEvidenciaDeMarca = [
+  ["cafeteira inox", listing("Cafeteira inox 15 barras", null), "material"],
+  ["panela vermelha", listing("Panela vermelha antiaderente", null), "cor"],
+  ["fone bluetooth", listing("Fone bluetooth preto", null), "tecnologia"],
+  ["furadeira profissional", listing("Furadeira profissional 500w", null), "caracteristica"],
+  ["sofa retratil", listing("Sofa retratil 3 lugares", null), "caracteristica"],
+  ["mesa madeira", listing("Mesa madeira 6 lugares", null), "material"],
+] as const;
+
+for (const [query, candidate, kind] of queriesSemEvidenciaDeMarca) {
+  const match = avaliarCompatibilidadeComConsulta(query, candidate);
+  assert.equal(
+    match.queryBrand,
+    null,
+    `produto + ${kind} nao vira marca: "${query}"`,
+  );
+  assert.equal(
+    match.brandCompatibility,
+    "UNKNOWN",
+    `Sem evidencia de marca, brand fica UNKNOWN: "${query}"`,
+  );
+  assert.equal(
+    match.hardConflicts.some((item) => item.startsWith("brand:")),
+    false,
+    `Brand CONFLICT nao dispara sem queryBrand confiavel: "${query}"`,
+  );
+}
+
+const explicitBrand = avaliarCompatibilidadeComConsulta(
+  "Headphone Sony Wireless",
+  listing("Headphone Sony Wireless", "Sony"),
+);
+assert.equal(explicitBrand.queryBrand, "sony");
+assert.equal(explicitBrand.brandCompatibility, "MATCH");
+assert.equal(explicitBrand.productClassCompatibility, "MATCH");
+assert.equal(explicitBrand.compatible, true);
+
+const samsungBrand = avaliarCompatibilidadeComConsulta(
+  "Samsung Galaxy A55",
+  listing("Samsung Galaxy A55 128GB", "Samsung"),
+);
+assert.equal(samsungBrand.queryBrand, "samsung");
+assert.equal(samsungBrand.brandCompatibility, "MATCH");
+assert.equal(samsungBrand.compatible, true);
+
+const brandMismatch = avaliarCompatibilidadeComConsulta(
+  "Headphone Sony Wireless",
+  listing("Headphone JBL Wireless", "JBL"),
+);
+assert.equal(brandMismatch.compatible, false);
+assert.equal(brandMismatch.brandCompatibility, "CONFLICT");
+
+const dustBags = resolverIdentidadeProduto(
+  listing(
+    "Pacote com 10 Sacos de Poeira Compativeis com o Aspirador Robo iHome",
+    "iHome",
+  ),
+);
+assert.notEqual(
+  dustBags.role,
+  "MAIN",
+  "Sacos de poeira nao podem virar MAIN do aspirador hospedeiro.",
+);
+assert.ok(dustBags.soldItemType);
+assert.ok(dustBags.hostItemType);
+assert.ok(dustBags.compatibilityRelation);
+assert.notEqual(dustBags.soldItemType, "PRIMARY");
+
+const dustBagVsHeadphone = avaliarCompatibilidadeComConsulta(
+  iHomeQuery,
+  listing(
+    "Pacote com 10 Sacos de Poeira Compativeis com o Aspirador Robo iHome",
+    "iHome",
+  ),
+);
+assert.equal(dustBagVsHeadphone.status, "REJECTED");
+assert.equal(
+  dustBagVsHeadphone.compatible,
+  false,
+  "Sacos para aspirador nao passam na consulta de headphone.",
+);
+assert.ok(
+  dustBagVsHeadphone.hardConflicts.some(
+    (item) =>
+      item.startsWith("soldItem:") ||
+      item.startsWith("papel:") ||
+      item.startsWith("productClass:"),
+  ),
+);
+
+const vacuumWheels = resolverIdentidadeProduto(
+  listing("Rodas para aspirador robo iHome", "iHome"),
+);
+assert.notEqual(vacuumWheels.role, "MAIN");
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    iHomeQuery,
+    listing("Rodas para aspirador robo iHome", "iHome"),
+  ).compatible,
+  false,
+);
+
+const vacuumRemote = avaliarCompatibilidadeComConsulta(
+  iHomeQuery,
+  listing("Controle para aspirador robo iHome", "iHome"),
+);
+assert.equal(vacuumRemote.compatible, false);
+assert.equal(vacuumRemote.status, "REJECTED");
+
+const marcaXQuery = "Headphone MarcaX";
+const headphoneAccepted = avaliarCompatibilidadeComConsulta(
+  marcaXQuery,
+  listing("Headphone MarcaX Wireless Rosa", "MarcaX"),
+);
+const headphoneAlias = avaliarCompatibilidadeComConsulta(
+  marcaXQuery,
+  listing("Fone de ouvido MarcaX Bluetooth", "MarcaX"),
+);
+const speakerRejected = avaliarCompatibilidadeComConsulta(
+  marcaXQuery,
+  listing("Caixa de Som MarcaX Bluetooth", "MarcaX"),
+);
+const lightingRejected = avaliarCompatibilidadeComConsulta(
+  marcaXQuery,
+  listing("Lustre MarcaX Cristal", "MarcaX"),
+);
+const accessoryRejected = avaliarCompatibilidadeComConsulta(
+  marcaXQuery,
+  listing("Capa para Headphone MarcaX ZX100", "MarcaX"),
+);
+const otherBrandRejected = avaliarCompatibilidadeComConsulta(
+  marcaXQuery,
+  listing("Headphone MarcaY Wireless", "MarcaY"),
+);
+
+assert.equal(headphoneAccepted.status, "ACCEPTED");
+assert.equal(headphoneAlias.status, "ACCEPTED");
+assert.equal(speakerRejected.status, "REJECTED");
+assert.ok(
+  speakerRejected.hardConflicts.some((item) => item.startsWith("productClass:")),
+);
+assert.equal(lightingRejected.status, "REJECTED");
+assert.ok(
+  lightingRejected.hardConflicts.some((item) => item.startsWith("productClass:")),
+);
+assert.equal(accessoryRejected.status, "REJECTED");
+assert.ok(
+  accessoryRejected.hardConflicts.some(
+    (item) => item.startsWith("soldItem:") || item.startsWith("papel:") || item.startsWith("productClass:"),
+  ),
+);
+assert.equal(otherBrandRejected.status, "REJECTED");
+assert.ok(
+  otherBrandRejected.hardConflicts.some((item) => item.startsWith("brand:")) ||
+    otherBrandRejected.hardConflicts.some((item) => item.startsWith("distinctive:")) ||
+    otherBrandRejected.reason.includes("distintivo"),
+  "Marca nao catalogada continua distintiva; brand CONFLICT so com evidencia confiavel.",
+);
+
+assert.notEqual(
+  headphoneAccepted.textRelevance,
+  lightingRejected.textRelevance,
+  "Candidates semanticamente diferentes nao podem ter queryTextRelevance identico.",
+);
+assert.notEqual(
+  speakerRejected.textRelevance,
+  lightingRejected.textRelevance,
+);
+assert.notEqual(
+  pontuarCoberturaLexicalPonderada(
+    marcaXQuery,
+    "Headphone MarcaX Wireless Rosa",
+  ).score,
+  pontuarCoberturaLexicalPonderada(
+    marcaXQuery,
+    "Lustre MarcaX Cristal",
+  ).score,
+);
+
+const queryIdentity = identityOf(marcaXQuery, null);
+const candidateIdentity = identityOf("Headphone MarcaX Wireless Rosa", "MarcaX");
+assert.equal(
+  matchQueryToCandidate(queryIdentity, candidateIdentity).status,
+  "ACCEPTED",
 );
 
 console.log("identity exact matcher: todos os casos globais passaram");

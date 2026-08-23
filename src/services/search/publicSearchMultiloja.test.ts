@@ -14,7 +14,7 @@ import {
   criarConsultasGlobaisDeIdentidade,
 } from "../identity";
 import type { ProductImport } from "../importers/core/types";
-import { escolherClusterExatoDaPesquisaPublica } from "./persistPublicSearchCluster";
+import { escolherClusterExatoDaPesquisaPublica, diagnosticarConsensoDaPesquisaPublica } from "./persistPublicSearchCluster";
 import type { PublicSearchOffer } from "./persistPublicSearchCluster";
 
 const QUERY =
@@ -1127,6 +1127,139 @@ assert.equal(
   "Persistencia publica nao pode aceitar produto sem a entidade distintiva da consulta.",
 );
 assert.match(distinctivePersistCluster[0]!.product.title, /MarcaR/i);
+
+const singleSourceConsensus = diagnosticarConsensoDaPesquisaPublica(
+  "Headphone MarcaX ZX100",
+  [
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-zx100-only",
+      title: "Headphone MarcaX ZX100",
+      price: 199,
+      brand: "MarcaX",
+    }),
+  ],
+);
+assert.equal(singleSourceConsensus.length, 1);
+assert.equal(
+  singleSourceConsensus[0]?.consensusMultiMarketplace,
+  false,
+  "1 marketplace + 1 candidato nao e consenso multi-loja.",
+);
+assert.equal(
+  singleSourceConsensus[0]?.reason,
+  "SINGLE_SOURCE_IDENTITY",
+);
+assert.equal(
+  singleSourceConsensus[0]?.consensusScore,
+  0,
+  "1 marketplace + 1 candidato tem consensusScore=0.",
+);
+
+const isolatedSpeaker = diagnosticarConsensoDaPesquisaPublica(
+  "Headphone MarcaX",
+  [
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-uv360",
+      title: "MarcaX Higienizador Uv360 Alto Falante Despertador Bluetooth",
+      price: 199,
+      brand: "MarcaX",
+    }),
+  ],
+);
+assert.equal(isolatedSpeaker[0]?.consensusMultiMarketplace, false);
+assert.equal(isolatedSpeaker[0]?.reason, "SINGLE_SOURCE_IDENTITY");
+assert.equal(
+  isolatedSpeaker[0]?.consensusScore,
+  0,
+  "1 marketplace + 1 candidato tem consensusScore=0.",
+);
+
+const multiSourceConsensus = diagnosticarConsensoDaPesquisaPublica(
+  "Headphone MarcaX ZX100",
+  [
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-zx100",
+      title: "Headphone MarcaX ZX100",
+      price: 199,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Amazon",
+      externalId: "amz-zx100",
+      title: "Headphone MarcaX ZX100 Bluetooth",
+      price: 189,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Shopee",
+      externalId: "shp-zx100",
+      title: "Fone Bluetooth MarcaX ZX100",
+      price: 179,
+      brand: "MarcaX",
+    }),
+  ],
+);
+assert.equal(
+  multiSourceConsensus[0]?.consensusMultiMarketplace,
+  true,
+  "A mesma identidade em 3 marketplaces e consenso real.",
+);
+assert.ok(
+  (multiSourceConsensus[0]?.consensusScore ?? 0) >
+    (singleSourceConsensus[0]?.consensusScore ?? 0),
+  "Consenso multi-loja deve pontuar acima de fonte unica.",
+);
+
+const accessoryNotReference = escolherClusterExatoDaPesquisaPublica(
+  "Headphone MarcaX ZX100",
+  [
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-estojo",
+      title: "Estojo de transporte para Headphone MarcaX ZX100",
+      price: 39,
+      brand: "MarcaX",
+    }),
+    offer({
+      marketplace: "Mercado Livre",
+      externalId: "ml-main-zx100",
+      title: "Headphone MarcaX ZX100 Bluetooth",
+      price: 199,
+      brand: "MarcaX",
+    }),
+  ],
+);
+assert.ok(accessoryNotReference.length >= 1);
+assert.match(
+  accessoryNotReference[0]!.product.title,
+  /Headphone MarcaX ZX100/i,
+);
+assert.equal(
+  accessoryNotReference.some((item) => /estojo/i.test(item.product.title)),
+  false,
+  "Acessorio nao pode virar referencia do produto principal.",
+);
+
+const onlyAccessory = escolherClusterExatoDaPesquisaPublica(
+  "Headphone MarcaX ZX100",
+  [
+    offer({
+      marketplace: "Magazine Luiza",
+      externalId: "mag-sacos",
+      title: "Pacote com 10 Sacos de Poeira Compativeis com o Aspirador Robo iHome",
+      price: 29,
+      brand: "iHome",
+    }),
+  ],
+);
+assert.equal(
+  onlyAccessory.length,
+  0,
+  "Saco de poeira nao pode ser referencia de consulta de headphone.",
+);
 
 void runAsyncCases()
   .then(() => {

@@ -17,6 +17,7 @@ import {
   rastrearResumoMercadoLivre,
 } from "./marketplaceTrace";
 import {
+  buscarEstrategiaPublicaMercadoLivre,
   buscarPaginaPublicaMercadoLivre,
   classificarErroFonteMercadoLivre,
   type MercadoLivreListingItem,
@@ -158,6 +159,14 @@ export type MercadoLivreAcquisitionSources = {
     limit: number,
   ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
   searchPublicListings: (
+    query: string,
+    limit: number,
+  ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
+  searchPublicLista?: (
+    query: string,
+    limit: number,
+  ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
+  searchPublicJm?: (
     query: string,
     limit: number,
   ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
@@ -1034,29 +1043,55 @@ async function hidratarAnunciosAvulsos(
   }
 }
 
-async function pesquisarPaginaPublica(
-  query: string,
+async function hidratarPaginaPublica(
+  pagina: MercadoLivreSourceFetch<SiteSearchItem[]>,
 ): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
-  const pagina = await buscarPaginaPublicaMercadoLivre(query);
-
   if (pagina.status !== "SUCCESS" || pagina.data.length === 0) {
     return pagina;
   }
 
+  const extractedCount = pagina.data.length;
   const hidratados = await hidratarAnunciosAvulsos(pagina.data);
-  const usaveis = hidratados.filter(
+  const withTitle = hidratados.filter(
     (item) => Boolean(item.id) && Boolean(item.title?.trim()),
   );
 
+  /*
+   * Nao zerar data quando o parser achou IDs. rawCount precisa
+   * refletir a extracao; itens sem titulo caem no converter.
+   */
+  const data = withTitle.length > 0 ? withTitle : hidratados;
+
   return {
     ...pagina,
-    data: usaveis,
-    status: usaveis.length > 0 ? "SUCCESS" : "EMPTY",
+    data,
     reason:
-      usaveis.length > 0
+      withTitle.length > 0
         ? pagina.reason
-        : "Busca publica encontrou IDs sem titulo/preco hidratavel.",
+        : `Busca publica extraiu ${extractedCount} ID(s) mas nenhum anuncio hidratou titulo.`,
   };
+}
+
+async function pesquisarPaginaPublica(
+  query: string,
+): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  return hidratarPaginaPublica(await buscarPaginaPublicaMercadoLivre(query));
+}
+
+async function pesquisarPaginaPublicaLista(
+  query: string,
+): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  return hidratarPaginaPublica(
+    await buscarEstrategiaPublicaMercadoLivre(query, "public-search-lista"),
+  );
+}
+
+async function pesquisarPaginaPublicaJm(
+  query: string,
+): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  return hidratarPaginaPublica(
+    await buscarEstrategiaPublicaMercadoLivre(query, "public-search-jm"),
+  );
 }
 
 function converterItemBusca(
@@ -1388,6 +1423,8 @@ function fontesPadraoMercadoLivre(): MercadoLivreAcquisitionSources {
     loadCatalogCandidate: carregarCandidato,
     searchItemsApi: pesquisarItens,
     searchPublicListings: pesquisarPaginaPublica,
+    searchPublicLista: pesquisarPaginaPublicaLista,
+    searchPublicJm: pesquisarPaginaPublicaJm,
   };
 }
 
@@ -1398,6 +1435,7 @@ function registrarFonte(
   usableCount: number,
   sourcesTried: string[],
   blockedSources: string[],
+  unusableSources: string[],
   rawTotal: { value: number },
 ): void {
   sourcesTried.push(source);
@@ -1405,6 +1443,10 @@ function registrarFonte(
 
   if (fetch.status === "BLOCKED" && !blockedSources.includes(source)) {
     blockedSources.push(source);
+  }
+
+  if (fetch.status === "UNUSABLE" && !unusableSources.includes(source)) {
+    unusableSources.push(source);
   }
 
   rastrearFonteMercadoLivre({
@@ -1438,6 +1480,7 @@ export async function buscarMercadoLivreComFontes(
 
   const sourcesTried: string[] = [];
   const blockedSources: string[] = [];
+  const unusableSources: string[] = [];
   const rawTotal = { value: 0 };
   const evaluations: CandidateEvaluation[] = [];
   let scanned = 0;
@@ -1459,6 +1502,7 @@ export async function buscarMercadoLivreComFontes(
       0,
       sourcesTried,
       blockedSources,
+      unusableSources,
       rawTotal,
     );
 
@@ -1476,6 +1520,7 @@ export async function buscarMercadoLivreComFontes(
         0,
         sourcesTried,
         blockedSources,
+        unusableSources,
         rawTotal,
       );
     }
@@ -1520,7 +1565,11 @@ export async function buscarMercadoLivreComFontes(
     });
 
     const coletarItens = async (
-      source: "items-api" | "public-search",
+      source:
+        | "items-api"
+        | "public-search"
+        | "public-search-lista"
+        | "public-search-jm",
       fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
     ) => {
       const before = evaluations.filter((item) => item.kept).length;
@@ -1540,6 +1589,7 @@ export async function buscarMercadoLivreComFontes(
         Math.max(0, after - before),
         sourcesTried,
         blockedSources,
+        unusableSources,
         rawTotal,
       );
     };
@@ -1552,10 +1602,29 @@ export async function buscarMercadoLivreComFontes(
     }
 
     if (evaluations.filter((item) => item.kept).length === 0) {
-      await coletarItens(
-        "public-search",
-        await sources.searchPublicListings(query, searchLimit),
-      );
+      if (sources.searchPublicLista || sources.searchPublicJm) {
+        if (sources.searchPublicLista) {
+          await coletarItens(
+            "public-search-lista",
+            await sources.searchPublicLista(query, searchLimit),
+          );
+        }
+
+        if (
+          evaluations.filter((item) => item.kept).length === 0 &&
+          sources.searchPublicJm
+        ) {
+          await coletarItens(
+            "public-search-jm",
+            await sources.searchPublicJm(query, searchLimit),
+          );
+        }
+      } else {
+        await coletarItens(
+          "public-search",
+          await sources.searchPublicListings(query, searchLimit),
+        );
+      }
     }
 
     rastrearFiltrosMarketplace({
@@ -1600,6 +1669,7 @@ export async function buscarMercadoLivreComFontes(
       error: null,
       degraded: blockedSources.length > 0,
       blockedSources,
+      unusableSources,
       sourcesTried,
     };
   } catch (error) {
@@ -1624,6 +1694,7 @@ export async function buscarMercadoLivreComFontes(
       error: mensagem.slice(0, 1000),
       degraded: blockedSources.length > 0,
       blockedSources,
+      unusableSources,
       sourcesTried,
     };
   }
