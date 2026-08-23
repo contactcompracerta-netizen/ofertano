@@ -8,7 +8,7 @@
     "build": "npm run check:encoding && prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/services/identity/exactMatcher.test.ts && npx tsx src/services/search/publicSearchMultiloja.test.ts && npx tsx src/services/search/searchCompletionBarrier.test.ts && npx tsx src/services/discovery/mercadolivre.test.ts",
+    "test": "npx tsx src/services/identity/exactMatcher.test.ts && npx tsx src/services/search/publicSearchMultiloja.test.ts && npx tsx src/services/search/searchCompletionBarrier.test.ts && npx tsx src/services/discovery/mercadolivre.test.ts && npx tsx src/services/multistore-v2/multistore-v2.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
