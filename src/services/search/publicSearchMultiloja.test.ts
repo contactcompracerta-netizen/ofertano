@@ -881,6 +881,61 @@ async function runAsyncCases() {
     isolatedZero.candidates.some((item) => item.externalId === "mag-wave"),
     "Zero candidatos em uma loja nao pode impedir as demais.",
   );
+
+  const mlBlockedAmazonOk = await descobrirProdutosComAdapters(
+    LONG_QUERY,
+    [
+      adapter("MERCADO_LIVRE", "Mercado Livre", async ({ query }) => ({
+        marketplace: "MERCADO_LIVRE",
+        query,
+        success: true,
+        scanned: 0,
+        candidates: [],
+        degraded: true,
+        blockedSources: ["items-api", "public-search"],
+        sourcesTried: ["catalog", "items-api", "public-search"],
+      })),
+      adapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query: LONG_QUERY,
+        success: true,
+        scanned: 3,
+        candidates: [
+          {
+            marketplace: "AMAZON",
+            marketplaceName: "Amazon",
+            externalId: "amz-wave",
+            sourceUrl: "https://loja.example/amz-wave",
+            affiliateLink: "https://aff.example/amz-wave",
+            title: LONG_QUERY,
+            image: "https://img.example/wave.jpg",
+            price: 210,
+            oldPrice: null,
+            brand: null,
+            attributes: {},
+            status: "FOUND",
+          },
+        ],
+      })),
+    ],
+    5,
+    { mode: "MULTILOJA" },
+  );
+
+  assert.equal(
+    mlBlockedAmazonOk.results.find((item) => item.marketplace === "MERCADO_LIVRE")
+      ?.degraded,
+    true,
+  );
+  assert.equal(
+    mlBlockedAmazonOk.results.find((item) => item.marketplace === "AMAZON")
+      ?.success,
+    true,
+  );
+  assert.ok(
+    mlBlockedAmazonOk.candidates.some((item) => item.externalId === "amz-wave"),
+    "Fontes ML bloqueadas nao podem derrubar as outras lojas.",
+  );
 }
 
 const STRUCTURAL_QUERY = "Headphone MarcaX ZX100";

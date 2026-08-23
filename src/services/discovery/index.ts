@@ -453,6 +453,18 @@ async function executarAdapterComPlanoGlobal(
           resultado.error!,
       );
 
+  const blockedSources = Array.from(
+    new Set(
+      resultados.flatMap((resultado) => resultado.blockedSources ?? []),
+    ),
+  );
+  const sourcesTried = Array.from(
+    new Set(
+      resultados.flatMap((resultado) => resultado.sourcesTried ?? []),
+    ),
+  );
+  const degraded = resultados.some((resultado) => resultado.degraded);
+
   return {
     marketplace: adapter.marketplace,
     query: consultaOriginal,
@@ -469,6 +481,9 @@ async function executarAdapterComPlanoGlobal(
         : erros.length > 0
           ? erros.join(" | ").slice(0, 1000)
           : null,
+    degraded,
+    blockedSources,
+    sourcesTried,
   };
 }
 
@@ -552,8 +567,11 @@ export async function descobrirProdutosComAdapters(
     traceMultiloja("marketplace", {
       marketplace: resultado.marketplace,
       success: resultado.success,
+      degraded: resultado.degraded ?? false,
       candidates: resultado.candidates.length,
       scanned: resultado.scanned,
+      blockedSources: resultado.blockedSources ?? [],
+      sourcesTried: resultado.sourcesTried ?? [],
       error: resultado.error,
     });
 

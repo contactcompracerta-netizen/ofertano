@@ -586,4 +586,38 @@ assert.ok(
   "Consulta longa deve gerar fallback progressivo com termos distintivos.",
 );
 
+const missingColor = avaliarCompatibilidadeComConsulta(
+  "Headphone MarcaX Rosa",
+  listing("Headphone MarcaX"),
+);
+assert.equal(
+  missingColor.compatible,
+  true,
+  "Cor nao informada nao e conflito de identidade.",
+);
+assert.equal(
+  missingColor.conflicts.some((item) => item.includes("nao-informado")),
+  false,
+);
+
+const conflictingColor = avaliarCompatibilidadeComConsulta(
+  "Headphone MarcaX Rosa",
+  listing("Headphone MarcaX Azul"),
+);
+assert.equal(conflictingColor.compatible, false);
+assert.ok(
+  conflictingColor.conflicts.some((item) => item.startsWith("color:")),
+  "Cores explicitamente diferentes sao conflito.",
+);
+
+const otherEntity = avaliarCompatibilidadeComConsulta(
+  "Headphone MarcaX Rosa",
+  listing("Headphone MarcaY Rosa"),
+);
+assert.equal(otherEntity.compatible, false);
+assert.ok(
+  otherEntity.conflicts.some((item) => item.startsWith("brand:")) ||
+    otherEntity.reason.includes("distintivo"),
+);
+
 console.log("identity exact matcher: todos os casos globais passaram");

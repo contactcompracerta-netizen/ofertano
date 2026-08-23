@@ -79,6 +79,12 @@ import type {
     scanned: number;
   
     error?: string | null;
+
+    degraded?: boolean;
+
+    blockedSources?: string[];
+
+    sourcesTried?: string[];
   };
   
   export type ProductDiscoveryResult = {

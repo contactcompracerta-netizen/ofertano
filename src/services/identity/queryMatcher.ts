@@ -260,6 +260,16 @@ const STRONG_VARIANT_KEYS: IdentityVariantKey[] = [
   "bundle",
 ];
 
+/*
+ * Cor, bundle e extras opcionais: ausencia nao prova identidade.
+ * Conflito so existe quando os dois lados declaram valores diferentes.
+ * Armazenamento, RAM, rede, voltagem e capacidade continuam estritos.
+ */
+const OPTIONAL_VARIANT_KEYS = new Set<IdentityVariantKey>([
+  "color",
+  "bundle",
+]);
+
 function reject(
   reason: string,
   conflicts: string[],
@@ -776,6 +786,10 @@ function verificarVariantesExplicitas(
      * preencher a evidencia via attributes quando o titulo for incompleto.
      */
     if (!found) {
+      if (OPTIONAL_VARIANT_KEYS.has(key)) {
+        continue;
+      }
+
       conflicts.push(
         `${key}:${requested}!=nao-informado`,
       );
@@ -787,17 +801,6 @@ function verificarVariantesExplicitas(
         `${key}:${requested}!=${found}`,
       );
     }
-  }
-
-  /*
-   * Bundle e assimetrico: um combo nao substitui o produto simples.
-   * Condicao (novo/reembalado/usado) nao define identidade comercial;
-   * ela so penaliza a escolha da ancora quando a consulta nao pede.
-   */
-  if (!query.variants.bundle && candidate.variants.bundle) {
-    conflicts.push(
-      `bundle:sem-bundle!=${candidate.variants.bundle}`,
-    );
   }
 
   return conflicts;

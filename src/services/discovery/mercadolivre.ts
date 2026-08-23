@@ -12,9 +12,16 @@ import {
 } from "@/services/identity";
 import type { MarketplaceFilterEvent } from "./marketplaceTrace";
 import {
-  rastrearBuscaBrutaMarketplace,
   rastrearFiltrosMarketplace,
+  rastrearFonteMercadoLivre,
+  rastrearResumoMercadoLivre,
 } from "./marketplaceTrace";
+import {
+  buscarPaginaPublicaMercadoLivre,
+  classificarErroFonteMercadoLivre,
+  type MercadoLivreListingItem,
+  type MercadoLivreSourceFetch,
+} from "./mercadolivrePublicSearch";
 
 type DomainDiscoveryResult = {
   domain_id?: string;
@@ -122,34 +129,38 @@ type CatalogItemsResponse = {
   results?: CatalogOffer[];
 };
 
-type SiteSearchItem = {
-  id?: string;
-  title?: string;
-  price?: number;
-  original_price?: number | null;
-  permalink?: string;
-  thumbnail?: string;
-  condition?: string;
-  currency_id?: string;
-  category_id?: string;
-  seller?: {
-    id?: number;
-    nickname?: string;
-  };
-  attributes?: Array<{
-    id?: string;
-    name?: string;
-    value_name?: string;
-  }>;
-  tags?: string[];
-  shipping?: {
-    logistic_type?: string;
-    tags?: string[];
-  };
-};
+type SiteSearchItem = MercadoLivreListingItem;
 
 type SiteSearchResponse = {
   results?: SiteSearchItem[];
+};
+
+type MultigetItemResponse = {
+  code?: number;
+  body?: SiteSearchItem & {
+    message?: string;
+  };
+};
+
+export type MercadoLivreAcquisitionSources = {
+  discoverDomain: (query: string) => Promise<string | null>;
+  searchCatalog: (
+    query: string,
+    limit: number,
+    domainId: string | null,
+  ) => Promise<MercadoLivreSourceFetch<ProductSearchResult[]>>;
+  loadCatalogCandidate: (
+    productId: string,
+    query: string,
+  ) => Promise<CandidateEvaluation>;
+  searchItemsApi: (
+    query: string,
+    limit: number,
+  ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
+  searchPublicListings: (
+    query: string,
+    limit: number,
+  ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
 };
 
 type CandidateEvaluation = MarketplaceFilterEvent & {
@@ -883,48 +894,169 @@ async function pesquisarCatalogo(
   query: string,
   searchLimit: number,
   domainId: string | null,
-): Promise<ProductSearchResult[]> {
-  const parametros =
-    new URLSearchParams({
-      status: "active",
-      site_id: "MLB",
-      limit: String(searchLimit),
-      q: query,
-    });
+): Promise<MercadoLivreSourceFetch<ProductSearchResult[]>> {
+  try {
+    const parametros =
+      new URLSearchParams({
+        status: "active",
+        site_id: "MLB",
+        limit: String(searchLimit),
+        q: query,
+      });
 
-  if (domainId) {
-    parametros.set("domain_id", domainId);
+    if (domainId) {
+      parametros.set("domain_id", domainId);
+    }
+
+    const pesquisa =
+      (await mercadoLivreFetch(
+        `/products/search?${parametros.toString()}`,
+      )) as ProductSearchResponse;
+
+    const data = (pesquisa.results ?? []).filter(
+      (produto) =>
+        typeof produto.id === "string" &&
+        Boolean(produto.id.trim()) &&
+        produto.status !== "inactive",
+    );
+
+    return {
+      status: data.length > 0 ? "SUCCESS" : "EMPTY",
+      httpStatus: 200,
+      data,
+      reason:
+        data.length > 0
+          ? undefined
+          : "Catalogo sem produtos para a consulta.",
+    };
+  } catch (error) {
+    return {
+      ...classificarErroFonteMercadoLivre(error),
+      data: [],
+    };
   }
-
-  const pesquisa =
-    (await mercadoLivreFetch(
-      `/products/search?${parametros.toString()}`,
-    )) as ProductSearchResponse;
-
-  return (pesquisa.results ?? []).filter(
-    (produto) =>
-      typeof produto.id === "string" &&
-      Boolean(produto.id.trim()) &&
-      produto.status !== "inactive",
-  );
 }
 
 async function pesquisarItens(
   query: string,
   searchLimit: number,
+): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  try {
+    const parametros =
+      new URLSearchParams({
+        q: query,
+        limit: String(Math.min(searchLimit, 50)),
+      });
+
+    const pesquisa =
+      (await mercadoLivreFetch(
+        `/sites/MLB/search?${parametros.toString()}`,
+      )) as SiteSearchResponse;
+
+    const data = pesquisa.results ?? [];
+
+    return {
+      status: data.length > 0 ? "SUCCESS" : "EMPTY",
+      httpStatus: 200,
+      data,
+      reason:
+        data.length > 0
+          ? undefined
+          : "API de anuncios avulsos sem resultados.",
+    };
+  } catch (error) {
+    return {
+      ...classificarErroFonteMercadoLivre(error),
+      data: [],
+    };
+  }
+}
+
+async function hidratarAnunciosAvulsos(
+  items: SiteSearchItem[],
 ): Promise<SiteSearchItem[]> {
-  const parametros =
-    new URLSearchParams({
-      q: query,
-      limit: String(Math.min(searchLimit, 50)),
+  const ids = Array.from(
+    new Set(
+      items
+        .map((item) => item.id?.replace(/-/g, "").toUpperCase())
+        .filter((id): id is string => Boolean(id && /^MLB\d+$/.test(id))),
+    ),
+  ).slice(0, 20);
+
+  if (ids.length === 0) {
+    return items;
+  }
+
+  const precisaHidratar = items.some(
+    (item) => !item.title?.trim() || item.price == null || !item.permalink,
+  );
+
+  if (!precisaHidratar) {
+    return items;
+  }
+
+  try {
+    const resposta =
+      (await mercadoLivreFetch(
+        `/items?ids=${encodeURIComponent(ids.join(","))}`,
+      )) as MultigetItemResponse[];
+
+    if (!Array.isArray(resposta)) {
+      return items;
+    }
+
+    const byId = new Map<string, SiteSearchItem>();
+
+    for (const entrada of resposta) {
+      const body = entrada.body;
+      const id = body?.id?.replace(/-/g, "").toUpperCase();
+
+      if (entrada.code !== 200 || !id) {
+        continue;
+      }
+
+      byId.set(id, {
+        ...body,
+        id,
+      });
+    }
+
+    return items.map((item) => {
+      const id = item.id?.replace(/-/g, "").toUpperCase();
+      const hydrated = id ? byId.get(id) : undefined;
+
+      return hydrated
+        ? { ...item, ...hydrated, id }
+        : item;
     });
+  } catch {
+    return items;
+  }
+}
 
-  const pesquisa =
-    (await mercadoLivreFetch(
-      `/sites/MLB/search?${parametros.toString()}`,
-    )) as SiteSearchResponse;
+async function pesquisarPaginaPublica(
+  query: string,
+): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  const pagina = await buscarPaginaPublicaMercadoLivre(query);
 
-  return pesquisa.results ?? [];
+  if (pagina.status !== "SUCCESS" || pagina.data.length === 0) {
+    return pagina;
+  }
+
+  const hidratados = await hidratarAnunciosAvulsos(pagina.data);
+  const usaveis = hidratados.filter(
+    (item) => Boolean(item.id) && Boolean(item.title?.trim()),
+  );
+
+  return {
+    ...pagina,
+    data: usaveis,
+    status: usaveis.length > 0 ? "SUCCESS" : "EMPTY",
+    reason:
+      usaveis.length > 0
+        ? pagina.reason
+        : "Busca publica encontrou IDs sem titulo/preco hidratavel.",
+  };
 }
 
 function converterItemBusca(
@@ -1249,90 +1381,105 @@ async function carregarCandidato(
   }
 }
 
-export async function buscarMercadoLivre(
-  request: DiscoveryQuery,
-): Promise<MarketplaceDiscoveryResult> {
-  const query =
-    request.query.trim();
+function fontesPadraoMercadoLivre(): MercadoLivreAcquisitionSources {
+  return {
+    discoverDomain: descobrirDominio,
+    searchCatalog: pesquisarCatalogo,
+    loadCatalogCandidate: carregarCandidato,
+    searchItemsApi: pesquisarItens,
+    searchPublicListings: pesquisarPaginaPublica,
+  };
+}
 
-  const limit =
-    limitarQuantidade(
-      request.limit,
-    );
+function registrarFonte(
+  query: string,
+  source: string,
+  fetch: MercadoLivreSourceFetch<unknown[]>,
+  usableCount: number,
+  sourcesTried: string[],
+  blockedSources: string[],
+  rawTotal: { value: number },
+): void {
+  sourcesTried.push(source);
+  rawTotal.value += fetch.data.length;
+
+  if (fetch.status === "BLOCKED" && !blockedSources.includes(source)) {
+    blockedSources.push(source);
+  }
+
+  rastrearFonteMercadoLivre({
+    source,
+    query,
+    status: fetch.status,
+    httpStatus: fetch.httpStatus,
+    rawCount: fetch.data.length,
+    usableCount,
+    reason: fetch.reason,
+  });
+}
+
+export async function buscarMercadoLivreComFontes(
+  request: DiscoveryQuery,
+  sources: MercadoLivreAcquisitionSources,
+): Promise<MarketplaceDiscoveryResult> {
+  const query = request.query.trim();
+  const limit = limitarQuantidade(request.limit);
 
   if (!query) {
     return {
-      marketplace:
-        "MERCADO_LIVRE",
-
+      marketplace: "MERCADO_LIVRE",
       query,
-
-      success:
-        false,
-
-      candidates:
-        [],
-
-      scanned:
-        0,
-
-      error:
-        "Consulta vazia.",
+      success: false,
+      candidates: [],
+      scanned: 0,
+      error: "Consulta vazia.",
     };
   }
 
+  const sourcesTried: string[] = [];
+  const blockedSources: string[] = [];
+  const rawTotal = { value: 0 };
+  const evaluations: CandidateEvaluation[] = [];
+  let scanned = 0;
+
   try {
-    const domainId =
-      await descobrirDominio(
-        query,
-      );
+    const searchLimit = Math.min(Math.max(limit * 6, 20), 50);
+    const domainId = await sources.discoverDomain(query);
 
-    const searchLimit =
-      Math.min(
-        Math.max(
-          limit * 6,
-          20,
-        ),
-        50,
-      );
-
-    let catalogResults =
-      await pesquisarCatalogo(
-        query,
-        searchLimit,
-        domainId,
-      );
-    let catalogSource =
-      domainId
-        ? "catalog"
-        : "catalog-no-domain";
-
-    rastrearBuscaBrutaMarketplace({
-      marketplace: "MERCADO_LIVRE",
+    const catalogWithDomain = await sources.searchCatalog(
       query,
-      rawCount: catalogResults.length,
-      source: catalogSource,
-    });
+      searchLimit,
+      domainId,
+    );
+    let catalogResults = catalogWithDomain.data;
+    registrarFonte(
+      query,
+      domainId ? "catalog" : "catalog-no-domain",
+      catalogWithDomain,
+      0,
+      sourcesTried,
+      blockedSources,
+      rawTotal,
+    );
 
     if (catalogResults.length === 0 && domainId) {
-      catalogResults =
-        await pesquisarCatalogo(
-          query,
-          searchLimit,
-          null,
-        );
-      catalogSource = "catalog-no-domain";
-
-      rastrearBuscaBrutaMarketplace({
-        marketplace: "MERCADO_LIVRE",
+      const catalogNoDomain = await sources.searchCatalog(
         query,
-        rawCount: catalogResults.length,
-        source: catalogSource,
-      });
+        searchLimit,
+        null,
+      );
+      catalogResults = catalogNoDomain.data;
+      registrarFonte(
+        query,
+        "catalog-no-domain",
+        catalogNoDomain,
+        0,
+        sourcesTried,
+        blockedSources,
+        rawTotal,
+      );
     }
 
-    const evaluations: CandidateEvaluation[] = [];
-    let scanned = 0;
     const productIds = Array.from(
       new Set(
         catalogResults
@@ -1344,45 +1491,71 @@ export async function buscarMercadoLivre(
     for (let index = 0; index < productIds.length; index += 4) {
       const lote = productIds.slice(index, index + 4);
       scanned += lote.length;
-
-      const resultados = await Promise.all(
-        lote.map((productId) => carregarCandidato(productId, query)),
+      evaluations.push(
+        ...(await Promise.all(
+          lote.map((productId) => sources.loadCatalogCandidate(productId, query)),
+        )),
       );
 
-      evaluations.push(...resultados);
-
-      if (
-        evaluations.filter((item) => item.status === "KEPT").length >= limit
-      ) {
+      if (evaluations.filter((item) => item.status === "KEPT").length >= limit) {
         break;
       }
     }
 
-    let kept = evaluations.filter((item) => item.kept);
+    const usableFromCatalog = evaluations.filter((item) => item.kept).length;
+    const catalogSourceName = sourcesTried.includes("catalog")
+      ? "catalog"
+      : "catalog-no-domain";
+    rastrearFonteMercadoLivre({
+      source: `${catalogSourceName}-usable`,
+      query,
+      status: usableFromCatalog > 0 ? "SUCCESS" : "EMPTY",
+      httpStatus: 200,
+      rawCount: productIds.length,
+      usableCount: usableFromCatalog,
+      reason:
+        usableFromCatalog > 0
+          ? undefined
+          : "Catalogo sem publicacao compravel (No winners found ou oferta invalida).",
+    });
 
-    if (kept.length === 0) {
-      try {
-        const items = await pesquisarItens(query, searchLimit);
+    const coletarItens = async (
+      source: "items-api" | "public-search",
+      fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
+    ) => {
+      const before = evaluations.filter((item) => item.kept).length;
 
-        rastrearBuscaBrutaMarketplace({
-          marketplace: "MERCADO_LIVRE",
-          query,
-          rawCount: items.length,
-          source: "items",
-        });
-
-        for (const item of items) {
+      if (fetch.status === "SUCCESS" || fetch.status === "EMPTY") {
+        for (const item of fetch.data) {
           scanned += 1;
           evaluations.push(converterItemBusca(item, query));
         }
-
-        kept = evaluations.filter((item) => item.kept);
-      } catch (error) {
-        console.warn(
-          "Fallback de itens do Mercado Livre indisponivel:",
-          error instanceof Error ? error.message : error,
-        );
       }
+
+      const after = evaluations.filter((item) => item.kept).length;
+      registrarFonte(
+        query,
+        source,
+        fetch,
+        Math.max(0, after - before),
+        sourcesTried,
+        blockedSources,
+        rawTotal,
+      );
+    };
+
+    if (evaluations.filter((item) => item.kept).length === 0) {
+      await coletarItens(
+        "items-api",
+        await sources.searchItemsApi(query, searchLimit),
+      );
+    }
+
+    if (evaluations.filter((item) => item.kept).length === 0) {
+      await coletarItens(
+        "public-search",
+        await sources.searchPublicListings(query, searchLimit),
+      );
     }
 
     rastrearFiltrosMarketplace({
@@ -1391,6 +1564,7 @@ export async function buscarMercadoLivre(
       events: evaluations,
     });
 
+    const kept = evaluations.filter((item) => item.kept);
     const candidatos = kept
       .sort((first, second) => {
         const firstRelevance = first.kept?.relevance ?? 0;
@@ -1408,6 +1582,15 @@ export async function buscarMercadoLivre(
       .slice(0, limit)
       .map((item) => item.kept!.candidate);
 
+    rastrearResumoMercadoLivre({
+      query,
+      sourcesTried,
+      blockedSources,
+      rawTotal: rawTotal.value,
+      normalized: evaluations.length,
+      accepted: candidatos.length,
+    });
+
     return {
       marketplace: "MERCADO_LIVRE",
       query,
@@ -1415,20 +1598,42 @@ export async function buscarMercadoLivre(
       candidates: candidatos,
       scanned,
       error: null,
+      degraded: blockedSources.length > 0,
+      blockedSources,
+      sourcesTried,
     };
   } catch (error) {
     const mensagem =
-      error instanceof Error
-        ? error.message
-        : "Erro desconhecido.";
+      error instanceof Error ? error.message : "Erro desconhecido.";
+
+    rastrearResumoMercadoLivre({
+      query,
+      sourcesTried,
+      blockedSources,
+      rawTotal: rawTotal.value,
+      normalized: evaluations.length,
+      accepted: 0,
+    });
 
     return {
       marketplace: "MERCADO_LIVRE",
       query,
       success: false,
       candidates: [],
-      scanned: 0,
+      scanned,
       error: mensagem.slice(0, 1000),
+      degraded: blockedSources.length > 0,
+      blockedSources,
+      sourcesTried,
     };
   }
+}
+
+export async function buscarMercadoLivre(
+  request: DiscoveryQuery,
+): Promise<MarketplaceDiscoveryResult> {
+  return buscarMercadoLivreComFontes(
+    request,
+    fontesPadraoMercadoLivre(),
+  );
 }
