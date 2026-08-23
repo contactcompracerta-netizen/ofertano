@@ -24,6 +24,7 @@ export type ProductClassId =
   | "WATCH"
   | "CONSOLE"
   | "BLENDER"
+  | "FURNITURE"
   | "CASE_ACCESSORY"
   | "CONSUMABLE"
   | "UNKNOWN";
@@ -198,6 +199,29 @@ const PRODUCT_CLASS_FAMILIES: ProductClassFamily[] = [
     id: "BLENDER",
     phrases: [],
     tokens: ["liquidificador"],
+  },
+  {
+    id: "FURNITURE",
+    phrases: [
+      "mesa de cabeceira",
+      "mesa de cabeceira",
+      "criado mudo",
+      "guarda roupa",
+    ],
+    tokens: [
+      "mesa",
+      "cabeceira",
+      "criado",
+      "comoda",
+      "gaveta",
+      "gavetas",
+      "armario",
+      "estante",
+      "rack",
+      "sofa",
+      "cama",
+      "moveis",
+    ],
   },
   {
     id: "CASE_ACCESSORY",

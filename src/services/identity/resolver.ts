@@ -111,6 +111,8 @@ const BRAND_ALIASES: BrandAlias[] = [
   { canonical: "philco", aliases: ["philco"] },
   { canonical: "notavel", aliases: ["notavel"] },
   { canonical: "aramoveis", aliases: ["aramoveis"] },
+  { canonical: "ihome", aliases: ["ihome", "i home"] },
+  { canonical: "criado mais", aliases: ["criado mais", "criado mais moveis"] },
 ];
 
 const INVALID_BRANDS = new Set([
@@ -140,6 +142,8 @@ const FURNITURE_TERMS = [
   "estante",
   "mesa de cabeceira",
   "criado mudo",
+  "cabeceira",
+  "criado",
   "sapateira",
   "cozinha",
   "cama",

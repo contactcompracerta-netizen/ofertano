@@ -37,6 +37,7 @@ const STOP_WORDS = new Set([
   "promocao",
   "kit",
   "modelo",
+  "mais",
 ]);
 
 const ACCESSORY_HEADS = new Set([
@@ -82,13 +83,13 @@ const REPLACEMENT_HEADS = new Set([
 ]);
 
 const CLASS_GROUPS: string[][] = [
-  ["headphone", "fone", "fones", "headset", "earbuds", "earphone", "auricular"],
+  ["headphone", "fone", "fones", "headset", "earbuds", "earphone", "auricular", "ouvido", "ouvidos"],
   ["speaker", "caixa", "som", "soundbar", "soundbox", "altofalante"],
   ["smartphone", "celular", "telefone", "iphone"],
   ["notebook", "laptop"],
   ["furadeira", "parafusadeira"],
   ["panela", "cacarola", "cafeteira"],
-  ["mesa", "criado", "cabeceira", "comoda", "rack", "estante", "sofa"],
+  ["mesa", "criado", "cabeceira", "comoda", "rack", "estante", "sofa", "moveis"],
   ["lapis", "caneta", "grafite"],
   ["estojo", "case", "capa"],
   ["barbeador", "aparador", "maquina"],
@@ -139,6 +140,7 @@ const MATERIAL_WORDS = new Set([
   "aco",
   "madeira",
   "mdf",
+  "mdp",
   "aluminio",
   "plastico",
   "vidro",
@@ -161,6 +163,11 @@ const ATTRIBUTE_WORDS = new Set([
   "cores",
   "gavetas",
   "gaveta",
+  "resistente",
+  "resistentes",
+  "prova",
+  "agua",
+  "waterproof",
 ]);
 
 const QUANTITY_UNITS = new Set([

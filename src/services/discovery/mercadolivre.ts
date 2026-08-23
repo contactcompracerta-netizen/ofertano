@@ -392,12 +392,24 @@ function extrairNumerosDeModelo(
       tokens[index + 1];
 
     /*
-     * Números de capacidade não representam
-     * o modelo do produto.
+     * Números de capacidade ou quantidade (3 gavetas) não
+     * representam o modelo do produto.
      */
     if (
       proximo === "gb" ||
-      proximo === "tb"
+      proximo === "tb" ||
+      proximo === "gaveta" ||
+      proximo === "gavetas" ||
+      proximo === "peca" ||
+      proximo === "pecas" ||
+      proximo === "porta" ||
+      proximo === "portas" ||
+      proximo === "unidade" ||
+      proximo === "unidades" ||
+      proximo === "lugar" ||
+      proximo === "lugares" ||
+      proximo === "cor" ||
+      proximo === "cores"
     ) {
       continue;
     }
@@ -1564,6 +1576,8 @@ export async function buscarMercadoLivreComFontes(
           : "Catalogo sem publicacao compravel (No winners found ou oferta invalida).",
     });
 
+    const catalogIds: string[] = [];
+
     const coletarItens = async (
       source:
         | "items-api"
@@ -1575,13 +1589,29 @@ export async function buscarMercadoLivreComFontes(
       const before = evaluations.filter((item) => item.kept).length;
 
       if (fetch.status === "SUCCESS" || fetch.status === "EMPTY") {
+        const seen = new Set(
+          evaluations
+            .map((item) => item.externalId.trim())
+            .filter(Boolean),
+        );
+
         for (const item of fetch.data) {
+          const itemId = item.id?.trim() ?? "";
+          if (itemId && seen.has(itemId)) {
+            continue;
+          }
+          if (itemId) {
+            seen.add(itemId);
+          }
           scanned += 1;
           evaluations.push(converterItemBusca(item, query));
         }
       }
 
       const after = evaluations.filter((item) => item.kept).length;
+      if (fetch.catalogIds?.length) {
+        catalogIds.push(...fetch.catalogIds);
+      }
       registrarFonte(
         query,
         source,
@@ -1594,37 +1624,42 @@ export async function buscarMercadoLivreComFontes(
       );
     };
 
-    if (evaluations.filter((item) => item.kept).length === 0) {
+    await coletarItens(
+      "items-api",
+      await sources.searchItemsApi(query, searchLimit),
+    );
+
+    if (sources.searchPublicLista || sources.searchPublicJm) {
+      if (sources.searchPublicLista) {
+        await coletarItens(
+          "public-search-lista",
+          await sources.searchPublicLista(query, searchLimit),
+        );
+      }
+
+      if (sources.searchPublicJm) {
+        await coletarItens(
+          "public-search-jm",
+          await sources.searchPublicJm(query, searchLimit),
+        );
+      }
+    } else {
       await coletarItens(
-        "items-api",
-        await sources.searchItemsApi(query, searchLimit),
+        "public-search",
+        await sources.searchPublicListings(query, searchLimit),
       );
     }
 
-    if (evaluations.filter((item) => item.kept).length === 0) {
-      if (sources.searchPublicLista || sources.searchPublicJm) {
-        if (sources.searchPublicLista) {
-          await coletarItens(
-            "public-search-lista",
-            await sources.searchPublicLista(query, searchLimit),
-          );
-        }
-
-        if (
-          evaluations.filter((item) => item.kept).length === 0 &&
-          sources.searchPublicJm
-        ) {
-          await coletarItens(
-            "public-search-jm",
-            await sources.searchPublicJm(query, searchLimit),
-          );
-        }
-      } else {
-        await coletarItens(
-          "public-search",
-          await sources.searchPublicListings(query, searchLimit),
-        );
+    const seenCatalog = new Set(
+      evaluations.map((item) => item.externalId.trim()).filter(Boolean),
+    );
+    for (const catalogId of Array.from(new Set(catalogIds))) {
+      if (seenCatalog.has(catalogId)) {
+        continue;
       }
+      seenCatalog.add(catalogId);
+      scanned += 1;
+      evaluations.push(await sources.loadCatalogCandidate(catalogId, query));
     }
 
     rastrearFiltrosMarketplace({

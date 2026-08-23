@@ -259,6 +259,43 @@ export function compareFingerprints(
     };
   }
 
+  const furnitureClass =
+    first.productClass.value === "mesa" || second.productClass.value === "mesa";
+  if (
+    furnitureClass &&
+    brandAligned &&
+    sameClass &&
+    !first.model.value &&
+    !second.model.value &&
+    attributeMatches.length >= 1 &&
+    lexicalOverlap >= 0.38
+  ) {
+    positiveEvidence.push("lexical", ...attributeMatches, "productClass");
+    return {
+      relation: "SAME",
+      hardConflicts,
+      positiveEvidence,
+      confidence: 0.7,
+    };
+  }
+
+  if (
+    sameBrand &&
+    sameClass &&
+    !first.model.value &&
+    !second.model.value &&
+    distinctiveOverlap >= 0.3 &&
+    lexicalOverlap >= 0.24
+  ) {
+    positiveEvidence.push("brand", "productClass", "lexical");
+    return {
+      relation: "SAME",
+      hardConflicts,
+      positiveEvidence,
+      confidence: 0.68,
+    };
+  }
+
   if (sameBrand) {
     positiveEvidence.push("brand");
   }

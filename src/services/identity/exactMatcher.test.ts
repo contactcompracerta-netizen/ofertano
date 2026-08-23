@@ -943,4 +943,64 @@ assert.equal(
   "ACCEPTED",
 );
 
+const nightstandQuery =
+  "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas";
+const nightstandTitle =
+  "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas";
+const nightstandAmazonTitle =
+  "Mesa de Cabeceira Criado Mais 3 Gavetas MDF";
+
+assert.equal(
+  classificarClasseProduto(nightstandQuery),
+  "FURNITURE",
+  "Mesa de cabeceira precisa ser classe FURNITURE.",
+);
+assert.equal(
+  candidatoPodeSeguirNoDiscovery(nightstandQuery, nightstandTitle).keep,
+  true,
+  "O anuncio do Mercado Livre da mesa de cabeceira nao pode ser filtrado no Discovery.",
+);
+assert.equal(
+  candidatoPodeSeguirNoDiscovery(nightstandQuery, nightstandAmazonTitle).keep,
+  true,
+  "Variante da mesma mesa em outra loja nao pode cair no Discovery so porque falta MDP/moveis.",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    nightstandQuery,
+    listing(nightstandTitle, "Criado Mais"),
+  ).compatible,
+  true,
+  "A mesa de cabeceira pesquisada precisa ser aceita pelo Identity.",
+);
+
+const ihomeQuery =
+  "Fones De Ouvido Ihome Wireless Rosa Resistentes A Agua";
+const ihomeTitle =
+  "Fones De Ouvido Ihome Wireless Rosa Resistentes A Agua";
+assert.equal(
+  classificarClasseProduto(ihomeQuery),
+  "AUDIO_HEADPHONE",
+);
+assert.equal(
+  candidatoPodeSeguirNoDiscovery(ihomeQuery, ihomeTitle).keep,
+  true,
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    ihomeQuery,
+    listing(ihomeTitle, "iHome"),
+  ).compatible,
+  true,
+  "O fone iHome pesquisado precisa ser aceito pelo Identity.",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    ihomeQuery,
+    listing("Lustre iHome Cristal", "iHome"),
+  ).compatible,
+  false,
+  "Lustre iHome nao pode entrar na consulta de fone.",
+);
+
 console.log("identity exact matcher: todos os casos globais passaram");

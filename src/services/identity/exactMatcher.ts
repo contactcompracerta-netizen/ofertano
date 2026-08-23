@@ -85,6 +85,12 @@ const FURNITURE_GENERIC_TOKENS = new Set([
   "nova",
   "moderno",
   "moderna",
+  "moveis",
+  "mais",
+  "mdp",
+  "mdf",
+  "gaveta",
+  "gavetas",
 ]);
 
 const FOOTWEAR_GENERIC_TOKENS = new Set([

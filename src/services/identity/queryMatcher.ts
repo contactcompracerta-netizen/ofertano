@@ -99,6 +99,7 @@ const QUERY_STOP_WORDS = new Set([
   "oficial",
   "oferta",
   "promocao",
+  "mais",
 ]);
 
 const MODEL_SUFFIX_STOP_WORDS = new Set([
@@ -195,6 +196,19 @@ const GENERIC_CLASS_WORDS = new Set([
   "substituicao",
   "reposicao",
   "peca",
+  "mesa",
+  "cabeceira",
+  "criado",
+  "mudo",
+  "comoda",
+  "gaveta",
+  "gavetas",
+  "armario",
+  "estante",
+  "rack",
+  "sofa",
+  "cama",
+  "moveis",
 ]);
 
 const GENERIC_CONNECTIVITY_WORDS = new Set([
@@ -277,6 +291,8 @@ const GENERIC_ADJECTIVE_WORDS = new Set([
   "true",
   "stereo",
   "audio",
+  "mdp",
+  "mdf",
 ]);
 
 const PRODUCT_CLASS_GROUPS: string[][] = [
@@ -302,6 +318,16 @@ const PRODUCT_CLASS_GROUPS: string[][] = [
   ["mouse"],
   ["teclado", "keyboard"],
   ["caixa", "som", "speaker"],
+  [
+    "mesa",
+    "cabeceira",
+    "criado",
+    "comoda",
+    "gaveta",
+    "gavetas",
+    "armario",
+    "moveis",
+  ],
 ];
 
 const DISTINCTIVE_TOKEN_WEIGHT = 5;
@@ -842,17 +868,20 @@ export function candidatoPodeSeguirNoDiscovery(
 
   const missing = pontuarCoberturaLexicalPonderada(query, title)
     .missingDistinctive;
+  const matchedDistinctive = distinctive.filter(
+    (token) => !missing.includes(token),
+  );
 
-  if (missing.length > 0) {
+  if (matchedDistinctive.length === 0) {
     return {
       keep: false,
-      reason: `Termo distintivo ausente no Discovery: ${missing.join(", ")}.`,
+      reason: `Nenhum termo distintivo da consulta aparece no titulo: ${distinctive.join(", ")}.`,
     };
   }
 
   return {
     keep: true,
-    reason: "Termos distintivos da consulta presentes no titulo.",
+    reason: "Pelo menos um termo distintivo da consulta esta no titulo.",
   };
 }
 
@@ -1433,11 +1462,11 @@ export function matchQueryToCandidate(
 
   if (
     distinctiveTokens.length > 0 &&
-    missingDistinctive.length > 0 &&
+    missingDistinctive.length === distinctiveTokens.length &&
     brandCompatibility !== "MATCH"
   ) {
     return reject(
-      `Termo distintivo da consulta ausente no candidato: ${missingDistinctive.join(", ")}.`,
+      `Nenhum termo distintivo da consulta aparece no candidato: ${missingDistinctive.join(", ")}.`,
       [`distinctive:${missingDistinctive.join(",")}`],
       gateExtras,
     );

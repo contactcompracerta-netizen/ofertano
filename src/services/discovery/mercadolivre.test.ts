@@ -97,6 +97,16 @@ assert.ok(
   "A pagina publica de busca deve expor o anuncio individual.",
 );
 
+const catalogHtml = `
+  <a href="https://www.mercadolivre.com.br/fones-de-ouvido-ihome-wireless-rosa/p/MLB2102485316?wid=MLB4995511477">iHome</a>
+`;
+assert.ok(
+  extrairItensDaPaginaDeBuscaPublica(catalogHtml).some(
+    (entry) => entry.id === "MLB4995511477",
+  ),
+  "wid ao lado de /p/ precisa virar anuncio compravel, nao ser descartado como catalogo.",
+);
+
 const blocked = classificarErroFonteMercadoLivre(
   new Error(
     "Mercado Livre /sites/MLB/search?q=teste falhou autenticado (403) e publico (403).",
@@ -305,6 +315,65 @@ async function runAcquisitionCases() {
     testE.candidates.some((entry) => entry.externalId === "MLB999888777"),
     true,
     "TESTE E: anuncio internacional compravel nao e rejeitado por tag/logistica.",
+  );
+
+  const testF = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLB-CAT-KEEP",
+            name: "Fones de ouvido sem fio MarcaX",
+            status: "active",
+          },
+        ],
+      }),
+      loadCatalogCandidate: async () => ({
+        title: "Fones de ouvido sem fio MarcaX",
+        externalId: "MLB-CAT-KEEP",
+        stage: "candidate",
+        status: "KEPT",
+        reason: "Oferta de catalogo compravel.",
+        lexicalScore: 0.8,
+        kept: {
+          relevance: 0.8,
+          candidate: {
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            externalId: "MLB-CAT-KEEP",
+            sourceUrl: "https://produto.mercadolivre.com.br/MLB-CAT-KEEP",
+            affiliateLink: null,
+            title: "Fones de ouvido sem fio MarcaX",
+            image: "https://http2.mlstatic.com/item.jpg",
+            price: 159,
+            oldPrice: null,
+            category: null,
+            brand: "MarcaX",
+            seller: null,
+            status: "FOUND",
+            error: null,
+          },
+        },
+      }),
+      searchItemsApi: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [listingItem],
+      }),
+    }),
+  );
+  assert.equal(
+    testF.candidates.some((entry) => entry.externalId === "MLB-CAT-KEEP"),
+    true,
+    "TESTE F: catalogo com oferta valida continua.",
+  );
+  assert.equal(
+    testF.candidates.some((entry) => entry.externalId === "MLB111222333"),
+    true,
+    "TESTE F: API de anuncios nao pode ser pulada quando o catalogo ja devolveu oferta.",
   );
 }
 

@@ -227,4 +227,50 @@ assert.equal(
   "Acessorio nao entra no cluster do produto principal na query MAIN",
 );
 
+const nightstandQuery = "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas";
+const nightstandMulti = processRawCandidates(nightstandQuery, [
+  raw("Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas", {
+    brand: "Criado Mais",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "ml-mesa",
+    price: 189,
+  }),
+  raw("Mesa de Cabeceira Criado Mais 3 Gavetas MDF", {
+    brand: "Criado Mais",
+    marketplace: "AMAZON",
+    externalId: "amz-mesa",
+    price: 199,
+  }),
+]);
+assert.equal(nightstandMulti.products.length, 1, "Mesa de cabeceira vira um produto");
+assert.equal(
+  nightstandMulti.products[0]?.offers.length,
+  2,
+  "Mesa de cabeceira agrupa precos de duas lojas",
+);
+
+const ihomeQuery = "Fones De Ouvido Ihome Wireless Rosa Resistentes A Agua";
+const ihomeMulti = processRawCandidates(ihomeQuery, [
+  raw("Fones De Ouvido Ihome Wireless Rosa Resistentes A Agua", {
+    brand: "iHome",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "ml-ihome",
+    price: 89,
+  }),
+  raw("Fone Ihome Bluetooth Rosa a prova d agua", {
+    brand: "iHome",
+    marketplace: "AMAZON",
+    externalId: "amz-ihome",
+    price: 79,
+  }),
+]);
+assert.equal(ihomeMulti.products.length, 1, "Fone iHome vira um produto");
+assert.equal(
+  ihomeMulti.products[0]?.offers.length,
+  2,
+  "Fone iHome agrupa precos de duas lojas",
+);
+
 console.log("multistore-v2: todos os casos globais passaram");

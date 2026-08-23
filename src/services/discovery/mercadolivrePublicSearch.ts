@@ -61,6 +61,7 @@ export type MercadoLivreSourceFetch<T> = {
   data: T;
   reason?: string;
   diagnostics?: PublicSearchPageDiagnostics;
+  catalogIds?: string[];
 };
 
 export type PublicSearchStrategyId = "public-search-lista" | "public-search-jm";
@@ -70,6 +71,8 @@ const PRODUCT_URL_PATTERN =
   /https?:\/\/(?:www\.)?produto\.mercadolivre\.com\.br\/MLB-(\d+)/gi;
 const ITEM_PATH_PATTERN =
   /https?:\/\/(?:www\.)?mercadolivre\.com\.br\/[^"'\\\s]*MLB-(\d+)/gi;
+const CATALOG_PATH_PATTERN = /\/p\/MLB-?(\d{8,})/gi;
+const WID_ITEM_PATTERN = /[?&#]wid=MLB-?(\d{8,})/gi;
 
 const CHALLENGE_MARKERS = [
   "captcha",
@@ -175,8 +178,25 @@ function parsePrice(value: unknown): number | undefined {
   return undefined;
 }
 
-function looksLikeCatalogOnlyContext(around: string): boolean {
-  return /\/p\//i.test(around) && !/produto\.mercadolivre/i.test(around);
+function looksLikeCatalogOnlyContext(around: string, itemId?: string): boolean {
+  if (!/\/p\//i.test(around)) {
+    return false;
+  }
+
+  if (/produto\.mercadolivre/i.test(around)) {
+    return false;
+  }
+
+  if (/\bwid=/i.test(around)) {
+    return false;
+  }
+
+  if (itemId) {
+    const digits = itemId.replace(/\D/g, "");
+    return new RegExp(`/p/MLB-?${digits}\\b`, "i").test(around);
+  }
+
+  return true;
 }
 
 function extractFromJsonLd(
@@ -415,7 +435,7 @@ function extractFromProductLinks(
       (match.index ?? 0) + 80,
     );
 
-    if (!id || looksLikeCatalogOnlyContext(around)) {
+    if (!id || looksLikeCatalogOnlyContext(around, id)) {
       continue;
     }
 
@@ -445,7 +465,7 @@ function extractFromMlbAnchors(
       (match.index ?? 0) + 20,
     );
 
-    if (looksLikeCatalogOnlyContext(around)) {
+    if (looksLikeCatalogOnlyContext(around, digits)) {
       continue;
     }
 
@@ -522,9 +542,23 @@ export function extrairItensDaPaginaDeBuscaPublica(
 export function analisarPaginaDeBuscaPublica(html: string): {
   items: MercadoLivreListingItem[];
   parserStrategy: string;
+  catalogIds: string[];
 } {
   const items = new Map<string, MercadoLivreListingItem>();
   const strategies: string[] = [];
+  const catalogIds = new Set<string>();
+
+  for (const match of html.matchAll(CATALOG_PATH_PATTERN)) {
+    if (match[1]) {
+      catalogIds.add(`MLB${match[1]}`);
+    }
+  }
+
+  for (const match of html.matchAll(WID_ITEM_PATTERN)) {
+    if (match[1]) {
+      registerItem(items, match[1], {});
+    }
+  }
 
   if (extractFromJsonLd(html, items)) {
     strategies.push("json-ld");
@@ -549,6 +583,7 @@ export function analisarPaginaDeBuscaPublica(html: string): {
   return {
     items: Array.from(items.values()),
     parserStrategy: strategies.join("+") || "none",
+    catalogIds: Array.from(catalogIds),
   };
 }
 
@@ -801,6 +836,7 @@ export async function buscarEstrategiaPublicaMercadoLivre(
       data: parsed.items,
       reason: classified.reason,
       diagnostics,
+      catalogIds: parsed.catalogIds,
     };
   } catch (error) {
     const classified = classificarErroFonteMercadoLivre(error);
@@ -841,6 +877,9 @@ export async function buscarPaginaPublicaMercadoLivre(
       status: "SUCCESS",
       httpStatus: lista.httpStatus ?? jm.httpStatus,
       data,
+      catalogIds: Array.from(
+        new Set([...(lista.catalogIds ?? []), ...(jm.catalogIds ?? [])]),
+      ),
     };
   }
 
