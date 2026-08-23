@@ -79,6 +79,14 @@ type DismissOpportunityResponse = {
   error?: string;
 };
 
+type ClearOpportunitiesResponse = {
+  success: boolean;
+  message?: string;
+  error?: string;
+  removed?: number;
+  preserved?: number;
+};
+
 type DiscoverResponse = {
   success: boolean;
   message?: string;
@@ -124,7 +132,7 @@ const statusLabels: Record<
   QUEUED: "Na fila",
   PUBLISHED: "Publicado",
   DISMISSED: "Descartado",
-  ERROR: "Erro â€” tentar novamente",
+  ERROR: "Erro — tentar novamente",
 };
 
 const statusClasses: Record<
@@ -132,17 +140,17 @@ const statusClasses: Record<
   string
 > = {
   WAITING_AFFILIATE:
-    "border-amber-200 bg-amber-100 text-amber-800",
+    "border-amber-200 bg-amber-50 text-amber-800",
   READY_TO_QUEUE:
-    "border-blue-200 bg-blue-100 text-blue-800",
+    "border-emerald-200 bg-emerald-50 text-emerald-800",
   QUEUED:
-    "border-purple-200 bg-purple-100 text-purple-800",
+    "border-slate-200 bg-slate-50 text-slate-700",
   PUBLISHED:
-    "border-emerald-200 bg-emerald-100 text-emerald-800",
+    "border-emerald-200 bg-emerald-50 text-emerald-800",
   DISMISSED:
-    "border-slate-200 bg-slate-100 text-slate-700",
+    "border-slate-200 bg-slate-50 text-slate-600",
   ERROR:
-    "border-red-200 bg-red-100 text-red-800",
+    "border-red-200 bg-red-50 text-red-800",
 };
 
 const marketplaceLabels: Record<
@@ -174,7 +182,7 @@ const marketplaceOpenLabels: Record<
 
 function formatCurrency(value: number | null) {
   if (value === null) {
-    return "PreÃ§o nÃ£o informado";
+    return "Preço não informado";
   }
 
   return new Intl.NumberFormat("pt-BR", {
@@ -255,6 +263,9 @@ export default function OpportunitiesPage() {
 
   const [dismissingId, setDismissingId] =
     useState<string | null>(null);
+
+  const [clearingOpportunities, setClearingOpportunities] =
+    useState(false);
 
   const [error, setError] = useState("");
   const [message, setMessage] =
@@ -348,7 +359,7 @@ export default function OpportunitiesPage() {
         if (!response.ok || !data.success) {
           throw new Error(
             data.error ||
-              "NÃ£o foi possÃ­vel carregar as categorias."
+              "Não foi possível carregar as categorias."
           );
         }
 
@@ -402,7 +413,7 @@ export default function OpportunitiesPage() {
         if (!response.ok || !data.success) {
           throw new Error(
             data.error ||
-              "NÃ£o foi possÃ­vel carregar as oportunidades."
+              "Não foi possível carregar as oportunidades."
           );
         }
 
@@ -452,7 +463,7 @@ export default function OpportunitiesPage() {
       !/^MLB\d+$/.test(normalizedCategoryId)
     ) {
       setError(
-        "Selecione uma categoria vÃ¡lida do Mercado Livre."
+        "Selecione uma categoria válida do Mercado Livre."
       );
       return;
     }
@@ -528,7 +539,7 @@ export default function OpportunitiesPage() {
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "NÃ£o foi possÃ­vel descobrir novas oportunidades."
+            "Não foi possível descobrir novas oportunidades."
         );
       }
 
@@ -557,8 +568,8 @@ export default function OpportunitiesPage() {
     ) {
       setError(
         pendingOpportunities.length === 0
-          ? "NÃ£o existem oportunidades pendentes."
-          : "Todos os produtos pendentes jÃ¡ possuem link de afiliado."
+          ? "Não existem oportunidades pendentes."
+          : "Todos os produtos pendentes já possuem link de afiliado."
       );
       return;
     }
@@ -581,11 +592,11 @@ export default function OpportunitiesPage() {
       );
 
       setMessage(
-        `${opportunitiesWithoutLink.length} URL(s) copiada(s). Gere os links de afiliado e mantenha a mesma ordem.`
+        `${opportunitiesWithoutLink.length} URL(s) copiada(s). No Mercado Livre, gere os links de afiliado e mantenha a ordem. Produtos Amazon com ASIN já entram com o link automático.`
       );
     } catch {
       setError(
-        "NÃ£o foi possÃ­vel copiar as URLs automaticamente."
+        "Não foi possível copiar as URLs automaticamente."
       );
     } finally {
       setCopyingUrls(false);
@@ -596,7 +607,7 @@ export default function OpportunitiesPage() {
     opportunity: Opportunity
   ) {
     const confirmed = window.confirm(
-      `Descartar "${opportunity.title}" por estar indisponÃ­vel?`
+      `Descartar "${opportunity.title}" por estar indisponível?`
     );
 
     if (!confirmed) {
@@ -620,7 +631,7 @@ export default function OpportunitiesPage() {
           body: JSON.stringify({
             id: opportunity.id,
             reason:
-              "Produto indisponÃ­vel no marketplace.",
+              "Produto indisponível no marketplace.",
           }),
         }
       );
@@ -631,7 +642,7 @@ export default function OpportunitiesPage() {
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "NÃ£o foi possÃ­vel descartar o produto."
+            "Não foi possível descartar o produto."
         );
       }
 
@@ -639,7 +650,7 @@ export default function OpportunitiesPage() {
 
       setMessage(
         data.message ||
-          "Produto indisponÃ­vel descartado."
+          "Produto indisponível descartado."
       );
 
       await loadOpportunities();
@@ -654,12 +665,72 @@ export default function OpportunitiesPage() {
     }
   }
 
+  async function clearOpportunities() {
+    if (items.length === 0) {
+      setError("");
+      setMessage("A lista de oportunidades já está vazia.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Tem certeza de que deseja limpar a lista de oportunidades? Produtos publicados, ofertas Multi Loja e a fila de importação não serão apagados.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setClearingOpportunities(true);
+      setError("");
+      setMessage("");
+
+      const response = await fetch(
+        "/api/opportunities",
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+      );
+
+      const data =
+        (await response.json()) as ClearOpportunitiesResponse;
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Não foi possível limpar as oportunidades.",
+        );
+      }
+
+      setBatchLinks("");
+      setAffiliateLinks({});
+      setItems([]);
+      setSummary(initialSummary);
+
+      setMessage(
+        data.message ||
+          `${data.removed ?? 0} oportunidade(s) removida(s).`,
+      );
+
+      await loadOpportunities();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Erro ao limpar oportunidades.",
+      );
+    } finally {
+      setClearingOpportunities(false);
+    }
+  }
+
   async function publishBatch() {
     if (
       pendingOpportunities.length === 0
     ) {
       setError(
-        "NÃ£o existem oportunidades pendentes para publicar."
+        "Não existem oportunidades pendentes para publicar."
       );
       return;
     }
@@ -680,7 +751,7 @@ export default function OpportunitiesPage() {
       batchAffiliateLinks.length > 0
     ) {
       setError(
-        "Todos os produtos jÃ¡ possuem link salvo. Apague os links colados ou edite o campo do produto que deseja corrigir."
+        "Todos os produtos já possuem link salvo. Apague os links colados ou edite o campo do produto que deseja corrigir."
       );
       return;
     }
@@ -752,7 +823,7 @@ export default function OpportunitiesPage() {
       allLinks.length
     ) {
       setError(
-        "O mesmo link de afiliado estÃ¡ associado a mais de um produto."
+        "O mesmo link de afiliado está associado a mais de um produto."
       );
       return;
     }
@@ -789,13 +860,13 @@ export default function OpportunitiesPage() {
         throw new Error(
           data.error ||
             data.message ||
-            "NÃ£o foi possÃ­vel publicar os produtos em lote."
+            "Não foi possível publicar os produtos em lote."
         );
       }
 
       setMessage(
         data.message ||
-          "PublicaÃ§Ã£o concluÃ­da com sucesso."
+          "Publicação concluída com sucesso."
       );
 
       setBatchLinks("");
@@ -839,51 +910,72 @@ export default function OpportunitiesPage() {
     },
   ];
 
+  const actionsLocked =
+    publishingBatch ||
+    dismissingId !== null ||
+    clearingOpportunities;
+
   return (
-    <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto max-w-[1200px]">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-emerald-600">
-              Painel administrativo
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+              Operação
             </p>
 
-            <h1 className="text-3xl font-bold text-slate-900">
-              ImportaÃ§Ã£o rÃ¡pida de produtos
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+              Oportunidades
             </h1>
 
-            <p className="mt-2 text-slate-600">
-              Descubra oportunidades, cole os
-              links de afiliado e publique tudo
-              em uma Ãºnica operaÃ§Ã£o.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Descubra produtos, publique na fila e
+              acompanhe o status. Na Amazon, o link
+              afiliado é gerado automaticamente quando
+              o ASIN é identificado.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              void loadOpportunities()
-            }
-            disabled={
-              loading ||
-              publishingBatch ||
-              dismissingId !== null
-            }
-            className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading
-              ? "Atualizando..."
-              : "Atualizar lista"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                void loadOpportunities()
+              }
+              disabled={
+                loading || actionsLocked
+              }
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? "Atualizando..."
+                : "Atualizar lista"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void clearOpportunities()
+              }
+              disabled={
+                loading || actionsLocked
+              }
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {clearingOpportunities
+                ? "Limpando..."
+                : "Limpar oportunidades"}
+            </button>
+          </div>
         </div>
 
-        <section className="mb-8 rounded-3xl border border-blue-200 bg-white p-6 shadow-sm">
+        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <div className="mb-5">
-            <p className="text-sm font-black uppercase tracking-[0.12em] text-blue-700">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               Etapa 1
             </p>
 
-            <h2 className="mt-2 text-2xl font-black text-slate-950">
+            <h2 className="mt-2 text-lg font-semibold text-slate-950">
               Descobrir oportunidades
             </h2>
 
@@ -918,7 +1010,7 @@ export default function OpportunitiesPage() {
                   discovering ||
                   publishingBatch
                 }
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
                 <option value="MERCADO_LIVRE">
                   Mercado Livre
@@ -954,7 +1046,7 @@ export default function OpportunitiesPage() {
                     discovering ||
                     publishingBatch
                   }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:bg-slate-50"
                 >
                   {loadingCategories ? (
                     <option value="">
@@ -962,7 +1054,7 @@ export default function OpportunitiesPage() {
                     </option>
                   ) : categories.length === 0 ? (
                     <option value="">
-                      Nenhuma categoria disponÃ­vel
+                      Nenhuma categoria disponível
                     </option>
                   ) : (
                     categories.map(
@@ -1038,7 +1130,7 @@ export default function OpportunitiesPage() {
                   discovering ||
                   publishingBatch
                 }
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
                 {[
                   1, 2, 3, 4, 5,
@@ -1062,8 +1154,7 @@ export default function OpportunitiesPage() {
               disabled={
                 discovering ||
                 loading ||
-                publishingBatch ||
-                dismissingId !== null ||
+                actionsLocked ||
                 (discoveryMarketplace === "AMAZON" &&
                   pendingOpportunities.length > 0) ||
                 (discoveryMarketplace ===
@@ -1072,7 +1163,7 @@ export default function OpportunitiesPage() {
                     !categoryId
                   : amazonQuery.trim().length < 3)
               }
-              className="rounded-xl bg-blue-600 px-6 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {discovering
                 ? "Descobrindo..."
@@ -1101,22 +1192,22 @@ export default function OpportunitiesPage() {
           ))}
         </section>
 
-        <section className="mb-8 overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm">
-          <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 p-6">
-            <p className="text-sm font-black uppercase tracking-[0.12em] text-emerald-700">
+        <section className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <div className="border-b border-slate-100 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               Etapa 2
             </p>
 
-            <h2 className="mt-2 text-2xl font-black text-slate-950">
+            <h2 className="mt-2 text-lg font-semibold text-slate-950">
               Gerar links e publicar
             </h2>
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Copie as URLs, gere os links no
-              programa de afiliados da loja
-              indicada, cole todos abaixo e clique
-              uma Ãºnica vez para validar, importar
-              e publicar.
+              No Mercado Livre, copie as URLs, gere
+              os links no programa de afiliados e
+              cole abaixo. Na Amazon, o link afiliado
+              é gerado automaticamente pelo ASIN e o
+              produto já fica pronto para a fila.
             </p>
           </div>
 
@@ -1127,27 +1218,27 @@ export default function OpportunitiesPage() {
                   Produtos pendentes
                 </p>
 
-                <p className="mt-2 text-3xl font-black text-emerald-700">
+                <p className="mt-2 text-3xl font-semibold text-emerald-700">
                   {pendingOpportunities.length}
                 </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-xl bg-white p-3">
                     <p className="text-xs font-semibold text-slate-500">
-                      Links necessÃ¡rios
+                      Links necessários
                     </p>
 
-                    <p className="mt-1 text-xl font-black text-slate-900">
+                    <p className="mt-1 text-xl font-semibold text-slate-900">
                       {linksMissing}
                     </p>
                   </div>
 
                   <div className="rounded-xl bg-white p-3">
                     <p className="text-xs font-semibold text-slate-500">
-                      Links jÃ¡ preenchidos
+                      Links já preenchidos
                     </p>
 
-                    <p className="mt-1 text-xl font-black text-slate-900">
+                    <p className="mt-1 text-xl font-semibold text-slate-900">
                       {pendingOpportunities.length -
                         linksMissing}
                     </p>
@@ -1161,8 +1252,7 @@ export default function OpportunitiesPage() {
                   }
                   disabled={
                     copyingUrls ||
-                    publishingBatch ||
-                    dismissingId !== null ||
+                    actionsLocked ||
                     linksMissing === 0
                   }
                   className="mt-5 flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1176,12 +1266,12 @@ export default function OpportunitiesPage() {
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                <p className="text-sm font-black text-amber-900">
+                <p className="text-sm font-semibold text-amber-900">
                   Mantenha a ordem
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-amber-800">
-                  O primeiro link gerado serÃ¡
+                  O primeiro link gerado será
                   associado ao primeiro produto
                   sem link, o segundo ao segundo
                   produto e assim por diante.
@@ -1209,16 +1299,15 @@ export default function OpportunitiesPage() {
                   linksMissing > 0
                     ? hasPendingAmazon &&
                       hasPendingMercadoLivre
-                      ? "Cole um link por linha, mantendo a ordem:\nhttps://meli.la/...\nhttps://www.amazon.com.br/dp/ASIN?tag=ofertano-20"
+                      ? "Cole os links do Mercado Livre, um por linha, na mesma ordem. Amazon com ASIN não precisa de link manual."
                       : hasPendingAmazon
-                        ? "Cole um link Amazon por linha:\nhttps://www.amazon.com.br/dp/ASIN?tag=ofertano-20"
+                        ? "Somente se algum produto Amazon ficou sem ASIN. Caso contrário, o link já foi gerado automaticamente."
                         : "Cole um link por linha:\nhttps://meli.la/...\nhttps://meli.la/..."
-                    : "Todos os produtos jÃ¡ possuem link. Clique em publicar."
+                    : "Todos os produtos já possuem link. Clique em publicar."
                 }
                 rows={9}
                 disabled={
-                  publishingBatch ||
-                  dismissingId !== null
+                  actionsLocked
                 }
                 className="mt-2 w-full resize-y rounded-2xl border border-slate-300 px-4 py-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
@@ -1237,7 +1326,7 @@ export default function OpportunitiesPage() {
 
                 <span className="text-slate-500">
                   {linksMissing} link(s)
-                  necessÃ¡rio(s)
+                  necessário(s)
                 </span>
               </div>
 
@@ -1254,12 +1343,11 @@ export default function OpportunitiesPage() {
                   void publishBatch()
                 }
                 disabled={
-                  publishingBatch ||
-                  dismissingId !== null ||
+                  actionsLocked ||
                   pendingOpportunities.length ===
                     0
                 }
-                className="mt-5 flex w-full items-center justify-center rounded-xl bg-emerald-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-600 px-6 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {publishingBatch
                   ? "Validando e publicando..."
@@ -1302,8 +1390,8 @@ export default function OpportunitiesPage() {
             </h2>
 
             <p className="mt-2 text-slate-600">
-              Os produtos publicados sÃ£o removidos
-              automaticamente desta lista. FaÃ§a
+              Os produtos publicados são removidos
+              automaticamente desta lista. Faça
               uma nova descoberta para buscar
               outros produtos.
             </p>
@@ -1339,7 +1427,7 @@ export default function OpportunitiesPage() {
                       />
                     ) : (
                       <span className="px-4 text-center text-sm text-slate-500">
-                        Imagem nÃ£o disponÃ­vel
+                        Imagem não disponível
                       </span>
                     )}
                   </div>
@@ -1347,7 +1435,7 @@ export default function OpportunitiesPage() {
                   <div className="min-w-0">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-black ${
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
                           marketplaceClasses[
                             opportunity.marketplace
                           ]
@@ -1399,13 +1487,13 @@ export default function OpportunitiesPage() {
                         ? `ASIN: ${opportunity.externalId}`
                         : opportunity.categoryName ||
                           opportunity.categoryId ||
-                          "Categoria nÃ£o informada"}
+                          "Categoria não informada"}
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-end gap-4">
                       <div>
                         <p className="text-sm text-slate-500">
-                          PreÃ§o atual
+                          Preço atual
                         </p>
 
                         <p className="text-2xl font-bold text-emerald-600">
@@ -1424,7 +1512,7 @@ export default function OpportunitiesPage() {
                       null ? (
                         <div>
                           <p className="text-sm text-slate-500">
-                            PreÃ§o anterior
+                            Preço anterior
                           </p>
 
                           <p className="text-base text-slate-500 line-through">
@@ -1461,15 +1549,14 @@ export default function OpportunitiesPage() {
                             )
                           }
                           disabled={
-                            publishingBatch ||
-                            dismissingId !== null
+                            actionsLocked
                           }
                           className="inline-flex rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {dismissingId ===
                           opportunity.id
                             ? "Descartando..."
-                            : "Descartar indisponÃ­vel"}
+                            : "Descartar indisponível"}
                         </button>
                       ) : null}
 
@@ -1512,13 +1599,12 @@ export default function OpportunitiesPage() {
                         }}
                         disabled={
                           !canEdit ||
-                          publishingBatch ||
-                          dismissingId !== null
+                          actionsLocked
                         }
                         placeholder={
                           opportunity.marketplace ===
                           "AMAZON"
-                            ? "Cole o link individual Amazon com tag=ofertano-20"
+                            ? "Emergência: cole o link afiliado apenas se o ASIN não foi identificado"
                             : "Preenchido automaticamente pelos links colados acima"
                         }
                         className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -1527,8 +1613,8 @@ export default function OpportunitiesPage() {
                       <p className="mt-2 text-xs text-slate-500">
                         {opportunity.marketplace ===
                         "AMAZON"
-                          ? "Use o link individual do mesmo ASIN com a tag ofertano-20. O sistema confere o produto antes de publicar."
-                          : "Use este campo apenas para corrigir manualmente um link. NÃ£o Ã© necessÃ¡rio salvar separadamente."}
+                          ? "Produtos Amazon com ASIN recebem o link afiliado automaticamente (tag ofertano-20) e já ficam prontos para a fila. Este campo é só para correção manual."
+                          : "Use este campo apenas para corrigir manualmente um link. Não é necessário salvar separadamente."}
                       </p>
 
                       {opportunity.errorMessage ? (

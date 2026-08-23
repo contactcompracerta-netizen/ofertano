@@ -99,10 +99,10 @@ function statusClasses(status: QueueStatus): string {
       return "border-amber-200 bg-amber-50 text-amber-800";
 
     case "PROCESSING":
-      return "border-blue-200 bg-blue-50 text-blue-800";
+      return "border-slate-200 bg-slate-50 text-slate-700";
 
     case "SUCCESS":
-      return "border-green-200 bg-green-50 text-green-800";
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
 
     case "ERROR":
       return "border-red-200 bg-red-50 text-red-800";
@@ -142,6 +142,8 @@ export default function FilaImportacaoPage() {
 
   const [deletingId, setDeletingId] =
     useState<string | null>(null);
+  const [clearing, setClearing] =
+    useState(false);
 
   const [panelError, setPanelError] =
     useState<string | null>(null);
@@ -338,6 +340,47 @@ export default function FilaImportacaoPage() {
     }
   }
 
+  async function clearQueue() {
+    const confirmed = window.confirm(
+      "Limpar a lista da fila? Registros pendentes, concluídos e com erro serão removidos. Apenas itens que estiverem processando agora serão preservados. Os produtos já publicados não serão apagados."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setClearing(true);
+      setActionResult(null);
+
+      const response = await fetch(
+        "/api/import-queue/clear",
+        {
+          method: "POST",
+          credentials: "same-origin",
+        }
+      );
+
+      const data =
+        (await response.json()) as ActionResponse;
+
+      setActionResult(data);
+
+      if (response.ok && data.success) {
+        await loadQueue();
+      }
+    } catch (error) {
+      console.error(error);
+
+      setActionResult({
+        success: false,
+        error: "Não foi possível limpar a fila.",
+      });
+    } finally {
+      setClearing(false);
+    }
+  }
+
   async function deleteItem(id: string) {
     const confirmed = window.confirm(
       "Remover este registro da fila? O produto já importado continuará publicado no site."
@@ -386,26 +429,26 @@ export default function FilaImportacaoPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 px-4 py-10">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-5">
+    <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto max-w-[1200px]">
+        <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-black uppercase tracking-wider text-green-700">
-              Painel Ofertano
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+              Operação
             </p>
 
-            <h1 className="mt-1 text-3xl font-black text-gray-900">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
               Fila de importação
             </h1>
 
-            <p className="mt-2 max-w-2xl text-gray-600">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Acompanhe os produtos pendentes, concluídos e
               com erro. O painel atualiza automaticamente a
               cada 15 segundos.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
@@ -413,7 +456,7 @@ export default function FilaImportacaoPage() {
                 void loadQueue();
               }}
               disabled={loadingPanel}
-              className="rounded-xl border border-gray-300 bg-white px-5 py-3 font-bold text-gray-700 transition hover:border-green-500 hover:text-green-700 disabled:opacity-60"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               {loadingPanel
                 ? "Atualizando..."
@@ -422,9 +465,9 @@ export default function FilaImportacaoPage() {
 
             <Link
               href="/admin"
-              className="rounded-xl bg-gray-900 px-5 py-3 font-bold text-white transition hover:bg-gray-700"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Voltar ao importador
+              Voltar ao painel
             </Link>
           </div>
         </header>
@@ -448,14 +491,14 @@ export default function FilaImportacaoPage() {
             label="Processando"
             value={summary.processing}
             description="Em execução"
-            className="border-blue-200 bg-blue-50 text-blue-900"
+            className="border-slate-200 bg-slate-50 text-slate-900"
           />
 
           <SummaryCard
             label="Concluídos"
             value={summary.success}
             description="Importados com sucesso"
-            className="border-green-200 bg-green-50 text-green-900"
+            className="border-emerald-200 bg-emerald-50 text-emerald-900"
           />
 
           <SummaryCard
@@ -474,16 +517,16 @@ export default function FilaImportacaoPage() {
           </section>
         )}
 
-        <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Processamento manual
               </h2>
 
               <p className="mt-1 text-sm text-gray-600">
-                O botão processa até cinco produtos. A automação
-                diária processa até dez produtos por execução.
+                O botão processa até cinco itens. A automação continua
+                processando a fila em segundo plano.
               </p>
             </div>
 
@@ -495,7 +538,7 @@ export default function FilaImportacaoPage() {
                 adding ||
                 summary.pending === 0
               }
-              className="rounded-xl bg-green-600 px-6 py-3.5 font-black text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {processing
                 ? "Processando..."
@@ -508,14 +551,14 @@ export default function FilaImportacaoPage() {
           <section
             className={`mt-6 rounded-2xl border p-5 ${
               processResult.success
-                ? "border-blue-200 bg-blue-50"
+                ? "border-emerald-200 bg-emerald-50"
                 : "border-red-200 bg-red-50"
             }`}
           >
             <p
-              className={`font-black ${
+              className={`font-semibold ${
                 processResult.success
-                  ? "text-blue-900"
+                  ? "text-emerald-800"
                   : "text-red-800"
               }`}
             >
@@ -566,11 +609,11 @@ export default function FilaImportacaoPage() {
 
         <form
           onSubmit={addLinks}
-          className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm"
+          className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
         >
           <label
             htmlFor="urls"
-            className="block text-lg font-black text-gray-900"
+            className="block text-lg font-semibold text-gray-900"
           >
             Adicionar produtos à fila
           </label>
@@ -589,7 +632,7 @@ export default function FilaImportacaoPage() {
             placeholder={`https://www.mercadolivre.com.br/produto-1
 https://www.mercadolivre.com.br/produto-2
 https://meli.la/produto-3`}
-            className="mt-4 w-full resize-y rounded-2xl border border-gray-300 bg-gray-50 p-4 text-sm text-gray-900 outline-none transition focus:border-green-500 focus:bg-white focus:ring-4 focus:ring-green-100"
+            className="mt-4 w-full resize-y rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
@@ -600,7 +643,7 @@ https://meli.la/produto-3`}
             <button
               type="submit"
               disabled={adding || processing}
-              className="rounded-xl bg-gray-900 px-6 py-3.5 font-black text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {adding
                 ? "Adicionando..."
@@ -618,7 +661,7 @@ https://meli.la/produto-3`}
             }`}
           >
             <p
-              className={`font-black ${
+              className={`font-semibold ${
                 addResult.success
                   ? "text-green-800"
                   : "text-red-800"
@@ -645,10 +688,10 @@ https://meli.la/produto-3`}
           </section>
         )}
 
-        <section className="mt-6 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+        <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 p-6">
             <div>
-              <h2 className="text-xl font-black text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Produtos da fila
               </h2>
 
@@ -657,7 +700,19 @@ https://meli.la/produto-3`}
               </p>
             </div>
 
-            <select
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void clearQueue()}
+                disabled={clearing || summary.total === 0}
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {clearing
+                  ? "Limpando..."
+                  : "Limpar lista"}
+              </button>
+
+              <select
               value={filter}
               onChange={(event) =>
                 setFilter(
@@ -677,7 +732,8 @@ https://meli.la/produto-3`}
               </option>
               <option value="SUCCESS">Concluídos</option>
               <option value="ERROR">Erros</option>
-            </select>
+              </select>
+            </div>
           </div>
 
           {loadingPanel && items.length === 0 ? (
@@ -701,7 +757,7 @@ https://meli.la/produto-3`}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-3">
                         <span
-                          className={`rounded-full border px-3 py-1 text-xs font-black ${statusClasses(
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClasses(
                             item.status
                           )}`}
                         >
@@ -718,7 +774,7 @@ https://meli.la/produto-3`}
                         </span>
                       </div>
 
-                      <h3 className="mt-3 break-words text-base font-black text-gray-900">
+                      <h3 className="mt-3 break-words text-base font-semibold text-gray-900">
                         {item.productName ||
                           "Produto ainda não importado"}
                       </h3>
@@ -727,7 +783,7 @@ https://meli.la/produto-3`}
                         href={item.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 block break-all text-sm font-medium text-blue-700 hover:underline"
+                        className="mt-2 block break-all text-sm font-medium text-emerald-700 hover:underline"
                       >
                         {item.url}
                       </a>
@@ -757,7 +813,7 @@ https://meli.la/produto-3`}
                       {item.productId && (
                         <Link
                           href={`/produto/${item.productId}`}
-                          className="rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 transition hover:border-green-500 hover:text-green-700"
+                          className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
                         >
                           Ver produto
                         </Link>
@@ -773,7 +829,7 @@ https://meli.la/produto-3`}
                             retryingId === item.id ||
                             deletingId === item.id
                           }
-                          className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {retryingId === item.id
                             ? "Enviando..."
@@ -791,7 +847,7 @@ https://meli.la/produto-3`}
                             deletingId === item.id ||
                             retryingId === item.id
                           }
-                          className="rounded-xl border border-red-300 bg-white px-4 py-2.5 text-sm font-black text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-xl border border-red-300 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {deletingId === item.id
                             ? "Removendo..."
@@ -827,11 +883,11 @@ function SummaryCard({
     <article
       className={`rounded-2xl border p-5 shadow-sm ${className}`}
     >
-      <p className="text-sm font-black uppercase tracking-wide">
+      <p className="text-sm font-semibold uppercase tracking-wide">
         {label}
       </p>
 
-      <p className="mt-2 text-4xl font-black">
+      <p className="mt-2 text-4xl font-semibold">
         {value}
       </p>
 

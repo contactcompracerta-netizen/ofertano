@@ -556,19 +556,19 @@ export default function AdminBlogPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Link
               href="/admin"
-              className="text-sm font-black text-emerald-700 transition hover:text-emerald-900"
+              className="text-sm font-semibold text-emerald-700 transition hover:text-emerald-900"
             >
               ← Voltar ao painel
             </Link>
-            <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               Conteúdo Ofertano
             </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
               Administração do blog
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
@@ -581,7 +581,7 @@ export default function AdminBlogPage() {
               type="button"
               onClick={importCurrentPosts}
               disabled={importing}
-              className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {importing
                 ? "Importando..."
@@ -590,7 +590,7 @@ export default function AdminBlogPage() {
             <button
               type="button"
               onClick={startNewPost}
-              className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
+              className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
               + Novo artigo
             </button>
@@ -614,12 +614,12 @@ export default function AdminBlogPage() {
             <div className="border-b border-slate-200 bg-emerald-50 px-5 py-5 sm:px-7">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-emerald-700">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                     {editingId
                       ? "Editando artigo"
                       : "Novo conteúdo"}
                   </p>
-                  <h2 className="mt-1 text-2xl font-black">
+                  <h2 className="mt-1 text-2xl font-semibold">
                     {editingId
                       ? editor.title || "Artigo"
                       : "Criar artigo"}
@@ -631,7 +631,7 @@ export default function AdminBlogPage() {
                     setShowEditor(false);
                     setEditingId(null);
                   }}
-                  className="self-start rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
+                  className="self-start rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Fechar editor
                 </button>
@@ -641,7 +641,7 @@ export default function AdminBlogPage() {
             <div className="space-y-8 p-5 sm:p-7 lg:p-9">
               <div className="grid gap-5 lg:grid-cols-2">
                 <label className="lg:col-span-2">
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Título do artigo
                   </span>
                   <input
@@ -662,7 +662,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label>
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Endereço do artigo (slug)
                   </span>
                   <input
@@ -681,7 +681,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label>
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Categoria
                   </span>
                   <input
@@ -706,7 +706,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label className="lg:col-span-2">
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Resumo
                   </span>
                   <textarea
@@ -724,7 +724,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label>
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Autor
                   </span>
                   <input
@@ -740,7 +740,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label>
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Tempo de leitura
                   </span>
                   <input
@@ -757,7 +757,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label>
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Cor do artigo
                   </span>
                   <select
@@ -783,7 +783,7 @@ export default function AdminBlogPage() {
                 </label>
 
                 <label>
-                  <span className="mb-2 block text-sm font-black text-slate-800">
+                  <span className="mb-2 block text-sm font-semibold text-slate-800">
                     Imagem de capa (URL)
                   </span>
                   <input
@@ -804,10 +804,10 @@ export default function AdminBlogPage() {
               <div className="border-t border-slate-200 pt-8">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wider text-emerald-700">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                       Conteúdo principal
                     </p>
-                    <h3 className="mt-1 text-2xl font-black">
+                    <h3 className="mt-1 text-2xl font-semibold">
                       Seções do artigo
                     </h3>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -817,7 +817,7 @@ export default function AdminBlogPage() {
                   <button
                     type="button"
                     onClick={addSection}
-                    className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 hover:bg-emerald-100"
+                    className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
                   >
                     + Adicionar seção
                   </button>
@@ -831,7 +831,7 @@ export default function AdminBlogPage() {
                         className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6"
                       >
                         <div className="flex items-center justify-between gap-4">
-                          <p className="text-sm font-black text-slate-700">
+                          <p className="text-sm font-semibold text-slate-700">
                             Seção {index + 1}
                           </p>
                           {editor.sections.length > 1 && (
@@ -840,7 +840,7 @@ export default function AdminBlogPage() {
                               onClick={() =>
                                 removeSection(index)
                               }
-                              className="text-xs font-black text-rose-700 hover:text-rose-900"
+                              className="text-xs font-semibold text-rose-700 hover:text-rose-900"
                             >
                               Remover seção
                             </button>
@@ -915,7 +915,7 @@ export default function AdminBlogPage() {
               </div>
 
               <details className="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
-                <summary className="cursor-pointer text-base font-black text-slate-900">
+                <summary className="cursor-pointer text-base font-semibold text-slate-900">
                   SEO e preparação para redes sociais
                 </summary>
 
@@ -980,7 +980,7 @@ export default function AdminBlogPage() {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="grid gap-5 lg:grid-cols-3">
                   <label>
-                    <span className="mb-2 block text-sm font-black text-slate-800">
+                    <span className="mb-2 block text-sm font-semibold text-slate-800">
                       Situação
                     </span>
                     <select
@@ -1011,7 +1011,7 @@ export default function AdminBlogPage() {
 
                   {editor.status === "SCHEDULED" && (
                     <label>
-                      <span className="mb-2 block text-sm font-black text-slate-800">
+                      <span className="mb-2 block text-sm font-semibold text-slate-800">
                         Data e horário
                       </span>
                       <input
@@ -1032,7 +1032,7 @@ export default function AdminBlogPage() {
                   {editor.status === "PUBLISHED" &&
                     editor.publishedAt && (
                       <label>
-                        <span className="mb-2 block text-sm font-black text-slate-800">
+                        <span className="mb-2 block text-sm font-semibold text-slate-800">
                           Data de publicação
                         </span>
                         <input
@@ -1063,7 +1063,7 @@ export default function AdminBlogPage() {
                       }
                       className="h-5 w-5 accent-emerald-600"
                     />
-                    <span className="text-sm font-black text-slate-800">
+                    <span className="text-sm font-semibold text-slate-800">
                       Artigo principal do blog
                     </span>
                   </label>
@@ -1077,7 +1077,7 @@ export default function AdminBlogPage() {
                       setEditingId(null);
                     }}
                     disabled={saving}
-                    className="rounded-xl border border-slate-300 bg-white px-6 py-3 font-black text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                    className="rounded-xl border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
                   >
                     Cancelar
                   </button>
@@ -1085,7 +1085,7 @@ export default function AdminBlogPage() {
                     type="button"
                     onClick={savePost}
                     disabled={saving}
-                    className="rounded-xl bg-emerald-600 px-7 py-3 font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-xl bg-emerald-600 px-7 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving
                       ? "Salvando..."
@@ -1142,7 +1142,7 @@ export default function AdminBlogPage() {
               <span className="text-sm font-bold text-slate-600">
                 {item.label}
               </span>
-              <strong className="mt-2 block text-3xl font-black text-slate-950">
+              <strong className="mt-2 block text-3xl font-semibold text-slate-950">
                 {item.value}
               </strong>
             </button>
@@ -1152,10 +1152,10 @@ export default function AdminBlogPage() {
         <section className="mt-8">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-wider text-emerald-700">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                 Biblioteca editorial
               </p>
-              <h2 className="mt-1 text-2xl font-black">
+              <h2 className="mt-1 text-2xl font-semibold">
                 Artigos
               </h2>
             </div>
@@ -1163,7 +1163,7 @@ export default function AdminBlogPage() {
               type="button"
               onClick={() => void loadPosts()}
               disabled={loading}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
               Atualizar
             </button>
@@ -1175,7 +1175,7 @@ export default function AdminBlogPage() {
             </div>
           ) : filteredPosts.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center sm:p-12">
-              <h3 className="text-xl font-black">
+              <h3 className="text-xl font-semibold">
                 Nenhum artigo nesta situação
               </h3>
               <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-600">
@@ -1191,7 +1191,7 @@ export default function AdminBlogPage() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${STATUS_CLASSES[post.status]}`}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${STATUS_CLASSES[post.status]}`}
                     >
                       {STATUS_LABELS[post.status]}
                     </span>
@@ -1199,13 +1199,13 @@ export default function AdminBlogPage() {
                       {post.category}
                     </span>
                     {post.featured && (
-                      <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-800">
+                      <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
                         Principal
                       </span>
                     )}
                   </div>
 
-                  <h3 className="mt-4 text-xl font-black leading-7 tracking-tight">
+                  <h3 className="mt-4 text-xl font-semibold leading-7 tracking-tight">
                     {post.title}
                   </h3>
                   <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
@@ -1227,7 +1227,7 @@ export default function AdminBlogPage() {
                     <button
                       type="button"
                       onClick={() => startEditing(post)}
-                      className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-700"
+                      className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
                     >
                       Editar artigo
                     </button>
@@ -1236,7 +1236,7 @@ export default function AdminBlogPage() {
                       <Link
                         href={`/blog/${post.slug}`}
                         target="_blank"
-                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-5 py-3 text-center text-sm font-black text-emerald-800 hover:bg-emerald-100"
+                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-5 py-3 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
                       >
                         Ver publicado
                       </Link>
@@ -1248,7 +1248,7 @@ export default function AdminBlogPage() {
                         onClick={() =>
                           void archivePost(post)
                         }
-                        className="rounded-xl border border-rose-200 bg-white px-5 py-3 text-sm font-black text-rose-700 hover:bg-rose-50"
+                        className="rounded-xl border border-rose-200 bg-white px-5 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50"
                       >
                         Arquivar
                       </button>

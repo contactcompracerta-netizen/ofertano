@@ -279,23 +279,16 @@ export default function IntegracoesPage() {
     ).length;
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-10">
-        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto max-w-[1200px]">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <Link
-              href="/admin"
-              className="text-sm font-bold text-emerald-700 transition hover:text-emerald-800"
-            >
-              ← Voltar ao painel
-            </Link>
-
-            <p className="mt-5 text-sm font-black uppercase tracking-[0.12em] text-emerald-700">
-              Ofertano
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+              Sistema
             </p>
 
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-              Central de Integrações
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+              Integrações
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
@@ -311,7 +304,7 @@ export default function IntegracoesPage() {
               void carregar()
             }
             disabled={loading}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading
               ? "Atualizando..."
@@ -327,7 +320,7 @@ export default function IntegracoesPage() {
                   Integrações
                 </p>
 
-                <p className="mt-2 text-3xl font-black text-slate-950">
+                <p className="mt-2 text-3xl font-semibold text-slate-950">
                   {
                     integrations.length
                   }
@@ -339,7 +332,7 @@ export default function IntegracoesPage() {
                   Operacionais
                 </p>
 
-                <p className="mt-2 text-3xl font-black text-emerald-600">
+                <p className="mt-2 text-3xl font-semibold text-emerald-600">
                   {operacionais}
                 </p>
               </div>
@@ -412,7 +405,7 @@ export default function IntegracoesPage() {
                             )}`}
                           />
 
-                          <h2 className="text-xl font-black text-slate-950">
+                          <h2 className="text-xl font-semibold text-slate-950">
                             {
                               integration.name
                             }
@@ -427,7 +420,7 @@ export default function IntegracoesPage() {
                       </div>
 
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-black ${classesStatus(
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${classesStatus(
                           integration.status,
                         )}`}
                       >
@@ -449,7 +442,7 @@ export default function IntegracoesPage() {
                           Ofertas
                         </p>
 
-                        <p className="mt-1 text-2xl font-black text-slate-950">
+                        <p className="mt-1 text-2xl font-semibold text-slate-950">
                           {
                             integration.totalOffers
                           }
@@ -461,7 +454,7 @@ export default function IntegracoesPage() {
                           Ativas
                         </p>
 
-                        <p className="mt-1 text-2xl font-black text-slate-950">
+                        <p className="mt-1 text-2xl font-semibold text-slate-950">
                           {
                             integration.activeOffers
                           }

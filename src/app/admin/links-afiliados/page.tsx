@@ -220,14 +220,14 @@ export default function AffiliateLinksPage() {
 
   return (
     <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-wider text-emerald-700">
+            <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">
               Mercado Livre
             </p>
 
-            <h1 className="mt-2 text-3xl font-black text-slate-950">
+            <h1 className="mt-2 text-3xl font-semibold text-slate-950">
               Links de afiliados
             </h1>
 
@@ -262,7 +262,7 @@ export default function AffiliateLinksPage() {
               Aguardando link
             </p>
 
-            <p className="mt-2 text-4xl font-black">
+            <p className="mt-2 text-4xl font-semibold">
               {items.length}
             </p>
           </div>
@@ -272,7 +272,7 @@ export default function AffiliateLinksPage() {
               Links colados
             </p>
 
-            <p className="mt-2 text-4xl font-black">
+            <p className="mt-2 text-4xl font-semibold">
               {links.length}
             </p>
           </div>
@@ -283,7 +283,7 @@ export default function AffiliateLinksPage() {
             </p>
 
             <p
-              className={`mt-2 text-xl font-black ${
+              className={`mt-2 text-xl font-semibold ${
                 quantidadeCorreta
                   ? "text-emerald-700"
                   : "text-amber-700"
@@ -301,7 +301,7 @@ export default function AffiliateLinksPage() {
         <section className="mb-8 rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
           <div className="grid gap-8 lg:grid-cols-2">
             <div>
-              <h2 className="text-xl font-black">
+              <h2 className="text-xl font-semibold">
                 1. Copiar produtos
               </h2>
 
@@ -319,7 +319,7 @@ export default function AffiliateLinksPage() {
                   saving ||
                   items.length === 0
                 }
-                className="mt-5 w-full rounded-xl bg-blue-600 px-5 py-4 font-black text-white disabled:opacity-50"
+                className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {copying
                   ? "Copiando..."
@@ -334,7 +334,7 @@ export default function AffiliateLinksPage() {
             </div>
 
             <div>
-              <h2 className="text-xl font-black">
+              <h2 className="text-xl font-semibold">
                 2. Colar links gerados
               </h2>
 
@@ -366,7 +366,7 @@ export default function AffiliateLinksPage() {
                   saving ||
                   !quantidadeCorreta
                 }
-                className="mt-5 w-full rounded-xl bg-emerald-600 px-5 py-4 font-black text-white disabled:opacity-50"
+                className="mt-5 w-full rounded-xl bg-emerald-600 px-5 py-4 font-semibold text-white disabled:opacity-50"
               >
                 {saving
                   ? "Validando e ativando..."
@@ -384,7 +384,7 @@ export default function AffiliateLinksPage() {
 
         {!loading && items.length === 0 ? (
           <div className="rounded-2xl border border-emerald-200 bg-white p-10 text-center">
-            <h2 className="text-2xl font-black text-emerald-700">
+            <h2 className="text-2xl font-semibold text-emerald-700">
               Nenhum link pendente
             </h2>
 
@@ -396,7 +396,7 @@ export default function AffiliateLinksPage() {
 
         {!loading && items.length > 0 ? (
           <section className="space-y-4">
-            <h2 className="text-xl font-black">
+            <h2 className="text-xl font-semibold">
               Prévia da associação
             </h2>
 
@@ -420,7 +420,7 @@ export default function AffiliateLinksPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-black text-emerald-700">
+                  <p className="text-xs font-semibold text-emerald-700">
                     #{index + 1}
                   </p>
 
@@ -428,7 +428,7 @@ export default function AffiliateLinksPage() {
                     {item.name}
                   </h3>
 
-                  <p className="mt-2 font-black text-emerald-700">
+                  <p className="mt-2 font-semibold text-emerald-700">
                     {formatCurrency(item.price)}
                   </p>
 

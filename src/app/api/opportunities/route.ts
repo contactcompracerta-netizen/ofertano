@@ -233,3 +233,55 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE() {
+  try {
+    const preservedQueued =
+      await prisma.productOpportunity.count({
+        where: {
+          status: "QUEUED",
+        },
+      });
+
+    const removed = await prisma.productOpportunity.deleteMany({
+      where: {
+        status: {
+          not: "QUEUED",
+        },
+      },
+    });
+
+    const preservedMessage =
+      preservedQueued > 0
+        ? ` ${preservedQueued} oportunidade(s) com status Na fila foram preservadas para não interromper o processamento.`
+        : "";
+
+    return NextResponse.json({
+      success: true,
+      removed: removed.count,
+      preserved: preservedQueued,
+      message:
+        removed.count === 0 && preservedQueued === 0
+          ? "A lista de oportunidades já estava vazia."
+          : `${removed.count} oportunidade(s) removida(s). Produtos publicados, ofertas Multi Loja e a fila de importação não foram apagados.${preservedMessage}`,
+    });
+  } catch (error) {
+    console.error(
+      "Erro ao limpar oportunidades:",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível limpar as oportunidades.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}

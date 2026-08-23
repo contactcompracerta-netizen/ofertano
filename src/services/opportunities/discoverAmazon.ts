@@ -58,6 +58,86 @@ function normalizarTexto(
     .replace(/\s+/g, " ");
 }
 
+function obterAsinAmazon(
+  externalId: string,
+  sourceUrl: string,
+): string | null {
+  const externalIdNormalizado =
+    externalId.trim().toUpperCase();
+
+  if (
+    /^[A-Z0-9]{10}$/.test(
+      externalIdNormalizado,
+    )
+  ) {
+    return externalIdNormalizado;
+  }
+
+  try {
+    const url = new URL(sourceUrl);
+
+    const match =
+      url.pathname.match(
+        /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i,
+      );
+
+    return (
+      match?.[1]?.toUpperCase() ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function gerarLinkAfiliadoAmazon(
+  externalId: string,
+  sourceUrl: string,
+): string | null {
+  const asin =
+    obterAsinAmazon(
+      externalId,
+      sourceUrl,
+    );
+
+  if (!asin) {
+    return null;
+  }
+
+  const associateTag =
+    process.env.AMAZON_ASSOCIATE_TAG?.trim() ||
+    "ofertano-20";
+
+  try {
+    const url = new URL(sourceUrl);
+
+    const hostname =
+      url.hostname
+        .toLowerCase()
+        .replace(/^www\./, "");
+
+    const dominioAmazon =
+      hostname === "amazon.com.br" ||
+      hostname.endsWith(".amazon.com.br") ||
+      hostname === "amazon.com" ||
+      hostname.endsWith(".amazon.com");
+
+    if (
+      dominioAmazon &&
+      url.searchParams.get("tag")?.trim() ===
+        associateTag
+    ) {
+      return sourceUrl.trim();
+    }
+  } catch {
+    // Usa o link canonico gerado pelo ASIN.
+  }
+
+  return (
+    `https://www.amazon.com.br/dp/${asin}` +
+    `/ref=nosim?tag=${encodeURIComponent(associateTag)}`
+  );
+}
 export async function discoverAmazonOpportunities(
   rawQuery: string,
   rawQuantity: unknown,
@@ -170,55 +250,64 @@ export async function discoverAmazonOpportunities(
       ? await prisma.productOpportunity.createMany({
           data:
             newCandidates.map(
-              (candidate) => ({
-                marketplace:
-                  "AMAZON" as const,
+              (candidate) => {
+                const affiliateLink =
+                  gerarLinkAfiliadoAmazon(
+                    candidate.externalId,
+                    candidate.sourceUrl,
+                  );
 
-                externalId:
-                  candidate.externalId,
+                return {
+                  marketplace:
+                    "AMAZON" as const,
 
-                sourceType:
-                  "SEARCH_RESULT" as const,
+                  externalId:
+                    candidate.externalId,
 
-                sourceUrl:
-                  candidate.sourceUrl,
+                  sourceType:
+                    "SEARCH_RESULT" as const,
 
-                title:
-                  candidate.title,
+                  sourceUrl:
+                    candidate.sourceUrl,
 
-                image:
-                  candidate.image,
+                  title:
+                    candidate.title,
 
-                categoryId:
-                  null,
+                  image:
+                    candidate.image,
 
-                categoryName:
-                  "Amazon",
+                  categoryId:
+                    null,
 
-                price:
-                  candidate.price,
+                  categoryName:
+                    "Amazon",
 
-                oldPrice:
-                  candidate.oldPrice,
+                  price:
+                    candidate.price,
 
-                discount:
-                  null,
+                  oldPrice:
+                    candidate.oldPrice,
 
-                affiliateLink:
-                  null,
+                  discount:
+                    null,
 
-                status:
-                  "WAITING_AFFILIATE" as const,
+                  affiliateLink,
 
-                matchStatus:
-                  "HIGH" as const,
+                  status: affiliateLink
+                    ? ("READY_TO_QUEUE" as const)
+                    : ("WAITING_AFFILIATE" as const),
 
-                reviewReason:
-                  "Aguardando link individual de afiliado da Amazon.",
+                  matchStatus:
+                    "HIGH" as const,
 
-                errorMessage:
-                  null,
-              }),
+                  reviewReason: affiliateLink
+                    ? null
+                    : "Não foi possível identificar o ASIN para gerar o link afiliado da Amazon.",
+
+                  errorMessage:
+                    null,
+                };
+              },
             ),
 
           skipDuplicates:
