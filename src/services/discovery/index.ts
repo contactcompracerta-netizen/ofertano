@@ -10,6 +10,11 @@ import type {
 } from "./core/types";
 
 import {
+  classificarBuscaDoMarketplace,
+  reduzirSearchOutcomes,
+} from "@/services/search/publicationGate";
+
+import {
   avaliarCompatibilidadeComConsulta,
   criarCanonicalKeyDaIdentidade,
   criarConsultasGlobaisDeIdentidade,
@@ -308,6 +313,7 @@ async function executarAdapter(
       scanned: 0,
       error:
         "Marketplace sem mecanismo de busca configurado.",
+      searchOutcome: "UNUSABLE",
     };
   }
 
@@ -338,6 +344,7 @@ async function executarAdapter(
       candidates: [],
       scanned: 0,
       error: mensagem.slice(0, 1000),
+      searchOutcome: "ERROR",
     };
   }
 }
@@ -458,12 +465,20 @@ async function executarAdapterComPlanoGlobal(
       resultados.flatMap((resultado) => resultado.blockedSources ?? []),
     ),
   );
+  const unusableSources = Array.from(
+    new Set(
+      resultados.flatMap((resultado) => resultado.unusableSources ?? []),
+    ),
+  );
   const sourcesTried = Array.from(
     new Set(
       resultados.flatMap((resultado) => resultado.sourcesTried ?? []),
     ),
   );
   const degraded = resultados.some((resultado) => resultado.degraded);
+  const searchOutcome = reduzirSearchOutcomes(
+    resultados.map((resultado) => classificarBuscaDoMarketplace(resultado)),
+  );
 
   return {
     marketplace: adapter.marketplace,
@@ -483,7 +498,9 @@ async function executarAdapterComPlanoGlobal(
           : null,
     degraded,
     blockedSources,
+    unusableSources,
     sourcesTried,
+    searchOutcome,
   };
 }
 
@@ -564,13 +581,19 @@ export async function descobrirProdutosComAdapters(
   );
 
   for (const resultado of resultados) {
+    const searchOutcome =
+      resultado.searchOutcome ??
+      classificarBuscaDoMarketplace(resultado);
+
     traceMultiloja("marketplace", {
       marketplace: resultado.marketplace,
       success: resultado.success,
+      searchOutcome,
       degraded: resultado.degraded ?? false,
       candidates: resultado.candidates.length,
       scanned: resultado.scanned,
       blockedSources: resultado.blockedSources ?? [],
+      unusableSources: resultado.unusableSources ?? [],
       sourcesTried: resultado.sourcesTried ?? [],
       error: resultado.error,
     });
@@ -608,6 +631,20 @@ export async function descobrirProdutosComAdapters(
         queryTextRelevance: match.textRelevance,
         queryRoleCompatibility: match.roleCompatible,
         queryRelevance: match.compatible ? match.score : 0,
+        queryProductClass: match.queryProductClass,
+        candidateProductClass: match.candidateProductClass,
+        productClassCompatibility: match.productClassCompatibility,
+        queryBrand: match.queryBrand,
+        candidateBrand: match.candidateBrand,
+        brandCompatibility: match.brandCompatibility,
+        attributeMatches: match.attributeMatches,
+        attributeMissing: match.attributeMissing,
+        attributeConflicts: match.attributeConflicts,
+        distinctiveTermsMatched: match.distinctiveTermsMatched,
+        distinctiveTermsMissing: match.distinctiveTermsMissing,
+        identityEvidenceScore: match.identityEvidenceScore,
+        attributeCoverage: match.attributeCoverage,
+        autoAcceptanceReason: match.autoAcceptanceReason,
         canonicalKey: criarCanonicalKeyDaIdentidade(identity),
       });
     }

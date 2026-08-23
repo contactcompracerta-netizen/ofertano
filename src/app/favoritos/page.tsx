@@ -7,9 +7,15 @@ import type { User } from "@supabase/supabase-js";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import { supabase } from "@/lib/supabaseClient";
-
-const STORAGE_KEY = "ofertano:favorites";
-const FAVORITES_EVENT = "ofertano:favorites-changed";
+import {
+  FAVORITES_EVENT,
+  aoSairDaContaFavoritos,
+  garantirSincronizacaoDaSessao,
+  hidratarProdutosFavoritos,
+  lerIdsFavoritosLocais,
+  removerFavoritoRemoto,
+  salvarIdsFavoritosLocais,
+} from "@/services/favorites";
 
 type FavoriteProduct = {
   id: string;
@@ -33,92 +39,6 @@ function formatarPreco(valor: number) {
   });
 }
 
-function normalizarIds(valor: unknown): string[] {
-  if (!Array.isArray(valor)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      valor
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function lerIdsFavoritosLocais(): string[] {
-  try {
-    const valor = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!valor) {
-      return [];
-    }
-
-    return normalizarIds(JSON.parse(valor));
-  } catch {
-    return [];
-  }
-}
-
-function salvarIdsFavoritosLocais(
-  ids: string[],
-  emitirEvento = true
-) {
-  const normalizados = normalizarIds(ids);
-
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(normalizados)
-  );
-
-  if (emitirEvento) {
-    window.dispatchEvent(new Event(FAVORITES_EVENT));
-  }
-}
-
-async function carregarIdsDaConta(userId: string) {
-  const { data, error } = await supabase
-    .from("user_favorites")
-    .select("product_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return normalizarIds(
-    (data ?? []).map((item) => item.product_id)
-  );
-}
-
-async function enviarFavoritosLocaisParaConta(
-  userId: string,
-  ids: string[]
-) {
-  if (ids.length === 0) {
-    return;
-  }
-
-  const linhas = ids.map((productId) => ({
-    user_id: userId,
-    product_id: productId,
-  }));
-
-  const { error } = await supabase
-    .from("user_favorites")
-    .upsert(linhas, {
-      onConflict: "user_id,product_id",
-      ignoreDuplicates: true,
-    });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
 export default function FavoritosPage() {
   const [user, setUser] = useState<User | null>(null);
   const [products, setProducts] = useState<FavoriteProduct[]>([]);
@@ -132,80 +52,32 @@ export default function FavoritosPage() {
       return;
     }
 
-    const response = await fetch("/api/favorites/products", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ids }),
-    });
-
-    const data = (await response.json()) as {
-      success?: boolean;
-      error?: string;
-      products?: FavoriteProduct[];
-    };
-
-    if (!response.ok || !data.success) {
-      throw new Error(
-        data.error || "Não foi possível carregar seus favoritos."
-      );
-    }
-
-    setProducts(
-      Array.isArray(data.products) ? data.products : []
-    );
+    const produtos = await hidratarProdutosFavoritos(ids);
+    setProducts(produtos);
   }, []);
 
-  const sincronizarECarregar = useCallback(
+  const carregarFavoritos = useCallback(
     async (usuarioAtual?: User | null) => {
       setLoading(true);
       setErro(null);
 
       try {
-        const idsLocais = lerIdsFavoritosLocais();
+        const ids = usuarioAtual
+          ? await garantirSincronizacaoDaSessao({
+              forcar: true,
+            })
+          : lerIdsFavoritosLocais();
 
-        if (!usuarioAtual) {
-          await carregarProdutos(idsLocais);
-          return;
-        }
-
-        await enviarFavoritosLocaisParaConta(
-          usuarioAtual.id,
-          idsLocais
-        );
-
-        const idsDaConta = await carregarIdsDaConta(
-          usuarioAtual.id
-        );
-
-        const idsMesclados = Array.from(
-          new Set([...idsDaConta, ...idsLocais])
-        );
-
-        // Atualiza o cache local sem disparar o próprio evento
-        // da página e evitar loop infinito de sincronização.
-        salvarIdsFavoritosLocais(idsMesclados, false);
-
-        // Atualiza apenas o contador/estado de outros componentes,
-        // como o Header. Esta página não escuta este evento.
-        window.dispatchEvent(new Event(FAVORITES_EVENT));
-
-        await carregarProdutos(idsMesclados);
+        await carregarProdutos(ids);
       } catch (error) {
-        console.error(
-          "Erro ao sincronizar favoritos:",
-          error
-        );
+        console.error("Erro ao carregar favoritos:", error);
 
         setErro(
-          "Não foi possível sincronizar seus favoritos agora."
+          "Não foi possível carregar seus favoritos agora."
         );
 
         try {
-          await carregarProdutos(
-            lerIdsFavoritosLocais()
-          );
+          await carregarProdutos(lerIdsFavoritosLocais());
         } catch {
           setProducts([]);
         }
@@ -229,10 +101,7 @@ export default function FavoritosPage() {
       }
 
       setUser(usuarioAtual ?? null);
-
-      await sincronizarECarregar(
-        usuarioAtual ?? null
-      );
+      await carregarFavoritos(usuarioAtual ?? null);
     }
 
     void iniciar();
@@ -245,17 +114,15 @@ export default function FavoritosPage() {
           return;
         }
 
-        const usuarioAtual =
-          session?.user ?? null;
-
+        const usuarioAtual = session?.user ?? null;
         setUser(usuarioAtual);
 
         if (event === "SIGNED_IN") {
-          void sincronizarECarregar(usuarioAtual);
+          void carregarFavoritos(usuarioAtual);
         }
 
         if (event === "SIGNED_OUT") {
-          void sincronizarECarregar(null);
+          void carregarFavoritos(null);
         }
       }
     );
@@ -264,93 +131,66 @@ export default function FavoritosPage() {
       ativo = false;
       subscription.unsubscribe();
     };
-  }, [sincronizarECarregar]);
+  }, [carregarFavoritos]);
 
   useEffect(() => {
-    function atualizarDeOutraAba() {
-      void sincronizarECarregar(user);
+    function atualizarListaLocal() {
+      if (loading) {
+        return;
+      }
+
+      const ids = lerIdsFavoritosLocais();
+      void carregarProdutos(ids);
     }
 
-    // O evento "storage" só dispara em outras abas/janelas.
-    // Não escutamos FAVORITES_EVENT aqui para impedir que a
-    // própria sincronização se chame novamente em loop.
-    window.addEventListener(
-      "storage",
-      atualizarDeOutraAba
-    );
+    window.addEventListener(FAVORITES_EVENT, atualizarListaLocal);
+    window.addEventListener("storage", atualizarListaLocal);
 
     return () => {
       window.removeEventListener(
-        "storage",
-        atualizarDeOutraAba
+        FAVORITES_EVENT,
+        atualizarListaLocal
       );
+      window.removeEventListener("storage", atualizarListaLocal);
     };
-  }, [sincronizarECarregar, user]);
+  }, [carregarProdutos, loading]);
 
-  async function removerFavorito(
-    productId: string
-  ) {
-    const anteriores =
-      lerIdsFavoritosLocais();
+  async function removerFavorito(productId: string) {
+    const anteriores = lerIdsFavoritosLocais();
+    const proximos = anteriores.filter((id) => id !== productId);
 
-    const proximos = anteriores.filter(
-      (id) => id !== productId
-    );
-
-    // Primeiro atualiza a tela e o cache local sem provocar
-    // nova sincronização desta página.
-    salvarIdsFavoritosLocais(proximos, false);
-
+    salvarIdsFavoritosLocais(proximos);
     setProducts((atuais) =>
-      atuais.filter(
-        (product) =>
-          product.id !== productId
-      )
+      atuais.filter((product) => product.id !== productId)
     );
 
-    if (user) {
-      const { error } = await supabase
-        .from("user_favorites")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("product_id", productId);
-
-      if (error) {
-        console.error(
-          "Erro ao remover favorito da conta:",
-          error.message
-        );
-
-        salvarIdsFavoritosLocais(
-          anteriores,
-          false
-        );
-
-        setErro(
-          "Não foi possível remover este favorito. Tente novamente."
-        );
-
-        await sincronizarECarregar(user);
-        return;
-      }
+    if (!user) {
+      return;
     }
 
-    // Atualiza o contador do Header somente depois de concluir.
-    window.dispatchEvent(new Event(FAVORITES_EVENT));
+    const remoto = await removerFavoritoRemoto(productId);
+
+    if (!remoto.success) {
+      salvarIdsFavoritosLocais(anteriores);
+      setErro(
+        "Não foi possível remover este favorito. Tente novamente."
+      );
+      await carregarFavoritos(user);
+    }
   }
 
   async function sair() {
     try {
       setSaindo(true);
 
-      const { error } =
-        await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
 
       if (error) {
-        setErro(
-          "Não foi possível sair da conta."
-        );
+        setErro("Não foi possível sair da conta.");
+        return;
       }
+
+      aoSairDaContaFavoritos();
     } finally {
       setSaindo(false);
     }
@@ -394,9 +234,7 @@ export default function FavoritosPage() {
                     disabled={saindo}
                     className="mt-2 text-xs font-black text-slate-600 underline underline-offset-4 transition hover:text-slate-950 disabled:opacity-50"
                   >
-                    {saindo
-                      ? "Saindo..."
-                      : "Sair da conta"}
+                    {saindo ? "Saindo..." : "Sair da conta"}
                   </button>
                 </div>
               ) : (
@@ -418,21 +256,15 @@ export default function FavoritosPage() {
 
           {loading ? (
             <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
-              Sincronizando seus favoritos...
+              Carregando seus favoritos...
             </div>
           ) : erro && products.length === 0 ? (
             <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
-              <p className="font-bold text-red-700">
-                {erro}
-              </p>
+              <p className="font-bold text-red-700">{erro}</p>
 
               <button
                 type="button"
-                onClick={() =>
-                  void sincronizarECarregar(
-                    user
-                  )
-                }
+                onClick={() => void carregarFavoritos(user)}
                 className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-black text-red-700 shadow-sm"
               >
                 Tentar novamente
@@ -445,19 +277,28 @@ export default function FavoritosPage() {
               </div>
 
               <h2 className="mt-5 text-2xl font-black text-slate-950">
-                Nenhum favorito ainda
+                Você ainda não adicionou nenhum favorito.
               </h2>
 
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
                 Toque no coração de um produto para salvá-lo aqui e comparar com calma depois.
               </p>
 
-              <Link
-                href="/ofertas"
-                className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-700"
-              >
-                Ver ofertas
-              </Link>
+              <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <Link
+                  href="/ofertas"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-700"
+                >
+                  Ver ofertas
+                </Link>
+
+                <Link
+                  href="/"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 transition hover:border-emerald-200 hover:text-emerald-700"
+                >
+                  Pesquisar produtos
+                </Link>
+              </div>
             </div>
           ) : (
             <>
@@ -480,8 +321,7 @@ export default function FavoritosPage() {
                 {products.map((product) => {
                   const possuiPrecoAnterior =
                     product.oldPrice !== null &&
-                    product.oldPrice >
-                      product.price;
+                    product.oldPrice > product.price;
 
                   return (
                     <article
@@ -499,15 +339,10 @@ export default function FavoritosPage() {
                           loading="lazy"
                         />
 
-                        {product.discount !==
-                          null &&
-                          product.discount >
-                            0 && (
+                        {product.discount !== null &&
+                          product.discount > 0 && (
                             <span className="absolute left-3 top-3 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-black text-white shadow-sm">
-                              {
-                                product.discount
-                              }
-                              % OFF
+                              {product.discount}% OFF
                             </span>
                           )}
                       </Link>
@@ -526,26 +361,19 @@ export default function FavoritosPage() {
 
                         <div className="mt-auto pt-4">
                           {possuiPrecoAnterior &&
-                            product.oldPrice !==
-                              null && (
+                            product.oldPrice !== null && (
                               <p className="text-xs font-semibold text-slate-400 line-through">
-                                {formatarPreco(
-                                  product.oldPrice
-                                )}
+                                {formatarPreco(product.oldPrice)}
                               </p>
                             )}
 
                           <p className="mt-1 text-2xl font-black tracking-tight text-emerald-700">
-                            {formatarPreco(
-                              product.price
-                            )}
+                            {formatarPreco(product.price)}
                           </p>
 
                           {product.installments && (
                             <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">
-                              {
-                                product.installments
-                              }
+                              {product.installments}
                             </p>
                           )}
 
@@ -560,9 +388,7 @@ export default function FavoritosPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                void removerFavorito(
-                                  product.id
-                                )
+                                void removerFavorito(product.id)
                               }
                               aria-label={`Remover ${product.name} dos favoritos`}
                               title="Remover dos favoritos"

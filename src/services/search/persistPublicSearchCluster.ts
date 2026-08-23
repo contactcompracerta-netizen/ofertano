@@ -19,6 +19,11 @@ import {
 
 import type { ProductImport } from "@/services/importers/core/types";
 import { traceMultiloja } from "@/services/multiloja/trace";
+import {
+  avaliarPublicationGate,
+  rastrearPublicationGate,
+  type PublicSearchCoverage,
+} from "@/services/search/publicationGate";
 
 export type PublicSearchOffer = {
   product: ProductImport;
@@ -155,6 +160,7 @@ type IdentityGroupMeta = {
   marketplaceSupport: number;
   candidateSupport: number;
   consensusScore: number;
+  consensusMultiMarketplace: boolean;
   isolated: boolean;
   reason: string;
 };
@@ -213,12 +219,13 @@ function metaDoGrupo(
   const queryAligned =
     Boolean(queryIdentity.model) &&
     group?.commercialModel === queryIdentity.model;
+  const consensusMultiMarketplace = marketplaceSupport >= 2;
   const isolated =
     marketplaceSupport <= 1 &&
     maxMarketplaceSupport >= 2 &&
     !queryAligned;
   const consensusScore =
-    marketplaceSupport * 400 +
+    (consensusMultiMarketplace ? marketplaceSupport * 400 : 0) +
     candidateSupport * 20 +
     (queryAligned ? 800 : 0) -
     (isolated ? 4000 : 0);
@@ -229,13 +236,36 @@ function metaDoGrupo(
     marketplaceSupport,
     candidateSupport,
     consensusScore,
+    consensusMultiMarketplace,
     isolated,
     reason: queryAligned
       ? "consenso-alinhado-a-consulta"
       : isolated
         ? "identidade-isolada"
-        : "consenso-de-marketplaces",
+        : consensusMultiMarketplace
+          ? "consenso-de-marketplaces"
+          : "identidade-fonte-unica",
   };
+}
+
+export function diagnosticarConsensoDaPesquisaPublica(
+  query: string,
+  offers: PublicSearchOffer[],
+): IdentityGroupMeta[] {
+  const queryIdentity = resolverIdentidadeProduto({
+    title: query,
+    brand: null,
+    attributes: {},
+  });
+  const groups = agruparIdentidadesComerciais(
+    query,
+    offers,
+    queryIdentity,
+  );
+
+  return Array.from(groups.keys()).map((key) =>
+    metaDoGrupo(queryIdentity, groups, key),
+  );
 }
 
 function podeSerAncoraDaConsulta(
@@ -245,6 +275,17 @@ function podeSerAncoraDaConsulta(
 ): boolean {
   const identity = identityOf(offer);
   const match = queryCompatibility(query, offer);
+
+  if (!match.compatible) {
+    return false;
+  }
+
+  if (
+    match.productClassCompatibility === "CONFLICT" ||
+    match.brandCompatibility === "CONFLICT"
+  ) {
+    return false;
+  }
 
   if (ehPapelNaoPrincipal(queryIdentity.kind)) {
     return identity.kind === queryIdentity.kind && match.roleCompatible;
@@ -512,6 +553,20 @@ export function escolherClusterExatoDaPesquisaPublica(
       queryTextRelevance: match.textRelevance,
       queryRoleCompatibility: match.roleCompatible,
       queryRelevance: match.compatible ? match.score : 0,
+      queryProductClass: match.queryProductClass,
+      candidateProductClass: match.candidateProductClass,
+      productClassCompatibility: match.productClassCompatibility,
+      queryBrand: match.queryBrand,
+      candidateBrand: match.candidateBrand,
+      brandCompatibility: match.brandCompatibility,
+      attributeMatches: match.attributeMatches,
+      attributeMissing: match.attributeMissing,
+      attributeConflicts: match.attributeConflicts,
+      distinctiveTermsMatched: match.distinctiveTermsMatched,
+      distinctiveTermsMissing: match.distinctiveTermsMissing,
+      identityEvidenceScore: match.identityEvidenceScore,
+      attributeCoverage: match.attributeCoverage,
+      autoAcceptanceReason: match.autoAcceptanceReason,
       canonicalKey: criarCanonicalKeyDaIdentidade(identity),
       status: match.compatible ? "ACCEPTED" : "REJECTED",
       reason: match.reason,
@@ -572,6 +627,7 @@ export function escolherClusterExatoDaPesquisaPublica(
     identityMarketplaceSupport: groupMeta.marketplaceSupport,
     identityCandidateSupport: groupMeta.candidateSupport,
     consensusScore: groupMeta.consensusScore,
+    consensusMultiMarketplace: groupMeta.consensusMultiMarketplace,
     canonicalIdentityReason: groupMeta.reason,
     modelAmbiguous: referenceIdentity.modelAmbiguous,
     identityConfidence: referenceIdentity.identityConfidence,
@@ -629,10 +685,19 @@ export async function persistPublicSearchCluster(
   query: string,
   offers: PublicSearchOffer[],
   existingProductId?: string | null,
+  coverage?: PublicSearchCoverage | null,
 ): Promise<PersistPublicSearchClusterResult | null> {
   const cluster = escolherClusterExatoDaPesquisaPublica(query, offers);
 
-  if (cluster.length === 0) {
+  const gate = avaliarPublicationGate({
+    query,
+    enabledMarketplaces: coverage?.enabledMarketplaces ?? [],
+    results: coverage?.results ?? [],
+    exactOffers: cluster,
+  });
+  rastrearPublicationGate(gate);
+
+  if (!gate.publicationEligible) {
     return null;
   }
 

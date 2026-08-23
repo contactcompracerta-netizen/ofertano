@@ -18,10 +18,21 @@ import type {
   ProductIdentity,
 } from "./resolver";
 
+import {
+  candidatoTemClasseEquivalente,
+  classificarClasseProduto,
+  compatibilidadeDeClasseProduto,
+  tokensDeClasseConhecidos,
+  type ClassCompatibility,
+  type ProductClassId,
+} from "./productClass";
+
 export type QueryIdentityInput = Pick<
   ProductImport,
   "title" | "brand" | "attributes"
 >;
+
+export type EvidenceState = "MATCH" | "MISSING" | "CONFLICT" | "UNKNOWN";
 
 export type QueryMatchResult = {
   compatible: boolean;
@@ -36,6 +47,20 @@ export type QueryMatchResult = {
     | "GENERIC"
     | null;
   conflicts: string[];
+  queryProductClass: string;
+  candidateProductClass: string;
+  productClassCompatibility: EvidenceState;
+  queryBrand: string | null;
+  candidateBrand: string | null;
+  brandCompatibility: EvidenceState;
+  attributeMatches: string[];
+  attributeMissing: string[];
+  attributeConflicts: string[];
+  distinctiveTermsMatched: string[];
+  distinctiveTermsMissing: string[];
+  identityEvidenceScore: number;
+  attributeCoverage: number;
+  autoAcceptanceReason: string;
 };
 
 const QUERY_STOP_WORDS = new Set([
@@ -133,6 +158,35 @@ const GENERIC_CLASS_WORDS = new Set([
   "cafeteira",
   "airfryer",
   "fritadeira",
+  "balanca",
+  "scale",
+  "lustre",
+  "luminaria",
+  "abajur",
+  "espelho",
+  "jogo",
+  "colher",
+  "controle",
+  "altofalante",
+  "soundbar",
+  "soundbox",
+  "estojo",
+  ...tokensDeClasseConhecidos(),
+  "almofada",
+  "almofadas",
+  "capa",
+  "capinha",
+  "case",
+  "pelicula",
+  "cabo",
+  "carregador",
+  "adaptador",
+  "suporte",
+  "bolsa",
+  "protetor",
+  "substituicao",
+  "reposicao",
+  "peca",
 ]);
 
 const GENERIC_CONNECTIVITY_WORDS = new Set([
@@ -270,13 +324,48 @@ const OPTIONAL_VARIANT_KEYS = new Set<IdentityVariantKey>([
   "bundle",
 ]);
 
+type MatchEvidence = Pick<
+  QueryMatchResult,
+  | "queryProductClass"
+  | "candidateProductClass"
+  | "productClassCompatibility"
+  | "queryBrand"
+  | "candidateBrand"
+  | "brandCompatibility"
+  | "attributeMatches"
+  | "attributeMissing"
+  | "attributeConflicts"
+  | "distinctiveTermsMatched"
+  | "distinctiveTermsMissing"
+  | "identityEvidenceScore"
+  | "attributeCoverage"
+  | "autoAcceptanceReason"
+>;
+
+const EMPTY_EVIDENCE: MatchEvidence = {
+  queryProductClass: "UNKNOWN",
+  candidateProductClass: "UNKNOWN",
+  productClassCompatibility: "UNKNOWN",
+  queryBrand: null,
+  candidateBrand: null,
+  brandCompatibility: "UNKNOWN",
+  attributeMatches: [],
+  attributeMissing: [],
+  attributeConflicts: [],
+  distinctiveTermsMatched: [],
+  distinctiveTermsMissing: [],
+  identityEvidenceScore: 0,
+  attributeCoverage: 0,
+  autoAcceptanceReason: "",
+};
+
 function reject(
   reason: string,
   conflicts: string[],
   extras: {
     textRelevance?: number;
     roleCompatible?: boolean;
-  } = {},
+  } & Partial<MatchEvidence> = {},
 ): QueryMatchResult {
   return {
     compatible: false,
@@ -286,6 +375,9 @@ function reject(
     reason,
     matchedBy: null,
     conflicts,
+    ...EMPTY_EVIDENCE,
+    ...extras,
+    autoAcceptanceReason: extras.autoAcceptanceReason ?? "",
   };
 }
 
@@ -587,10 +679,21 @@ function sinonimosDeToken(
 function candidatoPossuiToken(
   token: string,
   candidateTokens: Set<string>,
+  candidateTitle = "",
 ): boolean {
-  return sinonimosDeToken(token).some((item) =>
-    candidateTokens.has(item),
-  );
+  if (
+    sinonimosDeToken(token).some((item) => candidateTokens.has(item))
+  ) {
+    return true;
+  }
+
+  if (candidateTitle && candidatoTemClasseEquivalente(token, candidateTitle)) {
+    return true;
+  }
+
+  return candidateTitle
+    ? atributoEquivalentePresente(token, candidateTitle)
+    : false;
 }
 
 function pesoDoTokenConsulta(
@@ -633,10 +736,10 @@ export function pontuarCoberturaLexicalPonderada(
   const queryTokens = tokensRelevantes(query);
   const candidateTokens = new Set(tokensRelevantes(candidateTitle));
   const matchedTokens = queryTokens.filter((token) =>
-    candidatoPossuiToken(token, candidateTokens),
+    candidatoPossuiToken(token, candidateTokens, candidateTitle),
   );
   const missingDistinctive = tokensDistintivosDaConsulta(query).filter(
-    (token) => !candidatoPossuiToken(token, candidateTokens),
+    (token) => !candidatoPossuiToken(token, candidateTokens, candidateTitle),
   );
 
   if (queryTokens.length === 0) {
@@ -764,6 +867,237 @@ function modeloCoincide(
   });
 }
 
+function atributoEquivalentePresente(
+  token: string,
+  title: string,
+): boolean {
+  const normalized = normalizarTextoIdentidade(title);
+
+  if (
+    token === "wireless" ||
+    token === "bluetooth" ||
+    token === "inalambrico" ||
+    token === "inalambrica"
+  ) {
+    return (
+      /\bsem fio\b/.test(normalized) ||
+      /\bwireless\b/.test(normalized) ||
+      /\bbluetooth\b/.test(normalized)
+    );
+  }
+
+  if (token === "fio" || token === "sem") {
+    return /\bsem fio\b/.test(normalized) || /\bwireless\b/.test(normalized);
+  }
+
+  if (
+    token === "resistente" ||
+    token === "resistentes" ||
+    token === "waterproof" ||
+    token === "agua"
+  ) {
+    return (
+      /\bresistente(?:s)? a agua\b/.test(normalized) ||
+      /\ba prova d? agua\b/.test(normalized) ||
+      /\bwaterproof\b/.test(normalized) ||
+      /\bipx?\d+\b/.test(normalized)
+    );
+  }
+
+  return false;
+}
+
+function trechoVendido(title: string): string {
+  const normalized = normalizarTextoIdentidade(title);
+  const [sold = normalized] = normalized.split(
+    /\b(?:compativel com|compatible with|edicao|para)\b/,
+  );
+
+  return sold.trim();
+}
+
+function entidadeComercialDaConsulta(
+  query: string,
+  identity: ProductIdentity,
+): string | null {
+  if (identity.brand) {
+    return identity.brand;
+  }
+
+  const entity = tokensDistintivosDaConsulta(query).find(
+    (token) => !/\d/.test(token) && token.length >= 3,
+  );
+
+  return entity ?? null;
+}
+
+function mesmaEntidadeComercial(
+  first: string,
+  second: string,
+): boolean {
+  const left = first
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "");
+  const right = second
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "");
+
+  return Boolean(left) && left === right;
+}
+
+function entidadeComercialDoCandidato(
+  candidateBrand: string | null,
+  candidateTitle: string,
+): string | null {
+  if (candidateBrand) {
+    return candidateBrand;
+  }
+
+  const sold = trechoVendido(candidateTitle);
+  const entity = tokensRelevantes(sold).find(
+    (token) => ehTokenDistintivo(token) && !/\d/.test(token) && token.length >= 3,
+  );
+
+  return entity ?? null;
+}
+
+function compararMarcaConsulta(
+  queryBrand: string | null,
+  candidateBrand: string | null,
+  candidateTitle: string,
+): EvidenceState {
+  if (!queryBrand) {
+    return "UNKNOWN";
+  }
+
+  const resolvedCandidate = entidadeComercialDoCandidato(
+    candidateBrand,
+    candidateTitle,
+  );
+
+  if (resolvedCandidate) {
+    return mesmaEntidadeComercial(queryBrand, resolvedCandidate)
+      ? "MATCH"
+      : "CONFLICT";
+  }
+
+  const sold = trechoVendido(candidateTitle);
+
+  if (sold.split(" ").some((token) => mesmaEntidadeComercial(token, queryBrand))) {
+    return "MATCH";
+  }
+
+  if (
+    normalizarTextoIdentidade(candidateTitle)
+      .split(" ")
+      .some((token) => mesmaEntidadeComercial(token, queryBrand))
+  ) {
+    return "CONFLICT";
+  }
+
+  return "MISSING";
+}
+
+function avaliarAtributosDaConsulta(
+  query: string,
+  queryIdentity: ProductIdentity,
+  candidate: ProductIdentity,
+): {
+  matches: string[];
+  missing: string[];
+  conflicts: string[];
+  coverage: number;
+} {
+  const matches: string[] = [];
+  const missing: string[] = [];
+  const conflicts: string[] = [];
+  const queryText = normalizarTextoIdentidade(query);
+  const candidateText = normalizarTextoIdentidade(candidate.title);
+
+  const queryWireless =
+    /\b(?:wireless|bluetooth|inalambrico|inalambrica)\b/.test(queryText) ||
+    /\bsem fio\b/.test(queryText);
+  const candidateWireless =
+    /\b(?:wireless|bluetooth|inalambrico|inalambrica)\b/.test(candidateText) ||
+    /\bsem fio\b/.test(candidateText);
+  const candidateWired = /\bcom fio\b/.test(candidateText) || /\bwired\b/.test(candidateText);
+
+  if (queryWireless) {
+    if (candidateWired && !candidateWireless) {
+      conflicts.push("wireless");
+    } else if (candidateWireless) {
+      matches.push("wireless");
+    } else {
+      missing.push("wireless");
+    }
+  }
+
+  const queryWaterproof =
+    /\b(?:waterproof|ipx?\d+)\b/.test(queryText) ||
+    /\bresistente(?:s)? a agua\b/.test(queryText) ||
+    /\ba prova d? agua\b/.test(queryText);
+  const candidateWaterproof =
+    /\b(?:waterproof|ipx?\d+)\b/.test(candidateText) ||
+    /\bresistente(?:s)? a agua\b/.test(candidateText) ||
+    /\ba prova d? agua\b/.test(candidateText);
+
+  if (queryWaterproof) {
+    if (candidateWaterproof) {
+      matches.push("waterproof");
+    } else {
+      missing.push("waterproof");
+    }
+  }
+
+  const queryMic = /\b(?:microfone|microphone)\b/.test(queryText);
+  const candidateMic = /\b(?:microfone|microphone)\b/.test(candidateText);
+
+  if (queryMic) {
+    if (candidateMic) {
+      matches.push("microphone");
+    } else {
+      missing.push("microphone");
+    }
+  }
+
+  for (const key of STRONG_VARIANT_KEYS) {
+    const requested = queryIdentity.variants[key];
+    const found = candidate.variants[key];
+
+    if (!requested) {
+      continue;
+    }
+
+    if (!found) {
+      if (OPTIONAL_VARIANT_KEYS.has(key)) {
+        missing.push(key);
+      } else {
+        conflicts.push(`${key}:${requested}!=nao-informado`);
+      }
+      continue;
+    }
+
+    if (requested !== found) {
+      conflicts.push(`${key}:${requested}!=${found}`);
+    } else {
+      matches.push(key);
+    }
+  }
+
+  const requestedCount = matches.length + missing.length + conflicts.length;
+
+  return {
+    matches,
+    missing,
+    conflicts,
+    coverage: requestedCount === 0 ? 1 : matches.length / requestedCount,
+  };
+}
+
 function verificarVariantesExplicitas(
   query: ProductIdentity,
   candidate: ProductIdentity,
@@ -833,9 +1167,57 @@ export function avaliarCompatibilidadeComConsulta(
     : Math.min(1, lexicalScore);
   const distinctiveTokens = tokensDistintivosDaConsulta(query);
   const missingDistinctive = lexical.missingDistinctive;
-  const candidateDistinctive = tokensRelevantes(candidate.title)
-    .filter(ehTokenDistintivo)
-    .filter((token) => !distinctiveTokens.includes(token));
+  const matchedDistinctive = distinctiveTokens.filter(
+    (token) => !missingDistinctive.includes(token),
+  );
+
+  const queryClass = classificarClasseProduto(query);
+  const candidateClass = classificarClasseProduto(
+    trechoVendido(candidate.title) || candidate.title,
+  );
+  const classCompatibility = compatibilidadeDeClasseProduto(
+    queryClass,
+    candidateClass,
+  );
+  const queryBrand = entidadeComercialDaConsulta(query, queryIdentity);
+  const candidateBrand =
+    candidate.brand ??
+    entidadeComercialDoCandidato(candidate.brand, candidate.title);
+  const brandCompatibility = compararMarcaConsulta(
+    queryBrand,
+    candidate.brand,
+    candidate.title,
+  );
+  const attributes = avaliarAtributosDaConsulta(
+    query,
+    queryIdentity,
+    candidate,
+  );
+
+  const identityEvidenceScore = Math.min(
+    1,
+    (classCompatibility === "MATCH" ? 0.35 : 0) +
+      (brandCompatibility === "MATCH" ? 0.35 : 0) +
+      (modelMatched ? 0.3 : 0) +
+      (attributes.coverage * 0.2),
+  );
+
+  const evidence: MatchEvidence = {
+    queryProductClass: queryClass,
+    candidateProductClass: candidateClass,
+    productClassCompatibility: classCompatibility,
+    queryBrand,
+    candidateBrand,
+    brandCompatibility,
+    attributeMatches: attributes.matches,
+    attributeMissing: attributes.missing,
+    attributeConflicts: attributes.conflicts,
+    distinctiveTermsMatched: matchedDistinctive,
+    distinctiveTermsMissing: missingDistinctive,
+    identityEvidenceScore,
+    attributeCoverage: attributes.coverage,
+    autoAcceptanceReason: "",
+  };
 
   const roleCompatible =
     ehPapelNaoPrincipal(queryIdentity.kind) ===
@@ -850,8 +1232,8 @@ export function avaliarCompatibilidadeComConsulta(
   if (!roleCompatible) {
     conflicts.push(
       queryIdentity.kind === "GENERIC" || queryIdentity.role === "MAIN"
-        ? `classe:${queryIdentity.role}!=${candidate.role}`
-        : `classe:${queryIdentity.kind}!=${candidate.kind}`,
+        ? `papel:${queryIdentity.role}!=${candidate.role}`
+        : `papel:${queryIdentity.kind}!=${candidate.kind}`,
     );
   }
 
@@ -868,37 +1250,19 @@ export function avaliarCompatibilidadeComConsulta(
     conflicts.push("identidade:lista-de-compatibilidade");
   }
 
-  if (
-    queryIdentity.brand &&
-    candidate.brand &&
-    queryIdentity.brand !== candidate.brand
-  ) {
+  if (classCompatibility === "CONFLICT") {
     conflicts.push(
-      `brand:${queryIdentity.brand}!=${candidate.brand}`,
+      `productClass:${queryClass}!=${candidateClass}`,
     );
   }
 
-  const queryClassGroups = gruposDeClasse(queryTokens);
-  const candidateClassGroups = gruposDeClasse(
-    tokensRelevantes(candidate.title),
-  );
-
-  if (
-    queryClassGroups.size > 0 &&
-    candidateClassGroups.size > 0 &&
-    ![...queryClassGroups].some((group) => candidateClassGroups.has(group))
-  ) {
+  if (brandCompatibility === "CONFLICT") {
     conflicts.push(
-      `classe:${[...queryClassGroups][0]}!=${[...candidateClassGroups][0]}`,
+      `brand:${queryBrand}!=${candidate.brand ?? "title-host"}`,
     );
   }
 
-  conflicts.push(
-    ...verificarVariantesExplicitas(
-      queryIdentity,
-      candidate,
-    ),
-  );
+  conflicts.push(...attributes.conflicts);
 
   if (conflicts.length > 0) {
     return reject(
@@ -907,6 +1271,7 @@ export function avaliarCompatibilidadeComConsulta(
       {
         textRelevance,
         roleCompatible,
+        ...evidence,
       },
     );
   }
@@ -919,6 +1284,7 @@ export function avaliarCompatibilidadeComConsulta(
         {
           textRelevance,
           roleCompatible: true,
+          ...evidence,
         },
       );
     }
@@ -931,6 +1297,8 @@ export function avaliarCompatibilidadeComConsulta(
       reason: "Modelo forte da consulta e variantes explicitas compativeis.",
       matchedBy: "MODEL",
       conflicts: [],
+      ...evidence,
+      autoAcceptanceReason: "modelo-forte-compativel",
     };
   }
 
@@ -943,41 +1311,44 @@ export function avaliarCompatibilidadeComConsulta(
       reason: "Consulta sem tokens fortes; candidato sem conflito estrutural.",
       matchedBy: "GENERIC",
       conflicts: [],
+      ...evidence,
+      autoAcceptanceReason: "consulta-generica",
     };
   }
 
-  const brandRequested = Boolean(queryIdentity.brand);
-  const brandConfirmed = Boolean(
-    queryIdentity.brand &&
-    candidate.brand === queryIdentity.brand,
-  );
+  const brandConfirmed = brandCompatibility === "MATCH";
+  const classConfirmed = classCompatibility === "MATCH";
   const distinctiveConfirmed =
     distinctiveTokens.length > 0 &&
     missingDistinctive.length === 0;
 
-  if (distinctiveTokens.length > 0 && missingDistinctive.length > 0) {
-    const entityConflict =
-      candidateDistinctive.length > 0
-        ? `brand:${missingDistinctive[0]}!=${candidateDistinctive[0]}`
-        : `distinctive:${missingDistinctive.join(",")}`;
-
+  if (
+    distinctiveTokens.length > 0 &&
+    missingDistinctive.length > 0 &&
+    brandCompatibility !== "MATCH"
+  ) {
     return reject(
       `Termo distintivo da consulta ausente no candidato: ${missingDistinctive.join(", ")}.`,
-      [entityConflict],
+      [`distinctive:${missingDistinctive.join(",")}`],
       {
         textRelevance,
         roleCompatible: true,
+        ...evidence,
       },
     );
   }
 
+  /*
+   * Entidade distintiva no titulo nao e aceite automatico. Classe,
+   * marca resolvida e atributos estruturam a evidencia.
+   */
   const minimum =
     queryTokens.length <= 2 && distinctiveTokens.length === 0
       ? 1
-      : distinctiveConfirmed
-        ? 0.35
-        : brandRequested && brandConfirmed
-          ? 0.5
+      : classConfirmed && brandConfirmed
+        ? 0.42
+        : classConfirmed && !queryBrand
+          ? 0.55
           : 0.65;
 
   if (lexicalScore < minimum) {
@@ -987,27 +1358,46 @@ export function avaliarCompatibilidadeComConsulta(
       {
         textRelevance,
         roleCompatible: true,
+        ...evidence,
+        autoAcceptanceReason: "cobertura-insuficiente",
       },
     );
   }
 
+  const score = Math.min(
+    0.99,
+    lexicalScore * 0.7 +
+      identityEvidenceScore * 0.2 +
+      attributes.coverage * 0.15 +
+      (brandConfirmed && classConfirmed ? 0.08 : 0),
+  );
+
+  const autoAcceptanceReason = modelMatched
+    ? "modelo-forte-compativel"
+    : classConfirmed && brandConfirmed
+      ? attributes.missing.length > 0
+        ? "classe-marca-compativeis-atributos-parciais"
+        : "classe-marca-atributos-compativeis"
+      : classConfirmed
+        ? "classe-compativel-consulta-sem-marca"
+        : "cobertura-lexical-sem-conflito";
+
   return {
     compatible: true,
-    score: Math.min(
-      0.99,
-      lexicalScore +
-        (brandConfirmed ? 0.12 : 0) +
-        (distinctiveConfirmed ? 0.08 : 0),
-    ),
+    score,
     textRelevance,
     roleCompatible: true,
-    reason: brandConfirmed
-      ? "Marca e termos relevantes da consulta compativeis."
-      : distinctiveConfirmed
-        ? "Entidade distintiva e termos relevantes da consulta compativeis."
-        : "Termos relevantes da consulta compativeis.",
+    reason: brandConfirmed && classConfirmed
+      ? attributes.missing.length > 0
+        ? "Classe e marca compativeis; atributos pedidos parcialmente ausentes."
+        : "Classe, marca e atributos da consulta compativeis."
+      : classConfirmed
+        ? "Classe da consulta compativel sem marca exigida."
+        : "Termos relevantes da consulta compativeis sem conflito estrutural.",
     matchedBy: brandConfirmed ? "BRAND" : "LEXICAL",
     conflicts: [],
+    ...evidence,
+    autoAcceptanceReason,
   };
 }
 

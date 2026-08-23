@@ -47,6 +47,16 @@ export type {
 } from "./queryMatcher";
 
 export {
+  classificarClasseProduto,
+  compatibilidadeDeClasseProduto,
+} from "./productClass";
+
+export type {
+  ProductClassId,
+  ClassCompatibility,
+} from "./productClass";
+
+export {
   agruparPorIdentidadeExata,
   pontuarEvidenciaIdentidade,
 } from "./clustering";

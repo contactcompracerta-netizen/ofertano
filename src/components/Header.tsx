@@ -7,9 +7,12 @@ import type { User } from "@supabase/supabase-js";
 
 import Logo from "@/components/Logo";
 import { supabase } from "@/lib/supabaseClient";
-
-const FAVORITES_STORAGE_KEY = "ofertano:favorites";
-const FAVORITES_EVENT = "ofertano:favorites-changed";
+import {
+  FAVORITES_EVENT,
+  aoSairDaContaFavoritos,
+  contarIdsFavoritosLocais,
+  garantirSincronizacaoDaSessao,
+} from "@/services/favorites";
 
 const linksNavegacao = [
   { nome: "Início", href: "/" },
@@ -17,34 +20,6 @@ const linksNavegacao = [
   { nome: "Categorias", href: "/categorias" },
   { nome: "Blog", href: "/blog" },
 ];
-
-function contarFavoritosLocais() {
-  try {
-    const valor = window.localStorage.getItem(
-      FAVORITES_STORAGE_KEY
-    );
-
-    if (!valor) {
-      return 0;
-    }
-
-    const dados: unknown = JSON.parse(valor);
-
-    if (!Array.isArray(dados)) {
-      return 0;
-    }
-
-    return new Set(
-      dados.filter(
-        (item): item is string =>
-          typeof item === "string" &&
-          item.trim().length > 0
-      )
-    ).size;
-  } catch {
-    return 0;
-  }
-}
 
 function HeartIcon() {
   return (
@@ -107,7 +82,7 @@ export default function Header() {
       }
 
       setQuantidadeFavoritos(
-        contarFavoritosLocais()
+        contarIdsFavoritosLocais()
       );
     }
 
@@ -115,18 +90,43 @@ export default function Header() {
 
     void supabase.auth
       .getUser()
-      .then(({ data }) => {
-        if (ativo) {
-          setUser(data.user ?? null);
+      .then(async ({ data }) => {
+        if (!ativo) {
+          return;
+        }
+
+        setUser(data.user ?? null);
+
+        if (data.user) {
+          await garantirSincronizacaoDaSessao();
+          atualizarQuantidadeFavoritos();
         }
       });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (ativo) {
-          setUser(session?.user ?? null);
+      (event, session) => {
+        if (!ativo) {
+          return;
+        }
+
+        setUser(session?.user ?? null);
+
+        if (event === "SIGNED_IN") {
+          void garantirSincronizacaoDaSessao({
+            forcar: true,
+          }).then(() => {
+            if (ativo) {
+              atualizarQuantidadeFavoritos();
+            }
+          });
+          return;
+        }
+
+        if (event === "SIGNED_OUT") {
+          aoSairDaContaFavoritos();
+          atualizarQuantidadeFavoritos();
         }
       }
     );

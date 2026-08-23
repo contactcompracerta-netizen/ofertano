@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import {
+  limparOportunidadesDoPainel,
+  montarMensagemLimpeza,
+} from "@/services/opportunities/clearOpportunities";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -236,34 +240,15 @@ export async function PATCH(
 
 export async function DELETE() {
   try {
-    const preservedQueued =
-      await prisma.productOpportunity.count({
-        where: {
-          status: "QUEUED",
-        },
-      });
-
-    const removed = await prisma.productOpportunity.deleteMany({
-      where: {
-        status: {
-          not: "QUEUED",
-        },
-      },
-    });
-
-    const preservedMessage =
-      preservedQueued > 0
-        ? ` ${preservedQueued} oportunidade(s) com status Na fila foram preservadas para não interromper o processamento.`
-        : "";
+    const resultado = await limparOportunidadesDoPainel();
 
     return NextResponse.json({
       success: true,
-      removed: removed.count,
-      preserved: preservedQueued,
-      message:
-        removed.count === 0 && preservedQueued === 0
-          ? "A lista de oportunidades já estava vazia."
-          : `${removed.count} oportunidade(s) removida(s). Produtos publicados, ofertas Multi Loja e a fila de importação não foram apagados.${preservedMessage}`,
+      deletedCount: resultado.deletedCount,
+      preservedCount: resultado.preservedCount,
+      removed: resultado.deletedCount,
+      preserved: resultado.preservedCount,
+      message: montarMensagemLimpeza(resultado),
     });
   } catch (error) {
     console.error(
