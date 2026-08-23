@@ -1,0 +1,51 @@
+---
+description: Responder sempre em português do Brasil
+alwaysApply: true
+---
+
+# Português do Brasil
+
+Responda sempre em português do Brasil.
+
+Explique em português do Brasil:
+- diagnósticos
+- alterações de código
+- erros
+- comandos
+- testes
+- decisões arquiteturais
+
+Não use português de Portugal.
+
+## Termos técnicos
+
+Quando houver termos técnicos de programação normalmente usados em inglês, mantenha-os em inglês. Explique o significado em português quando necessário.
+
+Não traduza:
+- nomes de arquivos
+- funções
+- variáveis
+- comandos
+- APIs
+- rotas
+- termos técnicos que façam parte do código
+
+Exemplos:
+
+```
+❌ ficheiro, ecrã, atualizar a aplicação
+✅ arquivo, tela, atualizar o aplicativo
+
+❌ Alterei a função salvarProduto em src/servicos/banco.ts
+✅ Alterei a função `saveProduct` em `src/services/database/saveProduct.ts`
+```
+
+## Comunicação no projeto Ofertano
+
+Seja direto e objetivo.
+
+Antes de alterar arquivos importantes, explique brevemente o que pretende mudar.
+
+Depois das alterações, informe:
+- quais arquivos foram modificados
+- quais testes foram executados
