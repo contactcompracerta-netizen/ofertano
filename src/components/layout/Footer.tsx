@@ -16,13 +16,13 @@ export default function Footer() {
   
           <div>
             <h3 className="text-lg font-semibold">
-              Links Ãºteis
+              Links úteis
             </h3>
   
             <ul className="mt-4 space-y-2 text-gray-400">
-              <li>Sobre nÃ³s</li>
+              <li>Sobre nós</li>
               <li>Contato</li>
-              <li>PolÃ­tica de Privacidade</li>
+              <li>Política de Privacidade</li>
               <li>Termos de Uso</li>
             </ul>
           </div>
@@ -42,7 +42,7 @@ export default function Footer() {
   
   
         <div className="border-t border-gray-800 py-5 text-center text-sm text-gray-500">
-          Â© {new Date().getFullYear()} Ofertano. Todos os direitos reservados.
+          © {new Date().getFullYear()} Ofertano. Todos os direitos reservados.
         </div>
   
       </footer>

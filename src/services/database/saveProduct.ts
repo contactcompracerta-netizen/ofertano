@@ -184,7 +184,7 @@ function converterMarketplace(
       const marketplaceNunca: never = marketplace;
 
       throw new Error(
-        `Marketplace nÃ£o suportado: ${String(
+        `Marketplace não suportado: ${String(
           marketplaceNunca,
         )}`,
       );
@@ -2233,7 +2233,7 @@ export async function saveProduct(
 
   if (!externalId) {
     throw new Error(
-      "O produto nÃ£o possui identificador externo.",
+      "O produto não possui identificador externo.",
     );
   }
 
@@ -2242,7 +2242,7 @@ export async function saveProduct(
     product.price <= 0
   ) {
     throw new Error(
-      "O produto nÃ£o possui um preÃ§o vÃ¡lido.",
+      "O produto não possui um preço válido.",
     );
   }
 
@@ -2254,7 +2254,7 @@ export async function saveProduct(
 
   if (!sourceUrl) {
     throw new Error(
-      "O produto nÃ£o possui uma URL de origem.",
+      "O produto não possui uma URL de origem.",
     );
   }
 

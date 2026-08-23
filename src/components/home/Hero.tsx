@@ -10,15 +10,15 @@ export default function Hero() {
         <div>
 
           <span className="rounded-full bg-green-500 px-4 py-2 text-sm font-bold text-white">
-            ðŸ”¥ Ofertas Atualizadas Todos os Dias
+            Ofertas atualizadas todos os dias
           </span>
 
           <h1 className="mt-8 text-5xl font-extrabold leading-tight text-white lg:text-6xl">
-            Encontre o menor preÃ§o antes de comprar.
+            Encontre o menor preço antes de comprar.
           </h1>
 
           <p className="mt-6 text-xl text-gray-300">
-            Compare ofertas do Mercado Livre e compre com seguranÃ§a, rapidez e economia.
+            Compare ofertas do Mercado Livre e compre com segurança, rapidez e economia.
           </p>
 
           <div className="mt-10 flex gap-4">
@@ -48,7 +48,7 @@ export default function Hero() {
 
             <div>
               <p className="text-4xl font-extrabold">24h</p>
-              <span className="text-gray-300">AtualizaÃ§Ãµes</span>
+              <span className="text-gray-300">Atualizações</span>
             </div>
 
             <div>

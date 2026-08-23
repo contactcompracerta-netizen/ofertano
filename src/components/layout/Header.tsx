@@ -29,7 +29,7 @@ export default function Header() {
         <nav className="hidden items-center gap-8 font-semibold text-gray-700 lg:flex">
 
           <Link href="/" className="transition hover:text-green-600">
-            InÃ­cio
+            Início
           </Link>
 
           <Link href="/categoria" className="transition hover:text-green-600">

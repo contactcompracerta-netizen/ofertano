@@ -19,21 +19,21 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://ofertano.vercel.app"),
 
   title: {
-    default: "Ofertano | Compare preÃ§os antes de comprar",
+    default: "Ofertano | Compare preços antes de comprar",
     template: "%s | Ofertano",
   },
 
   description:
-    "Compare preÃ§os, encontre ofertas e compre diretamente em lojas parceiras como Mercado Livre, Amazon e Shopee.",
+    "Compare preços, encontre ofertas e compre diretamente em lojas parceiras como Mercado Livre, Amazon e Shopee.",
 
   applicationName: "Ofertano",
 
   keywords: [
     "Ofertano",
-    "comparador de preÃ§os",
-    "comparar preÃ§os",
+    "comparador de preços",
+    "comparar preços",
     "ofertas",
-    "promoÃ§Ãµes",
+    "promoções",
     "Mercado Livre",
     "Amazon",
     "Shopee",
@@ -59,16 +59,16 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     url: "/",
     siteName: "Ofertano",
-    title: "Ofertano | Compare preÃ§os antes de comprar",
+    title: "Ofertano | Compare preços antes de comprar",
     description:
-      "Compare preÃ§os, encontre ofertas e compre diretamente nas lojas parceiras.",
+      "Compare preços, encontre ofertas e compre diretamente nas lojas parceiras.",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Ofertano | Compare preÃ§os antes de comprar",
+    title: "Ofertano | Compare preços antes de comprar",
     description:
-      "Compare preÃ§os, encontre ofertas e compre diretamente nas lojas parceiras.",
+      "Compare preços, encontre ofertas e compre diretamente nas lojas parceiras.",
   },
 
   robots: {

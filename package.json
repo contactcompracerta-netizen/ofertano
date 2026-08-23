@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "check:encoding": "node scripts/check-encoding.mjs",
+    "build": "npm run check:encoding && prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "npx tsx src/services/identity/exactMatcher.test.ts && npx tsx src/services/search/publicSearchMultiloja.test.ts",

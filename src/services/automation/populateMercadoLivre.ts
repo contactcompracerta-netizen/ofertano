@@ -142,8 +142,8 @@ function escolherOferta(
 
   /*
    * Priorizamos produtos realmente em oferta.
-   * Quando nÃ£o houver preÃ§o antigo vÃ¡lido,
-   * ainda permitimos produto disponÃ­vel.
+   * Quando não houver preço antigo válido,
+   * ainda permitimos produto disponível.
    */
   return validas.sort(
     (primeira, segunda) => {
@@ -237,7 +237,7 @@ function selecionarCategorias(
 
   /*
    * Se algum nome mudar no Mercado Livre,
-   * ainda usamos algumas categorias vÃ¡lidas
+   * ainda usamos algumas categorias válidas
    * como fallback.
    */
   if (selecionadas.length < 4) {
@@ -365,7 +365,7 @@ async function resolverProduto(
     };
   } catch (error) {
     console.error(
-      `Falha ao preparar produto automÃ¡tico ${productId}:`,
+      `Falha ao preparar produto automático ${productId}:`,
       error,
     );
 
@@ -646,7 +646,7 @@ export async function populateMercadoLivre(
                   "HIGH",
 
                 reviewReason:
-                  "ImportaÃ§Ã£o automÃ¡tica. Aguardando validaÃ§Ã£o e link individual de afiliado.",
+                  "Importação automática. Aguardando validação e link individual de afiliado.",
 
                 queuedAt:
                   new Date(),
@@ -679,7 +679,7 @@ export async function populateMercadoLivre(
       errors += 1;
 
       console.error(
-        `Falha ao adicionar ${candidato.externalId} Ã  fila automÃ¡tica:`,
+        `Falha ao adicionar ${candidato.externalId} à fila automática:`,
         error,
       );
     }

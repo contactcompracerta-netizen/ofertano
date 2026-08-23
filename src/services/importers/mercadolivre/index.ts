@@ -83,12 +83,12 @@ function extrairIds(link: string): {
   }
 
   /*
-   * Em pÃ¡ginas /p/ do Mercado Livre, o fragmento da URL
-   * pode trazer um wid de uma oferta especÃ­fica.
+   * Em páginas /p/ do Mercado Livre, o fragmento da URL
+   * pode trazer um wid de uma oferta específica.
    *
    * Esse wid pode estar restrito pela API mesmo quando o
-   * produto de catÃ¡logo continua pÃºblico e possui outras
-   * ofertas vÃ¡lidas. Por isso o catÃ¡logo deve ter prioridade.
+   * produto de catálogo continua público e possui outras
+   * ofertas válidas. Por isso o catálogo deve ter prioridade.
    */
   const catalogPath = url.pathname.match(
     /\/p\/(MLB-?\d+)/i
@@ -127,7 +127,7 @@ function extrairIds(link: string): {
   }
 
   throw new Error(
-    "NÃ£o foi possÃ­vel identificar o produto no link informado."
+    "Não foi possível identificar o produto no link informado."
   );
 }
 
@@ -177,7 +177,7 @@ function escolherOferta(
 
   if (validas.length === 0) {
     throw new Error(
-      "Nenhum anÃºncio ativo foi encontrado para este produto."
+      "Nenhum anúncio ativo foi encontrado para este produto."
     );
   }
 
@@ -213,11 +213,11 @@ async function importarCatalogo(
     catalog.buy_box_winner?.item_id;
 
   /*
-   * Em alguns produtos de catÃ¡logo o Mercado Livre
+   * Em alguns produtos de catálogo o Mercado Livre
    * responde "No winners found" em /products/{id}/items.
    *
-   * Se ainda houver buy_box_winner no produto de catÃ¡logo,
-   * usamos o anÃºncio vencedor diretamente.
+   * Se ainda houver buy_box_winner no produto de catálogo,
+   * usamos o anúncio vencedor diretamente.
    */
   if (
     (!catalogItems?.results ||
@@ -235,7 +235,7 @@ async function importarCatalogo(
     catalogItems.results.length === 0
   ) {
     throw new Error(
-      "Este produto de catÃ¡logo existe no Mercado Livre, mas nenhuma oferta ativa foi retornada pela API. Abra uma oferta de um vendedor para este mesmo produto e importe o link do anÃºncio."
+      "Este produto de catálogo existe no Mercado Livre, mas nenhuma oferta ativa foi retornada pela API. Abra uma oferta de um vendedor para este mesmo produto e importe o link do anúncio."
     );
   }
 
@@ -320,7 +320,7 @@ async function importarUserProduct(
     typeof userProduct.user_id !== "number"
   ) {
     throw new Error(
-      "O Mercado Livre nÃ£o retornou os dados necessÃ¡rios deste User Product."
+      "O Mercado Livre não retornou os dados necessários deste User Product."
     );
   }
 
@@ -377,7 +377,7 @@ async function importarUserProduct(
 
   if (!melhorItem?.id) {
     throw new Error(
-      "Este User Product existe no Mercado Livre, mas nenhuma oferta comprÃ¡vel foi retornada pela API."
+      "Este User Product existe no Mercado Livre, mas nenhuma oferta comprável foi retornada pela API."
     );
   }
 
@@ -395,7 +395,7 @@ async function importarAnuncio(
 
   if (!item.id) {
     throw new Error(
-      "O Mercado Livre nÃ£o retornou o cÃ³digo do anÃºncio."
+      "O Mercado Livre não retornou o código do anúncio."
     );
   }
 
@@ -534,6 +534,6 @@ export async function importarMercadoLivre(
   }
 
   throw new Error(
-    "NÃ£o foi possÃ­vel identificar o produto."
+    "Não foi possível identificar o produto."
   );
 }
