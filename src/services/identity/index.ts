@@ -36,15 +36,28 @@ export {
   avaliarCompatibilidadeComConsulta,
   candidatoPodeSeguirNoDiscovery,
   criarConsultasGlobaisDeIdentidade,
+  matchQueryToCandidate,
   pontuarCoberturaLexicalPonderada,
   pontuarEspecificidadeDaConsulta,
   tokensDistintivosDaConsulta,
 } from "./queryMatcher";
 
 export type {
+  MatchDecisionStatus,
   QueryIdentityInput,
   QueryMatchResult,
 } from "./queryMatcher";
+
+export {
+  classificarClasseProduto,
+  classeEhProdutoPrincipal,
+  compatibilidadeDeClasseProduto,
+} from "./productClass";
+
+export type {
+  ProductClassId,
+  ClassCompatibility,
+} from "./productClass";
 
 export {
   agruparPorIdentidadeExata,

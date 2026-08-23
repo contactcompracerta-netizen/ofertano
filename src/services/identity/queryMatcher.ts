@@ -18,16 +18,31 @@ import type {
   ProductIdentity,
 } from "./resolver";
 
+import {
+  candidatoTemClasseEquivalente,
+  compatibilidadeDeClasseProduto,
+  tokensDeClasseConhecidos,
+  type ClassCompatibility,
+  type ProductClassId,
+} from "./productClass";
+
 export type QueryIdentityInput = Pick<
   ProductImport,
   "title" | "brand" | "attributes"
 >;
 
+export type EvidenceState = "MATCH" | "MISSING" | "CONFLICT" | "UNKNOWN";
+
+export type MatchDecisionStatus = "ACCEPTED" | "REJECTED" | "INSUFFICIENT";
+
 export type QueryMatchResult = {
   compatible: boolean;
+  status: MatchDecisionStatus;
   score: number;
   textRelevance: number;
   roleCompatible: boolean;
+  roleBoost: number;
+  finalRelevance: number;
   reason: string;
   matchedBy:
     | "MODEL"
@@ -36,6 +51,24 @@ export type QueryMatchResult = {
     | "GENERIC"
     | null;
   conflicts: string[];
+  hardConflicts: string[];
+  positiveEvidence: string[];
+  queryProductClass: string;
+  candidateProductClass: string;
+  productClassCompatibility: EvidenceState;
+  queryBrand: string | null;
+  candidateBrand: string | null;
+  brandCompatibility: EvidenceState;
+  attributeMatches: string[];
+  attributeMissing: string[];
+  attributeConflicts: string[];
+  distinctiveTermsMatched: string[];
+  distinctiveTermsMissing: string[];
+  matchedTerms: string[];
+  missingTerms: string[];
+  identityEvidenceScore: number;
+  attributeCoverage: number;
+  autoAcceptanceReason: string;
 };
 
 const QUERY_STOP_WORDS = new Set([
@@ -133,6 +166,35 @@ const GENERIC_CLASS_WORDS = new Set([
   "cafeteira",
   "airfryer",
   "fritadeira",
+  "balanca",
+  "scale",
+  "lustre",
+  "luminaria",
+  "abajur",
+  "espelho",
+  "jogo",
+  "colher",
+  "controle",
+  "altofalante",
+  "soundbar",
+  "soundbox",
+  "estojo",
+  ...tokensDeClasseConhecidos(),
+  "almofada",
+  "almofadas",
+  "capa",
+  "capinha",
+  "case",
+  "pelicula",
+  "cabo",
+  "carregador",
+  "adaptador",
+  "suporte",
+  "bolsa",
+  "protetor",
+  "substituicao",
+  "reposicao",
+  "peca",
 ]);
 
 const GENERIC_CONNECTIVITY_WORDS = new Set([
@@ -270,22 +332,78 @@ const OPTIONAL_VARIANT_KEYS = new Set<IdentityVariantKey>([
   "bundle",
 ]);
 
+type MatchEvidence = Pick<
+  QueryMatchResult,
+  | "queryProductClass"
+  | "candidateProductClass"
+  | "productClassCompatibility"
+  | "queryBrand"
+  | "candidateBrand"
+  | "brandCompatibility"
+  | "attributeMatches"
+  | "attributeMissing"
+  | "attributeConflicts"
+  | "distinctiveTermsMatched"
+  | "distinctiveTermsMissing"
+  | "matchedTerms"
+  | "missingTerms"
+  | "identityEvidenceScore"
+  | "attributeCoverage"
+  | "autoAcceptanceReason"
+>;
+
+const EMPTY_EVIDENCE: MatchEvidence = {
+  queryProductClass: "UNKNOWN",
+  candidateProductClass: "UNKNOWN",
+  productClassCompatibility: "UNKNOWN",
+  queryBrand: null,
+  candidateBrand: null,
+  brandCompatibility: "UNKNOWN",
+  attributeMatches: [],
+  attributeMissing: [],
+  attributeConflicts: [],
+  distinctiveTermsMatched: [],
+  distinctiveTermsMissing: [],
+  matchedTerms: [],
+  missingTerms: [],
+  identityEvidenceScore: 0,
+  attributeCoverage: 0,
+  autoAcceptanceReason: "",
+};
+
 function reject(
   reason: string,
   conflicts: string[],
   extras: {
     textRelevance?: number;
     roleCompatible?: boolean;
-  } = {},
+    roleBoost?: number;
+    finalRelevance?: number;
+    status?: MatchDecisionStatus;
+    positiveEvidence?: string[];
+  } & Partial<MatchEvidence> = {},
 ): QueryMatchResult {
+  const textRelevance = extras.textRelevance ?? 0;
+  const roleCompatible = extras.roleCompatible ?? true;
+  const roleBoost = extras.roleBoost ?? (roleCompatible ? 1 : 0);
+  const status = extras.status ?? "REJECTED";
+
   return {
     compatible: false,
+    status,
     score: 0,
-    textRelevance: extras.textRelevance ?? 0,
-    roleCompatible: extras.roleCompatible ?? true,
+    textRelevance,
+    roleCompatible,
+    roleBoost,
+    finalRelevance: extras.finalRelevance ?? textRelevance * roleBoost,
     reason,
     matchedBy: null,
     conflicts,
+    hardConflicts: conflicts,
+    positiveEvidence: extras.positiveEvidence ?? [],
+    ...EMPTY_EVIDENCE,
+    ...extras,
+    autoAcceptanceReason: extras.autoAcceptanceReason ?? "",
   };
 }
 
@@ -587,10 +705,21 @@ function sinonimosDeToken(
 function candidatoPossuiToken(
   token: string,
   candidateTokens: Set<string>,
+  candidateTitle = "",
 ): boolean {
-  return sinonimosDeToken(token).some((item) =>
-    candidateTokens.has(item),
-  );
+  if (
+    sinonimosDeToken(token).some((item) => candidateTokens.has(item))
+  ) {
+    return true;
+  }
+
+  if (candidateTitle && candidatoTemClasseEquivalente(token, candidateTitle)) {
+    return true;
+  }
+
+  return candidateTitle
+    ? atributoEquivalentePresente(token, candidateTitle)
+    : false;
 }
 
 function pesoDoTokenConsulta(
@@ -626,22 +755,26 @@ export function pontuarCoberturaLexicalPonderada(
   candidateTitle: string,
 ): {
   score: number;
+  queryCoverage: number;
   matchedTokens: string[];
   queryTokens: string[];
   missingDistinctive: string[];
 } {
   const queryTokens = tokensRelevantes(query);
-  const candidateTokens = new Set(tokensRelevantes(candidateTitle));
+  const candidateTokenList = tokensRelevantes(candidateTitle);
+  const candidateTokens = new Set(candidateTokenList);
+  const queryTokenSet = new Set(queryTokens);
   const matchedTokens = queryTokens.filter((token) =>
-    candidatoPossuiToken(token, candidateTokens),
+    candidatoPossuiToken(token, candidateTokens, candidateTitle),
   );
   const missingDistinctive = tokensDistintivosDaConsulta(query).filter(
-    (token) => !candidatoPossuiToken(token, candidateTokens),
+    (token) => !candidatoPossuiToken(token, candidateTokens, candidateTitle),
   );
 
   if (queryTokens.length === 0) {
     return {
       score: 0.5,
+      queryCoverage: 0.5,
       matchedTokens,
       queryTokens,
       missingDistinctive,
@@ -656,9 +789,35 @@ export function pontuarCoberturaLexicalPonderada(
     (total, token) => total + pesoDoTokenConsulta(token),
     0,
   );
+  const extraCandidate = candidateTokenList.filter((token) => {
+    if (queryTokenSet.has(token)) {
+      return false;
+    }
+
+    if (sinonimosDeToken(token).some((item) => queryTokenSet.has(item))) {
+      return false;
+    }
+
+    return ehTokenDistintivo(token) || ehTokenDeClasse(token);
+  });
+  const extraWeight = extraCandidate.reduce(
+    (total, token) => total + pesoDoTokenConsulta(token),
+    0,
+  );
+  const queryCoverage = totalWeight === 0 ? 0 : matchedWeight / totalWeight;
+  /*
+   * Relevancia bilateral: tokens extras do candidato (lustre, colher, jogo)
+   * entram no denominador. Cobertura so da query fazia todos os anuncios
+   * com a mesma marca receberem o mesmo queryTextRelevance.
+   */
+  const twoSided =
+    totalWeight + extraWeight === 0
+      ? 0
+      : matchedWeight / (totalWeight + extraWeight);
 
   return {
-    score: totalWeight === 0 ? 0 : matchedWeight / totalWeight,
+    score: twoSided,
+    queryCoverage,
     matchedTokens,
     queryTokens,
     missingDistinctive,
@@ -764,6 +923,239 @@ function modeloCoincide(
   });
 }
 
+function atributoEquivalentePresente(
+  token: string,
+  title: string,
+): boolean {
+  const normalized = normalizarTextoIdentidade(title);
+
+  if (
+    token === "wireless" ||
+    token === "bluetooth" ||
+    token === "inalambrico" ||
+    token === "inalambrica"
+  ) {
+    return (
+      /\bsem fio\b/.test(normalized) ||
+      /\bwireless\b/.test(normalized) ||
+      /\bbluetooth\b/.test(normalized)
+    );
+  }
+
+  if (token === "fio" || token === "sem") {
+    return /\bsem fio\b/.test(normalized) || /\bwireless\b/.test(normalized);
+  }
+
+  if (
+    token === "resistente" ||
+    token === "resistentes" ||
+    token === "waterproof" ||
+    token === "agua"
+  ) {
+    return (
+      /\bresistente(?:s)? a agua\b/.test(normalized) ||
+      /\ba prova d? agua\b/.test(normalized) ||
+      /\bwaterproof\b/.test(normalized) ||
+      /\bipx?\d+\b/.test(normalized)
+    );
+  }
+
+  return false;
+}
+
+function trechoVendido(title: string): string {
+  const normalized = normalizarTextoIdentidade(title);
+  const [sold = normalized] = normalized.split(
+    /\b(?:compative(?:l|is) com|compatible(?:s)? with|edicao|para)\b/,
+  );
+
+  return sold.trim();
+}
+
+function entidadeComercialDaConsulta(
+  query: string,
+  identity: ProductIdentity,
+): string | null {
+  void query;
+
+  /*
+   * Evidencia positiva de marca no motor atual:
+   * 1. campo estruturado / atributo BRAND|MARCA
+   * 2. alias conhecido no titulo (inferirMarcaPeloTitulo no resolver)
+   *
+   * Classe reconhecida + token restante NAO e marca. Atributo, material,
+   * cor, tecnologia e caracteristica continuam termos lexicais.
+   */
+  return identity.brand;
+}
+
+function mesmaEntidadeComercial(
+  first: string,
+  second: string,
+): boolean {
+  const left = first
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "");
+  const right = second
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "");
+
+  return Boolean(left) && left === right;
+}
+
+function entidadeComercialDoCandidato(
+  candidateBrand: string | null,
+  candidateTitle: string,
+): string | null {
+  if (candidateBrand) {
+    return candidateBrand;
+  }
+
+  const sold = trechoVendido(candidateTitle);
+  const entity = tokensRelevantes(sold).find(
+    (token) => ehTokenDistintivo(token) && !/\d/.test(token) && token.length >= 3,
+  );
+
+  return entity ?? null;
+}
+
+function compararMarcaConsulta(
+  queryBrand: string | null,
+  candidateBrand: string | null,
+  candidateTitle: string,
+): EvidenceState {
+  if (!queryBrand) {
+    return "UNKNOWN";
+  }
+
+  const resolvedCandidate = entidadeComercialDoCandidato(
+    candidateBrand,
+    candidateTitle,
+  );
+
+  if (resolvedCandidate) {
+    return mesmaEntidadeComercial(queryBrand, resolvedCandidate)
+      ? "MATCH"
+      : "CONFLICT";
+  }
+
+  const sold = trechoVendido(candidateTitle);
+
+  if (sold.split(" ").some((token) => mesmaEntidadeComercial(token, queryBrand))) {
+    return "MATCH";
+  }
+
+  if (
+    normalizarTextoIdentidade(candidateTitle)
+      .split(" ")
+      .some((token) => mesmaEntidadeComercial(token, queryBrand))
+  ) {
+    return "CONFLICT";
+  }
+
+  return "MISSING";
+}
+
+function avaliarAtributosDaConsulta(
+  query: string,
+  queryIdentity: ProductIdentity,
+  candidate: ProductIdentity,
+): {
+  matches: string[];
+  missing: string[];
+  conflicts: string[];
+  coverage: number;
+} {
+  const matches: string[] = [];
+  const missing: string[] = [];
+  const conflicts: string[] = [];
+  const queryText = normalizarTextoIdentidade(query);
+  const candidateText = normalizarTextoIdentidade(candidate.title);
+
+  const queryWireless =
+    /\b(?:wireless|bluetooth|inalambrico|inalambrica)\b/.test(queryText) ||
+    /\bsem fio\b/.test(queryText);
+  const candidateWireless =
+    /\b(?:wireless|bluetooth|inalambrico|inalambrica)\b/.test(candidateText) ||
+    /\bsem fio\b/.test(candidateText);
+  const candidateWired = /\bcom fio\b/.test(candidateText) || /\bwired\b/.test(candidateText);
+
+  if (queryWireless) {
+    if (candidateWired && !candidateWireless) {
+      conflicts.push("wireless");
+    } else if (candidateWireless) {
+      matches.push("wireless");
+    } else {
+      missing.push("wireless");
+    }
+  }
+
+  const queryWaterproof =
+    /\b(?:waterproof|ipx?\d+)\b/.test(queryText) ||
+    /\bresistente(?:s)? a agua\b/.test(queryText) ||
+    /\ba prova d? agua\b/.test(queryText);
+  const candidateWaterproof =
+    /\b(?:waterproof|ipx?\d+)\b/.test(candidateText) ||
+    /\bresistente(?:s)? a agua\b/.test(candidateText) ||
+    /\ba prova d? agua\b/.test(candidateText);
+
+  if (queryWaterproof) {
+    if (candidateWaterproof) {
+      matches.push("waterproof");
+    } else {
+      missing.push("waterproof");
+    }
+  }
+
+  const queryMic = /\b(?:microfone|microphone)\b/.test(queryText);
+  const candidateMic = /\b(?:microfone|microphone)\b/.test(candidateText);
+
+  if (queryMic) {
+    if (candidateMic) {
+      matches.push("microphone");
+    } else {
+      missing.push("microphone");
+    }
+  }
+
+  for (const key of STRONG_VARIANT_KEYS) {
+    const requested = queryIdentity.variants[key];
+    const found = candidate.variants[key];
+
+    if (!requested) {
+      continue;
+    }
+
+    if (!found) {
+      if (OPTIONAL_VARIANT_KEYS.has(key)) {
+        missing.push(key);
+      } else {
+        conflicts.push(`${key}:${requested}!=nao-informado`);
+      }
+      continue;
+    }
+
+    if (requested !== found) {
+      conflicts.push(`${key}:${requested}!=${found}`);
+    } else {
+      matches.push(key);
+    }
+  }
+
+  const requestedCount = matches.length + missing.length + conflicts.length;
+
+  return {
+    matches,
+    missing,
+    conflicts,
+    coverage: requestedCount === 0 ? 1 : matches.length / requestedCount,
+  };
+}
+
 function verificarVariantesExplicitas(
   query: ProductIdentity,
   candidate: ProductIdentity,
@@ -806,17 +1198,11 @@ function verificarVariantesExplicitas(
   return conflicts;
 }
 
-export function avaliarCompatibilidadeComConsulta(
-  query: string,
-  candidateInput: QueryIdentityInput,
+export function matchQueryToCandidate(
+  queryIdentity: ProductIdentity,
+  candidate: ProductIdentity,
 ): QueryMatchResult {
-  const queryIdentity = resolverIdentidadeProduto({
-    title: query,
-    brand: null,
-    attributes: {},
-  });
-
-  const candidate = resolverIdentidadeProduto(candidateInput);
+  const query = queryIdentity.title;
   const queryCodes = extrairCodigosFortesDaConsulta(
     query,
     queryIdentity,
@@ -828,14 +1214,42 @@ export function avaliarCompatibilidadeComConsulta(
   const lexical = pontuarCoberturaLexicalPonderada(query, candidate.title);
   const matchedTokens = lexical.matchedTokens;
   const lexicalScore = lexical.score;
-  const textRelevance = modelMatched
-    ? 1
-    : Math.min(1, lexicalScore);
+  const queryCoverage = lexical.queryCoverage;
+  const textRelevance = Math.min(1, lexicalScore);
   const distinctiveTokens = tokensDistintivosDaConsulta(query);
   const missingDistinctive = lexical.missingDistinctive;
-  const candidateDistinctive = tokensRelevantes(candidate.title)
-    .filter(ehTokenDistintivo)
-    .filter((token) => !distinctiveTokens.includes(token));
+  const matchedDistinctive = distinctiveTokens.filter(
+    (token) => !missingDistinctive.includes(token),
+  );
+
+  const queryClass = queryIdentity.productClass;
+  const candidateClass = candidate.productClass;
+  const classCompatibility = compatibilidadeDeClasseProduto(
+    queryClass,
+    candidateClass,
+  );
+  const queryBrand = entidadeComercialDaConsulta(query, queryIdentity);
+  const candidateBrand =
+    candidate.brand ??
+    entidadeComercialDoCandidato(candidate.brand, candidate.title);
+  const brandCompatibility = compararMarcaConsulta(
+    queryBrand,
+    candidate.brand,
+    candidate.title,
+  );
+  const attributes = avaliarAtributosDaConsulta(
+    query,
+    queryIdentity,
+    candidate,
+  );
+
+  const identityEvidenceScore = Math.min(
+    1,
+    (classCompatibility === "MATCH" ? 0.35 : 0) +
+      (brandCompatibility === "MATCH" ? 0.35 : 0) +
+      (modelMatched ? 0.3 : 0) +
+      (attributes.coverage * 0.2),
+  );
 
   const roleCompatible =
     ehPapelNaoPrincipal(queryIdentity.kind) ===
@@ -844,14 +1258,76 @@ export function avaliarCompatibilidadeComConsulta(
       !ehPapelNaoPrincipal(queryIdentity.kind) ||
       queryIdentity.kind === candidate.kind
     );
+  const roleBoost = roleCompatible ? 1 : 0;
+  const finalRelevance = textRelevance * (roleBoost || 0.15);
+
+  const positiveEvidence: string[] = [];
+  if (classCompatibility === "MATCH") {
+    positiveEvidence.push(`productClass:${queryClass}`);
+  }
+  if (brandCompatibility === "MATCH" && queryBrand) {
+    positiveEvidence.push(`brand:${queryBrand}`);
+  }
+  if (modelMatched) {
+    positiveEvidence.push("model");
+  }
+  if (matchedDistinctive.length > 0) {
+    positiveEvidence.push(`terms:${matchedDistinctive.join(",")}`);
+  }
+
+  const evidence: MatchEvidence = {
+    queryProductClass: queryClass,
+    candidateProductClass: candidateClass,
+    productClassCompatibility: classCompatibility,
+    queryBrand,
+    candidateBrand,
+    brandCompatibility,
+    attributeMatches: attributes.matches,
+    attributeMissing: attributes.missing,
+    attributeConflicts: attributes.conflicts,
+    distinctiveTermsMatched: matchedDistinctive,
+    distinctiveTermsMissing: missingDistinctive,
+    matchedTerms: matchedTokens,
+    missingTerms: missingDistinctive,
+    identityEvidenceScore,
+    attributeCoverage: attributes.coverage,
+    autoAcceptanceReason: "",
+  };
+
+  const gateExtras = {
+    textRelevance,
+    roleCompatible,
+    roleBoost,
+    finalRelevance,
+    positiveEvidence,
+    ...evidence,
+  };
 
   const conflicts: string[] = [];
+
+  /*
+   * FASE A — hard gates. Score nao autoriza identidade.
+   */
+  if (
+    !ehPapelNaoPrincipal(queryIdentity.kind) &&
+    (
+      ehPapelNaoPrincipal(candidate.kind) ||
+      (
+        Boolean(candidate.compatibilityRelation) &&
+        candidate.role !== "MAIN"
+      )
+    )
+  ) {
+    conflicts.push(
+      `soldItem:${candidate.soldItemType ?? candidate.role}!=MAIN`,
+    );
+  }
 
   if (!roleCompatible) {
     conflicts.push(
       queryIdentity.kind === "GENERIC" || queryIdentity.role === "MAIN"
-        ? `classe:${queryIdentity.role}!=${candidate.role}`
-        : `classe:${queryIdentity.kind}!=${candidate.kind}`,
+        ? `papel:${queryIdentity.role}!=${candidate.role}`
+        : `papel:${queryIdentity.kind}!=${candidate.kind}`,
     );
   }
 
@@ -868,105 +1344,117 @@ export function avaliarCompatibilidadeComConsulta(
     conflicts.push("identidade:lista-de-compatibilidade");
   }
 
-  if (
-    queryIdentity.brand &&
-    candidate.brand &&
-    queryIdentity.brand !== candidate.brand
-  ) {
+  if (classCompatibility === "CONFLICT") {
     conflicts.push(
-      `brand:${queryIdentity.brand}!=${candidate.brand}`,
+      `productClass:${queryClass}!=${candidateClass}`,
     );
   }
 
-  const queryClassGroups = gruposDeClasse(queryTokens);
-  const candidateClassGroups = gruposDeClasse(
-    tokensRelevantes(candidate.title),
-  );
-
-  if (
-    queryClassGroups.size > 0 &&
-    candidateClassGroups.size > 0 &&
-    ![...queryClassGroups].some((group) => candidateClassGroups.has(group))
-  ) {
+  if (brandCompatibility === "CONFLICT") {
     conflicts.push(
-      `classe:${[...queryClassGroups][0]}!=${[...candidateClassGroups][0]}`,
+      `brand:${queryBrand}!=${candidate.brand ?? "title-host"}`,
     );
   }
 
-  conflicts.push(
-    ...verificarVariantesExplicitas(
-      queryIdentity,
-      candidate,
-    ),
-  );
+  conflicts.push(...attributes.conflicts);
+
+  if (queryCodes.length > 0 && !modelMatched) {
+    conflicts.push(
+      `model:${codigosMaisEspecificos(queryCodes).join(",")}`,
+    );
+  }
 
   if (conflicts.length > 0) {
     return reject(
       `Conflito de identidade com a consulta: ${conflicts.join(", ")}.`,
       conflicts,
+      gateExtras,
+    );
+  }
+
+  const brandConfirmed = brandCompatibility === "MATCH";
+  const classConfirmed = classCompatibility === "MATCH";
+
+  const rankingScore = Math.min(
+    0.99,
+    queryCoverage * 0.55 +
+      lexicalScore * 0.2 +
+      identityEvidenceScore * 0.2 +
+      attributes.coverage * 0.15 +
+      (brandConfirmed && classConfirmed ? 0.08 : 0),
+  );
+
+  function accepted(
+    reason: string,
+    matchedBy: QueryMatchResult["matchedBy"],
+    autoAcceptanceReason: string,
+    score: number,
+    relevance: number,
+  ): QueryMatchResult {
+    return {
+      compatible: true,
+      status: "ACCEPTED",
+      score,
+      textRelevance: relevance,
+      roleCompatible: true,
+      roleBoost: 1,
+      finalRelevance: relevance,
+      reason,
+      matchedBy,
+      conflicts: [],
+      hardConflicts: [],
+      positiveEvidence,
+      ...evidence,
+      autoAcceptanceReason,
+    };
+  }
+
+  if (modelMatched) {
+    return accepted(
+      "Modelo forte da consulta e variantes explicitas compativeis.",
+      "MODEL",
+      "modelo-forte-compativel",
+      1,
+      1,
+    );
+  }
+
+  if (queryTokens.length === 0) {
+    return reject(
+      "Consulta sem tokens fortes; evidencia insuficiente para aceitar o candidato.",
+      [],
       {
-        textRelevance,
-        roleCompatible,
+        ...gateExtras,
+        status: "INSUFFICIENT",
+        autoAcceptanceReason: "consulta-generica",
       },
     );
   }
 
-  if (queryCodes.length > 0) {
-    if (!modeloCoincide(queryCodes, candidate, queryIdentity)) {
-      return reject(
-        `Modelo solicitado nao encontrado no candidato: ${codigosMaisEspecificos(queryCodes).join(", ")}.`,
-        ["model"],
-        {
-          textRelevance,
-          roleCompatible: true,
-        },
-      );
-    }
-
-    return {
-      compatible: true,
-      score: 1,
-      textRelevance: 1,
-      roleCompatible: true,
-      reason: "Modelo forte da consulta e variantes explicitas compativeis.",
-      matchedBy: "MODEL",
-      conflicts: [],
-    };
-  }
-
-  if (queryTokens.length === 0) {
-    return {
-      compatible: true,
-      score: 0.5,
-      textRelevance: 0.5,
-      roleCompatible: true,
-      reason: "Consulta sem tokens fortes; candidato sem conflito estrutural.",
-      matchedBy: "GENERIC",
-      conflicts: [],
-    };
-  }
-
-  const brandRequested = Boolean(queryIdentity.brand);
-  const brandConfirmed = Boolean(
-    queryIdentity.brand &&
-    candidate.brand === queryIdentity.brand,
-  );
-  const distinctiveConfirmed =
+  if (
     distinctiveTokens.length > 0 &&
-    missingDistinctive.length === 0;
-
-  if (distinctiveTokens.length > 0 && missingDistinctive.length > 0) {
-    const entityConflict =
-      candidateDistinctive.length > 0
-        ? `brand:${missingDistinctive[0]}!=${candidateDistinctive[0]}`
-        : `distinctive:${missingDistinctive.join(",")}`;
-
+    missingDistinctive.length > 0 &&
+    brandCompatibility !== "MATCH"
+  ) {
     return reject(
       `Termo distintivo da consulta ausente no candidato: ${missingDistinctive.join(", ")}.`,
-      [entityConflict],
+      [`distinctive:${missingDistinctive.join(",")}`],
+      gateExtras,
+    );
+  }
+
+  /*
+   * FASE B — ranking so depois dos hard gates. Marca/token distintivo
+   * sozinho nunca vira ACCEPT. Classe precisa casar.
+   */
+  if (!classConfirmed) {
+    return reject(
+      "Evidencia insuficiente: classe da consulta nao confirmada no candidato.",
+      [],
       {
-        textRelevance,
-        roleCompatible: true,
+        ...gateExtras,
+        status: "INSUFFICIENT",
+        autoAcceptanceReason: "classe-nao-confirmada",
       },
     );
   }
@@ -974,41 +1462,51 @@ export function avaliarCompatibilidadeComConsulta(
   const minimum =
     queryTokens.length <= 2 && distinctiveTokens.length === 0
       ? 1
-      : distinctiveConfirmed
-        ? 0.35
-        : brandRequested && brandConfirmed
-          ? 0.5
-          : 0.65;
+      : brandConfirmed
+        ? 0.42
+        : 0.55;
 
-  if (lexicalScore < minimum) {
+  if (queryCoverage < minimum) {
     return reject(
       `Cobertura lexical insuficiente: ${matchedTokens.length}/${queryTokens.length}.`,
-      ["lexical"],
+      [],
       {
-        textRelevance,
-        roleCompatible: true,
+        ...gateExtras,
+        status: "INSUFFICIENT",
+        autoAcceptanceReason: "cobertura-insuficiente",
       },
     );
   }
 
-  return {
-    compatible: true,
-    score: Math.min(
-      0.99,
-      lexicalScore +
-        (brandConfirmed ? 0.12 : 0) +
-        (distinctiveConfirmed ? 0.08 : 0),
-    ),
+  return accepted(
+    brandConfirmed
+      ? attributes.missing.length > 0
+        ? "Classe e marca compativeis; atributos pedidos parcialmente ausentes."
+        : "Classe, marca e atributos da consulta compativeis."
+      : "Classe da consulta compativel sem marca exigida.",
+    brandConfirmed ? "BRAND" : "LEXICAL",
+    brandConfirmed
+      ? attributes.missing.length > 0
+        ? "classe-marca-compativeis-atributos-parciais"
+        : "classe-marca-atributos-compativeis"
+      : "classe-compativel-consulta-sem-marca",
+    rankingScore,
     textRelevance,
-    roleCompatible: true,
-    reason: brandConfirmed
-      ? "Marca e termos relevantes da consulta compativeis."
-      : distinctiveConfirmed
-        ? "Entidade distintiva e termos relevantes da consulta compativeis."
-        : "Termos relevantes da consulta compativeis.",
-    matchedBy: brandConfirmed ? "BRAND" : "LEXICAL",
-    conflicts: [],
-  };
+  );
+}
+
+export function avaliarCompatibilidadeComConsulta(
+  query: string,
+  candidateInput: QueryIdentityInput,
+): QueryMatchResult {
+  const queryIdentity = resolverIdentidadeProduto({
+    title: query,
+    brand: null,
+    attributes: {},
+  });
+  const candidate = resolverIdentidadeProduto(candidateInput);
+
+  return matchQueryToCandidate(queryIdentity, candidate);
 }
 
 export function pontuarEspecificidadeDaConsulta(

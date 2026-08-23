@@ -19,6 +19,11 @@ import {
 
 import type { ProductImport } from "@/services/importers/core/types";
 import { traceMultiloja } from "@/services/multiloja/trace";
+import {
+  avaliarSearchCompletionBarrier,
+  rastrearSearchCompletion,
+  type PublicSearchCoverage,
+} from "@/services/search/searchCompletionBarrier";
 
 export type PublicSearchOffer = {
   product: ProductImport;
@@ -155,6 +160,7 @@ type IdentityGroupMeta = {
   marketplaceSupport: number;
   candidateSupport: number;
   consensusScore: number;
+  consensusMultiMarketplace: boolean;
   isolated: boolean;
   reason: string;
 };
@@ -213,15 +219,17 @@ function metaDoGrupo(
   const queryAligned =
     Boolean(queryIdentity.model) &&
     group?.commercialModel === queryIdentity.model;
+  const consensusMultiMarketplace = marketplaceSupport >= 2;
   const isolated =
     marketplaceSupport <= 1 &&
     maxMarketplaceSupport >= 2 &&
     !queryAligned;
-  const consensusScore =
-    marketplaceSupport * 400 +
-    candidateSupport * 20 +
-    (queryAligned ? 800 : 0) -
-    (isolated ? 4000 : 0);
+  const consensusScore = consensusMultiMarketplace
+    ? marketplaceSupport * 400 +
+      candidateSupport * 20 +
+      (queryAligned ? 800 : 0) -
+      (isolated ? 4000 : 0)
+    : 0;
 
   return {
     key,
@@ -229,13 +237,34 @@ function metaDoGrupo(
     marketplaceSupport,
     candidateSupport,
     consensusScore,
+    consensusMultiMarketplace,
     isolated,
-    reason: queryAligned
-      ? "consenso-alinhado-a-consulta"
-      : isolated
-        ? "identidade-isolada"
-        : "consenso-de-marketplaces",
+    reason: consensusMultiMarketplace
+      ? queryAligned
+        ? "consenso-alinhado-a-consulta"
+        : "consenso-de-marketplaces"
+      : "SINGLE_SOURCE_IDENTITY",
   };
+}
+
+export function diagnosticarConsensoDaPesquisaPublica(
+  query: string,
+  offers: PublicSearchOffer[],
+): IdentityGroupMeta[] {
+  const queryIdentity = resolverIdentidadeProduto({
+    title: query,
+    brand: null,
+    attributes: {},
+  });
+  const groups = agruparIdentidadesComerciais(
+    query,
+    offers,
+    queryIdentity,
+  );
+
+  return Array.from(groups.keys()).map((key) =>
+    metaDoGrupo(queryIdentity, groups, key),
+  );
 }
 
 function podeSerAncoraDaConsulta(
@@ -245,6 +274,17 @@ function podeSerAncoraDaConsulta(
 ): boolean {
   const identity = identityOf(offer);
   const match = queryCompatibility(query, offer);
+
+  if (match.status !== "ACCEPTED") {
+    return false;
+  }
+
+  if (
+    match.productClassCompatibility === "CONFLICT" ||
+    match.brandCompatibility === "CONFLICT"
+  ) {
+    return false;
+  }
 
   if (ehPapelNaoPrincipal(queryIdentity.kind)) {
     return identity.kind === queryIdentity.kind && match.roleCompatible;
@@ -304,11 +344,31 @@ function pontuarReferencia(
     score -= 5000;
   }
 
+  if (match.productClassCompatibility === "CONFLICT") {
+    penalties.push("product-class-conflito");
+    score -= 5000;
+  } else if (match.productClassCompatibility === "MATCH") {
+    score += 220;
+  }
+
+  if (match.brandCompatibility === "CONFLICT") {
+    penalties.push("marca-conflito");
+    score -= 4000;
+  } else if (match.brandCompatibility === "MATCH") {
+    score += 160;
+  }
+
   if (
     !ehPapelNaoPrincipal(queryIdentity.kind) &&
     ehPapelNaoPrincipal(identity.kind)
   ) {
     penalties.push("acessorio-vs-consulta-main");
+    score -= 5000;
+  }
+
+  if (groupMeta && !groupMeta.consensusMultiMarketplace && !queryModel) {
+    penalties.push("identidade-fonte-unica");
+    score -= 400;
   }
 
   if (
@@ -509,15 +569,34 @@ export function escolherClusterExatoDaPesquisaPublica(
       modelAmbiguous: identity.modelAmbiguous,
       identityConfidence: identity.identityConfidence,
       multiModelCompatibility: identity.multiModelCompatibility,
+      queryClass: match.queryProductClass,
+      candidateClass: match.candidateProductClass,
+      queryBrand: match.queryBrand,
+      candidateBrand: match.candidateBrand,
+      hardConflicts: match.hardConflicts,
+      matchedTerms: match.matchedTerms,
+      missingTerms: match.missingTerms,
       queryTextRelevance: match.textRelevance,
+      roleBoost: match.roleBoost,
+      finalRelevance: match.finalRelevance,
       queryRoleCompatibility: match.roleCompatible,
-      queryRelevance: match.compatible ? match.score : 0,
+      queryRelevance: match.status === "ACCEPTED" ? match.score : 0,
+      productClassCompatibility: match.productClassCompatibility,
+      brandCompatibility: match.brandCompatibility,
+      attributeMatches: match.attributeMatches,
+      attributeMissing: match.attributeMissing,
+      attributeConflicts: match.attributeConflicts,
+      distinctiveTermsMatched: match.distinctiveTermsMatched,
+      distinctiveTermsMissing: match.distinctiveTermsMissing,
+      identityEvidenceScore: match.identityEvidenceScore,
+      attributeCoverage: match.attributeCoverage,
+      autoAcceptanceReason: match.autoAcceptanceReason,
       canonicalKey: criarCanonicalKeyDaIdentidade(identity),
-      status: match.compatible ? "ACCEPTED" : "REJECTED",
+      status: match.status,
       reason: match.reason,
     });
 
-    if (match.compatible) {
+    if (match.status === "ACCEPTED") {
       compatibleOffers.push(offer);
     }
   }
@@ -572,6 +651,7 @@ export function escolherClusterExatoDaPesquisaPublica(
     identityMarketplaceSupport: groupMeta.marketplaceSupport,
     identityCandidateSupport: groupMeta.candidateSupport,
     consensusScore: groupMeta.consensusScore,
+    consensusMultiMarketplace: groupMeta.consensusMultiMarketplace,
     canonicalIdentityReason: groupMeta.reason,
     modelAmbiguous: referenceIdentity.modelAmbiguous,
     identityConfidence: referenceIdentity.identityConfidence,
@@ -629,10 +709,19 @@ export async function persistPublicSearchCluster(
   query: string,
   offers: PublicSearchOffer[],
   existingProductId?: string | null,
+  coverage?: PublicSearchCoverage | null,
 ): Promise<PersistPublicSearchClusterResult | null> {
   const cluster = escolherClusterExatoDaPesquisaPublica(query, offers);
 
-  if (cluster.length === 0) {
+  const barrier = avaliarSearchCompletionBarrier({
+    query,
+    enabledMarketplaces: coverage?.enabledMarketplaces ?? [],
+    results: coverage?.results ?? [],
+    exactOffers: cluster,
+  });
+  rastrearSearchCompletion(barrier);
+
+  if (!barrier.publicationAllowed || cluster.length === 0) {
     return null;
   }
 

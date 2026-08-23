@@ -2,6 +2,12 @@ import type {
   ProductImport,
 } from "@/services/importers/core/types";
 
+import {
+  classificarClasseProduto,
+  classeEhProdutoPrincipal,
+  type ProductClassId,
+} from "./productClass";
+
 /*
  * Identity Resolver
  *
@@ -55,6 +61,7 @@ export type ProductIdentity = {
   soldItemType: "ACCESSORY" | "REPLACEMENT_PART" | "PRIMARY" | null;
   hostItemType: "ACCESSORY" | "REPLACEMENT_PART" | "PRIMARY" | null;
   compatibilityRelation: string | null;
+  productClass: ProductClassId;
   hostModelCandidates: string[];
   identityModelCandidates: string[];
   modelAmbiguous: boolean;
@@ -217,6 +224,8 @@ const ACCESSORY_HEAD_TOKENS = new Set([
   "fontes",
   "tampa",
   "tampas",
+  "controle",
+  "controles",
 ]);
 
 const PRIMARY_PHRASES = [
@@ -304,6 +313,12 @@ const REPLACEMENT_HEAD_TOKENS = new Set([
   "pecas",
   "refil",
   "refis",
+  "saco",
+  "sacos",
+  "roda",
+  "rodas",
+  "filtro",
+  "filtros",
 ]);
 
 const ACCESSORY_RELATIONAL_PATTERNS = [
@@ -325,14 +340,16 @@ const ACCESSORY_RELATIONAL_PATTERNS = [
   /\bescova(?:s)?\s+para\b/,
   /\bscreen\s+protector\b/,
   /\bvidro\s+temperado\b/,
-  /\bcompativel\s+com\b/,
-  /\bcompatible\s+with\b/,
+  /\bcompative(?:l|is)\s+com\b/,
+  /\bcompatible(?:s)?\s+with\b/,
   /\bfits\b/,
   /\b(?:capa|capinha|case|cover|estojo|pelicula|protetor|cabo|cable|carregador|charger|adaptador|adapter|suporte|stand|holder|pulseira|acessorio|acessorios|bolsa|controle)\s+(?:para|for)\b/,
 ];
 
-const HOST_RELATION_PATTERN =
-  /\s+(?:compativel\s+com|compatible\s+with|de\s+substituicao(?:\s+para)?|de\s+reposicao(?:\s+para)?|replacement(?:\s+for)?|para|for|fits)\s+/;
+const SPECIFIC_HOST_RELATION_PATTERN =
+  /\s+((?:compative(?:l|is)\s+com)|(?:compatible(?:s)?\s+with)|(?:de\s+substituicao(?:\s+para)?)|(?:de\s+reposicao(?:\s+para)?)|(?:replacement(?:s)?(?:\s+for)?)|(?:fits))\s+/g;
+
+const GENERIC_HOST_RELATION_PATTERN = /\s+(para|for)\s+/g;
 
 const TITLE_STOP_WORDS = new Set([
   "de",
@@ -1888,6 +1905,14 @@ function textoComHifensPreservados(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+function firstRegexMatch(
+  text: string,
+  pattern: RegExp,
+): RegExpExecArray | null {
+  pattern.lastIndex = 0;
+  return pattern.exec(text);
+}
+
 function detectarRelacaoDeHospedeiro(
   normalizedTitle: string,
 ): {
@@ -1895,20 +1920,56 @@ function detectarRelacaoDeHospedeiro(
   host: string | null;
   relation: string | null;
 } {
-  const match = normalizedTitle.match(HOST_RELATION_PATTERN);
+  const specific = firstRegexMatch(
+    normalizedTitle,
+    SPECIFIC_HOST_RELATION_PATTERN,
+  );
 
-  if (!match || match.index === undefined) {
+  if (specific && specific.index !== undefined) {
     return {
-      sold: normalizedTitle,
-      host: null,
-      relation: null,
+      sold: normalizedTitle.slice(0, specific.index).trim() || normalizedTitle,
+      host:
+        normalizedTitle.slice(specific.index + specific[0].length).trim() ||
+        null,
+      relation: specific[0].trim(),
     };
   }
 
+  GENERIC_HOST_RELATION_PATTERN.lastIndex = 0;
+  let generic: RegExpExecArray | null;
+
+  while ((generic = GENERIC_HOST_RELATION_PATTERN.exec(normalizedTitle))) {
+    if (generic.index === undefined) {
+      continue;
+    }
+
+    const sold = normalizedTitle.slice(0, generic.index).trim();
+    const host = normalizedTitle.slice(generic.index + generic[0].length).trim();
+    const soldClass = classificarClasseProduto(sold);
+    const hostClass = classificarClasseProduto(host);
+
+    /*
+     * "para"/"for" so viram relacao de hospedeiro quando o item vendido
+     * nao e o mesmo tipo do trecho seguinte, ou quando o vendido ja e
+     * acessorio/consumivel mesmo que o hospedeiro ainda nao tenha classe.
+     * "headphone para academia" permanece MAIN.
+     */
+    if (
+      !classeEhProdutoPrincipal(soldClass) ||
+      (soldClass !== "UNKNOWN" && hostClass !== "UNKNOWN" && soldClass !== hostClass)
+    ) {
+      return {
+        sold: sold || normalizedTitle,
+        host: host || null,
+        relation: generic[0].trim(),
+      };
+    }
+  }
+
   return {
-    sold: normalizedTitle.slice(0, match.index).trim() || normalizedTitle,
-    host: normalizedTitle.slice(match.index + match[0].length).trim() || null,
-    relation: match[0].trim(),
+    sold: normalizedTitle,
+    host: null,
+    relation: null,
   };
 }
 
@@ -1974,13 +2035,29 @@ function analisarPapelDoTitulo(
     };
   }
 
-  if (structure.relation && !soldItemType) {
+  if (
+    structure.relation &&
+    (
+      !soldItemType ||
+      !classeEhProdutoPrincipal(classificarClasseProduto(structure.sold))
+    ) &&
+    soldItemType !== "PRIMARY"
+  ) {
+    const soldClass = classificarClasseProduto(structure.sold);
+    const inferredSold: SoldClass =
+      soldItemType ??
+      (soldClass === "CONSUMABLE" ? "REPLACEMENT_PART" : "ACCESSORY");
+    const inferredKind =
+      inferredSold === "REPLACEMENT_PART"
+        ? "REPLACEMENT_PART"
+        : "ACCESSORY";
+
     return {
-      kind: "ACCESSORY",
-      role: "ACCESSORY",
+      kind: inferredKind,
+      role: inferredKind,
       reason:
-        "Relacao para/compativel-com sem nucleo MAIN no item vendido.",
-      soldItemType,
+        "Relacao de hospedeiro: o item vendido nao e o equipamento citado depois da relacao.",
+      soldItemType: inferredSold,
       hostItemType: hostItemType ?? "PRIMARY",
       compatibilityRelation: structure.relation,
       soldText: structure.sold,
@@ -2028,7 +2105,7 @@ function analisarPapelDoTitulo(
     reason: soldItemType === "PRIMARY"
       ? "O nucleo do titulo e o produto principal; acessorios depois de 'com' nao mudam o papel."
       : "Sem sinal estrutural de acessorio ou peca no nucleo vendido.",
-    soldItemType,
+    soldItemType: soldItemType ?? "PRIMARY",
     hostItemType: hostItemType ?? (structure.host ? "PRIMARY" : null),
     compatibilityRelation: structure.relation,
     soldText: structure.sold,
@@ -2429,6 +2506,7 @@ export function resolverIdentidadeProduto(
     soldItemType: roleAnalysis.soldItemType,
     hostItemType: roleAnalysis.hostItemType,
     compatibilityRelation: roleAnalysis.compatibilityRelation,
+    productClass: classificarClasseProduto(roleAnalysis.soldText),
     hostModelCandidates,
     identityModelCandidates,
     modelAmbiguous,
