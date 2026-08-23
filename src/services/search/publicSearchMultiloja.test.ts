@@ -14,7 +14,7 @@ import {
   criarConsultasGlobaisDeIdentidade,
 } from "../identity";
 import type { ProductImport } from "../importers/core/types";
-import { escolherClusterExatoDaPesquisaPublica, diagnosticarConsensoDaPesquisaPublica } from "./persistPublicSearchCluster";
+import { escolherClusterExatoDaPesquisaPublica } from "./persistPublicSearchCluster";
 import type { PublicSearchOffer } from "./persistPublicSearchCluster";
 
 const QUERY =
@@ -1127,62 +1127,6 @@ assert.equal(
   "Persistencia publica nao pode aceitar produto sem a entidade distintiva da consulta.",
 );
 assert.match(distinctivePersistCluster[0]!.product.title, /MarcaR/i);
-
-const singleSourceConsensus = diagnosticarConsensoDaPesquisaPublica(
-  "Headphone MarcaX ZX100",
-  [
-    offer({
-      marketplace: "Mercado Livre",
-      externalId: "ml-zx100-only",
-      title: "Headphone MarcaX ZX100",
-      price: 199,
-      brand: "MarcaX",
-    }),
-  ],
-);
-assert.equal(singleSourceConsensus.length, 1);
-assert.equal(
-  singleSourceConsensus[0]?.consensusMultiMarketplace,
-  false,
-  "TESTE 12: 1 marketplace + 1 candidato nao e consenso multi-loja.",
-);
-
-const multiSourceConsensus = diagnosticarConsensoDaPesquisaPublica(
-  "Headphone MarcaX ZX100",
-  [
-    offer({
-      marketplace: "Mercado Livre",
-      externalId: "ml-zx100",
-      title: "Headphone MarcaX ZX100",
-      price: 199,
-      brand: "MarcaX",
-    }),
-    offer({
-      marketplace: "Amazon",
-      externalId: "amz-zx100",
-      title: "Headphone MarcaX ZX100 Bluetooth",
-      price: 189,
-      brand: "MarcaX",
-    }),
-    offer({
-      marketplace: "Shopee",
-      externalId: "shp-zx100",
-      title: "Fone Bluetooth MarcaX ZX100",
-      price: 179,
-      brand: "MarcaX",
-    }),
-  ],
-);
-assert.equal(
-  multiSourceConsensus[0]?.consensusMultiMarketplace,
-  true,
-  "TESTE 12: a mesma identidade em 3 marketplaces e consenso real.",
-);
-assert.ok(
-  (multiSourceConsensus[0]?.consensusScore ?? 0) >
-    (singleSourceConsensus[0]?.consensusScore ?? 0),
-  "Consenso multi-loja deve pontuar acima de fonte unica.",
-);
 
 void runAsyncCases()
   .then(() => {

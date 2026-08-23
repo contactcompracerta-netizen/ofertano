@@ -17,8 +17,6 @@ import {
   rastrearResumoMercadoLivre,
 } from "./marketplaceTrace";
 import {
-  anuncioPublicoEstaCompleto,
-  buscarEstrategiaPublicaMercadoLivre,
   buscarPaginaPublicaMercadoLivre,
   classificarErroFonteMercadoLivre,
   type MercadoLivreListingItem,
@@ -160,14 +158,6 @@ export type MercadoLivreAcquisitionSources = {
     limit: number,
   ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
   searchPublicListings: (
-    query: string,
-    limit: number,
-  ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
-  searchPublicLista?: (
-    query: string,
-    limit: number,
-  ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
-  searchPublicJm?: (
     query: string,
     limit: number,
   ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
@@ -1044,46 +1034,29 @@ async function hidratarAnunciosAvulsos(
   }
 }
 
-async function hidratarPaginaPublica(
-  pagina: MercadoLivreSourceFetch<SiteSearchItem[]>,
+async function pesquisarPaginaPublica(
+  query: string,
 ): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  const pagina = await buscarPaginaPublicaMercadoLivre(query);
+
   if (pagina.status !== "SUCCESS" || pagina.data.length === 0) {
     return pagina;
   }
 
   const hidratados = await hidratarAnunciosAvulsos(pagina.data);
-  const complete = hidratados.filter(anuncioPublicoEstaCompleto);
+  const usaveis = hidratados.filter(
+    (item) => Boolean(item.id) && Boolean(item.title?.trim()),
+  );
 
   return {
     ...pagina,
-    data: complete,
+    data: usaveis,
+    status: usaveis.length > 0 ? "SUCCESS" : "EMPTY",
     reason:
-      complete.length > 0
+      usaveis.length > 0
         ? pagina.reason
-        : "Busca publica encontrou anuncios sem titulo/preco/URL suficientes apos hidratacao.",
+        : "Busca publica encontrou IDs sem titulo/preco hidratavel.",
   };
-}
-
-async function pesquisarPaginaPublica(
-  query: string,
-): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
-  return hidratarPaginaPublica(await buscarPaginaPublicaMercadoLivre(query));
-}
-
-async function pesquisarPaginaPublicaLista(
-  query: string,
-): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
-  return hidratarPaginaPublica(
-    await buscarEstrategiaPublicaMercadoLivre(query, "public-search-lista"),
-  );
-}
-
-async function pesquisarPaginaPublicaJm(
-  query: string,
-): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
-  return hidratarPaginaPublica(
-    await buscarEstrategiaPublicaMercadoLivre(query, "public-search-jm"),
-  );
 }
 
 function converterItemBusca(
@@ -1415,8 +1388,6 @@ function fontesPadraoMercadoLivre(): MercadoLivreAcquisitionSources {
     loadCatalogCandidate: carregarCandidato,
     searchItemsApi: pesquisarItens,
     searchPublicListings: pesquisarPaginaPublica,
-    searchPublicLista: pesquisarPaginaPublicaLista,
-    searchPublicJm: pesquisarPaginaPublicaJm,
   };
 }
 
@@ -1427,7 +1398,6 @@ function registrarFonte(
   usableCount: number,
   sourcesTried: string[],
   blockedSources: string[],
-  unusableSources: string[],
   rawTotal: { value: number },
 ): void {
   sourcesTried.push(source);
@@ -1435,10 +1405,6 @@ function registrarFonte(
 
   if (fetch.status === "BLOCKED" && !blockedSources.includes(source)) {
     blockedSources.push(source);
-  }
-
-  if (fetch.status === "UNUSABLE" && !unusableSources.includes(source)) {
-    unusableSources.push(source);
   }
 
   rastrearFonteMercadoLivre({
@@ -1472,7 +1438,6 @@ export async function buscarMercadoLivreComFontes(
 
   const sourcesTried: string[] = [];
   const blockedSources: string[] = [];
-  const unusableSources: string[] = [];
   const rawTotal = { value: 0 };
   const evaluations: CandidateEvaluation[] = [];
   let scanned = 0;
@@ -1494,7 +1459,6 @@ export async function buscarMercadoLivreComFontes(
       0,
       sourcesTried,
       blockedSources,
-      unusableSources,
       rawTotal,
     );
 
@@ -1512,7 +1476,6 @@ export async function buscarMercadoLivreComFontes(
         0,
         sourcesTried,
         blockedSources,
-        unusableSources,
         rawTotal,
       );
     }
@@ -1557,11 +1520,7 @@ export async function buscarMercadoLivreComFontes(
     });
 
     const coletarItens = async (
-      source:
-        | "items-api"
-        | "public-search"
-        | "public-search-lista"
-        | "public-search-jm",
+      source: "items-api" | "public-search",
       fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
     ) => {
       const before = evaluations.filter((item) => item.kept).length;
@@ -1581,7 +1540,6 @@ export async function buscarMercadoLivreComFontes(
         Math.max(0, after - before),
         sourcesTried,
         blockedSources,
-        unusableSources,
         rawTotal,
       );
     };
@@ -1594,29 +1552,10 @@ export async function buscarMercadoLivreComFontes(
     }
 
     if (evaluations.filter((item) => item.kept).length === 0) {
-      if (sources.searchPublicLista || sources.searchPublicJm) {
-        if (sources.searchPublicLista) {
-          await coletarItens(
-            "public-search-lista",
-            await sources.searchPublicLista(query, searchLimit),
-          );
-        }
-
-        if (
-          evaluations.filter((item) => item.kept).length === 0 &&
-          sources.searchPublicJm
-        ) {
-          await coletarItens(
-            "public-search-jm",
-            await sources.searchPublicJm(query, searchLimit),
-          );
-        }
-      } else {
-        await coletarItens(
-          "public-search",
-          await sources.searchPublicListings(query, searchLimit),
-        );
-      }
+      await coletarItens(
+        "public-search",
+        await sources.searchPublicListings(query, searchLimit),
+      );
     }
 
     rastrearFiltrosMarketplace({
@@ -1661,7 +1600,6 @@ export async function buscarMercadoLivreComFontes(
       error: null,
       degraded: blockedSources.length > 0,
       blockedSources,
-      unusableSources,
       sourcesTried,
     };
   } catch (error) {
@@ -1686,7 +1624,6 @@ export async function buscarMercadoLivreComFontes(
       error: mensagem.slice(0, 1000),
       degraded: blockedSources.length > 0,
       blockedSources,
-      unusableSources,
       sourcesTried,
     };
   }

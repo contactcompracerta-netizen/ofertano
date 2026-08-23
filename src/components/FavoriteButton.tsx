@@ -1,22 +1,19 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
-
-import {
-  FAVORITES_EVENT,
-  alternarFavoritoDoProduto,
-  produtoEstaFavoritadoLocal,
-} from "@/services/favorites";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 type FavoriteButtonProps = {
   productId: string;
-  variant?: "icon" | "label" | "card";
+  variant?: "icon" | "label";
 };
 
 type IconProps = {
   className?: string;
   filled?: boolean;
 };
+
+const STORAGE_KEY = "ofertano:favorites";
 
 function HeartIcon({ className, filled = false }: IconProps) {
   return (
@@ -37,6 +34,44 @@ function HeartIcon({ className, filled = false }: IconProps) {
   );
 }
 
+function lerFavoritos(): string[] {
+  try {
+    const valor = window.localStorage.getItem(STORAGE_KEY);
+
+    if (!valor) {
+      return [];
+    }
+
+    const dados: unknown = JSON.parse(valor);
+
+    if (!Array.isArray(dados)) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        dados
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+    );
+  } catch {
+    return [];
+  }
+}
+
+function salvarFavoritos(ids: string[]) {
+  window.localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(Array.from(new Set(ids)))
+  );
+
+  window.dispatchEvent(
+    new Event("ofertano:favorites-changed")
+  );
+}
+
 export default function FavoriteButton({
   productId,
   variant = "icon",
@@ -45,61 +80,193 @@ export default function FavoriteButton({
   const [sincronizando, setSincronizando] = useState(false);
 
   useEffect(() => {
-    function atualizarEstado() {
-      setFavoritado(produtoEstaFavoritadoLocal(productId));
+    let ativo = true;
+
+    async function carregarEstado() {
+      const favoritosLocais = lerFavoritos();
+      const estaLocal = favoritosLocais.includes(productId);
+
+      if (ativo) {
+        setFavoritado(estaLocal);
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!ativo || !user) {
+        return;
+      }
+
+      if (estaLocal) {
+        const { error } = await supabase
+          .from("user_favorites")
+          .upsert(
+            {
+              user_id: user.id,
+              product_id: productId,
+            },
+            {
+              onConflict: "user_id,product_id",
+              ignoreDuplicates: true,
+            }
+          );
+
+        if (error) {
+          console.error(
+            "Erro ao sincronizar favorito local:",
+            error.message
+          );
+        }
+
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_favorites")
+        .select("product_id")
+        .eq("user_id", user.id)
+        .eq("product_id", productId)
+        .maybeSingle();
+
+      if (!ativo) {
+        return;
+      }
+
+      if (error) {
+        console.error(
+          "Erro ao consultar favorito:",
+          error.message
+        );
+        return;
+      }
+
+      if (data?.product_id) {
+        salvarFavoritos([
+          ...favoritosLocais,
+          productId,
+        ]);
+        setFavoritado(true);
+      }
     }
 
-    atualizarEstado();
+    void carregarEstado();
 
-    window.addEventListener(FAVORITES_EVENT, atualizarEstado);
-    window.addEventListener("storage", atualizarEstado);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (
+          event !== "SIGNED_IN" ||
+          !session?.user
+        ) {
+          return;
+        }
+
+        const favoritosLocais = lerFavoritos();
+
+        if (!favoritosLocais.includes(productId)) {
+          return;
+        }
+
+        void supabase
+          .from("user_favorites")
+          .upsert(
+            {
+              user_id: session.user.id,
+              product_id: productId,
+            },
+            {
+              onConflict: "user_id,product_id",
+              ignoreDuplicates: true,
+            }
+          );
+      }
+    );
 
     return () => {
-      window.removeEventListener(FAVORITES_EVENT, atualizarEstado);
-      window.removeEventListener("storage", atualizarEstado);
+      ativo = false;
+      subscription.unsubscribe();
     };
   }, [productId]);
 
-  async function alternarFavorito(
-    event?: MouseEvent<HTMLButtonElement>
-  ) {
-    event?.preventDefault();
-    event?.stopPropagation();
-
+  async function alternarFavorito() {
     if (sincronizando) {
       return;
     }
 
-    const estadoAnterior = favoritado;
-    const proximoEstado = !estadoAnterior;
+    const favoritos = lerFavoritos();
+    const novoEstado = !favoritado;
 
-    setFavoritado(proximoEstado);
-    setSincronizando(true);
+    const proximos = novoEstado
+      ? Array.from(
+          new Set([...favoritos, productId])
+        )
+      : favoritos.filter(
+          (id) => id !== productId
+        );
+
+    salvarFavoritos(proximos);
+    setFavoritado(novoEstado);
 
     try {
-      const favoritadoAgora =
-        await alternarFavoritoDoProduto(productId);
-      setFavoritado(favoritadoAgora);
-    } catch (error) {
-      console.error("Erro ao atualizar favorito:", error);
-      setFavoritado(produtoEstaFavoritadoLocal(productId));
+      setSincronizando(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return;
+      }
+
+      if (novoEstado) {
+        const { error } = await supabase
+          .from("user_favorites")
+          .upsert(
+            {
+              user_id: user.id,
+              product_id: productId,
+            },
+            {
+              onConflict: "user_id,product_id",
+              ignoreDuplicates: true,
+            }
+          );
+
+        if (error) {
+          console.error(
+            "Erro ao salvar favorito na conta:",
+            error.message
+          );
+        }
+      } else {
+        const { error } = await supabase
+          .from("user_favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("product_id", productId);
+
+        if (error) {
+          console.error(
+            "Erro ao remover favorito da conta:",
+            error.message
+          );
+        }
+      }
     } finally {
       setSincronizando(false);
     }
   }
 
-  const rotulo = favoritado
-    ? "Remover dos favoritos"
-    : "Adicionar aos favoritos";
-
   if (variant === "label") {
     return (
       <button
         type="button"
-        onClick={(event) => void alternarFavorito(event)}
-        onMouseDown={(event) => event.stopPropagation()}
+        onClick={() =>
+          void alternarFavorito()
+        }
         disabled={sincronizando}
-        aria-label={rotulo}
         aria-pressed={favoritado}
         className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition disabled:cursor-wait disabled:opacity-70 ${
           favoritado
@@ -107,30 +274,13 @@ export default function FavoriteButton({
             : "border-slate-200 bg-white text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
         }`}
       >
-        <HeartIcon className="h-5 w-5" filled={favoritado} />
-        {favoritado ? "Favoritado" : "Favoritar"}
-      </button>
-    );
-  }
-
-  if (variant === "card") {
-    return (
-      <button
-        type="button"
-        onClick={(event) => void alternarFavorito(event)}
-        onMouseDown={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        disabled={sincronizando}
-        aria-label={rotulo}
-        aria-pressed={favoritado}
-        title={rotulo}
-        className={`flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur-sm transition active:scale-[0.96] disabled:cursor-wait sm:h-9 sm:w-9 ${
-          favoritado
-            ? "border-rose-200 bg-white text-rose-600"
-            : "border-white/80 bg-white/90 text-slate-500 hover:border-rose-200 hover:text-rose-600"
-        }`}
-      >
-        <HeartIcon className="h-4 w-4" filled={favoritado} />
+        <HeartIcon
+          className="h-5 w-5"
+          filled={favoritado}
+        />
+        {favoritado
+          ? "Favoritado"
+          : "Favoritar"}
       </button>
     );
   }
@@ -138,19 +288,31 @@ export default function FavoriteButton({
   return (
     <button
       type="button"
-      onClick={(event) => void alternarFavorito(event)}
-      onMouseDown={(event) => event.stopPropagation()}
+      onClick={() =>
+        void alternarFavorito()
+      }
       disabled={sincronizando}
-      aria-label={rotulo}
+      aria-label={
+        favoritado
+          ? "Remover dos favoritos"
+          : "Adicionar aos favoritos"
+      }
       aria-pressed={favoritado}
-      title={rotulo}
-      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-md transition active:scale-[0.98] disabled:cursor-wait ${
+      title={
+        favoritado
+          ? "Remover dos favoritos"
+          : "Adicionar aos favoritos"
+      }
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-md transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-70 ${
         favoritado
           ? "bg-rose-600 text-white hover:bg-rose-700"
           : "bg-rose-50 text-rose-600 hover:bg-rose-100"
       }`}
     >
-      <HeartIcon className="h-5 w-5" filled={favoritado} />
+      <HeartIcon
+        className="h-5 w-5"
+        filled={favoritado}
+      />
     </button>
   );
 }

@@ -59,14 +59,6 @@ export function rastrearFonteMercadoLivre(input: {
   usableCount: number;
   reason?: string;
 }): void {
-  traceMultiloja("marketplace-raw", {
-    marketplace: "MERCADO_LIVRE",
-    query: input.query,
-    rawCount: input.rawCount,
-    source: input.source,
-    status: input.status,
-  });
-
   traceMultiloja("ml-source", {
     source: input.source,
     query: input.query,

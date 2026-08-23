@@ -1,8 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import FavoriteButton from "@/components/FavoriteButton";
-
 type ProductCardProps = {
   id: string;
   name: string;
@@ -26,27 +24,23 @@ export default function ProductCard({
 }: ProductCardProps) {
   return (
     <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+      <Link href={`/produto/${id}`} className="block">
         <div className="relative aspect-square w-full bg-gray-50">
-          <Link href={`/produto/${id}`} className="block h-full w-full">
-            <Image
-              src={image}
-              alt={name}
-              fill
-              className="object-contain p-4"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-            />
+          <Image
+            src={image}
+            alt={name}
+            fill
+            className="object-contain p-4"
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          />
 
-            {discount && (
-              <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-sm font-bold text-white">
-                {discount}
-              </span>
-            )}
-          </Link>
-
-          <div className="absolute right-3 top-3 z-30">
-            <FavoriteButton productId={id} variant="card" />
-          </div>
+          {discount && (
+            <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-sm font-bold text-white">
+              {discount}
+            </span>
+          )}
         </div>
+      </Link>
 
       <div className="p-5">
         <p className="mb-2 text-sm font-medium text-gray-500">

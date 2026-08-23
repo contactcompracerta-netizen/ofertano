@@ -6,7 +6,6 @@ import {
 } from "./mercadolivre";
 import type { DiscoveryQuery } from "./core/types";
 import {
-  avaliarStatusDaPaginaPublica,
   classificarErroFonteMercadoLivre,
   extrairItensDaPaginaDeBuscaPublica,
 } from "./mercadolivrePublicSearch";
@@ -104,77 +103,6 @@ const blocked = classificarErroFonteMercadoLivre(
 );
 assert.equal(blocked.status, "BLOCKED");
 assert.equal(blocked.httpStatus, 403);
-
-const jsonLdHtml = `
-<html>
-  <head>
-    <title>Headphone MarcaX | Mercado Livre</title>
-    <script type="application/ld+json">
-      {"@type":"ItemList","itemListElement":[
-        {"@type":"ListItem","item":{"@type":"Product","name":"Headphone MarcaX Wireless Rosa","sku":"MLB4224584697","url":"https://produto.mercadolivre.com.br/MLB-4224584697-headphone","offers":{"@type":"Offer","price":"149.90","availability":"https://schema.org/InStock"}}}
-      ]}
-    </script>
-  </head>
-  <body class="ui-search-page"></body>
-</html>
-`;
-
-const jsonLdItems = extrairItensDaPaginaDeBuscaPublica(jsonLdHtml);
-assert.ok(
-  jsonLdItems.some((entry) => entry.id === "MLB4224584697"),
-  "TESTE 9: JSON-LD da pagina publica deve expor o anuncio.",
-);
-assert.equal(
-  jsonLdItems.find((entry) => entry.id === "MLB4224584697")?.title,
-  "Headphone MarcaX Wireless Rosa",
-);
-assert.equal(
-  avaliarStatusDaPaginaPublica(jsonLdHtml, 200, {
-    requestedUrl: "https://lista.mercadolivre.com.br/headphone",
-    finalUrl: "https://lista.mercadolivre.com.br/headphone",
-    contentType: "text/html",
-  }),
-  "SUCCESS",
-);
-
-const challengeHtml = `
-<html>
-  <head><title>Just a moment</title></head>
-  <body>
-    <div id="challenge-running">Please wait</div>
-    <script src="https://challenges.cloudflare.com/turnstile"></script>
-  </body>
-</html>
-`;
-const challengeStatus = avaliarStatusDaPaginaPublica(challengeHtml, 200, {
-  requestedUrl: "https://lista.mercadolivre.com.br/headphone",
-  finalUrl: "https://lista.mercadolivre.com.br/headphone",
-  contentType: "text/html",
-});
-assert.ok(
-  challengeStatus === "BLOCKED" || challengeStatus === "UNUSABLE",
-  "TESTE 10: HTTP 200 de desafio nao pode ser EMPTY.",
-);
-assert.notEqual(challengeStatus, "EMPTY");
-
-const emptyHtml = `
-<html>
-  <head><title>Headphone | Mercado Livre</title></head>
-  <body class="ui-search-page">
-    <h2>Nao encontramos resultados para sua busca</h2>
-    <div class="ui-search-layout"></div>
-  </body>
-</html>
-`;
-assert.equal(
-  avaliarStatusDaPaginaPublica(emptyHtml, 200, {
-    requestedUrl: "https://lista.mercadolivre.com.br/headphone-xyz",
-    finalUrl: "https://lista.mercadolivre.com.br/headphone-xyz",
-    contentType: "text/html",
-  }),
-  "EMPTY",
-  "TESTE 11: pagina valida sem resultados e EMPTY verdadeiro.",
-);
 
 const listingItem = item({
   id: "MLB111222333",

@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import FavoriteButton from "@/components/FavoriteButton";
-
 type ProductCardProps = {
   produto: {
     id: string;
@@ -98,7 +96,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
         </div>
 
         {estoqueBaixo && (
-          <span className="absolute bottom-1.5 right-1.5 z-10 hidden rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-orange-700 sm:inline-flex">
+          <span className="absolute right-1.5 top-1.5 z-10 hidden rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-orange-700 sm:inline-flex">
             Últimas unidades
           </span>
         )}
@@ -110,10 +108,6 @@ export default function ProductCard({ produto }: ProductCardProps) {
           className="h-full w-full object-contain transition duration-500 group-hover:scale-[1.04]"
         />
       </Link>
-
-      <div className="absolute right-1.5 top-1.5 z-30 sm:right-3 sm:top-3">
-        <FavoriteButton productId={produto.id} variant="card" />
-      </div>
 
       <div className="flex flex-1 flex-col border-t border-slate-100 p-2.5 sm:p-4">
         <div className="flex items-center justify-between gap-2">

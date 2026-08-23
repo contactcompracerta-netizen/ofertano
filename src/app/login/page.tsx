@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { garantirSincronizacaoDaSessao } from "@/services/favorites";
 
 type Mode = "login" | "signup";
 
@@ -90,7 +89,6 @@ export default function LoginPage() {
         }
 
         if (data.session) {
-          await garantirSincronizacaoDaSessao({ forcar: true });
           window.location.href = "/favoritos";
           return;
         }
@@ -114,7 +112,6 @@ export default function LoginPage() {
         return;
       }
 
-      await garantirSincronizacaoDaSessao({ forcar: true });
       window.location.href = "/favoritos";
     } catch {
       setErro("Não foi possível concluir a operação. Tente novamente.");

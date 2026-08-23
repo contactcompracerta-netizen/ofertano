@@ -67,14 +67,6 @@ import type {
     targetProductId?: string | null;
   };
   
-  export type MarketplaceSearchOutcome =
-    | "SEARCH_COMPLETED"
-    | "EMPTY_VALID"
-    | "BLOCKED"
-    | "UNUSABLE"
-    | "ERROR"
-    | "NOT_RUN";
-
   export type MarketplaceDiscoveryResult = {
     marketplace: DiscoveryMarketplace;
   
@@ -92,16 +84,7 @@ import type {
 
     blockedSources?: string[];
 
-    unusableSources?: string[];
-
     sourcesTried?: string[];
-
-    /*
-     * Estado estrutural da busca nesta loja.
-     * SEARCH_COMPLETED e EMPTY_VALID contam como pesquisa real.
-     * BLOCKED, UNUSABLE, ERROR e NOT_RUN nao contam.
-     */
-    searchOutcome?: MarketplaceSearchOutcome;
   };
   
   export type ProductDiscoveryResult = {

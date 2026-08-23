@@ -394,11 +394,11 @@ export async function searchCatalogOrDiscover(
   } catch (error) {
     console.error("[Search Multi Loja] Discovery falhou:", error);
 
-    if (existingMultiStore.length > 0) {
+    if (existing.length > 0) {
       return {
         query: search,
         source: "CATALOG",
-        products: existingMultiStore,
+        products: existing,
       };
     }
 
@@ -412,58 +412,53 @@ export async function searchCatalogOrDiscover(
   const ranked = rankDiscoveryCandidates(search, discovery.candidates);
   const toImport = pickCandidatesForImport(ranked);
   const offers = await importExactOffers(search, toImport);
-  const coverage = {
-    enabledMarketplaces: listarDiscoveryAdaptersAtivos().map(
-      (adapter) => adapter.marketplace,
-    ),
-    results: discovery.results,
-  };
 
-  try {
-    const persisted = await persistPublicSearchCluster(
-      search,
-      offers,
-      existingMultiStore[0]?.id ?? existing[0]?.id ?? null,
-      coverage,
-    );
+  if (offers.length > 0) {
+    try {
+        const persisted = await persistPublicSearchCluster(
+        search,
+        offers,
+        existingMultiStore[0]?.id ?? existing[0]?.id ?? null,
+      );
 
-    if (persisted) {
-      const publishedProduct = await prisma.product.findUnique({
-        where: { id: persisted.productId },
-        include: {
-          offers: {
-            where: {
-              active: true,
-              matchStatus: "EXACT",
-            },
-            select: {
-              marketplace: true,
+      if (persisted) {
+        const publishedProduct = await prisma.product.findUnique({
+          where: { id: persisted.productId },
+          include: {
+            offers: {
+              where: {
+                active: true,
+                matchStatus: "EXACT",
+              },
+              select: {
+                marketplace: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      if (publishedProduct?.active) {
-        return {
-          query: search,
-          source: existing.length > 0 ? "CATALOG" : "DISCOVERY",
-          products: [publishedProduct],
-          discovery,
-        };
+        if (publishedProduct?.active) {
+          return {
+            query: search,
+            source: existing.length > 0 ? "CATALOG" : "DISCOVERY",
+            products: [publishedProduct],
+            discovery,
+          };
+        }
       }
+    } catch (error) {
+      console.error(
+        "[Search Multi Loja] Falha ao persistir cluster EXACT:",
+        error,
+      );
     }
-  } catch (error) {
-    console.error(
-      "[Search Multi Loja] Falha ao persistir cluster EXACT:",
-      error,
-    );
   }
 
-  if (existingMultiStore.length > 0) {
+  if (existing.length > 0) {
     return {
       query: search,
       source: "CATALOG",
-      products: existingMultiStore,
+      products: existing,
       discovery,
     };
   }

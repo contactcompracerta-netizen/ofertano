@@ -93,14 +93,14 @@ export default function OffersSection({
           <p className="mx-auto mt-3 max-w-lg text-sm text-slate-600 sm:text-base">
             {possuiBusca
               ? `Não encontramos produtos relacionados a “${busca}”. Tente pesquisar usando outro termo.`
-              : "Ainda não há ofertas disponíveis. Explore nossas categorias e volte em breve."}
+              : "Importe o primeiro produto pelo painel administrativo para começar a exibir ofertas."}
           </p>
 
           <Link
-            href={possuiBusca ? "/" : "/categorias"}
+            href={possuiBusca ? "/" : "/admin"}
             className="mt-6 inline-flex rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
           >
-            {possuiBusca ? "Ver todas as ofertas" : "Explorar categorias"}
+            {possuiBusca ? "Ver todas as ofertas" : "Cadastrar produto"}
           </Link>
         </div>
       ) : (

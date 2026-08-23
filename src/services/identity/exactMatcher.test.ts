@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { avaliarCompatibilidadeExataEntreImports } from "./exactMatcher";
 import { pontuarEspecificidadeDaConsulta, criarConsultasGlobaisDeIdentidade, avaliarCompatibilidadeComConsulta, candidatoPodeSeguirNoDiscovery, tokensDistintivosDaConsulta } from "./queryMatcher";
 import { criarCanonicalKeyDaIdentidade, papelDaIdentidade, resolverIdentidadeProduto, codigosDeIdentidadeDoItemVendido } from "./resolver";
-import { classificarClasseProduto } from "./productClass";
 
 function listing(
   title: string,
@@ -619,106 +618,6 @@ assert.equal(otherEntity.compatible, false);
 assert.ok(
   otherEntity.conflicts.some((item) => item.startsWith("brand:")) ||
     otherEntity.reason.includes("distintivo"),
-);
-
-const classQuery = "Headphone MarcaR Wireless Rosa";
-const classConflict = avaliarCompatibilidadeComConsulta(
-  classQuery,
-  listing("Caixa de Som MarcaR Wireless Rosa", "MarcaR"),
-);
-assert.equal(classConflict.compatible, false, "TESTE 1: classe errada deve ser rejeitada.");
-assert.equal(classConflict.productClassCompatibility, "CONFLICT");
-assert.ok(
-  classConflict.conflicts.some((item) => item.startsWith("productClass:")),
-);
-
-const brandConflict = avaliarCompatibilidadeComConsulta(
-  classQuery,
-  listing(
-    "Headphone MarcaS Wireless Rosa compativel com MarcaR",
-    "MarcaS",
-  ),
-);
-assert.equal(brandConflict.compatible, false, "TESTE 2: marca resolvida diferente deve ser rejeitada.");
-assert.equal(brandConflict.brandCompatibility, "CONFLICT");
-assert.equal(brandConflict.queryBrand, "marcar");
-assert.equal(brandConflict.candidateBrand, "marcas");
-
-const classSynonym = avaliarCompatibilidadeComConsulta(
-  classQuery,
-  listing("Fone sem fio MarcaR Rosa", "MarcaR"),
-);
-assert.equal(classSynonym.compatible, true, "TESTE 3: sinonimo de classe + marca + atributos.");
-assert.equal(classSynonym.productClassCompatibility, "MATCH");
-assert.equal(classSynonym.brandCompatibility, "MATCH");
-assert.ok(classSynonym.attributeMatches.includes("color"));
-assert.ok(classSynonym.attributeMatches.includes("wireless"));
-
-const fullAttributeQuery =
-  "Headphone MarcaR Wireless Rosa Resistente a Agua";
-const fullMatch = avaliarCompatibilidadeComConsulta(
-  fullAttributeQuery,
-  listing("Headphone MarcaR Wireless Rosa Resistente a Agua", "MarcaR"),
-);
-const missingAttributes = avaliarCompatibilidadeComConsulta(
-  fullAttributeQuery,
-  listing("Headphone MarcaR", "MarcaR"),
-);
-assert.equal(
-  missingAttributes.compatible,
-  true,
-  "TESTE 4: atributos ausentes nao sao conflito.",
-);
-assert.equal(missingAttributes.attributeConflicts.length, 0);
-assert.ok(missingAttributes.attributeMissing.length > 0);
-assert.ok(
-  missingAttributes.score < fullMatch.score,
-  "TESTE 4: cobertura parcial nao pode ter a mesma confianca do titulo completo.",
-);
-
-const colorConflict = avaliarCompatibilidadeComConsulta(
-  "Headphone MarcaR Wireless Rosa",
-  listing("Headphone MarcaR Wireless Azul", "MarcaR"),
-);
-assert.equal(colorConflict.compatible, false, "TESTE 5: cor conflitante.");
-assert.ok(
-  colorConflict.attributeConflicts.some((item) => item.startsWith("color:")),
-);
-
-const scaleMain = resolverIdentidadeProduto(
-  listing("Balanca MarcaR Digital", "MarcaR"),
-);
-const headphoneMainRole = resolverIdentidadeProduto(
-  listing("Headphone MarcaR Wireless", "MarcaR"),
-);
-assert.equal(scaleMain.role, "MAIN", "TESTE 7: balanca tambem pode ser MAIN.");
-assert.equal(headphoneMainRole.role, "MAIN");
-assert.notEqual(
-  classificarClasseProduto("Headphone MarcaR"),
-  classificarClasseProduto("Balanca MarcaR"),
-);
-assert.equal(
-  avaliarCompatibilidadeComConsulta(
-    "Headphone MarcaR",
-    listing("Balanca MarcaR Digital", "MarcaR"),
-  ).compatible,
-  false,
-  "TESTE 7: MAIN nao unifica classes diferentes.",
-);
-
-const accessoryHost = avaliarCompatibilidadeComConsulta(
-  "Headphone MarcaR",
-  listing("Estojo MarcaS para Headphone MarcaR", "MarcaS"),
-);
-assert.equal(
-  accessoryHost.compatible,
-  false,
-  "TESTE 8: acessorio de outra marca nao passa so porque o hospedeiro cita a marca da consulta.",
-);
-assert.ok(
-  accessoryHost.brandCompatibility === "CONFLICT" ||
-    accessoryHost.roleCompatible === false ||
-    accessoryHost.productClassCompatibility === "CONFLICT",
 );
 
 console.log("identity exact matcher: todos os casos globais passaram");

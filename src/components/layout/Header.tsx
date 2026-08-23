@@ -44,6 +44,13 @@ export default function Header() {
             Contato
           </a>
 
+          <Link
+            href="/admin"
+            className="rounded-lg bg-green-600 px-5 py-2 font-bold text-white transition hover:bg-green-700"
+          >
+            Admin
+          </Link>
+
         </nav>
 
       </div>

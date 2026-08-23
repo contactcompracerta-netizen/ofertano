@@ -83,8 +83,6 @@ type ClearOpportunitiesResponse = {
   success: boolean;
   message?: string;
   error?: string;
-  deletedCount?: number;
-  preservedCount?: number;
   removed?: number;
   preserved?: number;
 };
@@ -268,11 +266,6 @@ export default function OpportunitiesPage() {
 
   const [clearingOpportunities, setClearingOpportunities] =
     useState(false);
-
-  const [
-    confirmingClearOpportunities,
-    setConfirmingClearOpportunities,
-  ] = useState(false);
 
   const [error, setError] = useState("");
   const [message, setMessage] =
@@ -673,10 +666,17 @@ export default function OpportunitiesPage() {
   }
 
   async function clearOpportunities() {
-    if (summary.total === 0 && items.length === 0) {
-      setConfirmingClearOpportunities(false);
+    if (items.length === 0) {
       setError("");
-      setMessage("Nenhuma oportunidade para limpar.");
+      setMessage("A lista de oportunidades já está vazia.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Tem certeza de que deseja limpar a lista de oportunidades? Produtos publicados, ofertas Multi Loja e a fila de importação não serão apagados.",
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -703,19 +703,14 @@ export default function OpportunitiesPage() {
         );
       }
 
-      const deletedCount =
-        data.deletedCount ?? data.removed ?? 0;
-      const preservedCount =
-        data.preservedCount ?? data.preserved ?? 0;
-
       setBatchLinks("");
-      setConfirmingClearOpportunities(false);
+      setAffiliateLinks({});
+      setItems([]);
+      setSummary(initialSummary);
 
       setMessage(
         data.message ||
-          (preservedCount > 0
-            ? `${deletedCount} oportunidade(s) removida(s). ${preservedCount} em processamento foram preservadas.`
-            : `${deletedCount} oportunidade(s) removida(s).`),
+          `${data.removed ?? 0} oportunidade(s) removida(s).`,
       );
 
       await loadOpportunities();
@@ -941,81 +936,36 @@ export default function OpportunitiesPage() {
             </p>
           </div>
 
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  void loadOpportunities()
-                }
-                disabled={
-                  loading || actionsLocked
-                }
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading
-                  ? "Atualizando..."
-                  : "Atualizar lista"}
-              </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                void loadOpportunities()
+              }
+              disabled={
+                loading || actionsLocked
+              }
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? "Atualizando..."
+                : "Atualizar lista"}
+            </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setError("");
-                  setMessage("");
-                  setConfirmingClearOpportunities(
-                    true,
-                  );
-                }}
-                disabled={
-                  loading || actionsLocked
-                }
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {clearingOpportunities
-                  ? "Limpando..."
-                  : "Limpar oportunidades"}
-              </button>
-            </div>
-
-            {confirmingClearOpportunities ? (
-              <div className="w-full max-w-md rounded-lg border border-slate-200 bg-slate-50 p-3 sm:min-w-[340px]">
-                <p className="text-sm font-semibold text-slate-900">
-                  Limpar {summary.total} oportunidade(s) do painel?
-                </p>
-                <p className="mt-1 text-sm leading-5 text-slate-600">
-                  Produtos publicados, ofertas e itens da
-                  fila não serão apagados. Oportunidades em
-                  processamento serão preservadas.
-                </p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void clearOpportunities()
-                    }
-                    disabled={clearingOpportunities}
-                    className="inline-flex h-10 flex-1 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {clearingOpportunities
-                      ? "Limpando..."
-                      : "Confirmar limpeza"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setConfirmingClearOpportunities(
-                        false,
-                      )
-                    }
-                    disabled={clearingOpportunities}
-                    className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                void clearOpportunities()
+              }
+              disabled={
+                loading || actionsLocked
+              }
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {clearingOpportunities
+                ? "Limpando..."
+                : "Limpar oportunidades"}
+            </button>
           </div>
         </div>
 
@@ -1436,13 +1386,14 @@ export default function OpportunitiesPage() {
         visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <h2 className="text-xl font-bold text-slate-900">
-              Nenhuma oportunidade encontrada
+              Lista de oportunidades limpa
             </h2>
 
             <p className="mt-2 text-slate-600">
-              {summary.total === 0
-                ? "Novas oportunidades aparecerão aqui quando forem descobertas."
-                : "Os produtos publicados saem automaticamente desta lista. Faça uma nova descoberta para buscar outros produtos."}
+              Os produtos publicados são removidos
+              automaticamente desta lista. Faça
+              uma nova descoberta para buscar
+              outros produtos.
             </p>
           </div>
         ) : null}
