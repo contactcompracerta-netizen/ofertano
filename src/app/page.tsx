@@ -50,6 +50,18 @@ export default async function HomePage({
           },
         },
 
+        include: {
+          offers: {
+            where: {
+              active: true,
+              matchStatus: "EXACT",
+            },
+            select: {
+              marketplace: true,
+            },
+          },
+        },
+
         orderBy: {
           updatedAt: "desc",
         },

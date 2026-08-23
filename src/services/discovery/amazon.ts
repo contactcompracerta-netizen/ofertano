@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Descoberta de produtos Amazon pela busca ao vivo da SerpApi,
  * com validaÃ§Ã£o de modelo exato, acessÃ³rios e disponibilidade.
  */
@@ -9,8 +9,11 @@ import type {
   MarketplaceDiscoveryResult,
 } from "./core/types";
 
-const ENDPOINT =
+const SERPAPI_ENDPOINT =
   "https://serpapi.com/search.json";
+
+const AMAZON_SEARCH_ENDPOINT =
+  "https://www.amazon.com.br/s";
 
 const MARKETPLACE = "AMAZON" as const;
 const MARKETPLACE_NAME = "Amazon" as const;
@@ -847,11 +850,373 @@ function criarCandidatos(
   );
 }
 
+
+function decodificarHtml(
+  value: string,
+): string {
+  const entidades: Record<string, string> = {
+    amp: "&",
+    quot: '"',
+    apos: "'",
+    lt: "<",
+    gt: ">",
+    nbsp: " ",
+  };
+
+  return value
+    .replace(
+      /&#(\d+);/g,
+      (_match, code: string) =>
+        String.fromCharCode(
+          Number(code),
+        ),
+    )
+    .replace(
+      /&#x([0-9a-f]+);/gi,
+      (_match, code: string) =>
+        String.fromCharCode(
+          Number.parseInt(
+            code,
+            16,
+          ),
+        ),
+    )
+    .replace(
+      /&([a-z]+);/gi,
+      (match, name: string) =>
+        entidades[
+          name.toLowerCase()
+        ] ?? match,
+    );
+}
+
+function extrairAtributoHtml(
+  tag: string,
+  atributo: string,
+): string | null {
+  const escaped = atributo.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+
+  const match = tag.match(
+    new RegExp(
+      `${escaped}\\s*=\\s*["']([^"']+)["']`,
+      "i",
+    ),
+  );
+
+  return match?.[1]
+    ? decodificarHtml(
+        match[1],
+      ).trim()
+    : null;
+}
+
+function extrairTextoHtml(
+  html: string,
+): string {
+  return decodificarHtml(
+    html
+      .replace(
+        /<script\b[\s\S]*?<\/script>/gi,
+        " ",
+      )
+      .replace(
+        /<style\b[\s\S]*?<\/style>/gi,
+        " ",
+      )
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extrairMarcaDoTitulo(
+  title: string,
+): string | undefined {
+  const tokens = new Set(
+    tokenizar(title),
+  );
+
+  const marca = Array.from(
+    MARCAS_CONHECIDAS,
+  ).find(
+    (candidate) =>
+      tokens.has(candidate),
+  );
+
+  if (!marca) {
+    return undefined;
+  }
+
+  return marca.charAt(0).toUpperCase() +
+    marca.slice(1);
+}
+
+function extrairPrecoAmazonDoBloco(
+  block: string,
+): number | null {
+  const priceBlock =
+    block.match(
+      /<span\b[^>]*class=["'][^"']*\ba-price\b[^"']*["'][^>]*>[\s\S]*?<\/span>\s*<\/span>/i,
+    )?.[0] ?? block;
+
+  const priceText =
+    priceBlock.match(
+      /R\$\s*[0-9.]+(?:,[0-9]{2})?/i,
+    )?.[0] ?? null;
+
+  return normalizarPreco(
+    priceText,
+  );
+}
+
+function extrairPrecoAnteriorAmazonDoBloco(
+  block: string,
+): number | null {
+  const oldPriceBlock =
+    block.match(
+      /<span\b[^>]*class=["'][^"']*\ba-text-price\b[^"']*["'][^>]*>[\s\S]*?<\/span>/i,
+    )?.[0] ?? "";
+
+  const oldPriceText =
+    oldPriceBlock.match(
+      /R\$\s*[0-9.]+(?:,[0-9]{2})?/i,
+    )?.[0] ?? null;
+
+  return normalizarPreco(
+    oldPriceText,
+  );
+}
+
+function extrairResultadosAmazonHtml(
+  html: string,
+): SerpApiOrganicResult[] {
+  const markers = Array.from(
+    html.matchAll(
+      /<div\b[^>]*data-component-type=["']s-search-result["'][^>]*>/gi,
+    ),
+  );
+
+  const results:
+    SerpApiOrganicResult[] = [];
+
+  for (
+    let index = 0;
+    index < markers.length;
+    index += 1
+  ) {
+    const marker = markers[index];
+    const start = marker.index ?? 0;
+    const end =
+      markers[index + 1]?.index ??
+      Math.min(
+        html.length,
+        start + 90_000,
+      );
+
+    const openingTag =
+      marker[0] ?? "";
+    const asin = normalizarAsin(
+      extrairAtributoHtml(
+        openingTag,
+        "data-asin",
+      ) ?? undefined,
+    );
+
+    if (!asin) {
+      continue;
+    }
+
+    const block = html.slice(
+      start,
+      end,
+    );
+
+    const h2 =
+      block.match(
+        /<h2\b[^>]*>([\s\S]*?)<\/h2>/i,
+      )?.[1] ?? "";
+
+    const title = extrairTextoHtml(
+      h2,
+    );
+
+    if (!title) {
+      continue;
+    }
+
+    const imageTag =
+      block.match(
+        /<img\b[^>]*class=["'][^"']*\bs-image\b[^"']*["'][^>]*>/i,
+      )?.[0] ?? "";
+
+    const thumbnail =
+      extrairAtributoHtml(
+        imageTag,
+        "src",
+      ) ?? undefined;
+
+    const price =
+      extrairPrecoAmazonDoBloco(
+        block,
+      );
+
+    if (
+      price === null ||
+      !thumbnail
+    ) {
+      continue;
+    }
+
+    const oldPrice =
+      extrairPrecoAnteriorAmazonDoBloco(
+        block,
+      );
+
+    results.push({
+      asin,
+      title,
+      thumbnail,
+      brand:
+        extrairMarcaDoTitulo(
+          title,
+        ),
+      extracted_price: price,
+      extracted_old_price:
+        oldPrice !== null &&
+        oldPrice > price
+          ? oldPrice
+          : undefined,
+      prime:
+        /a-icon-prime|s-prime/i.test(
+          block,
+        ),
+      stock: "Disponível",
+      sponsored:
+        /patrocinado|sponsored/i.test(
+          extrairTextoHtml(
+            block.slice(0, 5_000),
+          ),
+        ),
+    });
+  }
+
+  return results;
+}
+
+async function consultarAmazonDireta(
+  query: string,
+): Promise<SerpApiOrganicResult[]> {
+  const url = new URL(
+    AMAZON_SEARCH_ENDPOINT,
+  );
+
+  url.searchParams.set(
+    "k",
+    query,
+  );
+
+  url.searchParams.set(
+    "ref",
+    "nb_sb_noss",
+  );
+
+  const tag =
+    process.env.AMAZON_ASSOCIATE_TAG
+      ?.trim();
+
+  if (tag) {
+    url.searchParams.set(
+      "tag",
+      tag,
+    );
+  }
+
+  const controller =
+    new AbortController();
+
+  const timeout = setTimeout(
+    () => controller.abort(),
+    18_000,
+  );
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language":
+          "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer:
+          "https://www.amazon.com.br/",
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      },
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+
+    const html =
+      await response.text();
+
+    if (!response.ok) {
+      throw new Error(
+        `Amazon busca direta respondeu HTTP ${response.status}.`,
+      );
+    }
+
+    const normalizedHtml =
+      normalizarTexto(
+        html.slice(0, 250_000),
+      );
+
+    if (
+      normalizedHtml.includes(
+        "digite os caracteres",
+      ) ||
+      normalizedHtml.includes(
+        "enter the characters you see below",
+      ) ||
+      normalizedHtml.includes(
+        "api services support amazon com",
+      )
+    ) {
+      throw new Error(
+        "Amazon bloqueou temporariamente a busca HTML automatizada.",
+      );
+    }
+
+    return extrairResultadosAmazonHtml(
+      html,
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === "AbortError"
+    ) {
+      throw new Error(
+        "A busca direta da Amazon ultrapassou 18 segundos.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function consultarSerpApi(
   apiKey: string,
   query: string,
 ): Promise<SerpApiOrganicResult[]> {
-  const url = new URL(ENDPOINT);
+  const url = new URL(SERPAPI_ENDPOINT);
 
   url.searchParams.set(
     "engine",
@@ -993,6 +1358,76 @@ export async function buscarAmazon(
     };
   }
 
+  const limit = normalizarLimite(
+    request.limit,
+  );
+
+  let directResults:
+    SerpApiOrganicResult[] = [];
+  let directError: string | null = null;
+
+  /*
+   * Fonte primária: a própria página pública de busca da Amazon.
+   *
+   * Assim a Amazon não fica dependente da cota da SerpApi.
+   * A SerpApi permanece somente como fallback quando a Amazon
+   * bloquear a busca HTML ou não devolver candidatos válidos.
+   */
+  try {
+    directResults =
+      await consultarAmazonDireta(
+        query,
+      );
+
+    const directCandidates =
+      criarCandidatos(
+        directResults,
+        query,
+        limit,
+      );
+
+    console.log(
+      "[Amazon Discovery] Busca direta:",
+      JSON.stringify({
+        query,
+        scanned:
+          directResults.length,
+        candidates:
+          directCandidates.length,
+        asins:
+          directCandidates.map(
+            (candidate) =>
+              candidate.externalId,
+          ),
+      }),
+    );
+
+    if (
+      directCandidates.length > 0
+    ) {
+      return {
+        marketplace: MARKETPLACE,
+        query,
+        success: true,
+        candidates:
+          directCandidates,
+        scanned:
+          directResults.length,
+        error: null,
+      };
+    }
+  } catch (error) {
+    directError =
+      error instanceof Error
+        ? error.message
+        : "Erro desconhecido na busca direta da Amazon.";
+
+    console.warn(
+      "[Amazon Discovery] Busca direta indisponível:",
+      directError,
+    );
+  }
+
   const apiKey =
     process.env.SERPAPI_API_KEY
       ?.trim();
@@ -1001,27 +1436,45 @@ export async function buscarAmazon(
     return {
       marketplace: MARKETPLACE,
       query,
-      success: false,
+      success:
+        directError === null,
       candidates: [],
-      scanned: 0,
+      scanned:
+        directResults.length,
       error:
-        "A variÃ¡vel SERPAPI_API_KEY nÃ£o estÃ¡ configurada.",
+        directError ??
+        "A busca direta da Amazon terminou sem candidatos compatíveis e a SerpApi não está configurada como fallback.",
     };
   }
 
   try {
-    const results =
+    const serpResults =
       await consultarSerpApi(
         apiKey,
         query,
       );
 
-    const candidates = criarCandidatos(
-      results,
-      query,
-      normalizarLimite(
-        request.limit,
-      ),
+    const candidates =
+      criarCandidatos(
+        serpResults,
+        query,
+        limit,
+      );
+
+    console.log(
+      "[Amazon Discovery] Fallback SerpApi:",
+      JSON.stringify({
+        query,
+        scanned:
+          serpResults.length,
+        candidates:
+          candidates.length,
+        asins:
+          candidates.map(
+            (candidate) =>
+              candidate.externalId,
+          ),
+      }),
     );
 
     return {
@@ -1029,30 +1482,41 @@ export async function buscarAmazon(
       query,
       success: true,
       candidates,
-      scanned: results.length,
+      scanned:
+        directResults.length +
+        serpResults.length,
       error:
         candidates.length > 0
           ? null
-          : "A busca ao vivo terminou, mas nÃ£o encontrou ofertas Amazon com ASIN, preÃ§o, imagem e disponibilidade confirmados.",
+          : directError ??
+            "As fontes Amazon terminaram, mas não encontraram ofertas com ASIN, preço, imagem e identidade compatíveis.",
     };
   } catch (error) {
-    console.error(
-      "Erro na descoberta ao vivo da Amazon:",
-      error,
-    );
-
-    const message =
+    const serpError =
       error instanceof Error
         ? error.message
         : "Erro desconhecido na descoberta da Amazon.";
 
+    console.warn(
+      "[Amazon Discovery] Fallback SerpApi indisponível:",
+      serpError,
+    );
+
     return {
       marketplace: MARKETPLACE,
       query,
-      success: false,
+      success:
+        directError === null,
       candidates: [],
-      scanned: 0,
-      error: message.slice(0, 1000),
+      scanned:
+        directResults.length,
+      error: [
+        directError,
+        serpError,
+      ]
+        .filter(Boolean)
+        .join(" | ")
+        .slice(0, 1000),
     };
   }
 }

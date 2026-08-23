@@ -3,6 +3,8 @@ import type {
 } from "@/services/importers/core/types";
 
 import {
+  ehCodigoSkuEspecifico,
+  normalizarCodigoIdentidade,
   normalizarTextoIdentidade,
   resolverIdentidadeProduto,
 } from "./resolver";
@@ -25,16 +27,27 @@ export type ExactMatchResult = {
     | null;
 };
 
-const VARIANT_KEYS: IdentityVariantKey[] = [
+const HARD_VARIANT_KEYS: IdentityVariantKey[] = [
   "voltage",
   "storage",
   "ram",
   "network",
-  "color",
   "size",
   "capacity",
   "kitQuantity",
 ];
+
+const ASYMMETRIC_VARIANT_KEYS: IdentityVariantKey[] = [
+  "condition",
+  "bundle",
+];
+
+/*
+ * Cor e uma variante de apresentacao, nao de identidade-base.
+ * Quando o cliente NAO pede uma cor, anuncios do mesmo modelo em cores
+ * diferentes podem compartilhar o mesmo Product e competir por preco.
+ * Se a consulta explicitar uma cor, queryMatcher continua exigindo-a.
+ */
 
 const FURNITURE_GENERIC_TOKENS = new Set([
   "armario",
@@ -175,11 +188,64 @@ function modeloEstruturado(
   return identity.mpn ?? identity.modelNumber;
 }
 
+function conflitoDeSubmodelo(
+  first: ProductIdentity,
+  second: ProductIdentity,
+): string | null {
+  const firstCodes = Array.from(new Set(first.searchCodes));
+  const secondCodes = Array.from(new Set(second.searchCodes));
+  const secondSet = new Set(secondCodes);
+
+  const commonBases = firstCodes
+    .filter((code) => secondSet.has(code))
+    .sort((a, b) => b.length - a.length);
+
+  for (const base of commonBases) {
+    const firstExtensions = firstCodes.filter(
+      (code) =>
+        code !== base &&
+        code.startsWith(base) &&
+        code.length > base.length,
+    );
+    const secondExtensions = secondCodes.filter(
+      (code) =>
+        code !== base &&
+        code.startsWith(base) &&
+        code.length > base.length,
+    );
+
+    if (
+      firstExtensions.length === 0 &&
+      secondExtensions.length === 0
+    ) {
+      continue;
+    }
+
+    if (
+      firstExtensions.length === 0 ||
+      secondExtensions.length === 0
+    ) {
+      return `Submodelo insuficiente para confirmar ${base}: ${firstExtensions.join("/") || "nao informado"} x ${secondExtensions.join("/") || "nao informado"}.`;
+    }
+
+    const secondExtensionSet = new Set(secondExtensions);
+    const commonExtension = firstExtensions.find((code) =>
+      secondExtensionSet.has(code),
+    );
+
+    if (!commonExtension) {
+      return `Submodelo diferente para ${base}: ${firstExtensions.join("/")} x ${secondExtensions.join("/")}.`;
+    }
+  }
+
+  return null;
+}
+
 function conflitoDeVariantes(
   first: ProductIdentity,
   second: ProductIdentity,
 ): string | null {
-  for (const key of VARIANT_KEYS) {
+  for (const key of HARD_VARIANT_KEYS) {
     const firstValue = first.variants[key];
     const secondValue = second.variants[key];
 
@@ -192,8 +258,76 @@ function conflitoDeVariantes(
     }
   }
 
+  for (const key of ASYMMETRIC_VARIANT_KEYS) {
+    const firstValue = first.variants[key];
+    const secondValue = second.variants[key];
+
+    if (firstValue && secondValue && firstValue !== secondValue) {
+      return `Variante ${key} diferente: ${firstValue} x ${secondValue}.`;
+    }
+
+    if (Boolean(firstValue) !== Boolean(secondValue)) {
+      return `Variante ${key} incompativel: ${firstValue ?? "padrao"} x ${secondValue ?? "padrao"}.`;
+    }
+  }
+
   return null;
 }
+
+function skusEspecificos(
+  identity: ProductIdentity,
+): string[] {
+  return Array.from(
+    new Set(
+      identity.searchCodes
+        .map((code) => normalizarCodigoIdentidade(code))
+        .filter((code): code is string => ehCodigoSkuEspecifico(code)),
+    ),
+  ).sort((first, second) => second.length - first.length);
+}
+
+function skusEspecificosCompativeis(
+  first: string,
+  second: string,
+): boolean {
+  return (
+    first === second ||
+    first.startsWith(second) ||
+    second.startsWith(first)
+  );
+}
+
+function conflitoDeSkuEspecifico(
+  first: ProductIdentity,
+  second: ProductIdentity,
+): string | null {
+  const firstSkus = skusEspecificos(first);
+  const secondSkus = skusEspecificos(second);
+
+  if (firstSkus.length === 0 && secondSkus.length === 0) {
+    return null;
+  }
+
+  if (firstSkus.length > 0 && secondSkus.length > 0) {
+    const compatible = firstSkus.some((firstSku) =>
+      secondSkus.some((secondSku) =>
+        skusEspecificosCompativeis(firstSku, secondSku),
+      ),
+    );
+
+    if (!compatible) {
+      return `SKU especifico diferente: ${firstSkus[0]} x ${secondSkus[0]}.`;
+    }
+
+    return null;
+  }
+
+  const only = firstSkus[0] ?? secondSkus[0]!;
+
+  return `SKU especifico ${only} nao confirmado no outro anuncio.`;
+}
+
+
 
 function tokensFortes(
   identity: ProductIdentity,
@@ -493,6 +627,29 @@ export function avaliarIdentidadesExatas(
     return reject(conflictingVariant);
   }
 
+  /*
+   * Ausencia de evidencia nao e conflito. Marketplaces diferentes quase
+   * nunca expõem a mesma quantidade de atributos. Se uma loja informa
+   * voltagem/RAM/capacidade e outra omite, o matcher nao deve fragmentar
+   * automaticamente o mesmo modelo. Divergencia explicita entre valores
+   * continua sendo bloqueada por conflitoDeVariantes acima.
+   */
+
+  const submodelConflict = conflitoDeSubmodelo(
+    first,
+    second,
+  );
+
+  if (submodelConflict) {
+    return reject(submodelConflict);
+  }
+
+  const skuConflict = conflitoDeSkuEspecifico(first, second);
+
+  if (skuConflict) {
+    return reject(skuConflict);
+  }
+
   const commonModel = codigoModeloEmComum(first, second);
   const firstStructuredModel = modeloEstruturado(first);
   const secondStructuredModel = modeloEstruturado(second);
@@ -520,11 +677,30 @@ export function avaliarIdentidadesExatas(
     return footwearResult;
   }
 
-  if (commonModel && first.brand && second.brand) {
-    return exact(
-      "MODEL",
-      `Marca e modelo/codigo ${commonModel} coincidem sem variante conflitante.`,
+  if (commonModel) {
+    const marcasIguais = Boolean(
+      first.brand &&
+      second.brand &&
+      first.brand === second.brand,
     );
+
+    const marcaConhecida = first.brand ?? second.brand;
+    const identidadeSemMarca = first.brand ? second : first;
+
+    const marcaConfirmadaNoTitulo = Boolean(
+      marcaConhecida &&
+      !identidadeSemMarca.brand &&
+      ` ${identidadeSemMarca.normalizedTitle} `.includes(
+        ` ${normalizarTextoIdentidade(marcaConhecida)} `,
+      ),
+    );
+
+    if (marcasIguais || marcaConfirmadaNoTitulo) {
+      return exact(
+        "MODEL",
+        `Modelo/codigo ${commonModel} e marca compativeis sem variante conflitante.`,
+      );
+    }
   }
 
   if (

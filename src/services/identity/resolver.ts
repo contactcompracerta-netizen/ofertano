@@ -18,7 +18,9 @@ export type IdentityVariantKey =
   | "color"
   | "size"
   | "capacity"
-  | "kitQuantity";
+  | "kitQuantity"
+  | "condition"
+  | "bundle";
 
 export type ProductKind =
   | "ACCESSORY"
@@ -142,6 +144,12 @@ const ACCESSORY_PATTERNS = [
   /\bpelicula\s+para\b/,
   /\bpeca(?:s)?\s+de\s+reposicao\b/,
   /\bkit\s+de\s+reposicao\b/,
+  /\brefil(?:s)?\b/,
+  /\bmop(?:s)?\s+para\b/,
+  /\bpano(?:s)?\s+para\b/,
+  /\bfiltro(?:s)?\s+para\b/,
+  /\bescova(?:s)?\s+para\b/,
+  /\bacessorio(?:s)?\s+para\b/,
   /\badaptador\s+para\b/,
   /\bsuporte\s+para\b/,
   /\bpulseira\s+para\b/,
@@ -188,10 +196,17 @@ const TECHNICAL_MODEL_PREFIXES = [
   "NVME",
 ];
 
+export function canonizarHifensModelo(value: string): string {
+  return value.replace(
+    /[\u00AD\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2043\uFE58\uFE63\uFF0D]/g,
+    "-",
+  );
+}
+
 export function normalizarTextoIdentidade(
   value: string | null | undefined,
 ): string {
-  return (value ?? "")
+  return canonizarHifensModelo(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -216,6 +231,78 @@ export function normalizarCodigoIdentidade(
     .trim();
 
   return normalized || null;
+}
+
+/*
+ * Codigo de linha/familia (V15, A55, G75) nao e o mesmo que SKU.
+ * Um SKU especifico mistura letras e numeros com comprimento suficiente
+ * para identificar a variante, nao so a familia comercial.
+ */
+export function ehCodigoSkuEspecifico(
+  value: string | null | undefined,
+): boolean {
+  const code = normalizarCodigoIdentidade(value);
+
+  if (!code || !/[A-Z]/.test(code) || !/\d/.test(code)) {
+    return false;
+  }
+
+  return code.length >= 8;
+}
+
+export function codigoModeloMaisEspecificoQue(
+  candidate: string,
+  base: string,
+): boolean {
+  const specific = normalizarCodigoIdentidade(candidate);
+  const family = normalizarCodigoIdentidade(base);
+
+  if (!specific || !family || specific === family) {
+    return false;
+  }
+
+  if (specific.startsWith(family) && specific.length > family.length) {
+    return true;
+  }
+
+  return (
+    family.length >= 3 &&
+    specific.length >= family.length + 3 &&
+    specific.includes(family)
+  );
+}
+
+export function selecionarCodigosModeloMaisEspecificos(
+  codes: string[],
+): string[] {
+  const normalized = Array.from(
+    new Set(
+      codes
+        .map((code) => normalizarCodigoIdentidade(code))
+        .filter((code): code is string => Boolean(code)),
+    ),
+  );
+
+  return normalized.filter(
+    (code) =>
+      !normalized.some((other) =>
+        codigoModeloMaisEspecificoQue(other, code),
+      ),
+  );
+}
+
+export function extrairGtinDaConsulta(
+  query: string,
+): string | null {
+  const matches = query.match(/\b(\d{8,14})\b/g) ?? [];
+
+  for (const match of matches) {
+    if (match.length >= 8 && match.length <= 14) {
+      return match;
+    }
+  }
+
+  return null;
 }
 
 function normalizarChaveAtributo(
@@ -401,6 +488,110 @@ function reconciliarCapacidadeDigital(
   }
 
   return fromStructured ?? fromTitle;
+}
+
+const BUNDLE_PRODUCT_CLASSES: Array<[string, RegExp]> = [
+  ["smartphone", /\b(?:smartphone|celular|iphone)\b/i],
+  ["smartwatch", /\b(?:smartwatch|smart watch|relogio inteligente|galaxy watch|apple watch)\b/i],
+  ["headphone", /\b(?:fone|headphone|headset|earbuds?|auricular)\b/i],
+  ["charger", /\b(?:carregador|charger)\b/i],
+  ["case", /\b(?:capa|case|estojo)\b/i],
+  ["screen-protector", /\b(?:pelicula|protetor de tela)\b/i],
+  ["keyboard", /\b(?:teclado|keyboard)\b/i],
+  ["mouse", /\b(?:mouse)\b/i],
+  ["controller", /\b(?:controle|controlador|gamepad|joystick)\b/i],
+  ["speaker", /\b(?:caixa de som|speaker)\b/i],
+  ["microphone", /\b(?:microfone|microphone)\b/i],
+  ["bag", /\b(?:bolsa|mochila|case de transporte)\b/i],
+  ["stand", /\b(?:suporte|base|stand)\b/i],
+];
+
+function classesProdutoNoTrecho(
+  value: string,
+): string[] {
+  const normalized = normalizarTextoIdentidade(value);
+
+  return BUNDLE_PRODUCT_CLASSES
+    .filter(([, pattern]) => pattern.test(normalized))
+    .map(([name]) => name);
+}
+
+function extrairBundleSignature(
+  title: string,
+): string | null {
+  const normalized = normalizarTextoIdentidade(title);
+  const detected = new Set<string>();
+
+  /*
+   * Marcadores comerciais de bundle. A regra olha para classes de produto,
+   * nao para modelos concretos. Assim A55 + smartwatch, notebook + mouse,
+   * console + controle etc. seguem a mesma politica.
+   */
+  const rawSegments = title.split(/\s*\+\s*/g);
+
+  if (rawSegments.length > 1) {
+    for (const segment of rawSegments.slice(1)) {
+      for (const item of classesProdutoNoTrecho(segment)) {
+        detected.add(item);
+      }
+    }
+  }
+
+  const companionPattern =
+    /\b(?:acompanha|inclui|com|brinde|gratis)\s+([^,;|]{2,90})/gi;
+  let companionMatch: RegExpExecArray | null;
+
+  while ((companionMatch = companionPattern.exec(normalized)) !== null) {
+    for (const item of classesProdutoNoTrecho(companionMatch[1] ?? "")) {
+      detected.add(item);
+    }
+  }
+
+  if (/\b(?:kit|combo|conjunto)\b/i.test(normalized)) {
+    const allClasses = classesProdutoNoTrecho(normalized);
+
+    if (allClasses.length >= 2) {
+      for (const item of allClasses) {
+        detected.add(item);
+      }
+    }
+
+    if (rawSegments.length > 1) {
+      detected.add("kit");
+    }
+  }
+
+  return detected.size > 0
+    ? Array.from(detected).sort().join("+")
+    : null;
+}
+
+function extrairCondicao(
+  title: string,
+  structured: string | null,
+): string | null {
+  const normalized = normalizarTextoIdentidade(
+    `${structured ?? ""} ${title}`,
+  );
+
+  if (/\b(?:recondicionado|remanufaturado|refurbished|renewed)\b/.test(normalized)) {
+    return "refurbished";
+  }
+
+  if (/\b(?:caixa aberta|open box|openbox)\b/.test(normalized)) {
+    return "open-box";
+  }
+
+  if (/\b(?:seminovo|semi novo|usado|used)\b/.test(normalized)) {
+    return "used";
+  }
+
+  if (/\boutlet\b/.test(normalized)) {
+    return "outlet";
+  }
+
+  /* Produto novo e o estado padrao do catalogo; ausencia nao vira conflito. */
+  return null;
 }
 
 function extrairVoltagem(
@@ -594,6 +785,54 @@ function pareceProdutoDigital(
   );
 }
 
+function extrairArmazenamentoAntesDeRamMalFormatado(
+  title: string,
+): string | null {
+  const normalized = normalizarTextoIdentidade(title);
+  const match = normalized.match(
+    /\b(\d+(?:[.,]\d+)?)\s*(gb|tb)\s+ram\s+(\d+(?:[.,]\d+)?)\s*(gb|mb)\b/i,
+  );
+
+  if (!match?.[1] || !match[2] || !match[3] || !match[4]) {
+    return null;
+  }
+
+  const first = normalizarCapacidadeDigital(`${match[1]}${match[2]}`);
+  const second = normalizarCapacidadeDigital(`${match[3]}${match[4]}`);
+
+  if (!first || !second) {
+    return null;
+  }
+
+  const firstGb =
+    match[2].toLowerCase() === "tb"
+      ? Number(match[1].replace(",", ".")) * 1024
+      : Number(match[1].replace(",", "."));
+  const secondGb =
+    match[4].toLowerCase() === "mb"
+      ? Number(match[3].replace(",", ".")) / 1024
+      : Number(match[3].replace(",", "."));
+
+  /*
+   * Alguns feeds removem a pontuacao de "256GB, RAM 8GB" e produzem
+   * "256GB RAM 8GB". Se o primeiro numero tem perfil de armazenamento e
+   * e muito maior que a RAM seguinte, preservamos 256GB como storage.
+   * Isso nao transforma "12GB RAM (6GB + 6GB virtual)" em storage.
+   */
+  if (
+    Number.isFinite(firstGb) &&
+    Number.isFinite(secondGb) &&
+    firstGb >= 64 &&
+    secondGb > 0 &&
+    secondGb <= 32 &&
+    firstGb / secondGb >= 4
+  ) {
+    return first;
+  }
+
+  return null;
+}
+
 function extrairArmazenamento(
   title: string,
   structured: string | null,
@@ -601,6 +840,16 @@ function extrairArmazenamento(
   const fromStructured = normalizarCapacidadeDigital(structured);
 
   const normalizedTitle = normalizarTextoIdentidade(title);
+  const malformedStorage =
+    extrairArmazenamentoAntesDeRamMalFormatado(title);
+
+  if (malformedStorage) {
+    return reconciliarCapacidadeDigital(
+      fromStructured,
+      malformedStorage,
+    );
+  }
+
   const capacities = extrairCapacidadesDigitais(title)
     .filter(
       (capacity) =>
@@ -625,11 +874,15 @@ function extrairArmazenamento(
     );
   }
 
-  const fromTitle = pareceProdutoDigital(title)
-    ? [...capacities].sort(
-        (first, second) => second.megabytes - first.megabytes,
-      )[0]?.value ?? null
-    : null;
+  /*
+   * GB/TB/MB fora de contexto de RAM ja sao evidencia digital suficiente.
+   * A consulta do usuario frequentemente omite palavras como "smartphone"
+   * (ex.: "Moto G75 256GB"), portanto nao dependemos da classe textual para
+   * reconhecer armazenamento.
+   */
+  const fromTitle = [...capacities].sort(
+    (first, second) => second.megabytes - first.megabytes,
+  )[0]?.value ?? null;
 
   return reconciliarCapacidadeDigital(
     fromStructured,
@@ -724,16 +977,69 @@ function extrairTamanho(
   title: string,
   structured: string | null,
 ): string | null {
+  const normalizedTitle = normalizarTextoIdentidade(title);
+  const hasFootwear = FOOTWEAR_TERMS.some((term) =>
+    containsPhrase(normalizedTitle, term),
+  );
+
+  const screenContext = /\b(?:tela|monitor|tv|televisao|notebook|display)\b/.test(
+    normalizedTitle,
+  );
+
+  const parseInches = (
+    value: string | null | undefined,
+    allowBareNumber = false,
+  ): string | null => {
+    if (!value) {
+      return null;
+    }
+
+    const source = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    const explicit = source.match(
+      /\b(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:["”″]|polegadas?|pol|inch(?:es)?)(?=\s|$|[^a-z0-9])/i,
+    );
+
+    const bare = allowBareNumber
+      ? source.trim().match(/^(\d{1,3}(?:[.,]\d{1,2})?)$/)
+      : null;
+
+    const amount = explicit?.[1] ?? bare?.[1] ?? null;
+
+    return amount
+      ? `${amount.replace(",", ".").replace(/\.0+$/, "")}pol`
+      : null;
+  };
+
+  /*
+   * Tela decimal deve ser lida antes da normalizacao que remove pontuacao.
+   * Evita interpretar 6,7" como 7".
+   */
+  if (screenContext) {
+    const structuredScreen = parseInches(structured, true);
+    const titleScreen = parseInches(title);
+
+    if (
+      structuredScreen &&
+      titleScreen &&
+      structuredScreen !== titleScreen
+    ) {
+      return titleScreen;
+    }
+
+    if (structuredScreen || titleScreen) {
+      return structuredScreen ?? titleScreen;
+    }
+  }
+
   const structuredSize = normalizarVariante(structured);
 
   if (structuredSize) {
     return structuredSize;
   }
-
-  const normalizedTitle = normalizarTextoIdentidade(title);
-  const hasFootwear = FOOTWEAR_TERMS.some((term) =>
-    containsPhrase(normalizedTitle, term),
-  );
 
   const clothing = normalizedTitle.match(
     /\b(?:tamanho|tam)\s*(rn|xpp|pp|p|m|g|gg|xg|xgg|xxg|xxxg)\b/i,
@@ -753,17 +1059,6 @@ function extrairTamanho(
     }
   }
 
-  const screenContext = /\b(?:tela|monitor|tv|televisao|notebook|display)\b/.test(
-    normalizedTitle,
-  );
-  const inches = normalizedTitle.match(
-    /\b(\d{1,2}(?:[.,]\d)?)\s*(?:polegadas?|pol)\b/i,
-  );
-
-  if (screenContext && inches?.[1]) {
-    return `${inches[1].replace(",", ".")}pol`;
-  }
-
   const isWatch = /\b(?:smartwatch|watch|relogio)\b/.test(
     normalizedTitle,
   );
@@ -781,29 +1076,66 @@ function extrairCapacidadeGenerica(
   structured: string | null,
 ): string | null {
   /*
-   * Em celulares e outros itens digitais, "capacidade" pode vir do
-   * marketplace com sentidos incompatíveis (4G, armazenamento, RAM etc.).
-   * Storage e RAM ja possuem resolvedores proprios; este campo fica restrito
-   * a produtos fisicos como litros, mililitros e peso.
+   * Em celulares e outros itens digitais, "capacidade" pode significar
+   * rede, armazenamento ou RAM. Esses eixos possuem resolvedores proprios.
    */
-  if (pareceProdutoDigital(title)) {
+  if (
+    pareceProdutoDigital(title) ||
+    extrairRede(title, null) !== null
+  ) {
     return null;
   }
 
-  const fromStructured = normalizarVariante(structured);
+  const parsePhysicalCapacity = (
+    value: string | null | undefined,
+  ): string | null => {
+    if (!value) {
+      return null;
+    }
 
-  if (fromStructured) {
-    return fromStructured;
+    /*
+     * Preservamos virgula/ponto decimal antes da normalizacao textual.
+     * Sem isso, 4,5 L poderia virar tokens "4 5 l" e ser lido como 5 L.
+     */
+    const source = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    const match = source.match(
+      /\b(\d+(?:[.,]\d+)?)\s*(l|litros?|ml|kg|g)\b/i,
+    );
+
+    if (!match?.[1] || !match[2]) {
+      return null;
+    }
+
+    const amount = match[1]
+      .replace(",", ".")
+      .replace(/\.0+$/, "");
+
+    const rawUnit = match[2].toLowerCase();
+    const unit = rawUnit.startsWith("litro")
+      ? "l"
+      : rawUnit;
+
+    return `${amount}${unit}`;
+  };
+
+  const fromStructured =
+    parsePhysicalCapacity(structured);
+  const fromTitle =
+    parsePhysicalCapacity(title);
+
+  if (
+    fromStructured &&
+    fromTitle &&
+    fromStructured !== fromTitle
+  ) {
+    return fromTitle;
   }
 
-  const normalizedTitle = normalizarTextoIdentidade(title);
-  const match = normalizedTitle.match(
-    /\b(\d+(?:[.,]\d+)?)\s*(?:l|litros?|ml|kg|g)\b/i,
-  );
-
-  return match?.[0]
-    ? normalizarVariante(match[0])
-    : null;
+  return fromStructured ?? fromTitle;
 }
 
 function extrairQuantidadeKit(
@@ -843,7 +1175,9 @@ function ehTokenModeloValido(
     /^[A-Z]+\d+(?:GB|TB|MB|MAH|W|V|HZ|KHZ|MHZ|GHZ|CM|MM|MP)$/.test(token) ||
     TECHNICAL_MODEL_TOKENS.has(token) ||
     TECHNICAL_MODEL_PREFIXES.some((prefix) =>
-      token.startsWith(prefix),
+      prefix === "IP"
+        ? /^IP\d{1,3}$/.test(token)
+        : token.startsWith(prefix),
     )
   ) {
     return false;
@@ -875,7 +1209,9 @@ function extrairTokensModelo(
   adicionarModelo(tokens, structuredModel, true);
 
   const structuredWords = structuredModel
-    ? structuredModel.match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g) ?? []
+    ? canonizarHifensModelo(structuredModel).match(
+        /[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g,
+      ) ?? []
     : [];
 
   for (const word of structuredWords) {
@@ -922,9 +1258,10 @@ function extrairTokensModelo(
     }
   }
 
-  const rawTitleTokens = title.match(
-    /[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g,
-  ) ?? [];
+  const rawTitleTokens =
+    canonizarHifensModelo(title).match(
+      /[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g,
+    ) ?? [];
 
   for (const rawToken of rawTitleTokens) {
     adicionarModelo(tokens, rawToken);
@@ -932,21 +1269,137 @@ function extrairTokensModelo(
 
   const words = normalizedTitle.split(" ").filter(Boolean);
 
-  for (let index = 0; index < words.length - 1; index += 1) {
-    const first = words[index] ?? "";
-    const second = words[index + 1] ?? "";
+  /*
+   * Modelos comerciais com numero separado, como "Edge 60 Fusion" e
+   * "iPhone 15 Pro", nao podem depender de regras por produto. Quando ha
+   * uma marca reconhecida, capturamos familia + numero e, se existir, um
+   * sufixo comercial alfabetico. Contextos tecnicos (camera 50 MP, tela
+   * 120 Hz, bateria 5000 mAh) sao bloqueados genericamente.
+   */
+  const contextosTecnicos = new Set([
+    "camera",
+    "tela",
+    "display",
+    "bateria",
+    "memoria",
+    "ram",
+    "rom",
+    "ssd",
+    "hdd",
+    "potencia",
+    "voltagem",
+    "tensao",
+    "frequencia",
+    "peso",
+    "capacidade",
+  ]);
 
+  const unidadesTecnicas = new Set([
+    "gb",
+    "tb",
+    "mb",
+    "mah",
+    "mp",
+    "hz",
+    "khz",
+    "mhz",
+    "ghz",
+    "w",
+    "kw",
+    "v",
+    "mm",
+    "cm",
+    "ml",
+    "kg",
+    "pol",
+    "polegada",
+    "polegadas",
+    "inch",
+    "inches",
+    "litro",
+    "litros",
+  ]);
+
+  function ehSufixoDeSubmodelo(value: string): boolean {
     if (
-      !first ||
-      !second ||
-      /^(?:de|com|para|por|ram|rom|ssd|hdd|tela|cor|modelo|versao|smartphone|celular|telefone|notebook|laptop|tablet|camera|tv|monitor|produto)$/.test(first) ||
-      /^(?:\d+(?:gb|tb|mb|mah|w|v|hz|khz|mhz|ghz|mm|cm|mp|ml|kg|g)|\d+)$/.test(second)
+      !value ||
+      unidadesTecnicas.has(value) ||
+      contextosTecnicos.has(value) ||
+      aliasesMarcaSet.has(value) ||
+      /^(?:de|da|do|com|para|por|e|em|intel|amd|nvidia|windows|linux|macos|core|geracao)$/.test(
+        value,
+      )
     ) {
-      continue;
+      return false;
     }
 
-    if (/\d/.test(second)) {
-      adicionarModelo(tokens, `${first}${second}`, true);
+    return (
+      /^[a-z][a-z0-9+]{1,20}$/.test(value) ||
+      /^\d{1,4}[a-z][a-z0-9]{0,8}$/.test(value)
+    );
+  }
+
+  const aliasesMarcaSet = new Set(
+    aliasesDaMarca(brand)
+      .flatMap((alias) =>
+        normalizarTextoIdentidade(alias)
+          .split(" ")
+          .filter(Boolean),
+      ),
+  );
+
+  const contextoTelaGrande =
+    /\b(?:tv|televisao|monitor|display)\b/.test(
+      normalizedTitle,
+    );
+
+  if (brand) {
+    for (let index = 0; index < words.length - 1; index += 1) {
+      const family = words[index] ?? "";
+      const number = words[index + 1] ?? "";
+      const suffix = words[index + 2] ?? "";
+      const suffix2 = words[index + 3] ?? "";
+
+      if (
+        !/^[a-z][a-z0-9+]{1,20}$/.test(family) ||
+        !/^\d{2,4}$/.test(number) ||
+        contextosTecnicos.has(family)
+      ) {
+        continue;
+      }
+
+      /*
+       * Em TVs/monitores, "Samsung 55", "LG 65" etc. normalmente descreve
+       * o tamanho da tela, nao o codigo do modelo. Fora desse contexto,
+       * marca + numero continua valido para familias como Realme 14/Xiaomi 14.
+       */
+      const numeroComoTamanhoDeTela =
+        contextoTelaGrande &&
+        aliasesMarcaSet.has(family) &&
+        Number(number) >= 15 &&
+        Number(number) <= 120;
+
+      if (numeroComoTamanhoDeTela) {
+        continue;
+      }
+
+      adicionarModelo(tokens, `${family}${number}`, true);
+
+      if (ehSufixoDeSubmodelo(suffix)) {
+        adicionarModelo(
+          tokens,
+          `${family}${number}${suffix}`,
+          true,
+        );
+
+        if (ehSufixoDeSubmodelo(suffix2)) {
+          adicionarModelo(
+            tokens,
+            `${family}${number}${suffix}${suffix2}`,
+            true,
+          );
+        }
+      }
     }
   }
 
@@ -970,6 +1423,11 @@ function extrairTokensModelo(
     adicionarModelo(
       tokens,
       `galaxy${galaxy[1]}${galaxy[2] ?? ""}`,
+      true,
+    );
+    adicionarModelo(
+      tokens,
+      `${galaxy[1]}${galaxy[2] ?? ""}`,
       true,
     );
     adicionarModelo(tokens, galaxy[1], true);
@@ -1166,6 +1624,15 @@ export function resolverIdentidadeProduto(
         "UNIDADES_POR_KIT",
       ]),
     ),
+    condition: extrairCondicao(
+      title,
+      obterAtributo(product.attributes, [
+        "CONDITION",
+        "CONDICAO",
+        "ESTADO",
+      ]),
+    ),
+    bundle: extrairBundleSignature(title),
   };
 
   return {
@@ -1199,11 +1666,33 @@ export function criarCanonicalKeyDaIdentidade(
     return `gtin:${globalCode}`;
   }
 
+  /*
+   * Para codigos inferidos do titulo, usamos o submodelo MAIS especifico
+   * que estende o modelo-base. Isso evita colisao de canonicalKey entre
+   * variantes como EDGE60FUSION e EDGE60PRO ou IPHONE15PRO e
+   * IPHONE15PROMAX. Prefixos de marca/familia alternativos continuam
+   * disponiveis no matcher, mas nao dominam a chave canonica.
+   */
+  const baseModel =
+    normalizarCodigoIdentidade(identity.model);
+
+  const inferredModelCode =
+    identity.modelTokens
+      .map((token) => normalizarCodigoIdentidade(token))
+      .filter((token): token is string => Boolean(token))
+      .filter((token) =>
+        baseModel
+          ? token === baseModel || token.startsWith(baseModel)
+          : token.length >= 3,
+      )
+      .sort((first, second) => second.length - first.length)[0] ??
+    baseModel ??
+    null;
+
   const code =
     identity.mpn ??
     identity.modelNumber ??
-    identity.modelTokens.find((token) => token.length >= 3) ??
-    null;
+    inferredModelCode;
 
   if (!identity.brand || !code) {
     return null;
@@ -1217,21 +1706,18 @@ export function criarCanonicalKeyDaIdentidade(
   const variantParts = variantEntries
     .filter(
       (entry): entry is [IdentityVariantKey, string] =>
-        Boolean(entry[1]),
+        Boolean(entry[1]) && entry[0] !== "color",
     )
     .map(([key, value]) => `${key}=${value}`);
 
   /*
-   * Brand + model alone is not a safe database key: it can represent a
-   * different voltage, storage or color SKU.  The matcher can still compare
-   * such products, but automatic canonical grouping needs one stable variant.
+   * canonicalKey e apenas indice de busca. O Exact Matcher continua sendo
+   * a autorizacao de merge, portanto brand + modelo pode ter uma chave-base
+   * mesmo quando nenhuma variante dura foi declarada. Isso e importante
+   * para produtos como fones, onde cor nao deve fragmentar o catalogo.
    */
-  if (variantParts.length === 0) {
-    return null;
-  }
-
   return [
-    "brand-model-v4",
+    "brand-model-v6",
     normalizarCodigoIdentidade(identity.brand),
     code,
     ...variantParts.sort(),

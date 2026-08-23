@@ -751,6 +751,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       offers: {
         where: {
           active: true,
+          matchStatus: "EXACT",
         },
         orderBy: {
           price: "asc",
@@ -783,19 +784,8 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
    * Ela continua válida para comparação e histórico, embora outra
    * loja permaneça como botão principal de compra.
    */
-  const ofertaBaseComparador =
-    produto.offers.length > 0
-      ? produto.offers.reduce((maisAntiga, oferta) =>
-          oferta.createdAt.getTime() < maisAntiga.createdAt.getTime()
-            ? oferta
-            : maisAntiga,
-        )
-      : null;
-
   const ofertasComparador = produto.offers.filter(
-    (oferta) =>
-      oferta.id === ofertaBaseComparador?.id ||
-      oferta.matchStatus === "EXACT",
+    (oferta) => oferta.matchStatus === "EXACT",
   );
 
   const ofertasComparadorDisponiveis = ofertasComparador.filter(

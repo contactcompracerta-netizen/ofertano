@@ -16,6 +16,9 @@ type ProductCardProps = {
     sales?: number | null;
     stock?: number | null;
     featured?: boolean;
+    offers?: Array<{
+      marketplace: string;
+    }>;
   };
 };
 
@@ -31,6 +34,17 @@ function formatarQuantidade(valor: number) {
 }
 
 export default function ProductCard({ produto }: ProductCardProps) {
+  const lojasComparadas = Array.from(
+    new Set(
+      (produto.offers ?? []).map(
+        (oferta) => oferta.marketplace,
+      ),
+    ),
+  );
+
+  const possuiMultiLoja =
+    lojasComparadas.length >= 2;
+
   const possuiPrecoAnterior =
     produto.oldPrice !== null && produto.oldPrice > produto.price;
 
@@ -71,6 +85,12 @@ export default function ProductCard({ produto }: ProductCardProps) {
           {produto.featured && (
             <span className="hidden rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-800 sm:inline-flex">
               Destaque
+            </span>
+          )}
+
+          {possuiMultiLoja && (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700 shadow-sm sm:px-3 sm:text-[11px]">
+              Compare em {lojasComparadas.length} lojas
             </span>
           )}
         </div>

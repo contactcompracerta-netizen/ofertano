@@ -7,6 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "npx tsx src/services/identity/exactMatcher.test.ts && npx tsx src/services/search/publicSearchMultiloja.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

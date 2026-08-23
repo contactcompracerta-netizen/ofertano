@@ -1602,6 +1602,10 @@ async function consultarMagazineLuiza(
 export async function buscarMagazineLuiza(
     request: DiscoveryQuery,
   ): Promise<MarketplaceDiscoveryResult> {
+
+  const modoMultiloja =
+    request.mode === "MULTILOJA";
+
     const query =
       request.query.trim();
   
@@ -1677,56 +1681,68 @@ export async function buscarMagazineLuiza(
         }
   
         if (
+        !modoMultiloja && (
           possuiAcessorioNaoSolicitado(
             titulo,
             query,
           )
-        ) {
+        
+        )) {
           continue;
         }
   
         if (
+        !modoMultiloja && (
           possuiBundleNaoSolicitado(
             titulo,
             query,
           )
-        ) {
+        
+        )) {
           continue;
         }
   
         if (
+        !modoMultiloja && (
           !marcaCompativel(
             titulo,
             query,
           )
-        ) {
+        
+        )) {
           continue;
         }
   
         if (
+        !modoMultiloja && (
           !varianteCompativel(
             titulo,
             query,
           )
-        ) {
+        
+        )) {
           continue;
         }
   
         if (
+        !modoMultiloja && (
           !modeloCompativel(
             titulo,
             query,
           )
-        ) {
+        
+        )) {
           continue;
         }
   
         if (
+        !modoMultiloja && (
           !capacidadeCompativel(
             titulo,
             query,
           )
-        ) {
+        
+        )) {
           continue;
         }
   
@@ -1737,8 +1753,10 @@ export async function buscarMagazineLuiza(
           );
   
         if (
+        !modoMultiloja && (
           relevancia < 0.65
-        ) {
+        
+        )) {
           continue;
         }
   

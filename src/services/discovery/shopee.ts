@@ -1,4 +1,4 @@
-﻿import {
+import {
   buscarOfertasShopeePorPalavraChave,
   type ShopeeAffiliateOffer,
 } from "@/services/importers/shopee/api";
@@ -86,6 +86,19 @@ const TERMOS_ACESSORIOS = [
   "soundbar",
   "soundbars",
   "flex",
+
+  /*
+   * Combos/brindes. Em uma pesquisa por celular puro, anúncios
+   * com relógio/fone/tablet não podem ocupar o pequeno conjunto
+   * de candidatos que será enviado ao Exact Matcher.
+   */
+  "smartwatch",
+  "smart watch",
+  "watch",
+  "relogio",
+  "earbuds",
+  "buds",
+  "tablet",
 ];
 
 const TERMOS_CONDICAO_NAO_NOVA = [
@@ -682,6 +695,10 @@ function ofertaValida(
 export async function buscarShopee(
   request: DiscoveryQuery,
 ): Promise<MarketplaceDiscoveryResult> {
+
+  const modoMultiloja =
+    request.mode === "MULTILOJA";
+
   const query =
     request.query.trim();
 
@@ -772,11 +789,19 @@ export async function buscarShopee(
        * forte com o produto de referência.
        */
       if (
+        !modoMultiloja && (
         relevancia < 0.8
-      ) {
+      
+        )) {
         continue;
       }
 
+      /*
+       * Este filtro é seguro também no MULTILOJA: ele só rejeita
+       * item extra que NÃO foi pedido na consulta. Isso impede que
+       * combos como "Galaxy A55 + Smartwatch" ocupem as primeiras
+       * posições de uma busca por "Galaxy A55 128GB".
+       */
       if (
         possuiAcessorioNaoSolicitado(
           titulo,
@@ -787,20 +812,24 @@ export async function buscarShopee(
       }
 
       if (
+        !modoMultiloja && (
         !varianteCompativel(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
       if (
+        !modoMultiloja && (
         !capacidadeCompativel(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
@@ -905,6 +934,17 @@ export async function buscarShopee(
       });
     }
 
+    const candidateLimit =
+      modoMultiloja
+        ? Math.min(
+            Math.max(
+              limit * 3,
+              12,
+            ),
+            20,
+          )
+        : limit;
+
     const candidatos =
       encontrados
         .sort(
@@ -941,7 +981,7 @@ export async function buscarShopee(
         )
         .slice(
           0,
-          limit,
+          candidateLimit,
         )
         .map(
           (resultado) =>

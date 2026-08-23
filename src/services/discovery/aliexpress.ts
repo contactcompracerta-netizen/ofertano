@@ -1542,6 +1542,10 @@ function urlHttpValida(
 export async function buscarAliExpress(
   request: DiscoveryQuery,
 ): Promise<MarketplaceDiscoveryResult> {
+
+  const modoMultiloja =
+    request.mode === "MULTILOJA";
+
   const query =
     request.query.trim();
 
@@ -1632,47 +1636,57 @@ export async function buscarAliExpress(
       }
 
       if (
+        !modoMultiloja && (
         possuiAcessorioNaoSolicitado(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
       if (
+        !modoMultiloja && (
         possuiBundleNaoSolicitado(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
       if (
+        !modoMultiloja && (
         !marcaCompativel(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
       if (
+        !modoMultiloja && (
         !varianteCompativel(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
       if (
+        !modoMultiloja && (
         !capacidadeCompativel(
           titulo,
           query,
         )
-      ) {
+      
+        )) {
         continue;
       }
 
@@ -1683,8 +1697,10 @@ export async function buscarAliExpress(
         );
 
       if (
+        !modoMultiloja && (
         relevancia < 0.65
-      ) {
+      
+        )) {
         continue;
       }
 

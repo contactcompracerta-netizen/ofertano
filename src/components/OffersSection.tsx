@@ -15,8 +15,10 @@ type Produto = {
   reviews?: number | null;
   sales?: number | null;
   stock?: number | null;
-  featured?: boolean;
-};
+    offers?: Array<{
+      marketplace: string;
+    }>;
+  };
 
 type OffersSectionProps = {
   produtos: Produto[];

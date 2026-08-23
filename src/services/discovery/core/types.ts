@@ -38,6 +38,13 @@ import type {
     category?: string | null;
   
     brand?: string | null;
+
+    /*
+     * Evidencia estruturada opcional da marketplace.
+     * Nem todo adapter fornece atributos; quando ausente,
+     * o motor global de identidade trabalha com titulo + marca.
+     */
+    attributes?: Record<string, string> | null;
   
     seller?: string | null;
   
@@ -52,6 +59,10 @@ import type {
     normalizedQuery: string;
   
     limit: number;
+  
+    mode?: "DEFAULT" | "MULTILOJA";
+
+
   
     targetProductId?: string | null;
   };

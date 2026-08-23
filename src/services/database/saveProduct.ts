@@ -40,6 +40,32 @@ export type SaveProductOptions = {
   suppressPublicationSync?: boolean;
 };
 
+export type DecisaoAlvoDaOferta = {
+  usarTarget: boolean;
+  desanexarOfertaExistente: boolean;
+};
+
+export function decidirAlvoDaOferta(input: {
+  targetProductId?: string | null;
+  verifiedExactMatch?: boolean;
+  targetExiste: boolean;
+  ofertaExistenteProductId?: string | null;
+}): DecisaoAlvoDaOferta {
+  const usarTarget = Boolean(
+    input.targetProductId &&
+    input.verifiedExactMatch &&
+    input.targetExiste,
+  );
+
+  return {
+    usarTarget,
+    desanexarOfertaExistente:
+      usarTarget &&
+      Boolean(input.ofertaExistenteProductId) &&
+      input.ofertaExistenteProductId !== input.targetProductId,
+  };
+}
+
 function criarSlug(
   texto: string,
   marketplace: MarketplaceDatabase,
@@ -1993,9 +2019,15 @@ export async function sincronizarMelhorOfertaDoProduto(
         Boolean(item.affiliateLink?.trim()),
     ) ?? null;
 
+  /*
+   * Product.price, desconto e loja principal seguem a oferta EXACT
+   * mais barata. O link afiliado do Product so e copiado dessa oferta
+   * quando ela ja possui um; caso contrario, reutiliza o link da
+   * oferta compravel mais barata sem trocar o preco de comparacao.
+   */
   const melhorOfertaPrincipal =
-    melhorOfertaCompravel ??
-    melhorOfertaEncontrada;
+    melhorOfertaEncontrada ??
+    melhorOfertaCompravel;
 
   await tx.marketplaceOffer.updateMany({
     where: {
@@ -2076,6 +2108,7 @@ export async function sincronizarMelhorOfertaDoProduto(
 
       affiliateLink:
         melhorOfertaPrincipal.affiliateLink?.trim() ||
+        melhorOfertaCompravel?.affiliateLink?.trim() ||
         "",
 
       price: melhorOfertaPrincipal.price,
@@ -2296,7 +2329,7 @@ export async function saveProduct(
   const agora = new Date();
 
   return prisma.$transaction(async (tx) => {
-    const ofertaPeloCodigo =
+    let ofertaPeloCodigo =
       await tx.marketplaceOffer.findUnique({
         where: {
           marketplace_externalId: {
@@ -2309,6 +2342,37 @@ export async function saveProduct(
         },
       });
 
+    const produtoAlvo =
+      options.targetProductId &&
+      options.verifiedExactMatch
+        ? await tx.product.findUnique({
+            where: {
+              id: options.targetProductId,
+            },
+          })
+        : null;
+
+    const decisaoAlvo = decidirAlvoDaOferta({
+      targetProductId: options.targetProductId,
+      verifiedExactMatch: options.verifiedExactMatch,
+      targetExiste: Boolean(produtoAlvo),
+      ofertaExistenteProductId: ofertaPeloCodigo?.productId ?? null,
+    });
+
+    /*
+     * Contrato do Exact Matcher: se o cluster ja escolheu o Product
+     * canonico, a oferta precisa ir para esse productId. Um SKU que ja
+     * exista em outro Product nao pode sequestrar o cluster.
+     */
+    if (decisaoAlvo.desanexarOfertaExistente && ofertaPeloCodigo) {
+      await tx.marketplaceOffer.delete({
+        where: {
+          id: ofertaPeloCodigo.id,
+        },
+      });
+      ofertaPeloCodigo = null;
+    }
+
     const produtoPeloCanonicalKey =
       canonicalKey
         ? await tx.product.findUnique({
@@ -2317,6 +2381,27 @@ export async function saveProduct(
             },
           })
         : null;
+
+    /*
+     * canonicalKey e indice de busca, nao autorizacao de merge. Mesmo uma
+     * chave deterministica pode colidir quando uma marketplace omite parte
+     * da variante. Qualquer reaproveitamento continua passando pelo Exact
+     * Matcher central.
+     */
+    const scoreCanonicalKey =
+      produtoPeloCanonicalKey
+        ? calcularCompatibilidadeExata(
+            produtoPeloCanonicalKey,
+            productComMarca,
+            identificadores,
+          )
+        : null;
+
+    const canonicalKeyParaPersistir =
+      produtoPeloCanonicalKey &&
+      scoreCanonicalKey === null
+        ? null
+        : canonicalKey;
 
     const marcaOriginalParaMatching =
       productComMarca.brand?.trim() || null;
@@ -2341,7 +2426,7 @@ export async function saveProduct(
       identificadores.mpn;
 
     const candidatosPorIdentidade =
-      !produtoPeloCanonicalKey &&
+      (!produtoPeloCanonicalKey || scoreCanonicalKey === null) &&
       (identificadores.mpn ||
         identificadores.modelNumber ||
         identificadores.ean ||
@@ -2441,7 +2526,9 @@ export async function saveProduct(
         : null;
 
     let saved =
-      ofertaPeloCodigo?.product ?? null;
+      (decisaoAlvo.usarTarget ? produtoAlvo : null) ??
+      ofertaPeloCodigo?.product ??
+      null;
 
     let produtoCriadoAgora = false;
 
@@ -2470,7 +2557,8 @@ export async function saveProduct(
 
     if (
       !saved &&
-      produtoPeloCanonicalKey
+      produtoPeloCanonicalKey &&
+      scoreCanonicalKey !== null
     ) {
       saved = produtoPeloCanonicalKey;
     }
@@ -2498,7 +2586,7 @@ export async function saveProduct(
           slug,
 
           canonicalName: product.title,
-          canonicalKey,
+          canonicalKey: canonicalKeyParaPersistir,
 
           modelNumber:
             identificadores.modelNumber,
@@ -2595,13 +2683,13 @@ export async function saveProduct(
       const canonicalKeyPermitida =
         saved.canonicalKey ??
         (
-          canonicalKey &&
+          canonicalKeyParaPersistir &&
           (
             !produtoPeloCanonicalKey ||
             produtoPeloCanonicalKey.id ===
               saved.id
           )
-            ? canonicalKey
+            ? canonicalKeyParaPersistir
             : null
         );
 
@@ -2771,8 +2859,9 @@ export async function saveProduct(
                   saved.id
             ? 1
           : produtoPeloCanonicalKey?.id ===
-                saved.id
-            ? 1
+                saved.id &&
+                scoreCanonicalKey !== null
+            ? scoreCanonicalKey
             : produtoCompativelPorIdentidade
                   ?.candidato.id === saved.id
               ? produtoCompativelPorIdentidade.score

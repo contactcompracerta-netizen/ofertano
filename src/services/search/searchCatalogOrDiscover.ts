@@ -2,475 +2,468 @@ import type { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { descobrirProdutos } from "@/services/discovery";
-import { publicarResultadoDiscovery } from "@/services/discovery/publisher";
+import { importarCandidatoDiscovery } from "@/services/discovery/importCandidate";
+import {
+  avaliarCompatibilidadeComConsulta,
+  pontuarEspecificidadeDaConsulta,
+} from "@/services/identity";
+import { persistPublicSearchCluster } from "@/services/search/persistPublicSearchCluster";
+import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
+import type { DiscoveryCandidate } from "@/services/discovery/core/types";
+import type { ProductImport } from "@/services/importers/core/types";
 
-const TERMOS_ACESSORIOS = [
-  "capa",
-  "capinha",
-  "case",
-  "pelicula",
-  "pelicula de vidro",
-  "vidro temperado",
-  "cabo",
-  "carregador",
-  "adaptador",
-  "fonte",
-  "suporte",
-  "base",
-  "bases",
-  "stand",
-  "stands",
-  "pedestal",
-  "pedestais",
-  "protetor",
-  "borracha",
-  "anel de vedacao",
-  "pino",
-  "peso regulador",
-  "regulador",
-  "valvula",
-  "gaxeta",
-  "guarnicao",
-  "peca de reposicao",
-  "kit reparo",
-  "flex antena",
-
-  /*
-   * Armazenamento e acessórios eletrônicos.
-   *
-   * Importante para evitar resultados como
-   * "Pen Drive 128GB para iPhone" em uma busca
-   * por "iPhone 15 128GB".
-   */
-  "pen drive",
-  "pendrive",
-  "memoria usb",
-  "cartao de memoria",
-  "cartao memoria",
-  "micro sd",
-  "microsd",
-
-  /*
-   * Smartwatch / relógios.
-   */
-  "pulseira",
-  "bracelete",
-  "correia",
-
-  /*
-   * Celulares / câmeras.
-   */
-  "protetor de camera",
-  "protetor de lente",
-  "lente para camera",
-];
-
-function normalizarTexto(valor: string): string {
-  return valor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function normalizeQuery(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
-function normalizarBusca(valor: string): string {
-  return valor
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 160);
-}
+function termVariants(term: string): string[] {
+  const cleaned = term.trim();
 
-function contemExpressao(
-  textoNormalizado: string,
-  expressao: string,
-): boolean {
-  const texto = ` ${textoNormalizado} `;
-
-  const termo =
-    ` ${normalizarTexto(expressao)} `;
-
-  return texto.includes(termo);
-}
-
-function possuiAcessorioNaoSolicitado(
-  titulo: string,
-  consulta: string,
-): boolean {
-  const tituloNormalizado =
-    normalizarTexto(titulo);
-
-  const consultaNormalizada =
-    normalizarTexto(consulta);
-
-  return TERMOS_ACESSORIOS.some(
-    (termo) =>
-      contemExpressao(
-        tituloNormalizado,
-        termo,
-      ) &&
-      !contemExpressao(
-        consultaNormalizada,
-        termo,
-      ),
-  );
-}
-
-function variantesDoTermo(
-  termo: string,
-): string[] {
-  const limpo = termo.trim();
-
-  if (!limpo) {
+  if (!cleaned) {
     return [];
   }
 
-  /*
-   * Permite que:
-   *
-   * 128GB
-   *
-   * encontre também:
-   *
-   * 128 GB
-   */
-  const capacidade = limpo.match(
+  const capacity = cleaned.match(
     /^(\d+(?:[.,]\d+)?)\s*(tb|gb|mb)$/i,
   );
 
-  if (capacidade) {
-    const numero = capacidade[1];
-
-    const unidade =
-      capacidade[2].toUpperCase();
+  if (capacity) {
+    const amount = capacity[1];
+    const unit = capacity[2].toUpperCase();
 
     return Array.from(
-      new Set([
-        `${numero}${unidade}`,
-        `${numero} ${unidade}`,
-      ]),
+      new Set([`${amount}${unit}`, `${amount} ${unit}`]),
     );
   }
 
-  return [limpo];
+  return [cleaned];
 }
 
-function criarFiltroTexto(
-  valor: string,
-): Prisma.ProductWhereInput[] {
+function textFilters(value: string): Prisma.ProductWhereInput[] {
   return [
-    {
-      name: {
-        contains: valor,
-        mode: "insensitive",
-      },
-    },
-
-    {
-      canonicalName: {
-        contains: valor,
-        mode: "insensitive",
-      },
-    },
-
-    {
-      brand: {
-        contains: valor,
-        mode: "insensitive",
-      },
-    },
-
-    {
-      modelNumber: {
-        contains: valor,
-        mode: "insensitive",
-      },
-    },
-
-    {
-      category: {
-        contains: valor,
-        mode: "insensitive",
-      },
-    },
+    { name: { contains: value, mode: "insensitive" } },
+    { canonicalName: { contains: value, mode: "insensitive" } },
+    { brand: { contains: value, mode: "insensitive" } },
+    { modelNumber: { contains: value, mode: "insensitive" } },
+    { category: { contains: value, mode: "insensitive" } },
   ];
 }
 
-function criarFiltroCatalogo(
-  busca: string,
-): Prisma.ProductWhereInput {
-  const termos = busca
-    .split(/\s+/)
-    .map((termo) => termo.trim())
-    .filter(Boolean);
-
-  /*
-   * Para cada palavra da consulta exigimos
-   * correspondência em algum campo relevante.
-   *
-   * Exemplo:
-   *
-   * Galaxy S24 256GB
-   *
-   * não deve se comportar como uma simples
-   * busca por qualquer uma dessas palavras.
-   */
-  const buscaPorTermos: Prisma.ProductWhereInput =
-    {
-      AND: termos.map((termo) => {
-        const variantes =
-          variantesDoTermo(termo);
-
-        return {
-          OR: variantes.flatMap(
-            (variante) =>
-              criarFiltroTexto(variante),
-          ),
-        };
-      }),
-    };
+function catalogFilter(query: string): Prisma.ProductWhereInput {
+  const terms = query.split(/\s+/).map((term) => term.trim()).filter(Boolean);
 
   return {
     active: true,
-
-    price: {
-      gt: 0,
-    },
-
-    image: {
-      not: "",
-    },
-
+    price: { gt: 0 },
+    image: { not: "" },
     OR: [
-      ...criarFiltroTexto(busca),
-      buscaPorTermos,
+      ...textFilters(query),
+      {
+        AND: terms.map((term) => ({
+          OR: termVariants(term).flatMap((variant) => textFilters(variant)),
+        })),
+      },
     ],
   };
 }
 
-async function buscarNoCatalogo(
-  busca: string,
-) {
-  /*
-   * Buscamos uma quantidade maior antes do
-   * filtro final porque alguns registros podem
-   * ser acessórios não solicitados.
-   */
-  const candidatos =
-    await prisma.product.findMany({
-      where: criarFiltroCatalogo(busca),
+function storeCount(product: { offers: Array<{ marketplace: string }> }): number {
+  return new Set(
+    product.offers.map((offer) => offer.marketplace.trim()).filter(Boolean),
+  ).size;
+}
 
-      orderBy: [
-        {
-          updatedAt: "desc",
+type CatalogIdentityProduct = {
+  name: string;
+  canonicalName: string | null;
+  brand: string | null;
+  specifications: unknown;
+  modelNumber: string | null;
+  ean: string | null;
+  gtin: string | null;
+  mpn: string | null;
+  color: string | null;
+  voltage: string | null;
+  size: string | null;
+};
+
+function catalogIdentityAttributes(
+  product: CatalogIdentityProduct,
+): Record<string, string> {
+  const base =
+    product.specifications &&
+    typeof product.specifications === "object" &&
+    !Array.isArray(product.specifications)
+      ? Object.fromEntries(
+          Object.entries(product.specifications as Record<string, unknown>)
+            .filter(([, value]) => value !== null && value !== undefined)
+            .map(([key, value]) => [key, String(value)]),
+        )
+      : {};
+
+  return {
+    ...base,
+    ...(product.modelNumber ? { MODEL: product.modelNumber } : {}),
+    ...(product.ean ? { EAN: product.ean } : {}),
+    ...(product.gtin ? { GTIN: product.gtin } : {}),
+    ...(product.mpn ? { MPN: product.mpn } : {}),
+    ...(product.color ? { COLOR: product.color } : {}),
+    ...(product.voltage ? { VOLTAGE: product.voltage } : {}),
+    ...(product.size ? { SIZE: product.size } : {}),
+  };
+}
+
+function matchesQuery(
+  product: CatalogIdentityProduct,
+  query: string,
+): boolean {
+  return avaliarCompatibilidadeComConsulta(query, {
+    title: product.canonicalName?.trim() || product.name,
+    brand: product.brand,
+    attributes: catalogIdentityAttributes(product),
+  }).compatible;
+}
+
+async function searchCatalog(query: string) {
+  const candidates = await prisma.product.findMany({
+    where: catalogFilter(query),
+    include: {
+      offers: {
+        where: {
+          active: true,
+          matchStatus: "EXACT",
         },
-        {
-          price: "asc",
+        select: {
+          marketplace: true,
         },
-      ],
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { price: "asc" }],
+    take: 120,
+  });
 
-      take: 120,
-    });
+  return candidates
+    .filter((product) => matchesQuery(product, query))
+    .sort((first, second) => {
+      const storeDifference = storeCount(second) - storeCount(first);
 
-  /*
-   * Segunda camada de segurança.
-   *
-   * O banco pode encontrar:
-   *
-   * "Pen Drive 128GB para iPhone"
-   *
-   * para:
-   *
-   * "iPhone 15 128GB"
-   *
-   * porque as palavras existem no título.
-   *
-   * Aqui rejeitamos o acessório quando ele
-   * não foi explicitamente pedido.
-   */
-  return candidatos
-    .filter(
-      (produto) =>
-        !possuiAcessorioNaoSolicitado(
-          [
-            produto.name,
-            produto.canonicalName || "",
-          ]
-            .filter(Boolean)
-            .join(" "),
-          busca,
-        ),
-    )
+      if (storeDifference !== 0) {
+        return storeDifference;
+      }
+
+      return first.price - second.price;
+    })
     .slice(0, 40);
 }
 
 export type SearchCatalogOrDiscoverResult = {
   query: string;
-
-  source:
-    | "CATALOG"
-    | "DISCOVERY"
-    | "NOT_FOUND";
-
-  products: Awaited<
-    ReturnType<typeof buscarNoCatalogo>
-  >;
-
-  discovery?: Awaited<
-    ReturnType<typeof descobrirProdutos>
-  >;
-
-  publication?: Awaited<
-    ReturnType<
-      typeof publicarResultadoDiscovery
-    >
-  >;
+  source: "CATALOG" | "DISCOVERY" | "NOT_FOUND";
+  products: Awaited<ReturnType<typeof searchCatalog>>;
+  discovery?: Awaited<ReturnType<typeof descobrirProdutos>>;
 };
+
+function rankDiscoveryCandidates(
+  query: string,
+  candidates: DiscoveryCandidate[],
+) {
+  return candidates
+    .map((candidate) => ({
+      candidate,
+      match: avaliarCompatibilidadeComConsulta(query, {
+        title: candidate.title,
+        brand: candidate.brand ?? null,
+        attributes: candidate.attributes ?? {},
+      }),
+      specificity: pontuarEspecificidadeDaConsulta(query, {
+        title: candidate.title,
+        brand: candidate.brand ?? null,
+        attributes: candidate.attributes ?? {},
+      }),
+    }))
+    .filter(
+      ({ candidate, match }) =>
+        candidate.status === "FOUND" &&
+        Boolean(candidate.sourceUrl?.trim()) &&
+        Boolean(candidate.title.trim()) &&
+        match.compatible,
+    )
+    .sort((first, second) => {
+      if (first.match.score !== second.match.score) {
+        return second.match.score - first.match.score;
+      }
+
+      if (first.specificity !== second.specificity) {
+        return second.specificity - first.specificity;
+      }
+
+      if (first.match.matchedBy !== second.match.matchedBy) {
+        if (first.match.matchedBy === "MODEL") {
+          return -1;
+        }
+        if (second.match.matchedBy === "MODEL") {
+          return 1;
+        }
+      }
+
+      const firstHasLink = Number(Boolean(first.candidate.affiliateLink?.trim()));
+      const secondHasLink = Number(Boolean(second.candidate.affiliateLink?.trim()));
+
+      if (firstHasLink !== secondHasLink) {
+        return secondHasLink - firstHasLink;
+      }
+
+      return (
+        (first.candidate.price ?? Number.POSITIVE_INFINITY) -
+        (second.candidate.price ?? Number.POSITIVE_INFINITY)
+      );
+    });
+}
+
+function pickCandidatesForImport(
+  ranked: ReturnType<typeof rankDiscoveryCandidates>,
+): DiscoveryCandidate[] {
+  const selected: DiscoveryCandidate[] = [];
+  const perMarketplace = new Map<string, number>();
+
+  for (const { candidate } of ranked) {
+    const taken = perMarketplace.get(candidate.marketplace) ?? 0;
+
+    if (taken >= 4) {
+      continue;
+    }
+
+    perMarketplace.set(candidate.marketplace, taken + 1);
+    selected.push(candidate);
+  }
+
+  return selected;
+}
+
+function offerFromDiscoveryCandidate(
+  candidate: DiscoveryCandidate | undefined,
+  query: string,
+): { product: ProductImport; affiliateLink?: string | null } | null {
+  if (!candidate) {
+    return null;
+  }
+
+  const sourceUrl = candidate.sourceUrl?.trim() || "";
+  const externalId = candidate.externalId?.trim() || "";
+  const title = candidate.title.trim();
+  const image = candidate.image?.trim() || "";
+  const price = candidate.price;
+
+  if (!sourceUrl || !externalId || !title || !image) {
+    return null;
+  }
+
+  if (price == null || !Number.isFinite(price) || price <= 0) {
+    return null;
+  }
+
+  const product: ProductImport = {
+    marketplace: candidate.marketplaceName,
+    externalId,
+    url: sourceUrl,
+    affiliateLink: candidate.affiliateLink ?? null,
+    title,
+    description: null,
+    brand: candidate.brand ?? null,
+    category: candidate.category ?? null,
+    image,
+    images: [image],
+    price,
+    oldPrice: candidate.oldPrice,
+    discount: null,
+    installments: null,
+    rating: null,
+    reviews: null,
+    sales: null,
+    stock: null,
+    seller: candidate.seller ?? null,
+    attributes: candidate.attributes ?? {},
+  };
+
+  const match = avaliarCompatibilidadeComConsulta(query, {
+    title: product.title,
+    brand: product.brand,
+    attributes: product.attributes,
+  });
+
+  if (!match.compatible) {
+    return null;
+  }
+
+  return {
+    product,
+    affiliateLink: product.affiliateLink,
+  };
+}
+
+async function importExactOffers(
+  query: string,
+  candidates: DiscoveryCandidate[],
+): Promise<Array<{ product: ProductImport; affiliateLink?: string | null }>> {
+  const imported = await Promise.allSettled(
+    candidates.map(async (candidate) => {
+      const result = await importarCandidatoDiscovery(candidate);
+      const match = avaliarCompatibilidadeComConsulta(query, {
+        title: result.product.title,
+        brand: result.product.brand ?? null,
+        attributes: result.product.attributes,
+      });
+
+      if (!match.compatible) {
+        throw new Error(match.reason);
+      }
+
+      return {
+        product: result.product,
+        affiliateLink:
+          result.product.affiliateLink ??
+          candidate.affiliateLink ??
+          null,
+      };
+    }),
+  );
+
+  return imported.flatMap((result, index) => {
+    const candidate = candidates[index];
+
+    if (result.status !== "fulfilled") {
+      const fallback = offerFromDiscoveryCandidate(candidate, query);
+
+      if (fallback) {
+        return [fallback];
+      }
+
+      return [];
+    }
+
+    return [result.value];
+  });
+}
 
 export async function searchCatalogOrDiscover(
   query: string,
   discoveryLimit = 5,
 ): Promise<SearchCatalogOrDiscoverResult> {
-  const busca =
-    normalizarBusca(query);
+  const search = normalizeQuery(query);
 
-  if (busca.length < 2) {
+  if (search.length < 2) {
     return {
-      query: busca,
+      query: search,
       source: "NOT_FOUND",
       products: [],
     };
   }
 
   /*
-   * 1. Consulta primeiro o catálogo.
+   * MULTI LOJA DA PESQUISA PUBLICA
+   *
+   * Os resultados brutos das marketplaces nunca viram Products separados.
+   * Discovery so produz candidatos temporarios. O motor de identidade
+   * agrupa EXACT e a persistencia grava UM Product + N MarketplaceOffer
+   * com o mesmo productId. Nenhuma loja e ancora.
    */
-  const produtosExistentes =
-    await buscarNoCatalogo(busca);
+  const existing = await searchCatalog(search);
+  const existingMultiStore = existing.filter((product) => storeCount(product) >= 2);
+  const marketplacesAtivas = listarDiscoveryAdaptersAtivos().length;
+  const catalogCompleto =
+    Boolean(existingMultiStore[0]) &&
+    storeCount(existingMultiStore[0]!) >= marketplacesAtivas;
 
-  if (produtosExistentes.length > 0) {
+  if (catalogCompleto) {
     return {
-      query: busca,
+      query: search,
       source: "CATALOG",
-      products: produtosExistentes,
+      products: existingMultiStore,
     };
   }
 
-  /*
-   * 2. Nenhum produto válido no catálogo.
-   *
-   * Executa o Discovery nos marketplaces.
-   */
-  const discovery =
-    await descobrirProdutos(
-      busca,
-      discoveryLimit,
-    );
+  let discovery: Awaited<ReturnType<typeof descobrirProdutos>>;
 
-  /*
-   * 3. Publica e faz o agrupamento canônico.
-   */
-  const publication =
-    await publicarResultadoDiscovery(
-      discovery,
-    );
+  try {
+    discovery = await descobrirProdutos(search, Math.max(discoveryLimit, 5), {
+      mode: "MULTILOJA",
+    });
+  } catch (error) {
+    console.error("[Search Multi Loja] Discovery falhou:", error);
 
-  const productIds = Array.from(
-    new Set(
-      publication.productIds.filter(
-        (id): id is string =>
-          typeof id === "string" &&
-          id.trim().length > 0,
-      ),
-    ),
-  );
+    if (existing.length > 0) {
+      return {
+        query: search,
+        source: "CATALOG",
+        products: existing,
+      };
+    }
 
-  /*
-   * 4. Se o Publisher informar os produtos
-   * criados ou atualizados, buscamos pelos IDs.
-   */
-  if (productIds.length > 0) {
-    const produtosPublicados =
-      await prisma.product.findMany({
-        where: {
-          id: {
-            in: productIds,
-          },
+    return {
+      query: search,
+      source: "NOT_FOUND",
+      products: [],
+    };
+  }
 
-          active: true,
+  const ranked = rankDiscoveryCandidates(search, discovery.candidates);
+  const toImport = pickCandidatesForImport(ranked);
+  const offers = await importExactOffers(search, toImport);
 
-          price: {
-            gt: 0,
-          },
-
-          image: {
-            not: "",
-          },
-        },
-
-        orderBy: [
-          {
-            price: "asc",
-          },
-          {
-            updatedAt: "desc",
-          },
-        ],
-      });
-
-    const produtosValidos =
-      produtosPublicados.filter(
-        (produto) =>
-          !possuiAcessorioNaoSolicitado(
-            [
-              produto.name,
-              produto.canonicalName || "",
-            ]
-              .filter(Boolean)
-              .join(" "),
-            busca,
-          ),
+  if (offers.length > 0) {
+    try {
+        const persisted = await persistPublicSearchCluster(
+        search,
+        offers,
+        existingMultiStore[0]?.id ?? existing[0]?.id ?? null,
       );
 
-    if (produtosValidos.length > 0) {
-      return {
-        query: busca,
-        source: "DISCOVERY",
-        products: produtosValidos,
-        discovery,
-        publication,
-      };
+      if (persisted) {
+        const publishedProduct = await prisma.product.findUnique({
+          where: { id: persisted.productId },
+          include: {
+            offers: {
+              where: {
+                active: true,
+                matchStatus: "EXACT",
+              },
+              select: {
+                marketplace: true,
+              },
+            },
+          },
+        });
+
+        if (publishedProduct?.active) {
+          return {
+            query: search,
+            source: existing.length > 0 ? "CATALOG" : "DISCOVERY",
+            products: [publishedProduct],
+            discovery,
+          };
+        }
+      }
+    } catch (error) {
+      console.error(
+        "[Search Multi Loja] Falha ao persistir cluster EXACT:",
+        error,
+      );
     }
   }
 
-  /*
-   * 5. Última verificação.
-   *
-   * O saveProduct pode ter associado uma oferta
-   * descoberta a um produto já existente.
-   */
-  const produtosDepoisDoDiscovery =
-    await buscarNoCatalogo(busca);
-
-  if (
-    produtosDepoisDoDiscovery.length > 0
-  ) {
+  if (existing.length > 0) {
     return {
-      query: busca,
-      source: "DISCOVERY",
-      products:
-        produtosDepoisDoDiscovery,
+      query: search,
+      source: "CATALOG",
+      products: existing,
       discovery,
-      publication,
     };
   }
 
   return {
-    query: busca,
+    query: search,
     source: "NOT_FOUND",
     products: [],
     discovery,
-    publication,
   };
 }
