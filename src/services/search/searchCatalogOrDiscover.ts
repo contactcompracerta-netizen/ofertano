@@ -12,6 +12,10 @@ import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registr
 import type { DiscoveryCandidate } from "@/services/discovery/core/types";
 import type { ProductImport } from "@/services/importers/core/types";
 import { traceMultiloja } from "@/services/multiloja/trace";
+import {
+  searchMultistoreV2,
+  usarMotorMultistoreV2,
+} from "@/services/multistore-v2";
 
 function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -362,13 +366,38 @@ export async function searchCatalogOrDiscover(
 
   traceMultiloja("query", { query: search });
 
+  if (usarMotorMultistoreV2()) {
+    try {
+      const v2 = await searchMultistoreV2(search, {
+        persist: true,
+        limit: Math.max(discoveryLimit, 12),
+      });
+
+      if (v2.views.length > 0) {
+        return {
+          query: search,
+          source: "DISCOVERY",
+          products: v2.views as Awaited<ReturnType<typeof searchCatalog>>,
+        };
+      }
+
+      return {
+        query: search,
+        source: "NOT_FOUND",
+        products: [],
+      };
+    } catch (error) {
+      console.error("[Search Multi Loja V2] Discovery falhou:", error);
+      return {
+        query: search,
+        source: "NOT_FOUND",
+        products: [],
+      };
+    }
+  }
+
   /*
-   * MULTI LOJA DA PESQUISA PUBLICA
-   *
-   * Os resultados brutos das marketplaces nunca viram Products separados.
-   * Discovery so produz candidatos temporarios. O motor de identidade
-   * agrupa EXACT e a persistencia grava UM Product + N MarketplaceOffer
-   * com o mesmo productId. Nenhuma loja e ancora.
+   * LEGACY — isolado para rollback via MULTISTORE_ENGINE=legacy
    */
   const existing = await searchCatalog(search);
   const existingMultiStore = existing.filter((product) => storeCount(product) >= 2);
