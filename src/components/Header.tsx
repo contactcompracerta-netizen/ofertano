@@ -6,10 +6,8 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 
 import Logo from "@/components/Logo";
+import { useFavoriteCount } from "@/lib/favorites/hooks";
 import { supabase } from "@/lib/supabaseClient";
-
-const FAVORITES_STORAGE_KEY = "ofertano:favorites";
-const FAVORITES_EVENT = "ofertano:favorites-changed";
 
 const linksNavegacao = [
   { nome: "Início", href: "/" },
@@ -17,34 +15,6 @@ const linksNavegacao = [
   { nome: "Categorias", href: "/categorias" },
   { nome: "Blog", href: "/blog" },
 ];
-
-function contarFavoritosLocais() {
-  try {
-    const valor = window.localStorage.getItem(
-      FAVORITES_STORAGE_KEY
-    );
-
-    if (!valor) {
-      return 0;
-    }
-
-    const dados: unknown = JSON.parse(valor);
-
-    if (!Array.isArray(dados)) {
-      return 0;
-    }
-
-    return new Set(
-      dados.filter(
-        (item): item is string =>
-          typeof item === "string" &&
-          item.trim().length > 0
-      )
-    ).size;
-  } catch {
-    return 0;
-  }
-}
 
 function HeartIcon() {
   return (
@@ -93,25 +63,10 @@ export default function Header() {
   const [user, setUser] =
     useState<User | null>(null);
 
-  const [
-    quantidadeFavoritos,
-    setQuantidadeFavoritos,
-  ] = useState(0);
+  const quantidadeFavoritos = useFavoriteCount();
 
   useEffect(() => {
     let ativo = true;
-
-    function atualizarQuantidadeFavoritos() {
-      if (!ativo) {
-        return;
-      }
-
-      setQuantidadeFavoritos(
-        contarFavoritosLocais()
-      );
-    }
-
-    atualizarQuantidadeFavoritos();
 
     void supabase.auth
       .getUser()
@@ -131,29 +86,9 @@ export default function Header() {
       }
     );
 
-    window.addEventListener(
-      FAVORITES_EVENT,
-      atualizarQuantidadeFavoritos
-    );
-
-    window.addEventListener(
-      "storage",
-      atualizarQuantidadeFavoritos
-    );
-
     return () => {
       ativo = false;
       subscription.unsubscribe();
-
-      window.removeEventListener(
-        FAVORITES_EVENT,
-        atualizarQuantidadeFavoritos
-      );
-
-      window.removeEventListener(
-        "storage",
-        atualizarQuantidadeFavoritos
-      );
     };
   }, []);
 

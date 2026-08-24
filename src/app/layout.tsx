@@ -2,6 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AnalyticsBootstrap from "@/components/analytics/AnalyticsBootstrap";
+import FavoritesBootstrap from "@/components/FavoritesBootstrap";
 import SearchNavigationLoading from "@/components/search/SearchNavigationLoading";
 
 const geistSans = Geist({
@@ -108,6 +109,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-slate-50 text-gray-900">
         <AnalyticsBootstrap />
+        <FavoritesBootstrap />
         <SearchNavigationLoading />
         {children}
       </body>

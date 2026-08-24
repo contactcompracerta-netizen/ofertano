@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import { trackAnalyticsEvent } from "@/lib/analytics/tracker";
+import { eventForFavoriteMutation } from "@/lib/favorites/analytics";
+import { fetchFavoriteProducts } from "@/lib/favorites/clientApi";
+import { useFavoriteIds } from "@/lib/favorites/hooks";
+import { favoritesController } from "@/lib/favorites/store";
 import { supabase } from "@/lib/supabaseClient";
-
-const STORAGE_KEY = "ofertano:favorites";
-const FAVORITES_EVENT = "ofertano:favorites-changed";
 
 type FavoriteProduct = {
   id: string;
@@ -33,323 +35,134 @@ function formatarPreco(valor: number) {
   });
 }
 
-function normalizarIds(valor: unknown): string[] {
-  if (!Array.isArray(valor)) {
-    return [];
+function isFavoriteProduct(value: unknown): value is FavoriteProduct {
+  if (!value || typeof value !== "object") {
+    return false;
   }
 
-  return Array.from(
-    new Set(
-      valor
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function lerIdsFavoritosLocais(): string[] {
-  try {
-    const valor = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!valor) {
-      return [];
-    }
-
-    return normalizarIds(JSON.parse(valor));
-  } catch {
-    return [];
-  }
-}
-
-function salvarIdsFavoritosLocais(
-  ids: string[],
-  emitirEvento = true
-) {
-  const normalizados = normalizarIds(ids);
-
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(normalizados)
-  );
-
-  if (emitirEvento) {
-    window.dispatchEvent(new Event(FAVORITES_EVENT));
-  }
-}
-
-async function carregarIdsDaConta(userId: string) {
-  const { data, error } = await supabase
-    .from("user_favorites")
-    .select("product_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return normalizarIds(
-    (data ?? []).map((item) => item.product_id)
-  );
-}
-
-async function enviarFavoritosLocaisParaConta(
-  userId: string,
-  ids: string[]
-) {
-  if (ids.length === 0) {
-    return;
-  }
-
-  const linhas = ids.map((productId) => ({
-    user_id: userId,
-    product_id: productId,
-  }));
-
-  const { error } = await supabase
-    .from("user_favorites")
-    .upsert(linhas, {
-      onConflict: "user_id,product_id",
-      ignoreDuplicates: true,
-    });
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const item = value as Partial<FavoriteProduct>;
+  return typeof item.id === "string" && typeof item.name === "string";
 }
 
 export default function FavoritosPage() {
+  const ids = useFavoriteIds();
   const [user, setUser] = useState<User | null>(null);
   const [products, setProducts] = useState<FavoriteProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [saindo, setSaindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-
-  const carregarProdutos = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) {
-      setProducts([]);
-      return;
-    }
-
-    const response = await fetch("/api/favorites/products", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ids }),
-    });
-
-    const data = (await response.json()) as {
-      success?: boolean;
-      error?: string;
-      products?: FavoriteProduct[];
-    };
-
-    if (!response.ok || !data.success) {
-      throw new Error(
-        data.error || "Não foi possível carregar seus favoritos."
-      );
-    }
-
-    setProducts(
-      Array.isArray(data.products) ? data.products : []
-    );
-  }, []);
-
-  const sincronizarECarregar = useCallback(
-    async (usuarioAtual?: User | null) => {
-      setLoading(true);
-      setErro(null);
-
-      try {
-        const idsLocais = lerIdsFavoritosLocais();
-
-        if (!usuarioAtual) {
-          await carregarProdutos(idsLocais);
-          return;
-        }
-
-        await enviarFavoritosLocaisParaConta(
-          usuarioAtual.id,
-          idsLocais
-        );
-
-        const idsDaConta = await carregarIdsDaConta(
-          usuarioAtual.id
-        );
-
-        const idsMesclados = Array.from(
-          new Set([...idsDaConta, ...idsLocais])
-        );
-
-        // Atualiza o cache local sem disparar o próprio evento
-        // da página e evitar loop infinito de sincronização.
-        salvarIdsFavoritosLocais(idsMesclados, false);
-
-        // Atualiza apenas o contador/estado de outros componentes,
-        // como o Header. Esta página não escuta este evento.
-        window.dispatchEvent(new Event(FAVORITES_EVENT));
-
-        await carregarProdutos(idsMesclados);
-      } catch (error) {
-        console.error(
-          "Erro ao sincronizar favoritos:",
-          error
-        );
-
-        setErro(
-          "Não foi possível sincronizar seus favoritos agora."
-        );
-
-        try {
-          await carregarProdutos(
-            lerIdsFavoritosLocais()
-          );
-        } catch {
-          setProducts([]);
-        }
-      } finally {
-        setLoading(false);
-      }
-    },
-    [carregarProdutos]
-  );
+  const [reloadToken, setReloadToken] = useState(0);
+  const loadedKey = useRef<string | null>(null);
+  const idsKey = ids.join(",");
 
   useEffect(() => {
     let ativo = true;
 
-    async function iniciar() {
-      const {
-        data: { user: usuarioAtual },
-      } = await supabase.auth.getUser();
-
-      if (!ativo) {
-        return;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (ativo) {
+        setUser(data.user ?? null);
       }
-
-      setUser(usuarioAtual ?? null);
-
-      await sincronizarECarregar(
-        usuarioAtual ?? null
-      );
-    }
-
-    void iniciar();
+    });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!ativo) {
-          return;
-        }
-
-        const usuarioAtual =
-          session?.user ?? null;
-
-        setUser(usuarioAtual);
-
-        if (event === "SIGNED_IN") {
-          void sincronizarECarregar(usuarioAtual);
-        }
-
-        if (event === "SIGNED_OUT") {
-          void sincronizarECarregar(null);
-        }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (ativo) {
+        setUser(session?.user ?? null);
       }
-    );
+    });
 
     return () => {
       ativo = false;
       subscription.unsubscribe();
     };
-  }, [sincronizarECarregar]);
+  }, []);
 
   useEffect(() => {
-    function atualizarDeOutraAba() {
-      void sincronizarECarregar(user);
+    const key = `${idsKey}:${reloadToken}`;
+
+    if (loadedKey.current === key) {
+      return;
     }
 
-    // O evento "storage" só dispara em outras abas/janelas.
-    // Não escutamos FAVORITES_EVENT aqui para impedir que a
-    // própria sincronização se chame novamente em loop.
-    window.addEventListener(
-      "storage",
-      atualizarDeOutraAba
-    );
+    loadedKey.current = key;
+    let ativo = true;
+    const currentIds = idsKey ? idsKey.split(",") : [];
 
-    return () => {
-      window.removeEventListener(
-        "storage",
-        atualizarDeOutraAba
-      );
-    };
-  }, [sincronizarECarregar, user]);
+    async function carregar() {
+      setLoading(true);
+      setErro(null);
 
-  async function removerFavorito(
-    productId: string
-  ) {
-    const anteriores =
-      lerIdsFavoritosLocais();
+      try {
+        const carregados = await fetchFavoriteProducts(currentIds);
 
-    const proximos = anteriores.filter(
-      (id) => id !== productId
-    );
+        if (!ativo) {
+          return;
+        }
 
-    // Primeiro atualiza a tela e o cache local sem provocar
-    // nova sincronização desta página.
-    salvarIdsFavoritosLocais(proximos, false);
+        const validos = carregados.filter(isFavoriteProduct);
+        setProducts(validos);
 
-    setProducts((atuais) =>
-      atuais.filter(
-        (product) =>
-          product.id !== productId
-      )
-    );
+        const validIds = validos.map((product) => product.id);
 
-    if (user) {
-      const { error } = await supabase
-        .from("user_favorites")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("product_id", productId);
+        if (validIds.length !== currentIds.length) {
+          favoritesController.replaceActiveIds(validIds);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar favoritos:", error);
 
-      if (error) {
-        console.error(
-          "Erro ao remover favorito da conta:",
-          error.message
-        );
+        if (!ativo) {
+          return;
+        }
 
-        salvarIdsFavoritosLocais(
-          anteriores,
-          false
-        );
-
-        setErro(
-          "Não foi possível remover este favorito. Tente novamente."
-        );
-
-        await sincronizarECarregar(user);
-        return;
+        setErro("Não foi possível sincronizar seus favoritos agora.");
+        setProducts([]);
+      } finally {
+        if (ativo) {
+          setLoading(false);
+        }
       }
     }
 
-    // Atualiza o contador do Header somente depois de concluir.
-    window.dispatchEvent(new Event(FAVORITES_EVENT));
+    void carregar();
+
+    return () => {
+      ativo = false;
+    };
+  }, [idsKey, reloadToken]);
+
+  async function removerFavorito(productId: string) {
+    const estavaFavoritado = favoritesController.getIds().includes(productId);
+    const resultado = await favoritesController.remove(productId);
+    const evento = eventForFavoriteMutation(
+      "user",
+      estavaFavoritado,
+      resultado.favorited,
+    );
+
+    if (resultado.changed && evento) {
+      trackAnalyticsEvent({
+        eventType: evento,
+        productId,
+        metadata: {
+          surface: "favorites-page",
+        },
+      });
+    }
+
+    setProducts((atuais) =>
+      atuais.filter((product) => product.id !== productId),
+    );
   }
 
   async function sair() {
     try {
       setSaindo(true);
 
-      const { error } =
-        await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
 
       if (error) {
-        setErro(
-          "Não foi possível sair da conta."
-        );
+        setErro("Não foi possível sair da conta.");
       }
     } finally {
       setSaindo(false);
@@ -394,9 +207,7 @@ export default function FavoritosPage() {
                     disabled={saindo}
                     className="mt-2 text-xs font-black text-slate-600 underline underline-offset-4 transition hover:text-slate-950 disabled:opacity-50"
                   >
-                    {saindo
-                      ? "Saindo..."
-                      : "Sair da conta"}
+                    {saindo ? "Saindo..." : "Sair da conta"}
                   </button>
                 </div>
               ) : (
@@ -422,17 +233,14 @@ export default function FavoritosPage() {
             </div>
           ) : erro && products.length === 0 ? (
             <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
-              <p className="font-bold text-red-700">
-                {erro}
-              </p>
+              <p className="font-bold text-red-700">{erro}</p>
 
               <button
                 type="button"
-                onClick={() =>
-                  void sincronizarECarregar(
-                    user
-                  )
-                }
+                onClick={() => {
+                  loadedKey.current = null;
+                  setReloadToken((token) => token + 1);
+                }}
                 className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-black text-red-700 shadow-sm"
               >
                 Tentar novamente
@@ -470,18 +278,14 @@ export default function FavoritosPage() {
               <div className="mb-4 flex items-center justify-between gap-4">
                 <p className="text-sm font-bold text-slate-600">
                   {products.length}{" "}
-                  {products.length === 1
-                    ? "produto salvo"
-                    : "produtos salvos"}
+                  {products.length === 1 ? "produto salvo" : "produtos salvos"}
                 </p>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {products.map((product) => {
                   const possuiPrecoAnterior =
-                    product.oldPrice !== null &&
-                    product.oldPrice >
-                      product.price;
+                    product.oldPrice !== null && product.oldPrice > product.price;
 
                   return (
                     <article
@@ -499,17 +303,11 @@ export default function FavoritosPage() {
                           loading="lazy"
                         />
 
-                        {product.discount !==
-                          null &&
-                          product.discount >
-                            0 && (
-                            <span className="absolute left-3 top-3 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-black text-white shadow-sm">
-                              {
-                                product.discount
-                              }
-                              % OFF
-                            </span>
-                          )}
+                        {product.discount !== null && product.discount > 0 && (
+                          <span className="absolute left-3 top-3 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-black text-white shadow-sm">
+                            {product.discount}% OFF
+                          </span>
+                        )}
                       </Link>
 
                       <div className="flex flex-1 flex-col p-4">
@@ -525,27 +323,19 @@ export default function FavoritosPage() {
                         </Link>
 
                         <div className="mt-auto pt-4">
-                          {possuiPrecoAnterior &&
-                            product.oldPrice !==
-                              null && (
-                              <p className="text-xs font-semibold text-slate-400 line-through">
-                                {formatarPreco(
-                                  product.oldPrice
-                                )}
-                              </p>
-                            )}
+                          {possuiPrecoAnterior && product.oldPrice !== null && (
+                            <p className="text-xs font-semibold text-slate-400 line-through">
+                              {formatarPreco(product.oldPrice)}
+                            </p>
+                          )}
 
                           <p className="mt-1 text-2xl font-black tracking-tight text-emerald-700">
-                            {formatarPreco(
-                              product.price
-                            )}
+                            {formatarPreco(product.price)}
                           </p>
 
                           {product.installments && (
                             <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">
-                              {
-                                product.installments
-                              }
+                              {product.installments}
                             </p>
                           )}
 
@@ -559,11 +349,7 @@ export default function FavoritosPage() {
 
                             <button
                               type="button"
-                              onClick={() =>
-                                void removerFavorito(
-                                  product.id
-                                )
-                              }
+                              onClick={() => void removerFavorito(product.id)}
                               aria-label={`Remover ${product.name} dos favoritos`}
                               title="Remover dos favoritos"
                               className="flex h-11 w-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-xl text-rose-600 transition hover:bg-rose-100"

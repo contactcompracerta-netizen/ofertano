@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
+import { syncFavoritesAfterAuthentication } from "@/lib/favorites/store";
 import { supabase } from "@/lib/supabaseClient";
 
 type Mode = "login" | "signup";
@@ -89,6 +90,7 @@ export default function LoginPage() {
         }
 
         if (data.session) {
+          await syncFavoritesAfterAuthentication();
           window.location.href = "/favoritos";
           return;
         }
@@ -112,6 +114,7 @@ export default function LoginPage() {
         return;
       }
 
+      await syncFavoritesAfterAuthentication();
       window.location.href = "/favoritos";
     } catch {
       setErro("Não foi possível concluir a operação. Tente novamente.");
