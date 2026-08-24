@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { trackAnalyticsEvent } from "@/lib/analytics/tracker";
 
 type FavoriteButtonProps = {
   productId: string;
@@ -208,6 +209,13 @@ export default function FavoriteButton({
 
     salvarFavoritos(proximos);
     setFavoritado(novoEstado);
+    trackAnalyticsEvent({
+      eventType: novoEstado ? "FAVORITE_ADD" : "FAVORITE_REMOVE",
+      productId,
+      metadata: {
+        surface: "favorite",
+      },
+    });
 
     try {
       setSincronizando(true);

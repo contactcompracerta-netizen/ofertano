@@ -380,3 +380,93 @@ model BlogPost {
   @@index([status, scheduledAt])
   @@index([featured, status])
 }
+
+// Eventos first-party do painel de inteligência.
+// eventType é String (não enum) para aceitar tipos futuros sem migration.
+model AnalyticsEvent {
+  id String @id @default(cuid())
+
+  eventType String
+  sessionId String
+
+  productId   String?
+  query       String?
+  marketplace String?
+  position    Int?
+  resultCount Int?
+
+  source      String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  deviceType  String?
+
+  eventHash String @unique
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([eventType, createdAt])
+  @@index([productId, createdAt])
+  @@index([query, createdAt])
+  @@index([marketplace, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+// Agregação diária para o Admin não varrer eventos brutos.
+model AnalyticsDailyAgg {
+  id String @id @default(cuid())
+
+  day          DateTime @db.Date
+  grain        String
+  eventType    String
+  dimensionKey String
+
+  query       String?
+  productId   String?
+  marketplace String?
+  source      String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  deviceType  String?
+
+  eventCount     Int @default(0)
+  resultCountSum Int @default(0)
+
+  lastEventAt DateTime @default(now())
+
+  @@unique([day, grain, eventType, dimensionKey])
+  @@index([grain, eventType, day])
+  @@index([productId, day])
+  @@index([query, day])
+  @@index([marketplace, day])
+  @@index([source, day])
+  @@index([deviceType, day])
+}
+
+// Sessões anônimas por dia (visitantes).
+model AnalyticsSessionDay {
+  id String @id @default(cuid())
+
+  sessionId String
+  day       DateTime @db.Date
+
+  source      String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  deviceType  String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, day])
+  @@index([day])
+  @@index([source, day])
+  @@index([deviceType, day])
+  @@index([utmSource, utmMedium, utmCampaign, day])
+}

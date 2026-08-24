@@ -3,6 +3,9 @@ import prisma from "@/lib/prisma";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type Categoria = {
   nome: string;
   quantidade: number;

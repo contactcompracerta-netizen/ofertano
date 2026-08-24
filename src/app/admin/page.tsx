@@ -291,6 +291,27 @@ export default function AdminPage() {
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <article className={cardClass}>
             <span
+              className={`${badgeClass} border-emerald-200 bg-emerald-50 text-emerald-800`}
+            >
+              Inteligência
+            </span>
+            <h2 className="mt-3 text-base font-semibold text-slate-950">
+              Analytics first-party
+            </h2>
+            <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">
+              Pesquisas, funil, zero resultados e produtos com potencial para
+              tráfego pago.
+            </p>
+            <Link
+              href="/admin/inteligencia"
+              className={`${primaryButtonClass} mt-5 w-full`}
+            >
+              Abrir inteligência
+            </Link>
+          </article>
+
+          <article className={cardClass}>
+            <span
               className={`${badgeClass} border-slate-200 bg-slate-50 text-slate-600`}
             >
               Descoberta

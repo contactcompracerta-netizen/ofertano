@@ -1,5 +1,7 @@
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
+import ProductImpression from "@/components/analytics/ProductImpression";
+import SearchAnalytics from "@/components/analytics/SearchAnalytics";
 
 type Produto = {
   id: string;
@@ -23,11 +25,17 @@ type Produto = {
 type OffersSectionProps = {
   produtos: Produto[];
   busca: string;
+  searchMeta?: {
+    durationMs?: number;
+    source?: string;
+    productIds?: string[];
+  };
 };
 
 export default function OffersSection({
   produtos,
   busca,
+  searchMeta,
 }: OffersSectionProps) {
   const possuiBusca = busca.length > 0;
 
@@ -78,6 +86,16 @@ export default function OffersSection({
         )}
       </div>
 
+      {possuiBusca ? (
+        <SearchAnalytics
+          query={busca}
+          resultCount={produtos.length}
+          durationMs={searchMeta?.durationMs}
+          searchSource={searchMeta?.source}
+          productIds={searchMeta?.productIds ?? produtos.map((produto) => produto.id)}
+        />
+      ) : null}
+
       {produtos.length === 0 ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl sm:h-16 sm:w-16">
@@ -105,11 +123,16 @@ export default function OffersSection({
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 lg:gap-5 xl:grid-cols-4 2xl:grid-cols-5">
-          {produtos.map((produto) => (
-            <ProductCard
+          {produtos.map((produto, index) => (
+            <ProductImpression
               key={produto.id}
-              produto={produto}
-            />
+              productId={produto.id}
+              position={index + 1}
+              query={possuiBusca ? busca : null}
+              surface={possuiBusca ? "search" : "home"}
+            >
+              <ProductCard produto={produto} />
+            </ProductImpression>
           ))}
         </div>
       )}

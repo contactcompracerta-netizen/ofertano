@@ -95,11 +95,13 @@ export default async function HomePage({
    * 3. publica/agrupar canonicamente;
    * 4. retorna os produtos encontrados.
    */
+  const pesquisaIniciadaEm = Date.now();
   const resultado =
     await searchCatalogOrDiscover(
       busca,
       5,
     );
+  const searchDurationMs = Date.now() - pesquisaIniciadaEm;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -108,6 +110,11 @@ export default async function HomePage({
       <OffersSection
         produtos={resultado.products}
         busca={busca}
+        searchMeta={{
+          durationMs: searchDurationMs,
+          source: resultado.source,
+          productIds: resultado.products.map((produto) => produto.id),
+        }}
       />
 
       <Benefits />

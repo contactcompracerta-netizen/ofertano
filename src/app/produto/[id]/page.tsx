@@ -8,6 +8,9 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ProductGallery from "@/components/ProductGallery";
 import ShareProductButton from "@/components/ShareProductButton";
+import MarketplaceClickAnchor from "@/components/analytics/MarketplaceClickAnchor";
+import ProductImpression from "@/components/analytics/ProductImpression";
+import ProductViewTracker from "@/components/analytics/ProductViewTracker";
 import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
@@ -1062,6 +1065,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         )
       : produto.store?.trim() || "Loja parceira";
 
+  const marketplacePrincipalKey = (
+    ofertaPrincipalComLink?.marketplace ??
+    produto.store?.trim() ??
+    "OUTROS"
+  ).slice(0, 40);
+
   const precoPrincipal =
     ofertaPrincipalComLink?.price ??
     (produto.price > 0 ? produto.price : 0);
@@ -1137,6 +1146,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   return (
     <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <Header />
+      <ProductViewTracker
+        productId={produto.id}
+        offers={ofertasComparador.map((oferta, index) => ({
+          marketplace: oferta.marketplace,
+          position: index + 1,
+          price: oferta.price,
+        }))}
+      />
 
       <main className="bg-slate-50/70">
         <div className="border-b border-slate-200 bg-white">
@@ -1295,15 +1312,19 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                 </div>
 
                 {possuiLinkPrincipal ? (
-                  <a
+                  <MarketplaceClickAnchor
                     href={linkPrincipal}
                     target="_blank"
                     rel="noopener noreferrer sponsored"
+                    productId={produto.id}
+                    marketplace={marketplacePrincipalKey}
+                    position={1}
+                    price={precoPrincipal}
                     className="mt-2.5 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-center text-[12px] font-black text-white shadow-md shadow-emerald-600/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200"
                   >
                     Ver oferta em {marketplacePrincipal}
                     <ExternalLinkIcon className="h-4 w-4" />
-                  </a>
+                  </MarketplaceClickAnchor>
                 ) : (
                   <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-center">
                     <p className="text-sm font-black text-amber-950">
@@ -1486,11 +1507,15 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
                     if (linkAtivo && linkDestino) {
                       return (
-                        <a
+                        <MarketplaceClickAnchor
                           key={oferta.id}
                           href={linkDestino}
                           target="_blank"
                           rel="noopener noreferrer sponsored"
+                          productId={produto.id}
+                          marketplace={oferta.marketplace}
+                          position={ofertasComparador.indexOf(oferta) + 1}
+                          price={oferta.price}
                           className={`rounded-xl p-3 transition hover:-translate-y-0.5 hover:shadow-md ${
                             menorPrecoEncontrado
                               ? "border-2 border-emerald-300 bg-emerald-50/60 shadow-sm hover:border-emerald-400"
@@ -1498,7 +1523,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                           }`}
                         >
                           {conteudoOferta}
-                        </a>
+                        </MarketplaceClickAnchor>
                       );
                     }
 
@@ -1704,7 +1729,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-                {produtosRecomendados.map((item) => {
+                {produtosRecomendados.map((item, index) => {
                   const temPrecoAnterior =
                     item.oldPrice !== null &&
                     item.oldPrice > item.price;
@@ -1723,8 +1748,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                         : 0;
 
                   return (
-                    <Link
+                    <ProductImpression
                       key={item.id}
+                      productId={item.id}
+                      position={index + 1}
+                      surface="recommended"
+                      className="h-full"
+                    >
+                    <Link
                       href={`/produto/${item.id}`}
                       className="group overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
                     >
@@ -1770,6 +1801,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                         </span>
                       </div>
                     </Link>
+                    </ProductImpression>
                   );
                 })}
               </div>
@@ -1842,15 +1874,19 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
             <div className="mt-1.5">
               {possuiLinkPrincipal ? (
-                <a
+                <MarketplaceClickAnchor
                   href={linkPrincipal}
                   target="_blank"
                   rel="noopener noreferrer sponsored"
+                  productId={produto.id}
+                  marketplace={marketplacePrincipalKey}
+                  position={1}
+                  price={precoPrincipal}
                   className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-center text-[13px] font-black text-white shadow-md shadow-emerald-600/15 active:scale-[0.99]"
                 >
                   Ver oferta em {marketplacePrincipal}
                   <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
-                </a>
+                </MarketplaceClickAnchor>
               ) : (
                 <div className="flex min-h-10 w-full items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-center text-[12px] font-black text-amber-800">
                   Link em revisão
@@ -1891,15 +1927,19 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             </div>
 
             {possuiLinkPrincipal ? (
-              <a
+              <MarketplaceClickAnchor
                 href={linkPrincipal}
                 target="_blank"
                 rel="noopener noreferrer sponsored"
+                productId={produto.id}
+                marketplace={marketplacePrincipalKey}
+                position={1}
+                price={precoPrincipal}
                 className="flex min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 text-center text-[12px] font-black text-white shadow-md shadow-emerald-600/15 active:scale-[0.99]"
               >
                 <span className="truncate">Ver oferta</span>
                 <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-              </a>
+              </MarketplaceClickAnchor>
             ) : (
               <div className="flex min-h-10 min-w-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-2 text-center text-[11px] font-black text-amber-800">
                 Link em revisão

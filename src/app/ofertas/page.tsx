@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import Header from "@/components/Header";
 import ProductCard from "@/components/ProductCard";
+import ProductImpression from "@/components/analytics/ProductImpression";
 import Footer from "@/components/Footer";
 
 export const dynamic = "force-dynamic";
@@ -84,8 +85,15 @@ export default async function OfertasPage() {
           </div>
         ) : (
           <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {produtos.map((produto) => (
-              <ProductCard key={produto.id} produto={produto} />
+            {produtos.map((produto, index) => (
+              <ProductImpression
+                key={produto.id}
+                productId={produto.id}
+                position={index + 1}
+                surface="ofertas"
+              >
+                <ProductCard produto={produto} />
+              </ProductImpression>
             ))}
           </div>
         )}

@@ -6,6 +6,9 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import prisma from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type ProdutoPageProps = {
   params: Promise<{
     id: string;
