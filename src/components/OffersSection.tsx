@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
+import AnalyticsListingScope from "@/components/analytics/AnalyticsListingScope";
 import ProductImpression from "@/components/analytics/ProductImpression";
 import SearchAnalytics from "@/components/analytics/SearchAnalytics";
 
@@ -43,6 +44,10 @@ export default function OffersSection({
     <section
       id="ofertas"
       className="mx-auto w-full max-w-[1440px] scroll-mt-20 px-2.5 py-4 sm:px-5 sm:py-8 lg:px-8 lg:py-10"
+    >
+    <AnalyticsListingScope
+      surface={possuiBusca ? "search" : "home"}
+      scope={busca}
     >
       <div className="mb-3 flex items-end justify-between gap-3 sm:mb-6">
         <div className="min-w-0">
@@ -130,12 +135,16 @@ export default function OffersSection({
               position={index + 1}
               query={possuiBusca ? busca : null}
               surface={possuiBusca ? "search" : "home"}
+              marketplaces={(produto.offers ?? []).map(
+                (oferta) => oferta.marketplace,
+              )}
             >
               <ProductCard produto={produto} />
             </ProductImpression>
           ))}
         </div>
       )}
+    </AnalyticsListingScope>
     </section>
   );
 }

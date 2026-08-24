@@ -1,14 +1,24 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useContext, useEffect, useRef, type ReactNode } from "react";
 
-import { trackAnalyticsEvent } from "@/lib/analytics/tracker";
+import {
+  IMPRESSION_VISIBILITY_THRESHOLD,
+  isImpressionVisible,
+  uniqueMarketplaces,
+} from "@/lib/analytics/impression";
+import { ListingOccurrenceContext } from "@/components/analytics/AnalyticsListingScope";
+import {
+  ensureListingOccurrence,
+  trackAnalyticsEvent,
+} from "@/lib/analytics/tracker";
 
 type ProductImpressionProps = {
   productId: string;
   position?: number | null;
   query?: string | null;
   marketplace?: string | null;
+  marketplaces?: string[] | null;
   surface?: string;
   children: ReactNode;
   className?: string;
@@ -19,17 +29,29 @@ export default function ProductImpression({
   position,
   query,
   marketplace,
+  marketplaces,
   surface = "list",
   children,
   className,
 }: ProductImpressionProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const sent = useRef(false);
+  const sentOccurrenceRef = useRef<string | null>(null);
+  const scopedOccurrenceId = useContext(ListingOccurrenceContext);
+  const marketplaceKey = uniqueMarketplaces([
+    marketplace,
+    ...(marketplaces ?? []),
+  ]).join("|");
 
   useEffect(() => {
+    const occurrenceId =
+      scopedOccurrenceId || ensureListingOccurrence(surface, query ?? "");
     const node = ref.current;
 
-    if (!node || sent.current || typeof IntersectionObserver === "undefined") {
+    if (!occurrenceId || !node || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    if (sentOccurrenceRef.current === occurrenceId) {
       return;
     }
 
@@ -37,26 +59,37 @@ export default function ProductImpression({
       (entries) => {
         const entry = entries[0];
 
-        if (!entry?.isIntersecting || sent.current) {
+        if (
+          !isImpressionVisible(entry) ||
+          sentOccurrenceRef.current === occurrenceId
+        ) {
           return;
         }
 
-        sent.current = true;
+        sentOccurrenceRef.current = occurrenceId;
         observer.disconnect();
+
+        const attributedMarketplaces = uniqueMarketplaces([
+          marketplace,
+          ...(marketplaces ?? []),
+        ]);
 
         trackAnalyticsEvent({
           eventType: "PRODUCT_IMPRESSION",
           productId,
           position: position ?? null,
           query: query || null,
-          marketplace: marketplace || null,
           metadata: {
             surface,
+            occurrenceId,
+            ...(attributedMarketplaces.length > 0
+              ? { marketplaces: attributedMarketplaces }
+              : {}),
           },
         });
       },
       {
-        threshold: 0.45,
+        threshold: IMPRESSION_VISIBILITY_THRESHOLD,
         rootMargin: "0px 0px -8% 0px",
       },
     );
@@ -64,7 +97,15 @@ export default function ProductImpression({
     observer.observe(node);
 
     return () => observer.disconnect();
-  }, [productId, position, query, marketplace, surface]);
+  }, [
+    productId,
+    position,
+    query,
+    marketplace,
+    marketplaceKey,
+    surface,
+    scopedOccurrenceId,
+  ]);
 
   return (
     <div ref={ref} className={className ?? "h-full"}>

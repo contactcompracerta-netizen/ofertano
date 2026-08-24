@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import Header from "@/components/Header";
 import ProductCard from "@/components/ProductCard";
+import AnalyticsListingScope from "@/components/analytics/AnalyticsListingScope";
 import ProductImpression from "@/components/analytics/ProductImpression";
 import Footer from "@/components/Footer";
 
@@ -84,7 +85,8 @@ export default async function OfertasPage() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <AnalyticsListingScope surface="ofertas">
+            <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {produtos.map((produto, index) => (
               <ProductImpression
                 key={produto.id}
@@ -95,7 +97,8 @@ export default async function OfertasPage() {
                 <ProductCard produto={produto} />
               </ProductImpression>
             ))}
-          </div>
+            </div>
+          </AnalyticsListingScope>
         )}
       </section>
 

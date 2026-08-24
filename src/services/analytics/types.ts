@@ -96,7 +96,7 @@ export type TrendResult = {
   current: number;
   previous: number;
   pct: number | null;
-  direction: "up" | "down" | "flat";
+  direction: "up" | "down" | "flat" | "new";
 };
 
 export type FunnelMetrics = {
@@ -104,9 +104,10 @@ export type FunnelMetrics = {
   impression: number;
   view: number;
   click: number;
-  searchToImpression: number | null;
+  impressionsPerSearch: number | null;
   impressionToView: number | null;
   viewToClick: number | null;
+  clickThroughRate: number | null;
 };
 
 export type OpportunityScoreInput = {

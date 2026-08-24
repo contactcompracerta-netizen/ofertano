@@ -4,7 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { IntelligenceDashboard } from "@/services/analytics/dashboard";
 import type { IntelligenceSort } from "@/services/analytics/dashboard";
-import { dateKeyInTimeZone, formatCtr } from "@/services/analytics/metrics";
+import { dateKeyInTimeZone, formatCtr, formatTrendLabel } from "@/services/analytics/metrics";
+import {
+  DESKTOP_TABLE_CLASS,
+  MOBILE_STACK_CLASS,
+  PRODUCT_NAME_CELL_CLASS,
+  PRODUCT_NAME_TEXT_CLASS,
+  TABLE_WRAP_CLASS,
+  buildFunnelPresentation,
+  compactMarketplaces,
+  seriesBarHeightPct,
+  seriesChartLayout,
+  trendBadgeTone,
+} from "@/services/analytics/presentation";
 import type { TrendResult } from "@/services/analytics/types";
 
 type Preset = "today" | "7d" | "30d" | "90d" | "custom";
@@ -12,12 +24,14 @@ type Preset = "today" | "7d" | "30d" | "90d" | "custom";
 const cardClass =
   "rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
 
-const tableWrapClass = "overflow-x-auto";
-
 const thClass =
-  "whitespace-nowrap px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
+  "px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
 
-const tdClass = "whitespace-nowrap px-3 py-2 text-sm text-slate-800";
+const thNumClass = `${thClass} text-right`;
+
+const tdClass = "px-3 py-2 text-sm text-slate-800";
+
+const tdNumClass = `${tdClass} text-right tabular-nums`;
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("pt-BR").format(Math.round(value));
@@ -39,7 +53,7 @@ function formatMarketplace(marketplace: string) {
     MERCADO_LIVRE: "Mercado Livre",
     AMAZON: "Amazon",
     SHOPEE: "Shopee",
-    MAGAZINE_LUIZA: "Magazine Luiza",
+    MAGAZINE_LUIZA: "Magalu",
     CASAS_BAHIA: "Casas Bahia",
     KABUM: "KaBuM!",
     TERABYTE: "Terabyte",
@@ -77,23 +91,16 @@ function formatDateTime(value: string | null): string {
 }
 
 function TrendBadge({ trend }: { trend: TrendResult }) {
-  const pct = trend.pct;
-  const label =
-    pct == null
-      ? "—"
-      : `${pct > 0 ? "+" : ""}${pct.toLocaleString("pt-BR", {
-          maximumFractionDigits: 1,
-        })}%`;
-
-  const color =
-    trend.direction === "up"
-      ? "bg-emerald-50 text-emerald-800"
-      : trend.direction === "down"
-        ? "bg-rose-50 text-rose-800"
-        : "bg-slate-100 text-slate-600";
-
+  const label = formatTrendLabel(trend);
+  const color = trendBadgeTone(trend);
   const arrow =
-    trend.direction === "up" ? "▲" : trend.direction === "down" ? "▼" : "▬";
+    trend.direction === "new"
+      ? "●"
+      : trend.direction === "up"
+        ? "▲"
+        : trend.direction === "down"
+          ? "▼"
+          : "▬";
 
   return (
     <span
@@ -109,16 +116,67 @@ function ScoreBar({ score }: { score: number | null }) {
   const value = score ?? 0;
 
   return (
-    <div className="flex min-w-28 items-center gap-2">
+    <div className="flex min-w-[5.5rem] items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full bg-emerald-600"
           style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
         />
       </div>
-      <span className="w-8 text-right text-sm font-semibold tabular-nums text-slate-900">
+      <span className="w-8 shrink-0 text-right text-sm font-semibold tabular-nums text-slate-900">
         {score == null ? "—" : Math.round(value)}
       </span>
+    </div>
+  );
+}
+
+function MarketplaceChips({ marketplaces }: { marketplaces: string[] }) {
+  const model = compactMarketplaces(marketplaces.map(formatMarketplace), 2);
+
+  if (model.visible.length === 0) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  return (
+    <div className="flex max-w-[11rem] flex-wrap gap-1">
+      {model.visible.map((name) => (
+        <span
+          key={name}
+          title={name}
+          className="inline-flex max-w-[6.5rem] truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+        >
+          {name}
+        </span>
+      ))}
+      {model.extra > 0 ? (
+        <span
+          title={model.hidden.join(" · ")}
+          className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+        >
+          +{model.extra}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function ProductName({
+  name,
+  extra,
+}: {
+  name: string;
+  extra?: string | null;
+}) {
+  return (
+    <div className={PRODUCT_NAME_CELL_CLASS}>
+      <p className={PRODUCT_NAME_TEXT_CLASS} title={name}>
+        {name}
+      </p>
+      {extra ? (
+        <p className="mt-1 truncate text-[11px] text-slate-500" title={extra}>
+          {extra}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -157,16 +215,11 @@ function SeriesChart({
 }: {
   series: IntelligenceDashboard["series"];
 }) {
-  const max = Math.max(
-    1,
-    ...series.map((point) =>
-      Math.max(point.searches, point.views, point.clicks),
-    ),
-  );
+  const layout = seriesChartLayout(series);
 
   return (
     <div className={cardClass}>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
             Tendência do período
@@ -187,52 +240,59 @@ function SeriesChart({
           </span>
         </div>
       </div>
-      <div className="flex h-28 items-end gap-1">
-        {series.map((point) => (
-          <div
-            key={point.day}
-            className="flex min-w-0 flex-1 items-end justify-center gap-px"
-            title={`${point.day}: ${point.searches} pesquisas, ${point.views} views, ${point.clicks} cliques`}
-          >
+      {layout.isEmpty ? (
+        <p className="flex h-28 items-center text-sm text-slate-500">
+          Sem dados no período.
+        </p>
+      ) : (
+        <div
+          className={`flex h-28 items-end gap-1 ${layout.isSinglePoint ? "max-w-xs" : ""}`}
+        >
+          {series.map((point) => (
             <div
-              className="w-[30%] rounded-t bg-slate-300"
-              style={{ height: `${(point.searches / max) * 100}%` }}
-            />
-            <div
-              className="w-[30%] rounded-t bg-emerald-500"
-              style={{ height: `${(point.views / max) * 100}%` }}
-            />
-            <div
-              className="w-[30%] rounded-t bg-emerald-800"
-              style={{ height: `${(point.clicks / max) * 100}%` }}
-            />
-          </div>
-        ))}
-      </div>
+              key={point.day}
+              className={`flex h-full ${layout.columnMinWidthClass} min-w-0 flex-1 items-end justify-center gap-px`}
+              title={`${point.day}: ${point.searches} pesquisas, ${point.views} views, ${point.clicks} cliques`}
+            >
+              {(
+                [
+                  ["searches", "bg-slate-300", point.searches],
+                  ["views", "bg-emerald-500", point.views],
+                  ["clicks", "bg-emerald-800", point.clicks],
+                ] as const
+              ).map(([key, color, value]) => (
+                <div
+                  key={key}
+                  className="relative flex h-full w-[30%] items-end justify-center"
+                >
+                  <div
+                    className={`w-full rounded-t ${color} ${layout.showMarkers && value > 0 ? "min-h-3" : ""}`}
+                    style={{
+                      height: `${seriesBarHeightPct(value, layout.max)}%`,
+                    }}
+                  />
+                  {layout.showMarkers && value > 0 ? (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute h-2.5 w-2.5 rounded-full ring-2 ring-white ${color}`}
+                      style={{
+                        bottom: `calc(${seriesBarHeightPct(value, layout.max)}% - 5px)`,
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function Funnel({ funnel }: { funnel: IntelligenceDashboard["funnel"] }) {
-  const steps = [
-    { label: "SEARCH", value: funnel.search, rate: null as number | null },
-    {
-      label: "PRODUCT_IMPRESSION",
-      value: funnel.impression,
-      rate: funnel.searchToImpression,
-    },
-    {
-      label: "PRODUCT_VIEW",
-      value: funnel.view,
-      rate: funnel.impressionToView,
-    },
-    {
-      label: "MARKETPLACE_CLICK",
-      value: funnel.click,
-      rate: funnel.viewToClick,
-    },
-  ];
-  const max = Math.max(1, ...steps.map((step) => step.value));
+  const steps = buildFunnelPresentation(funnel);
+  const max = Math.max(1, ...steps.map((step) => step.volume));
 
   return (
     <div className={cardClass}>
@@ -244,18 +304,24 @@ function Funnel({ funnel }: { funnel: IntelligenceDashboard["funnel"] }) {
       </h2>
       <div className="mt-4 space-y-3">
         {steps.map((step) => (
-          <div key={step.label}>
-            <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-              <span className="font-semibold text-slate-700">{step.label}</span>
-              <span className="tabular-nums text-slate-500">
-                {formatNumber(step.value)}
-                {step.rate != null ? ` · ${formatCtr(step.rate)}` : ""}
+          <div key={step.key}>
+            <div className="mb-1 flex items-start justify-between gap-3 text-xs">
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-700">{step.label}</p>
+                {step.details.length > 0 ? (
+                  <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                    {step.details.join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+              <span className="shrink-0 tabular-nums font-semibold text-slate-800">
+                {formatNumber(step.volume)}
               </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full bg-emerald-600"
-                style={{ width: `${(step.value / max) * 100}%` }}
+                style={{ width: `${(step.volume / max) * 100}%` }}
               />
             </div>
           </div>
@@ -281,71 +347,154 @@ function ProductTable({
   }
 
   return (
-    <div className={tableWrapClass}>
-      <table className="min-w-full">
-        <thead className="border-b border-slate-100 bg-slate-50/80">
-          <tr>
-            <th className={thClass}>Produto</th>
-            {showScore ? <th className={thClass}>Pesquisas</th> : null}
-            <th className={thClass}>Impressões</th>
-            <th className={thClass}>Views</th>
-            <th className={thClass}>Cliques</th>
-            <th className={thClass}>CTR</th>
-            <th className={thClass}>Favoritos</th>
-            <th className={thClass}>Marketplaces</th>
-            <th className={thClass}>Tendência</th>
-            {showScore ? <th className={thClass}>Score</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.productId} className="border-b border-slate-100">
-              <td className={`${tdClass} max-w-[280px] whitespace-normal`}>
-                <p className="font-medium text-slate-950">{row.name}</p>
-                {showScore && row.relatedQueries.length > 0 ? (
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    {row.relatedQueries.join(" · ")}
-                  </p>
-                ) : null}
-              </td>
+    <>
+      <div className={MOBILE_STACK_CLASS}>
+        {rows.map((row) => (
+          <article
+            key={row.productId}
+            className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"
+          >
+            <ProductName
+              name={row.name}
+              extra={
+                showScore && row.relatedQueries.length > 0
+                  ? row.relatedQueries.join(" · ")
+                  : null
+              }
+            />
+            <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
               {showScore ? (
-                <td className={`${tdClass} tabular-nums`}>
-                  {formatNumber(row.relatedSearchCount)}
-                </td>
+                <div>
+                  <dt className="text-slate-500">Pesquisas</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {formatNumber(row.relatedSearchCount)}
+                  </dd>
+                </div>
               ) : null}
-              <td className={`${tdClass} tabular-nums`}>
-                {formatNumber(row.impressions)}
-              </td>
-              <td className={`${tdClass} tabular-nums`}>
-                {formatNumber(row.views)}
-              </td>
-              <td className={`${tdClass} tabular-nums`}>
-                {formatNumber(row.clicks)}
-              </td>
-              <td className={`${tdClass} tabular-nums`}>
-                {formatCtr(row.ctr)}
-              </td>
-              <td className={`${tdClass} tabular-nums`}>
-                {formatNumber(row.favorites)}
-              </td>
-              <td className={`${tdClass} whitespace-normal`}>
-                {row.marketplaces.length > 0
-                  ? row.marketplaces.map(formatMarketplace).join(", ")
-                  : "—"}
-              </td>
-              <td className={tdClass}>
-                <TrendBadge trend={row.trend} />
-              </td>
-              {showScore ? (
-                <td className={tdClass}>
-                  <ScoreBar score={row.opportunityScore} />
-                </td>
-              ) : null}
+              <div>
+                <dt className="text-slate-500">Impressões</dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatNumber(row.impressions)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Views</dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatNumber(row.views)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Cliques</dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatNumber(row.clicks)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">CTR</dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatCtr(row.ctr)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Favoritos</dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatNumber(row.favorites)}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <MarketplaceChips marketplaces={row.marketplaces} />
+              <TrendBadge trend={row.trend} />
+            </div>
+            {showScore ? (
+              <div className="mt-2">
+                <ScoreBar score={row.opportunityScore} />
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+
+      <div className={`${TABLE_WRAP_CLASS} hidden md:block`}>
+        <table className={DESKTOP_TABLE_CLASS}>
+          <colgroup>
+            <col className="w-[32%]" />
+            {showScore ? <col className="w-[8%]" /> : null}
+            <col className="w-[9%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[14%]" />
+            <col className="w-[9%]" />
+            {showScore ? <col className="w-[12%]" /> : null}
+          </colgroup>
+          <thead className="border-b border-slate-100 bg-slate-50/80">
+            <tr>
+              <th className={thClass}>Produto</th>
+              {showScore ? <th className={thNumClass}>Pesquisas</th> : null}
+              <th className={thNumClass}>Impressões</th>
+              <th className={thNumClass}>Views</th>
+              <th className={thNumClass}>Cliques</th>
+              <th className={thNumClass} title="Cliques / impressões">
+                CTR
+              </th>
+              <th className={thNumClass}>Favoritos</th>
+              <th className={thClass}>Marketplaces</th>
+              <th className={thClass}>Tendência</th>
+              {showScore ? <th className={thClass}>Score</th> : null}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.productId} className="border-b border-slate-100">
+                <td className={`${tdClass} align-top`}>
+                  <ProductName
+                    name={row.name}
+                    extra={
+                      showScore && row.relatedQueries.length > 0
+                        ? row.relatedQueries.join(" · ")
+                        : null
+                    }
+                  />
+                </td>
+                {showScore ? (
+                  <td className={`${tdNumClass} align-top`}>
+                    {formatNumber(row.relatedSearchCount)}
+                  </td>
+                ) : null}
+                <td className={`${tdNumClass} align-top`}>
+                  {formatNumber(row.impressions)}
+                </td>
+                <td className={`${tdNumClass} align-top`}>
+                  {formatNumber(row.views)}
+                </td>
+                <td className={`${tdNumClass} align-top`}>
+                  {formatNumber(row.clicks)}
+                </td>
+                <td className={`${tdNumClass} align-top`}>
+                  {formatCtr(row.ctr)}
+                </td>
+                <td className={`${tdNumClass} align-top`}>
+                  {formatNumber(row.favorites)}
+                </td>
+                <td className={`${tdClass} align-top`}>
+                  <MarketplaceChips marketplaces={row.marketplaces} />
+                </td>
+                <td className={`${tdClass} align-top`}>
+                  <TrendBadge trend={row.trend} />
+                </td>
+                {showScore ? (
+                  <td className={`${tdClass} align-top`}>
+                    <ScoreBar score={row.opportunityScore} />
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -435,7 +584,8 @@ export default function InteligenciaDashboard() {
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Comportamento first-party para decidir tráfego pago, conteúdo e
-              descoberta. Clique em marketplace não é compra.
+              descoberta. Clique em marketplace não é compra. CTR é sempre
+              cliques / impressões.
             </p>
           </div>
 
@@ -522,7 +672,7 @@ export default function InteligenciaDashboard() {
               <KpiCard
                 label="CTR"
                 value={formatCtr(data.overview.ctr)}
-                hint="Cliques / impressões (ou views)"
+                hint="Cliques / impressões"
               />
               <KpiCard
                 label="Zero resultados"
@@ -564,47 +714,126 @@ export default function InteligenciaDashboard() {
                   </select>
                 </label>
               </div>
-              <div className={tableWrapClass}>
-                <table className="min-w-full">
+
+              <div className={MOBILE_STACK_CLASS}>
+                {data.searches.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Nenhuma pesquisa no período.
+                  </p>
+                ) : (
+                  data.searches.map((row) => (
+                    <article
+                      key={row.query}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"
+                    >
+                      <p className="line-clamp-2 text-sm font-medium text-slate-950" title={row.query}>
+                        {row.query}
+                      </p>
+                      <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <dt className="text-slate-500">Pesquisas</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {formatNumber(row.searches)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">Impressões</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {formatNumber(row.impressions)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">CTR</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {formatCtr(row.ctr)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">Views</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {formatNumber(row.views)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">Cliques</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {formatNumber(row.clicks)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">Tendência</dt>
+                          <dd className="mt-1">
+                            <TrendBadge trend={row.trend} />
+                          </dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))
+                )}
+              </div>
+
+              <div className={`${TABLE_WRAP_CLASS} hidden md:block`}>
+                <table className={DESKTOP_TABLE_CLASS}>
+                  <colgroup>
+                    <col className="w-[28%]" />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                  </colgroup>
                   <thead className="border-b border-slate-100 bg-slate-50/80">
                     <tr>
                       <th className={thClass}>Termo</th>
-                      <th className={thClass}>Pesquisas</th>
-                      <th className={thClass}>Resultados médios</th>
-                      <th className={thClass}>Zero resultados</th>
-                      <th className={thClass}>Visualizações</th>
-                      <th className={thClass}>Cliques</th>
-                      <th className={thClass}>CTR</th>
+                      <th className={thNumClass}>Pesquisas</th>
+                      <th className={thNumClass}>Resultados médios</th>
+                      <th className={thNumClass}>Zero resultados</th>
+                      <th className={thNumClass}>Impressões</th>
+                      <th className={thNumClass}>Visualizações</th>
+                      <th className={thNumClass}>Cliques</th>
+                      <th className={thNumClass} title="Cliques / impressões da query">
+                        CTR
+                      </th>
                       <th className={thClass}>Tendência</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.searches.length === 0 ? (
                       <tr>
-                        <td className={`${tdClass} text-slate-500`} colSpan={8}>
+                        <td className={`${tdClass} text-slate-500`} colSpan={9}>
                           Nenhuma pesquisa no período.
                         </td>
                       </tr>
                     ) : (
                       data.searches.map((row) => (
                         <tr key={row.query} className="border-b border-slate-100">
-                          <td className={`${tdClass} font-medium`}>{row.query}</td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={`${tdClass} font-medium`}>
+                            <p className="line-clamp-2 break-words" title={row.query}>
+                              {row.query}
+                            </p>
+                          </td>
+                          <td className={tdNumClass}>
                             {formatNumber(row.searches)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatAvg(row.avgResults)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.zeros)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
+                            {formatNumber(row.impressions)}
+                          </td>
+                          <td className={tdNumClass}>
                             {formatNumber(row.views)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.clicks)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatCtr(row.ctr)}
                           </td>
                           <td className={tdClass}>
@@ -629,12 +858,12 @@ export default function InteligenciaDashboard() {
                 Termos com demanda e nenhuma resposta útil. Priorize Discovery
                 por volume.
               </p>
-              <div className={`${tableWrapClass} mt-3`}>
-                <table className="min-w-full">
+              <div className={`${TABLE_WRAP_CLASS} mt-3`}>
+                <table className="min-w-full table-fixed">
                   <thead className="border-b border-slate-100 bg-slate-50/80">
                     <tr>
                       <th className={thClass}>Termo</th>
-                      <th className={thClass}>Vezes pesquisado</th>
+                      <th className={thNumClass}>Vezes pesquisado</th>
                       <th className={thClass}>Última ocorrência</th>
                       <th className={thClass}>Tendência</th>
                     </tr>
@@ -649,8 +878,12 @@ export default function InteligenciaDashboard() {
                     ) : (
                       data.zeroResults.map((row) => (
                         <tr key={row.query} className="border-b border-slate-100">
-                          <td className={`${tdClass} font-medium`}>{row.query}</td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={`${tdClass} font-medium`}>
+                            <p className="line-clamp-2 break-words" title={row.query}>
+                              {row.query}
+                            </p>
+                          </td>
+                          <td className={tdNumClass}>
                             {formatNumber(row.searches)}
                           </td>
                           <td className={tdClass}>
@@ -731,17 +964,20 @@ export default function InteligenciaDashboard() {
                   Marketplaces
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Clique externo não é compra confirmada.
+                  CTR = cliques da loja / impressões de produtos que incluem
+                  essa loja. Clique externo não é compra confirmada.
                 </p>
-                <div className={`${tableWrapClass} mt-3`}>
-                  <table className="min-w-full">
+                <div className={`${TABLE_WRAP_CLASS} mt-3`}>
+                  <table className="min-w-full table-fixed">
                     <thead className="border-b border-slate-100 bg-slate-50/80">
                       <tr>
                         <th className={thClass}>Loja</th>
-                        <th className={thClass}>Impressões</th>
-                        <th className={thClass}>Cliques</th>
-                        <th className={thClass}>CTR</th>
-                        <th className={thClass}>Participação</th>
+                        <th className={thNumClass}>Impressões</th>
+                        <th className={thNumClass}>Cliques</th>
+                        <th className={thNumClass} title="Cliques / impressões atribuídas">
+                          CTR
+                        </th>
+                        <th className={thNumClass}>Participação</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -753,16 +989,16 @@ export default function InteligenciaDashboard() {
                           <td className={`${tdClass} font-medium`}>
                             {formatMarketplace(row.marketplace)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.impressions)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.clicks)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatCtr(row.ctr)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatCtr(row.clickShare)}
                           </td>
                         </tr>
@@ -776,16 +1012,22 @@ export default function InteligenciaDashboard() {
                 <h2 className="text-sm font-semibold text-slate-950">
                   Origem do tráfego
                 </h2>
-                <div className={`${tableWrapClass} mt-3`}>
-                  <table className="min-w-full">
+                <p className="mt-1 text-xs text-slate-500">
+                  CTR = cliques / impressões da origem.
+                </p>
+                <div className={`${TABLE_WRAP_CLASS} mt-3`}>
+                  <table className="min-w-full table-fixed">
                     <thead className="border-b border-slate-100 bg-slate-50/80">
                       <tr>
                         <th className={thClass}>Origem</th>
-                        <th className={thClass}>Sessões</th>
-                        <th className={thClass}>Pesquisas</th>
-                        <th className={thClass}>Views</th>
-                        <th className={thClass}>Cliques</th>
-                        <th className={thClass}>CTR</th>
+                        <th className={thNumClass}>Sessões</th>
+                        <th className={thNumClass}>Pesquisas</th>
+                        <th className={thNumClass}>Impressões</th>
+                        <th className={thNumClass}>Views</th>
+                        <th className={thNumClass}>Cliques</th>
+                        <th className={thNumClass} title="Cliques / impressões">
+                          CTR
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -794,19 +1036,22 @@ export default function InteligenciaDashboard() {
                           <td className={`${tdClass} font-medium`}>
                             {row.source}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.sessions)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.searches)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
+                            {formatNumber(row.impressions)}
+                          </td>
+                          <td className={tdNumClass}>
                             {formatNumber(row.views)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.clicks)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatCtr(row.ctr)}
                           </td>
                         </tr>
@@ -822,24 +1067,25 @@ export default function InteligenciaDashboard() {
                 <h2 className="text-sm font-semibold text-slate-950">
                   Campanhas UTM
                 </h2>
-                <div className={`${tableWrapClass} mt-3`}>
-                  <table className="min-w-full">
+                <div className={`${TABLE_WRAP_CLASS} mt-3`}>
+                  <table className="min-w-full table-fixed">
                     <thead className="border-b border-slate-100 bg-slate-50/80">
                       <tr>
                         <th className={thClass}>Source</th>
                         <th className={thClass}>Medium</th>
                         <th className={thClass}>Campaign</th>
-                        <th className={thClass}>Sessões</th>
-                        <th className={thClass}>Pesquisas</th>
-                        <th className={thClass}>Views</th>
-                        <th className={thClass}>Cliques</th>
-                        <th className={thClass}>CTR</th>
+                        <th className={thNumClass}>Sessões</th>
+                        <th className={thNumClass}>Pesquisas</th>
+                        <th className={thNumClass}>Cliques</th>
+                        <th className={thNumClass} title="Cliques / impressões">
+                          CTR
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.utms.length === 0 ? (
                         <tr>
-                          <td className={`${tdClass} text-slate-500`} colSpan={8}>
+                          <td className={`${tdClass} text-slate-500`} colSpan={7}>
                             Nenhuma UTM no período.
                           </td>
                         </tr>
@@ -849,22 +1095,25 @@ export default function InteligenciaDashboard() {
                             key={`${row.utmSource}-${row.utmMedium}-${row.utmCampaign}-${index}`}
                             className="border-b border-slate-100"
                           >
-                            <td className={tdClass}>{row.utmSource || "—"}</td>
-                            <td className={tdClass}>{row.utmMedium || "—"}</td>
-                            <td className={tdClass}>{row.utmCampaign || "—"}</td>
-                            <td className={`${tdClass} tabular-nums`}>
+                            <td className={`${tdClass} truncate`}>
+                              {row.utmSource || "—"}
+                            </td>
+                            <td className={`${tdClass} truncate`}>
+                              {row.utmMedium || "—"}
+                            </td>
+                            <td className={`${tdClass} truncate`}>
+                              {row.utmCampaign || "—"}
+                            </td>
+                            <td className={tdNumClass}>
                               {formatNumber(row.sessions)}
                             </td>
-                            <td className={`${tdClass} tabular-nums`}>
+                            <td className={tdNumClass}>
                               {formatNumber(row.searches)}
                             </td>
-                            <td className={`${tdClass} tabular-nums`}>
-                              {formatNumber(row.views)}
-                            </td>
-                            <td className={`${tdClass} tabular-nums`}>
+                            <td className={tdNumClass}>
                               {formatNumber(row.clicks)}
                             </td>
-                            <td className={`${tdClass} tabular-nums`}>
+                            <td className={tdNumClass}>
                               {formatCtr(row.ctr)}
                             </td>
                           </tr>
@@ -879,15 +1128,18 @@ export default function InteligenciaDashboard() {
                 <h2 className="text-sm font-semibold text-slate-950">
                   Dispositivos
                 </h2>
-                <div className={`${tableWrapClass} mt-3`}>
-                  <table className="min-w-full">
+                <div className={`${TABLE_WRAP_CLASS} mt-3`}>
+                  <table className="min-w-full table-fixed">
                     <thead className="border-b border-slate-100 bg-slate-50/80">
                       <tr>
                         <th className={thClass}>Dispositivo</th>
-                        <th className={thClass}>Sessões</th>
-                        <th className={thClass}>Views</th>
-                        <th className={thClass}>Cliques</th>
-                        <th className={thClass}>CTR</th>
+                        <th className={thNumClass}>Sessões</th>
+                        <th className={thNumClass}>Impressões</th>
+                        <th className={thNumClass}>Views</th>
+                        <th className={thNumClass}>Cliques</th>
+                        <th className={thNumClass} title="Cliques / impressões">
+                          CTR
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -899,16 +1151,19 @@ export default function InteligenciaDashboard() {
                           <td className={`${tdClass} font-medium`}>
                             {formatDevice(row.deviceType)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.sessions)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
+                            {formatNumber(row.impressions)}
+                          </td>
+                          <td className={tdNumClass}>
                             {formatNumber(row.views)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatNumber(row.clicks)}
                           </td>
-                          <td className={`${tdClass} tabular-nums`}>
+                          <td className={tdNumClass}>
                             {formatCtr(row.ctr)}
                           </td>
                         </tr>

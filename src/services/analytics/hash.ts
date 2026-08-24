@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 
+import { occurrenceIdFromMetadata } from "@/lib/analytics/impression";
+
+import type { AnalyticsMetadata } from "./types";
+
 export function dedupWindowMs(eventType: string): number {
   switch (eventType) {
     case "PRODUCT_IMPRESSION":
@@ -20,6 +24,10 @@ export function dedupWindowMs(eventType: string): number {
   }
 }
 
+function hashRaw(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
 export function buildEventHash(input: {
   eventType: string;
   sessionId: string;
@@ -28,7 +36,37 @@ export function buildEventHash(input: {
   marketplace: string | null;
   position: number | null;
   createdAt: Date;
+  metadata?: AnalyticsMetadata | null;
 }): string {
+  if (input.eventType === "PRODUCT_IMPRESSION") {
+    const occurrenceId = occurrenceIdFromMetadata(input.metadata);
+
+    if (occurrenceId) {
+      return hashRaw(
+        [
+          input.eventType,
+          input.sessionId,
+          input.productId ?? "",
+          occurrenceId,
+        ].join("|"),
+      );
+    }
+
+    const bucket = Math.floor(
+      input.createdAt.getTime() / dedupWindowMs("PRODUCT_IMPRESSION"),
+    );
+
+    return hashRaw(
+      [
+        input.eventType,
+        input.sessionId,
+        input.productId ?? "",
+        input.query ?? "",
+        String(bucket),
+      ].join("|"),
+    );
+  }
+
   const windowMs = dedupWindowMs(input.eventType);
   const bucket = Math.floor(input.createdAt.getTime() / windowMs);
   const raw = [
@@ -41,5 +79,5 @@ export function buildEventHash(input: {
     String(bucket),
   ].join("|");
 
-  return createHash("sha256").update(raw).digest("hex");
+  return hashRaw(raw);
 }

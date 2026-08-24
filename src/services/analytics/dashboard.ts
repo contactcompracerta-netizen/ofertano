@@ -9,6 +9,7 @@ import {
   computeTrend,
   enumerateDateKeys,
   previousPeriodRange,
+  trendPctForOpportunityScore,
 } from "./metrics";
 import type { OpportunityScoreInput, TrendResult } from "./types";
 
@@ -25,6 +26,7 @@ type QueryRow = {
   searches: bigint | number;
   resultSum: bigint | number;
   zeros: bigint | number;
+  impressions: bigint | number;
   views: bigint | number;
   clicks: bigint | number;
   lastEventAt: Date | null;
@@ -47,6 +49,7 @@ type MarketplaceRow = {
 type DimCountRow = {
   key: string;
   searches: bigint | number;
+  impressions: bigint | number;
   views: bigint | number;
   clicks: bigint | number;
 };
@@ -62,6 +65,7 @@ type UtmRow = {
   utmCampaign: string | null;
   sessions: bigint | number;
   searches: bigint | number;
+  impressions: bigint | number;
   views: bigint | number;
   clicks: bigint | number;
 };
@@ -157,6 +161,7 @@ export type IntelligenceDashboard = {
     searches: number;
     avgResults: number | null;
     zeros: number;
+    impressions: number;
     views: number;
     clicks: number;
     ctr: number | null;
@@ -186,6 +191,7 @@ export type IntelligenceDashboard = {
     source: string;
     sessions: number;
     searches: number;
+    impressions: number;
     views: number;
     clicks: number;
     ctr: number | null;
@@ -196,6 +202,7 @@ export type IntelligenceDashboard = {
     utmCampaign: string | null;
     sessions: number;
     searches: number;
+    impressions: number;
     views: number;
     clicks: number;
     ctr: number | null;
@@ -203,6 +210,7 @@ export type IntelligenceDashboard = {
   devices: Array<{
     deviceType: string;
     sessions: number;
+    impressions: number;
     views: number;
     clicks: number;
     ctr: number | null;
@@ -308,6 +316,7 @@ export async function loadIntelligenceDashboard(input: {
              SUM(CASE WHEN "eventType" = 'SEARCH' THEN "eventCount" ELSE 0 END) AS searches,
              SUM(CASE WHEN "eventType" = 'SEARCH' THEN "resultCountSum" ELSE 0 END) AS "resultSum",
              SUM(CASE WHEN "eventType" = 'ZERO_RESULT' THEN "eventCount" ELSE 0 END) AS zeros,
+             SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END) AS impressions,
              SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END) AS views,
              SUM(CASE WHEN "eventType" = 'MARKETPLACE_CLICK' THEN "eventCount" ELSE 0 END) AS clicks,
              MAX("lastEventAt") AS "lastEventAt",
@@ -318,9 +327,9 @@ export async function loadIntelligenceDashboard(input: {
                ELSE NULL
              END AS "avgResults",
              CASE
-               WHEN SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END) > 0
+               WHEN SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END) > 0
                THEN SUM(CASE WHEN "eventType" = 'MARKETPLACE_CLICK' THEN "eventCount" ELSE 0 END)::double precision
-                    / SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END)
+                    / SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END)
                ELSE NULL
              END AS "ctr"
       FROM "AnalyticsDailyAgg"
@@ -337,6 +346,7 @@ export async function loadIntelligenceDashboard(input: {
              SUM(CASE WHEN "eventType" = 'SEARCH' THEN "eventCount" ELSE 0 END) AS searches,
              0 AS "resultSum",
              SUM(CASE WHEN "eventType" = 'ZERO_RESULT' THEN "eventCount" ELSE 0 END) AS zeros,
+             SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END) AS impressions,
              SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END) AS views,
              SUM(CASE WHEN "eventType" = 'MARKETPLACE_CLICK' THEN "eventCount" ELSE 0 END) AS clicks,
              NULL AS "lastEventAt"
@@ -352,6 +362,7 @@ export async function loadIntelligenceDashboard(input: {
              SUM("eventCount") AS searches,
              0 AS "resultSum",
              SUM("eventCount") AS zeros,
+             0 AS impressions,
              0 AS views,
              0 AS clicks,
              MAX("lastEventAt") AS "lastEventAt"
@@ -370,6 +381,7 @@ export async function loadIntelligenceDashboard(input: {
              SUM("eventCount") AS searches,
              0 AS "resultSum",
              SUM("eventCount") AS zeros,
+             0 AS impressions,
              0 AS views,
              0 AS clicks,
              NULL AS "lastEventAt"
@@ -422,6 +434,7 @@ export async function loadIntelligenceDashboard(input: {
     prisma.$queryRaw<DimCountRow[]>(Prisma.sql`
       SELECT "source" AS key,
              SUM(CASE WHEN "eventType" = 'SEARCH' THEN "eventCount" ELSE 0 END) AS searches,
+             SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END) AS impressions,
              SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END) AS views,
              SUM(CASE WHEN "eventType" = 'MARKETPLACE_CLICK' THEN "eventCount" ELSE 0 END) AS clicks
       FROM "AnalyticsDailyAgg"
@@ -440,6 +453,7 @@ export async function loadIntelligenceDashboard(input: {
     prisma.$queryRaw<DimCountRow[]>(Prisma.sql`
       SELECT "deviceType" AS key,
              SUM(CASE WHEN "eventType" = 'SEARCH' THEN "eventCount" ELSE 0 END) AS searches,
+             SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END) AS impressions,
              SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END) AS views,
              SUM(CASE WHEN "eventType" = 'MARKETPLACE_CLICK' THEN "eventCount" ELSE 0 END) AS clicks
       FROM "AnalyticsDailyAgg"
@@ -461,6 +475,7 @@ export async function loadIntelligenceDashboard(input: {
              a."utmCampaign",
              COALESCE(s.sessions, 0) AS sessions,
              a.searches,
+             a.impressions,
              a.views,
              a.clicks
       FROM (
@@ -468,6 +483,7 @@ export async function loadIntelligenceDashboard(input: {
                "utmMedium",
                "utmCampaign",
                SUM(CASE WHEN "eventType" = 'SEARCH' THEN "eventCount" ELSE 0 END) AS searches,
+               SUM(CASE WHEN "eventType" = 'PRODUCT_IMPRESSION' THEN "eventCount" ELSE 0 END) AS impressions,
                SUM(CASE WHEN "eventType" = 'PRODUCT_VIEW' THEN "eventCount" ELSE 0 END) AS views,
                SUM(CASE WHEN "eventType" = 'MARKETPLACE_CLICK' THEN "eventCount" ELSE 0 END) AS clicks
         FROM "AnalyticsDailyAgg"
@@ -623,13 +639,14 @@ export async function loadIntelligenceDashboard(input: {
     return {
       productId: row.productId,
       searches: relatedSearches,
-      searchGrowthPct: computeTrend(relatedSearches, previousRelatedSearches)
-        .pct,
+      searchGrowthPct: trendPctForOpportunityScore(
+        computeTrend(relatedSearches, previousRelatedSearches),
+      ),
       impressions: impressionsCount,
       views: viewsCount,
       clicks: clicksCount,
       favorites: num(row.favorites),
-      ctr: computeCtr(clicksCount, impressionsCount || viewsCount),
+      ctr: computeCtr(clicksCount, impressionsCount),
       marketplaceCount: marketplacesByProduct.get(row.productId)?.length ?? 0,
     };
   });
@@ -659,7 +676,7 @@ export async function loadIntelligenceDashboard(input: {
       impressions: impressionsCount,
       views: viewsCount,
       clicks: clicksCount,
-      ctr: computeCtr(clicksCount, impressionsCount || viewsCount),
+      ctr: computeCtr(clicksCount, impressionsCount),
       favorites: num(row.favorites),
       relatedSearchCount: relatedSearchCountByProduct.get(row.productId) ?? 0,
       marketplaces: marketplacesByProduct.get(row.productId) ?? [],
@@ -680,7 +697,7 @@ export async function loadIntelligenceDashboard(input: {
     .slice(0, 20);
 
   const bestCtr = [...productDetails]
-    .filter((row) => row.impressions + row.views >= 5 && row.ctr != null)
+    .filter((row) => row.impressions >= 5 && row.ctr != null)
     .sort((a, b) => (b.ctr ?? 0) - (a.ctr ?? 0) || b.clicks - a.clicks)
     .slice(0, 20);
 
@@ -714,6 +731,7 @@ export async function loadIntelligenceDashboard(input: {
       const sessionRow = originSessionRows.find(
         (row) => (row.key ?? "Direct") === source,
       );
+      const originImpressions = num(events?.impressions);
       const originViews = num(events?.views);
       const originClicks = num(events?.clicks);
 
@@ -721,9 +739,10 @@ export async function loadIntelligenceDashboard(input: {
         source: source || "Direct",
         sessions: num(sessionRow?.sessions),
         searches: num(events?.searches),
+        impressions: originImpressions,
         views: originViews,
         clicks: originClicks,
-        ctr: computeCtr(originClicks, originViews),
+        ctr: computeCtr(originClicks, originImpressions),
       };
     })
     .sort((a, b) => b.sessions - a.sessions || b.clicks - a.clicks);
@@ -739,15 +758,17 @@ export async function loadIntelligenceDashboard(input: {
       const sessionRow = deviceSessionRows.find(
         (row) => (row.key ?? "unknown") === deviceType,
       );
+      const deviceImpressions = num(events?.impressions);
       const deviceViews = num(events?.views);
       const deviceClicks = num(events?.clicks);
 
       return {
         deviceType: deviceType || "unknown",
         sessions: num(sessionRow?.sessions),
+        impressions: deviceImpressions,
         views: deviceViews,
         clicks: deviceClicks,
-        ctr: computeCtr(deviceClicks, deviceViews),
+        ctr: computeCtr(deviceClicks, deviceImpressions),
       };
     })
     .sort((a, b) => b.sessions - a.sessions);
@@ -795,7 +816,7 @@ export async function loadIntelligenceDashboard(input: {
       views,
       clicks,
       zeroResults,
-      ctr: computeCtr(clicks, impressions || views),
+      ctr: computeCtr(clicks, impressions),
       impressionToViewCtr: computeCtr(views, impressions),
       trends: {
         sessions: computeTrend(sessions, previousSessions),
@@ -817,6 +838,7 @@ export async function loadIntelligenceDashboard(input: {
     })),
     searches: searchRows.map((row) => {
       const searchCount = num(row.searches);
+      const impressionCount = num(row.impressions);
       const viewCount = num(row.views);
       const clickCount = num(row.clicks);
       const resultSum = num(row.resultSum);
@@ -826,9 +848,10 @@ export async function loadIntelligenceDashboard(input: {
         searches: searchCount,
         avgResults: searchCount > 0 ? resultSum / searchCount : null,
         zeros: num(row.zeros),
+        impressions: impressionCount,
         views: viewCount,
         clicks: clickCount,
-        ctr: computeCtr(clickCount, viewCount || searchCount),
+        ctr: computeCtr(clickCount, impressionCount),
         trend: computeTrend(searchCount, previousSearchMap.get(row.query) ?? 0),
       };
     }),
@@ -860,6 +883,7 @@ export async function loadIntelligenceDashboard(input: {
     }),
     origins,
     utms: utmRows.map((row) => {
+      const utmImpressions = num(row.impressions);
       const utmViews = num(row.views);
       const utmClicks = num(row.clicks);
 
@@ -869,9 +893,10 @@ export async function loadIntelligenceDashboard(input: {
         utmCampaign: row.utmCampaign,
         sessions: num(row.sessions),
         searches: num(row.searches),
+        impressions: utmImpressions,
         views: utmViews,
         clicks: utmClicks,
-        ctr: computeCtr(utmClicks, utmViews),
+        ctr: computeCtr(utmClicks, utmImpressions),
       };
     }),
     devices,

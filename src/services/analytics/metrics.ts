@@ -43,7 +43,7 @@ export function computeTrend(current: number, previous: number): TrendResult {
     return {
       current: safeCurrent,
       previous: safePrevious,
-      pct: 0,
+      pct: null,
       direction: "flat",
     };
   }
@@ -52,8 +52,8 @@ export function computeTrend(current: number, previous: number): TrendResult {
     return {
       current: safeCurrent,
       previous: safePrevious,
-      pct: 100,
-      direction: "up",
+      pct: null,
+      direction: "new",
     };
   }
 
@@ -66,6 +66,32 @@ export function computeTrend(current: number, previous: number): TrendResult {
     pct: rounded,
     direction: rounded > 0.5 ? "up" : rounded < -0.5 ? "down" : "flat",
   };
+}
+
+export function formatTrendLabel(trend: TrendResult): string {
+  if (trend.direction === "new") {
+    return "Novo";
+  }
+
+  if (trend.pct == null || !Number.isFinite(trend.pct)) {
+    return "—";
+  }
+
+  const sign = trend.pct > 0 ? "+" : "";
+
+  return `${sign}${trend.pct.toLocaleString("pt-BR", {
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
+export function trendPctForOpportunityScore(
+  trend: TrendResult,
+): number | null {
+  if (trend.direction === "new") {
+    return 100;
+  }
+
+  return trend.pct;
 }
 
 export function computeFunnel(input: {
@@ -84,9 +110,10 @@ export function computeFunnel(input: {
     impression,
     view,
     click,
-    searchToImpression: computeCtr(impression, search),
+    impressionsPerSearch: search > 0 ? impression / search : null,
     impressionToView: computeCtr(view, impression),
     viewToClick: computeCtr(click, view),
+    clickThroughRate: computeCtr(click, impression),
   };
 }
 

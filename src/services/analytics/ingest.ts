@@ -46,6 +46,7 @@ export async function ingestAnalyticsEvent(
     marketplace: event.marketplace,
     position: event.position,
     createdAt,
+    metadata: event.metadata,
   });
 
   try {

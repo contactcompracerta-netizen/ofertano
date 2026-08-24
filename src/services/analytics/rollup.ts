@@ -66,6 +66,20 @@ export function buildRollupWrites(
     );
   }
 
+  if (event.eventType === "PRODUCT_IMPRESSION") {
+    for (const marketplace of marketplacesFromMetadata(event)) {
+      if (marketplace === event.marketplace) {
+        continue;
+      }
+
+      writes.push(
+        baseWrite(event, "MARKETPLACE", marketplace, {
+          marketplace,
+        }),
+      );
+    }
+  }
+
   if (event.source) {
     writes.push(
       baseWrite(event, "SOURCE", event.source, {
@@ -152,4 +166,25 @@ export function relatedProductIdsFromMetadata(
     .filter((item) => item.length > 0 && item.length <= 80);
 
   return Array.from(new Set(ids)).slice(0, 12);
+}
+
+function marketplacesFromMetadata(
+  event: ValidatedAnalyticsEvent,
+): string[] {
+  if (!event.metadata) {
+    return [];
+  }
+
+  const raw = event.metadata.marketplaces;
+
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const names = raw
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0 && item.length <= 40);
+
+  return Array.from(new Set(names)).slice(0, 8);
 }

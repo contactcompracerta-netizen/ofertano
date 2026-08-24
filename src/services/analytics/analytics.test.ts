@@ -6,11 +6,22 @@ import {
   computeFunnel,
   computeOpportunityScore,
   computeTrend,
+  formatCtr,
+  formatTrendLabel,
   minMaxNorm,
   parseDateKeyRange,
   periodFromPreset,
   previousPeriodRange,
+  trendPctForOpportunityScore,
 } from "./metrics";
+import {
+  PRODUCT_NAME_TEXT_CLASS,
+  buildFunnelPresentation,
+  compactMarketplaces,
+  funnelShowsAmbiguousConversion,
+  seriesBarHeightPct,
+  seriesChartLayout,
+} from "./presentation";
 import { detectDeviceType } from "./device";
 import { classifyTrafficOrigin } from "./origin";
 import {
@@ -24,6 +35,15 @@ import {
 import { buildRollupWrites } from "./rollup";
 import { parseUtmParams, referrerHostFromUrl } from "./utm";
 import { ANALYTICS_EVENT_TYPES } from "./types";
+import {
+  TimedDedupeIndex,
+  buildClientDuplicateKey,
+  decideImpressionTrack,
+  duplicateWindowMs,
+  isImpressionVisible,
+  shouldReuseListingOccurrence,
+} from "../../lib/analytics/impression";
+import { buildProductViewAnalyticsEvent } from "../../components/analytics/ProductViewTracker";
 
 const SESSION = "11111111-1111-4111-8111-111111111111";
 
@@ -216,11 +236,19 @@ assert.equal(down.direction, "down");
 
 const flat = computeTrend(0, 0);
 assert.equal(flat.direction, "flat");
-assert.equal(flat.pct, 0);
+assert.equal(flat.pct, null);
+assert.equal(formatTrendLabel(flat), "—");
 
 const newVolume = computeTrend(10, 0);
-assert.equal(newVolume.direction, "up");
-assert.equal(newVolume.pct, 100);
+assert.equal(newVolume.direction, "new");
+assert.equal(newVolume.pct, null);
+assert.equal(formatTrendLabel(newVolume), "Novo");
+assert.equal(trendPctForOpportunityScore(newVolume), 100);
+
+const dropToZero = computeTrend(0, 8);
+assert.equal(dropToZero.direction, "down");
+assert.equal(dropToZero.pct, -100);
+assert.equal(formatTrendLabel(dropToZero), "-100%");
 
 const funnel = computeFunnel({
   search: 100,
@@ -228,9 +256,10 @@ const funnel = computeFunnel({
   view: 40,
   click: 10,
 });
-assert.equal(funnel.searchToImpression, 0.8);
+assert.equal(funnel.impressionsPerSearch, 0.8);
 assert.equal(funnel.impressionToView, 0.5);
 assert.equal(funnel.viewToClick, 0.25);
+assert.equal(funnel.clickThroughRate, 0.125);
 
 assert.equal(minMaxNorm(5, 0, 10), 0.5);
 assert.equal(minMaxNorm(0, 0, 0), 0);
@@ -406,5 +435,251 @@ assert.equal(batch.ok, true);
 if (batch.ok) {
   assert.equal(batch.events.length, 2);
 }
+
+for (const eventType of [
+  "SEARCH",
+  "SEARCH_RESULT",
+  "ZERO_RESULT",
+  "PRODUCT_VIEW",
+  "MARKETPLACE_CLICK",
+  "FAVORITE_ADD",
+  "FAVORITE_REMOVE",
+  "PRODUCT_IMPRESSION",
+] as const) {
+  const parsedType = validateAnalyticsEvent(
+    event({
+      eventType,
+      productId: eventType.includes("PRODUCT") || eventType.includes("FAVORITE") || eventType === "MARKETPLACE_CLICK"
+        ? "prod-1"
+        : null,
+      marketplace: eventType === "MARKETPLACE_CLICK" ? "AMAZON" : null,
+    }),
+  );
+  assert.equal(parsedType.ok, true, `${eventType} deve continuar válido`);
+}
+
+const impressionDedupe = new TimedDedupeIndex();
+const sameOccurrenceKey = buildClientDuplicateKey({
+  eventType: "PRODUCT_IMPRESSION",
+  productId: "jbl-520",
+  query: "jbl tune 520bt",
+  marketplace: "AMAZON",
+  position: 1,
+  metadata: { occurrenceId: "search-1" },
+});
+
+assert.equal(
+  impressionDedupe.shouldSkip(sameOccurrenceKey, duplicateWindowMs("PRODUCT_IMPRESSION")),
+  false,
+);
+
+for (const marketplace of ["AMAZON", "SHOPEE", "MAGAZINE_LUIZA", "CASAS_BAHIA"]) {
+  const remountKey = buildClientDuplicateKey({
+    eventType: "PRODUCT_IMPRESSION",
+    productId: "jbl-520",
+    query: "jbl tune 520bt",
+    marketplace,
+    position: marketplace.length,
+    metadata: { occurrenceId: "search-1" },
+  });
+  assert.equal(remountKey, sameOccurrenceKey);
+  assert.equal(
+    impressionDedupe.shouldSkip(remountKey, duplicateWindowMs("PRODUCT_IMPRESSION")),
+    true,
+    "4 renders do mesmo card na mesma ocorrência devem contar 1 impressão",
+  );
+}
+
+const newSearchKey = buildClientDuplicateKey({
+  eventType: "PRODUCT_IMPRESSION",
+  productId: "jbl-520",
+  metadata: { occurrenceId: "search-2" },
+});
+assert.notEqual(newSearchKey, sameOccurrenceKey);
+assert.equal(
+  impressionDedupe.shouldSkip(newSearchKey, duplicateWindowMs("PRODUCT_IMPRESSION")),
+  false,
+  "nova execução de pesquisa pode contar nova impressão",
+);
+
+const otherProductKey = buildClientDuplicateKey({
+  eventType: "PRODUCT_IMPRESSION",
+  productId: "jbl-720",
+  metadata: { occurrenceId: "search-1" },
+});
+assert.equal(
+  impressionDedupe.shouldSkip(otherProductKey, duplicateWindowMs("PRODUCT_IMPRESSION")),
+  false,
+  "dois produtos na mesma busca geram duas impressões",
+);
+
+assert.equal(
+  isImpressionVisible({ isIntersecting: false, intersectionRatio: 0 }),
+  false,
+);
+assert.equal(
+  decideImpressionTrack({ alreadySent: false, visible: false }),
+  "skip",
+);
+assert.equal(
+  isImpressionVisible({ isIntersecting: true, intersectionRatio: 0.5 }),
+  true,
+);
+assert.equal(
+  decideImpressionTrack({ alreadySent: false, visible: true }),
+  "track",
+);
+assert.equal(
+  decideImpressionTrack({ alreadySent: true, visible: true }),
+  "skip",
+);
+
+assert.equal(computeCtr(1, 1), 1);
+assert.equal(formatCtr(computeCtr(1, 1)), "100%");
+assert.equal(computeCtr(1, 4), 0.25);
+assert.equal(formatCtr(computeCtr(1, 4)), "25%");
+
+const onePointChart = seriesChartLayout([
+  { day: "2026-08-24", searches: 1, views: 1, clicks: 1 },
+]);
+assert.equal(onePointChart.isEmpty, false);
+assert.equal(onePointChart.isSinglePoint, true);
+assert.equal(onePointChart.showMarkers, true);
+assert.ok(seriesBarHeightPct(1, 1) >= 12);
+assert.equal(seriesBarHeightPct(0, 1), 0);
+
+const emptyChart = seriesChartLayout([]);
+assert.equal(emptyChart.isEmpty, true);
+
+assert.ok(PRODUCT_NAME_TEXT_CLASS.includes("line-clamp-2"));
+assert.ok(PRODUCT_NAME_TEXT_CLASS.includes("text-sm"));
+
+const manyStores = compactMarketplaces(
+  ["Amazon", "Shopee", "Magazine Luiza", "Casas Bahia"],
+  2,
+);
+assert.equal(manyStores.visible.length, 2);
+assert.equal(manyStores.extra, 2);
+assert.equal(manyStores.text, "Amazon · Shopee +2");
+
+const realFunnel = computeFunnel({
+  search: 1,
+  impression: 4,
+  view: 1,
+  click: 1,
+});
+assert.equal(realFunnel.impressionsPerSearch, 4);
+assert.equal(realFunnel.impressionToView, 0.25);
+assert.equal(realFunnel.viewToClick, 1);
+assert.equal(realFunnel.clickThroughRate, 0.25);
+const funnelUi = buildFunnelPresentation(realFunnel);
+assert.equal(funnelShowsAmbiguousConversion(funnelUi), false);
+assert.ok(
+  funnelUi.every((step) => !step.details.some((detail) => detail.includes("400%"))),
+);
+assert.ok(
+  funnelUi
+    .find((step) => step.key === "PRODUCT_IMPRESSION")
+    ?.details.some((detail) => detail.includes("por pesquisa")),
+);
+
+const productPageEvent = buildProductViewAnalyticsEvent({
+  productId: "jbl-520",
+  query: "jbl tune 520bt",
+  offers: [
+    { marketplace: "AMAZON", position: 1 },
+    { marketplace: "SHOPEE", position: 2 },
+    { marketplace: "MAGAZINE_LUIZA", position: 3 },
+    { marketplace: "CASAS_BAHIA", position: 4 },
+  ],
+});
+assert.equal(productPageEvent.eventType, "PRODUCT_VIEW");
+
+const impressionCreatedAt = new Date("2026-08-24T12:00:00.000Z");
+const impressionHashA = buildEventHash({
+  eventType: "PRODUCT_IMPRESSION",
+  sessionId: SESSION,
+  productId: "jbl-520",
+  query: "jbl tune 520bt",
+  marketplace: "AMAZON",
+  position: 1,
+  createdAt: impressionCreatedAt,
+  metadata: { occurrenceId: "occ-1" },
+});
+const impressionHashB = buildEventHash({
+  eventType: "PRODUCT_IMPRESSION",
+  sessionId: SESSION,
+  productId: "jbl-520",
+  query: "jbl tune 520bt",
+  marketplace: "SHOPEE",
+  position: 4,
+  createdAt: impressionCreatedAt,
+  metadata: { occurrenceId: "occ-1" },
+});
+assert.equal(impressionHashA, impressionHashB);
+const impressionHashNewSearch = buildEventHash({
+  eventType: "PRODUCT_IMPRESSION",
+  sessionId: SESSION,
+  productId: "jbl-520",
+  query: "jbl tune 520bt",
+  marketplace: null,
+  position: null,
+  createdAt: impressionCreatedAt,
+  metadata: { occurrenceId: "occ-2" },
+});
+assert.notEqual(impressionHashA, impressionHashNewSearch);
+
+const reuseOccurrence = shouldReuseListingOccurrence(
+  {
+    id: "occ-1",
+    surface: "search",
+    scope: "jbl tune 520bt",
+    startedAt: 1_000,
+  },
+  { surface: "search", scope: "jbl tune 520bt" },
+  3_000,
+);
+assert.equal(reuseOccurrence, true);
+assert.equal(
+  shouldReuseListingOccurrence(
+    {
+      id: "occ-1",
+      surface: "search",
+      scope: "jbl tune 520bt",
+      startedAt: 1_000,
+    },
+    { surface: "search", scope: "jbl tune 520bt" },
+    20_000,
+  ),
+  false,
+);
+
+const impressionRollup = buildRollupWrites({
+  eventType: "PRODUCT_IMPRESSION",
+  sessionId: SESSION,
+  productId: "jbl-520",
+  query: "jbl tune 520bt",
+  normalizedQuery: "jbl tune 520bt",
+  marketplace: null,
+  position: 1,
+  resultCount: null,
+  source: "Direct",
+  referrer: null,
+  utmSource: null,
+  utmMedium: null,
+  utmCampaign: null,
+  utmContent: null,
+  deviceType: "desktop",
+  metadata: {
+    occurrenceId: "occ-1",
+    marketplaces: ["AMAZON", "SHOPEE"],
+  },
+});
+assert.equal(
+  impressionRollup.filter((row) => row.grain === "MARKETPLACE").length,
+  2,
+);
+
+assert.ok(typeof MAX_METADATA_BYTES === "number");
 
 console.log("analytics tests: ok");

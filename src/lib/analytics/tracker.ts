@@ -1,6 +1,15 @@
 import { classifyTrafficOrigin } from "@/services/analytics/origin";
 import { parseUtmParams, referrerHostFromUrl } from "@/services/analytics/utm";
 import type { AnalyticsDeviceType } from "@/services/analytics/types";
+import {
+  LISTING_OCCURRENCE_STORAGE_KEY,
+  TimedDedupeIndex,
+  buildClientDuplicateKey,
+  duplicateWindowMs,
+  parseListingOccurrence,
+  shouldReuseListingOccurrence,
+  type ListingOccurrence,
+} from "@/lib/analytics/impression";
 
 const SESSION_STORAGE_KEY = "ofertano:analytics:sid";
 const ATTR_STORAGE_KEY = "ofertano:analytics:attr";
@@ -40,7 +49,7 @@ type QueuedEvent = ClientAnalyticsEvent & {
   deviceType: AnalyticsDeviceType;
 };
 
-const recentKeys = new Map<string, number>();
+const recentKeys = new TimedDedupeIndex();
 let queue: QueuedEvent[] = [];
 let flushTimer: number | null = null;
 let listenersBound = false;
@@ -186,22 +195,79 @@ export function getRememberedAnalyticsQuery(): string | null {
   }
 }
 
-function shouldSkipDuplicate(key: string, windowMs: number): boolean {
+function readListingOccurrence(): ListingOccurrence | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return parseListingOccurrence(
+      window.sessionStorage.getItem(LISTING_OCCURRENCE_STORAGE_KEY),
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeListingOccurrence(occurrence: ListingOccurrence) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      LISTING_OCCURRENCE_STORAGE_KEY,
+      JSON.stringify(occurrence),
+    );
+  } catch {
+    // ignore quota
+  }
+}
+
+export function beginListingOccurrence(surface: string, scope = ""): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const normalizedScope = scope.replace(/\s+/g, " ").trim();
   const now = Date.now();
-  const previous = recentKeys.get(key);
-  if (previous && now - previous < windowMs) {
-    return true;
+  const previous = readListingOccurrence();
+
+  if (
+    shouldReuseListingOccurrence(
+      previous,
+      { surface, scope: normalizedScope },
+      now,
+    )
+  ) {
+    return previous!.id;
   }
-  recentKeys.set(key, now);
-  if (recentKeys.size > 200) {
-    const cutoff = now - 30 * 60 * 1000;
-    for (const [entry, time] of recentKeys) {
-      if (time < cutoff) {
-        recentKeys.delete(entry);
-      }
-    }
-  }
-  return false;
+
+  const created =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, "0").slice(-12)}`;
+
+  const occurrence: ListingOccurrence = {
+    id: created,
+    surface,
+    scope: normalizedScope,
+    startedAt: now,
+  };
+
+  writeListingOccurrence(occurrence);
+  return occurrence.id;
+}
+
+export function getListingOccurrenceId(): string | null {
+  return readListingOccurrence()?.id ?? null;
+}
+
+export function ensureListingOccurrence(
+  surface: string,
+  scope = "",
+): string {
+  return getListingOccurrenceId() ?? beginListingOccurrence(surface, scope);
 }
 
 function bindFlushListeners() {
@@ -293,24 +359,10 @@ export function trackAnalyticsEvent(
     return;
   }
 
-  const duplicateWindow =
-    eventType === "MARKETPLACE_CLICK"
-      ? 2500
-      : eventType === "PRODUCT_VIEW"
-        ? 60_000
-        : eventType === "PRODUCT_IMPRESSION"
-          ? 30 * 60 * 1000
-          : 8000;
+  const duplicateWindow = duplicateWindowMs(eventType);
+  const duplicateKey = buildClientDuplicateKey(event);
 
-  const duplicateKey = [
-    eventType,
-    event.productId ?? "",
-    event.query ?? "",
-    event.marketplace ?? "",
-    event.position ?? "",
-  ].join("|");
-
-  if (shouldSkipDuplicate(duplicateKey, duplicateWindow)) {
+  if (recentKeys.shouldSkip(duplicateKey, duplicateWindow)) {
     return;
   }
 

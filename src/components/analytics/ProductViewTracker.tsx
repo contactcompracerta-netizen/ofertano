@@ -18,41 +18,47 @@ type ProductViewTrackerProps = {
   offers?: OfferImpression[];
 };
 
+export function buildProductViewAnalyticsEvent(input: {
+  productId: string;
+  query?: string | null;
+  offers?: OfferImpression[];
+}) {
+  const offers = input.offers ?? [];
+  const marketplaces = Array.from(
+    new Set(offers.map((offer) => offer.marketplace).filter(Boolean)),
+  );
+
+  return {
+    eventType: "PRODUCT_VIEW" as const,
+    productId: input.productId,
+    query: input.query ?? null,
+    metadata: {
+      surface: "product",
+      offerCount: offers.length,
+      marketplaces,
+    },
+  };
+}
+
 export default function ProductViewTracker({
   productId,
   offers = [],
 }: ProductViewTrackerProps) {
+  const offerKey = offers
+    .map((offer) => `${offer.marketplace}:${offer.position}`)
+    .join("|");
+
   useEffect(() => {
     const query = getRememberedAnalyticsQuery();
-    const marketplaces = Array.from(
-      new Set(offers.map((offer) => offer.marketplace).filter(Boolean)),
-    );
 
-    trackAnalyticsEvent({
-      eventType: "PRODUCT_VIEW",
-      productId,
-      query,
-      metadata: {
-        surface: "product",
-        offerCount: offers.length,
-        marketplaces,
-      },
-    });
-
-    offers.forEach((offer) => {
-      trackAnalyticsEvent({
-        eventType: "PRODUCT_IMPRESSION",
+    trackAnalyticsEvent(
+      buildProductViewAnalyticsEvent({
         productId,
-        marketplace: offer.marketplace,
-        position: offer.position,
         query,
-        metadata: {
-          surface: "product_offer",
-          ...(typeof offer.price === "number" ? { price: offer.price } : {}),
-        },
-      });
-    });
-  }, [productId, offers]);
+        offers,
+      }),
+    );
+  }, [productId, offerKey]);
 
   return null;
 }

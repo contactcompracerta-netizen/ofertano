@@ -16,5 +16,7 @@ export {
   computeTrend,
   computeFunnel,
   computeOpportunityScore,
+  formatCtr,
+  formatTrendLabel,
   OPPORTUNITY_SCORE_WEIGHTS,
 } from "./metrics";

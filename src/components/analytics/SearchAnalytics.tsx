@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import {
+  beginListingOccurrence,
   rememberAnalyticsQuery,
   trackAnalyticsEvent,
 } from "@/lib/analytics/tracker";
@@ -30,6 +31,7 @@ export default function SearchAnalytics({
     }
 
     rememberAnalyticsQuery(termo);
+    beginListingOccurrence("search", termo);
 
     const relatedIds = productIds.slice(0, 12);
     const metadata = {

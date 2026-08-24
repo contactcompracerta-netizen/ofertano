@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import ProductGallery from "@/components/ProductGallery";
 import ShareProductButton from "@/components/ShareProductButton";
 import MarketplaceClickAnchor from "@/components/analytics/MarketplaceClickAnchor";
+import AnalyticsListingScope from "@/components/analytics/AnalyticsListingScope";
 import ProductImpression from "@/components/analytics/ProductImpression";
 import ProductViewTracker from "@/components/analytics/ProductViewTracker";
 import prisma from "@/lib/prisma";
@@ -1728,6 +1729,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                 </p>
               </div>
 
+              <AnalyticsListingScope surface="recommended" scope={produto.id}>
               <div className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
                 {produtosRecomendados.map((item, index) => {
                   const temPrecoAnterior =
@@ -1805,6 +1807,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   );
                 })}
               </div>
+                </AnalyticsListingScope>
             </section>
           )}
 
