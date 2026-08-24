@@ -1636,6 +1636,7 @@ export async function buscarAliExpress(
       }
 
       if (
+        !modoMultiloja &&
         possuiAcessorioNaoSolicitado(
           titulo,
           query,
@@ -1802,6 +1803,17 @@ export async function buscarAliExpress(
       });
     }
 
+    const candidateLimit =
+      modoMultiloja
+        ? Math.min(
+            Math.max(
+              limit * 3,
+              12,
+            ),
+            20,
+          )
+        : limit;
+
     const candidates =
       encontrados
         .sort(
@@ -1830,21 +1842,21 @@ export async function buscarAliExpress(
               (
                 a.candidate
                   .price ??
-                Number
-                  .POSITIVE_INFINITY
+                  Number
+                    .POSITIVE_INFINITY
               ) -
               (
                 b.candidate
                   .price ??
-                Number
-                  .POSITIVE_INFINITY
+                  Number
+                    .POSITIVE_INFINITY
               )
             );
           },
         )
         .slice(
           0,
-          limit,
+          candidateLimit,
         )
         .map(
           (resultado) =>

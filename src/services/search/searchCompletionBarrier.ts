@@ -6,7 +6,7 @@ import type {
 import { traceMultiloja } from "@/services/multiloja/trace";
 
 const BLOCKED_ERROR_RE =
-  /captcha|challenge|access[_\s-]?denied|403|blocked|bloquead|login|robot|unusual traffic|too many requests|429|rate limit/i;
+  /captcha|challenge|access[_\s-]?denied|403|401|forbidden|unauthorized|blocked|bloquead|bloqueou|login|robot|unusual traffic|too many requests|429|rate limit/i;
 
 const UNUSABLE_ERROR_RE =
   /unusable|sem estrutura|nao interpretavel|não interpretável|pagina invalida|página inválida|sem mecanismo de busca/i;
@@ -93,6 +93,50 @@ export function codigoDoMarketplace(
   }
 
   return MARKETPLACE_NAME_TO_CODE[trimmed] ?? null;
+}
+
+export function inferSearchOutcome(
+  result: Pick<
+    MarketplaceDiscoveryResult,
+    | "success"
+    | "candidates"
+    | "error"
+    | "blockedSources"
+    | "unusableSources"
+    | "searchOutcome"
+  >,
+): MarketplaceSearchOutcome {
+  if ((result.candidates?.length ?? 0) > 0) {
+    return "SEARCH_COMPLETED";
+  }
+
+  if (result.searchOutcome) {
+    return result.searchOutcome;
+  }
+
+  const error = result.error ?? "";
+  if ((result.blockedSources?.length ?? 0) > 0 || BLOCKED_ERROR_RE.test(error)) {
+    return "BLOCKED";
+  }
+
+  if ((result.unusableSources?.length ?? 0) > 0 || UNUSABLE_ERROR_RE.test(error)) {
+    return "UNUSABLE";
+  }
+
+  if (!result.success && error) {
+    return "ERROR";
+  }
+
+  return "EMPTY_VALID";
+}
+
+export function withAcquisitionOutcome(
+  result: MarketplaceDiscoveryResult,
+): MarketplaceDiscoveryResult {
+  return {
+    ...result,
+    searchOutcome: inferSearchOutcome(result),
+  };
 }
 
 export function classificarBuscaDoMarketplace(

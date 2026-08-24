@@ -192,6 +192,7 @@ export type MultistoreV2Result = {
   views: PublicProductView[];
   persistedProductIds: string[];
   marketplacesAttempted: MarketplaceCode[];
+  marketplacesSucceeded: MarketplaceCode[];
   multiStoreClusters: number;
   singleStoreClusters: number;
 };

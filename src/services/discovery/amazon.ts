@@ -748,17 +748,14 @@ function possuiSinalDeDisponibilidade(
     return false;
   }
 
-  return (
-    result.prime === true ||
-    delivery.length > 0 ||
-    stock.length > 0
-  );
+  return true;
 }
 
 function criarCandidatos(
   results: SerpApiOrganicResult[],
   query: string,
   limit: number,
+  collectOnly = false,
 ): DiscoveryCandidate[] {
   const candidates = new Map<
     string,
@@ -781,8 +778,12 @@ function criarCandidatos(
       result.title,
     );
 
+    if (!title) {
+      continue;
+    }
+
     if (
-      !title ||
+      !collectOnly &&
       !tituloCompativel(
         query,
         title,
@@ -803,7 +804,6 @@ function criarCandidatos(
 
     if (
       price === null ||
-      image === null ||
       !possuiSinalDeDisponibilidade(
         result,
       )
@@ -1067,10 +1067,7 @@ function extrairResultadosAmazonHtml(
         block,
       );
 
-    if (
-      price === null ||
-      !thumbnail
-    ) {
+    if (price === null) {
       continue;
     }
 
@@ -1362,6 +1359,8 @@ export async function buscarAmazon(
     };
   }
 
+  const collectOnly =
+    request.mode === "MULTILOJA";
   const limit = normalizarLimite(
     request.limit,
   );
@@ -1388,6 +1387,7 @@ export async function buscarAmazon(
         directResults,
         query,
         limit,
+        collectOnly,
       );
 
     console.log(
@@ -1463,6 +1463,7 @@ export async function buscarAmazon(
         serpResults,
         query,
         limit,
+        collectOnly,
       );
 
     console.log(

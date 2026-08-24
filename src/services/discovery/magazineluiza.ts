@@ -1681,6 +1681,7 @@ export async function buscarMagazineLuiza(
         }
   
         if (
+        !modoMultiloja &&
           possuiAcessorioNaoSolicitado(
             titulo,
             query,
@@ -1860,6 +1861,17 @@ export async function buscarMagazineLuiza(
         });
       }
   
+      const candidateLimit =
+        modoMultiloja
+          ? Math.min(
+              Math.max(
+                limit * 3,
+                12,
+              ),
+              20,
+            )
+          : limit;
+
       const candidates =
         encontrados
           .sort(
@@ -1902,7 +1914,7 @@ export async function buscarMagazineLuiza(
           )
           .slice(
             0,
-            limit,
+            candidateLimit,
           )
           .map(
             (resultado) =>

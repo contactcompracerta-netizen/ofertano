@@ -1,7 +1,7 @@
 import type { QueryIntent, ScoredCandidate } from "./types";
 import type { NormalizedCandidate } from "./types";
 import { buildFingerprint } from "./fingerprint";
-import { classesAreIncompatible } from "./normalizeCandidate";
+import { classesAreIncompatible, normalizeMultistoreText } from "./normalizeCandidate";
 
 function tokenWeight(token: string, intent: QueryIntent): number {
   if (intent.modelTokens.includes(token) || intent.identityNumbers.includes(token)) {
@@ -120,6 +120,16 @@ export function scoreQueryRelevance(
     fingerprint.model.value,
     ...(fingerprint.variantCodes.value ?? []),
   ].filter((item): item is string => Boolean(item));
+  const missingModels = intent.modelTokens.filter(
+    (token) => !candidateHasToken(token, candidateTokens, candidateText),
+  );
+  const queryCompact = normalizeMultistoreText(intent.rawQuery).replace(/\s+/g, "");
+  const requestedModelCodes = intent.modelTokens.filter((token) =>
+    queryCompact.includes(token.replace(/\s+/g, "")),
+  );
+  const missingRequestedModels = requestedModelCodes.filter(
+    (token) => !candidateHasToken(token, candidateTokens, candidateText),
+  );
   const modelAligned =
     intent.modelTokens.length === 0 ||
     candidateModels.length === 0 ||
@@ -137,6 +147,10 @@ export function scoreQueryRelevance(
     hardConflicts.push(`model:${intent.modelTokens.join(",")}!=${fingerprint.model.value}`);
   }
 
+  if (requestedModelCodes.length > 0 && missingRequestedModels.length > 0) {
+    hardConflicts.push(`model:${missingRequestedModels.join(",")}!=ausente`);
+  }
+
   if (
     intent.identityNumbers.length > 0 &&
     fingerprint.identityNumbers.length > 0 &&
@@ -145,6 +159,13 @@ export function scoreQueryRelevance(
     hardConflicts.push(
       `identityNumber:${intent.identityNumbers.join(",")}!=${fingerprint.identityNumbers.join(",")}`,
     );
+  }
+
+  const missingIdentityNumbers = intent.identityNumbers.filter(
+    (number) => !candidateHasToken(number, candidateTokens, candidateText),
+  );
+  if (intent.identityNumbers.length > 0 && missingIdentityNumbers.length > 0) {
+    hardConflicts.push(`identityNumber:${missingIdentityNumbers.join(",")}!=ausente`);
   }
 
   if (
@@ -191,9 +212,6 @@ export function scoreQueryRelevance(
     }
   }
 
-  const missingModels = intent.modelTokens.filter(
-    (token) => !candidateHasToken(token, candidateTokens, candidateText),
-  );
   const modelPresent =
     intent.modelTokens.length > 0 && missingModels.length === 0;
 
