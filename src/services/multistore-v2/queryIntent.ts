@@ -2,6 +2,7 @@ import type { QueryIntent } from "./types";
 import {
   classifyProductClass,
   distinctiveTokensOf,
+  extractBrand,
   extractCapacity,
   extractColor,
   extractIdentityNumbers,
@@ -27,6 +28,8 @@ export function buildQueryIntent(query: string): QueryIntent {
         : "UNKNOWN";
 
   const productClass = classifyProductClass(rawQuery);
+  const brand = extractBrand(rawQuery);
+  const brandTokens = brand ? brand.split(" ").filter((token) => token.length >= 3) : [];
   const modelTokens = extractModelTokens(tokens);
   const capacity = extractCapacity(tokens);
   const quantity = extractQuantity(tokens);
@@ -44,12 +47,14 @@ export function buildQueryIntent(query: string): QueryIntent {
     normalizedQuery: tokens.join(" "),
     requestedRole,
     productClass,
-    brand: null,
+    brand,
     modelTokens,
     variantTokens: [color, material].filter((item): item is string => Boolean(item)),
     importantAttributes,
     normalizedTokens: tokens,
-    distinctiveTokens: distinctiveTokensOf(tokens),
+    distinctiveTokens: Array.from(
+      new Set([...brandTokens, ...distinctiveTokensOf(tokens)]),
+    ),
     identityNumbers: extractIdentityNumbers(tokens),
   };
 }

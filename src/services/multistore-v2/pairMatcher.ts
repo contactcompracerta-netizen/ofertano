@@ -261,14 +261,18 @@ export function compareFingerprints(
 
   const furnitureClass =
     first.productClass.value === "mesa" || second.productClass.value === "mesa";
+  const furnitureAttributesAligned =
+    furnitureClass &&
+    attributeMatches.includes("quantity") &&
+    (attributeMatches.includes("material") || attributeMatches.length >= 1);
   if (
     furnitureClass &&
     brandAligned &&
     sameClass &&
     !first.model.value &&
     !second.model.value &&
-    attributeMatches.length >= 1 &&
-    lexicalOverlap >= 0.38
+    furnitureAttributesAligned &&
+    (lexicalOverlap >= 0.28 || distinctiveOverlap >= 0.25)
   ) {
     positiveEvidence.push("lexical", ...attributeMatches, "productClass");
     return {

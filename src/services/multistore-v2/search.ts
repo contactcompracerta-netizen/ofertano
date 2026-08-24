@@ -10,6 +10,7 @@ import type {
   MarketplaceAcquisition,
   MarketplaceCode,
   MultistoreV2Result,
+  ProductCluster,
   PublicProductView,
   RawCandidate,
   ScoredCandidate,
@@ -21,10 +22,67 @@ import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
 import { persistCanonicalProducts } from "./persist";
 import { traceV2 } from "./trace";
+import { normalizeMultistoreText } from "./normalizeCandidate";
+import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 
 export function usarMotorMultistoreV2(): boolean {
   const value = process.env.MULTISTORE_ENGINE?.trim().toLowerCase();
   return value !== "legacy";
+}
+
+function formatSearchAttribute(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  return value.replace(/(\d+)([a-z]+)/i, "$1 $2");
+}
+
+function classSearchHint(productClass: string): string {
+  if (productClass === "headphone") {
+    return "fone";
+  }
+
+  if (productClass === "mesa") {
+    return "mesa de cabeceira";
+  }
+
+  if (productClass === "UNKNOWN" || !productClass) {
+    return "";
+  }
+
+  return productClass;
+}
+
+export function buildSearchPlan(query: string): string[] {
+  const intent = buildQueryIntent(query);
+  const classHint = classSearchHint(intent.productClass);
+  const focused = [
+    intent.brand,
+    classHint,
+    formatSearchAttribute(intent.importantAttributes.quantity),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return Array.from(
+    new Set(
+      [focused, query.replace(/\s+/g, " ").trim()].filter(
+        (item) => item.length >= 2,
+      ),
+    ),
+  );
+}
+
+function titleHasBrand(title: string, brand: string | null): boolean {
+  if (!brand) {
+    return true;
+  }
+
+  const normalized = normalizeMultistoreText(title);
+  return brand.split(" ").every((token) => normalized.includes(token));
 }
 
 function mapAcquisitionStatus(
@@ -137,20 +195,176 @@ function toViews(
   });
 }
 
+function candidateKey(marketplace: string, externalId: string): string {
+  return `${marketplace}:${externalId}`;
+}
+
+async function huntMissingStoreOffers(
+  clusters: ProductCluster[],
+  knownKeys: Set<string>,
+  limit: number,
+): Promise<ProductCluster[]> {
+  const adapters = listarDiscoveryAdaptersAtivos();
+  const nextClusters = clusters.map((cluster) => ({
+    ...cluster,
+    members: [...cluster.members],
+  }));
+
+  const targets = nextClusters
+    .filter((cluster) => {
+      const stores = new Set(
+        cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+      );
+      return stores.size < adapters.length;
+    })
+    .slice(0, 3);
+
+  await Promise.all(
+    targets.map(async (cluster) => {
+      const present = new Set(
+        cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+      );
+      const missing = adapters.filter((adapter) => !present.has(adapter.marketplace));
+      const title =
+        cluster.members[0]?.candidate.normalized.raw.title.trim() || "";
+      if (!title || missing.length === 0) {
+        return;
+      }
+
+      const huntQuery = buildSearchPlan(title)[0] || title;
+      const huntIntent = buildQueryIntent(title);
+
+      traceV2("hunt", {
+        title,
+        huntQuery,
+        missing: missing.map((adapter) => adapter.marketplace),
+      });
+
+      const settled = await Promise.allSettled(
+        missing.map((adapter) =>
+          adapter.searcher!({
+            query: huntQuery,
+            normalizedQuery: huntQuery,
+            limit: Math.min(limit, 8),
+            mode: "MULTILOJA",
+          }),
+        ),
+      );
+
+      for (const result of settled) {
+        if (result.status !== "fulfilled") {
+          continue;
+        }
+
+        for (const candidate of result.value.candidates) {
+          const key = candidateKey(candidate.marketplace, candidate.externalId);
+          if (knownKeys.has(key)) {
+            continue;
+          }
+
+          const raw = toRawCandidate(candidate);
+          if (!raw || raw.price == null || raw.price <= 0) {
+            continue;
+          }
+
+          const scored = scoreQueryRelevance(
+            huntIntent,
+            normalizeCandidate(raw),
+          );
+          const versusCluster = compareFingerprints(
+            scored.fingerprint,
+            cluster.identity,
+          );
+          if (versusCluster.relation !== "SAME") {
+            continue;
+          }
+
+          const memberConflict = cluster.members.some(
+            (member) =>
+              compareFingerprints(
+                scored.fingerprint,
+                member.candidate.fingerprint,
+              ).relation === "DIFFERENT",
+          );
+          if (memberConflict) {
+            continue;
+          }
+
+          cluster.members.push({ candidate: scored });
+          cluster.identity = mergeFingerprints(
+            cluster.identity,
+            scored.fingerprint,
+          );
+          knownKeys.add(key);
+
+          traceV2("hunt-hit", {
+            title: raw.title,
+            marketplace: raw.marketplace,
+            price: raw.price,
+          });
+        }
+      }
+    }),
+  );
+
+  return nextClusters;
+}
+
 export async function acquireMarketplaces(
   query: string,
   limit = 12,
 ): Promise<MarketplaceAcquisition[]> {
   const adapters = listarDiscoveryAdaptersAtivos();
+  const plan = buildSearchPlan(query);
+  const intent = buildQueryIntent(query);
+
   const settled = await Promise.allSettled(
-    adapters.map((adapter) =>
-      adapter.searcher!({
-        query,
-        normalizedQuery: query,
-        limit,
-        mode: "MULTILOJA",
-      }),
-    ),
+    adapters.map(async (adapter) => {
+      const merged = new Map<string, DiscoveryCandidate>();
+      let last: MarketplaceDiscoveryResult | null = null;
+      let scanned = 0;
+
+      for (const searchQuery of plan) {
+        last = await adapter.searcher!({
+          query: searchQuery,
+          normalizedQuery: searchQuery,
+          limit,
+          mode: "MULTILOJA",
+        });
+        scanned += last.scanned || last.candidates.length;
+
+        for (const candidate of last.candidates) {
+          const key = candidateKey(candidate.marketplace, candidate.externalId);
+          if (!merged.has(key)) {
+            merged.set(key, candidate);
+          }
+        }
+
+        const brandHits = Array.from(merged.values()).filter((candidate) =>
+          titleHasBrand(candidate.title, intent.brand),
+        );
+        if (brandHits.length >= Math.min(4, limit)) {
+          break;
+        }
+      }
+
+      const lastResult =
+        last ?? {
+          marketplace: adapter.marketplace,
+          query: plan[0] || query,
+          success: false,
+          candidates: [],
+          scanned: 0,
+          searchOutcome: "EMPTY_VALID" as const,
+          error: null,
+        };
+
+      return {
+        last: lastResult,
+        scanned,
+        candidates: Array.from(merged.values()),
+      };
+    }),
   );
 
   return settled.map((result, index) => {
@@ -177,7 +391,15 @@ export async function acquireMarketplaces(
     const rawCandidates = payload.candidates
       .map(toRawCandidate)
       .filter((item): item is RawCandidate => item !== null);
-    const status = mapAcquisitionStatus(payload);
+    const status = mapAcquisitionStatus({
+      ...payload.last,
+      candidates: payload.candidates,
+      scanned: payload.scanned,
+      searchOutcome:
+        payload.candidates.length > 0
+          ? "SEARCH_COMPLETED"
+          : payload.last.searchOutcome,
+    });
 
     return {
       marketplace: adapter.marketplace,
@@ -185,7 +407,7 @@ export async function acquireMarketplaces(
       status,
       raw: payload.scanned || payload.candidates.length,
       usable: rawCandidates.length,
-      error: payload.error ?? null,
+      error: payload.last.error ?? null,
       candidates: rawCandidates,
     };
   });
@@ -213,6 +435,18 @@ export async function searchMultistoreV2(
 
   const rawCandidates = acquisitions.flatMap((item) => item.candidates);
   const processed = processRawCandidates(search, rawCandidates);
+  const knownKeys = new Set(
+    rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
+  );
+  const huntedClusters = await huntMissingStoreOffers(
+    processed.clusters,
+    knownKeys,
+    options.limit ?? 12,
+  );
+  const products = huntedClusters
+    .map(canonicalizeCluster)
+    .filter((item): item is CanonicalProduct => item !== null)
+    .sort((first, second) => first.price - second.price);
 
   for (const candidate of processed.scored) {
     const fingerprint = candidate.fingerprint;
@@ -230,7 +464,7 @@ export async function searchMultistoreV2(
     });
   }
 
-  for (const cluster of processed.clusters) {
+  for (const cluster of huntedClusters) {
     const canonical = canonicalizeCluster(cluster);
     traceV2("cluster", {
       clusterId: cluster.clusterId,
@@ -243,14 +477,14 @@ export async function searchMultistoreV2(
 
   const persistEnabled = options.persist !== false;
   const persistedProductIds = persistEnabled
-    ? await persistCanonicalProducts(search, processed.products)
+    ? await persistCanonicalProducts(search, products)
     : [];
 
-  const views = toViews(processed.products, persistedProductIds);
-  const multiStoreClusters = processed.products.filter(
+  const views = toViews(products, persistedProductIds);
+  const multiStoreClusters = products.filter(
     (item) => item.marketplaces.length >= 2,
   ).length;
-  const singleStoreClusters = processed.products.filter(
+  const singleStoreClusters = products.filter(
     (item) => item.marketplaces.length === 1,
   ).length;
 
@@ -259,7 +493,7 @@ export async function searchMultistoreV2(
     marketplacesAttempted,
     rawCandidates: rawCandidates.length,
     relevantCandidates: processed.relevant.length,
-    clusters: processed.clusters.length,
+    clusters: huntedClusters.length,
     multiStoreClusters,
     singleStoreClusters,
   });
@@ -270,8 +504,8 @@ export async function searchMultistoreV2(
     acquisitions,
     rawCandidates: rawCandidates.length,
     relevantCandidates: processed.relevant,
-    clusters: processed.clusters,
-    products: processed.products,
+    clusters: huntedClusters,
+    products,
     views,
     persistedProductIds,
     marketplacesAttempted,

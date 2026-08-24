@@ -14,6 +14,7 @@ import {
   extractIdentityNumbers,
   extractMaterial,
   extractModelTokens,
+  extractBrand,
   extractQuantity,
   inferRole,
   normalizeMultistoreText,
@@ -51,9 +52,10 @@ export function buildFingerprint(
   const sku = candidate.structuredSku
     ? normalizeMultistoreText(candidate.structuredSku).replace(/\s+/g, "")
     : null;
-  const brand = candidate.structuredBrand
-    ? normalizeMultistoreText(candidate.structuredBrand)
-    : null;
+  const brand =
+    (candidate.structuredBrand
+      ? normalizeMultistoreText(candidate.structuredBrand)
+      : null) || extractBrand(title);
   const capacity = extractCapacity(soldTokens);
   const quantity = extractQuantity(soldTokens);
   const color = extractColor(soldTokens);

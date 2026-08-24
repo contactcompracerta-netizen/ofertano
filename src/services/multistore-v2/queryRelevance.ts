@@ -103,11 +103,17 @@ export function scoreQueryRelevance(
   if (
     intent.brand &&
     fingerprint.brand.value &&
-    fingerprint.brand.confidence === "HIGH" &&
-    !intent.brand.split(/\s+/).includes(fingerprint.brand.value) &&
-    !fingerprint.brand.value.split(/\s+/).includes(intent.brand)
+    fingerprint.brand.confidence === "HIGH"
   ) {
-    hardConflicts.push(`brand:${intent.brand}!=${fingerprint.brand.value}`);
+    const queryBrand = intent.brand;
+    const candidateBrand = fingerprint.brand.value;
+    const sameBrand =
+      queryBrand === candidateBrand ||
+      queryBrand.split(/\s+/).includes(candidateBrand) ||
+      candidateBrand.split(/\s+/).includes(queryBrand);
+    if (!sameBrand) {
+      hardConflicts.push(`brand:${queryBrand}!=${candidateBrand}`);
+    }
   }
 
   const candidateModels = [
@@ -149,6 +155,30 @@ export function scoreQueryRelevance(
     hardConflicts.push(
       `capacity:${intent.importantAttributes.capacity}!=${fingerprint.capacity.value}`,
     );
+  }
+
+  if (
+    intent.importantAttributes.quantity &&
+    fingerprint.quantity.value &&
+    intent.importantAttributes.quantity !== fingerprint.quantity.value
+  ) {
+    hardConflicts.push(
+      `quantity:${intent.importantAttributes.quantity}!=${fingerprint.quantity.value}`,
+    );
+  }
+
+  if (intent.brand) {
+    const brandTokens = intent.brand.split(" ").filter((token) => token.length >= 3);
+    const missingBrand = brandTokens.filter(
+      (token) => !candidateHasToken(token, candidateTokens, candidateText),
+    );
+    if (
+      brandTokens.length > 0 &&
+      (missingBrand.length === brandTokens.length ||
+        (brandTokens.length > 1 && missingBrand.length > 0))
+    ) {
+      hardConflicts.push(`brand:${intent.brand}!=ausente`);
+    }
   }
 
   const missingModels = intent.modelTokens.filter(

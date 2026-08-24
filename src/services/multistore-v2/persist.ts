@@ -8,8 +8,12 @@ function toMarketplaceName(code: MarketplaceCode): ProductImport["marketplace"] 
   return marketplaceLabel(code) as ProductImport["marketplace"];
 }
 
-function toProductImport(offer: CanonicalOffer): ProductImport | null {
-  if (!offer.image.trim()) {
+function toProductImport(
+  offer: CanonicalOffer,
+  fallbackImage = "",
+): ProductImport | null {
+  const image = offer.image.trim() || fallbackImage.trim();
+  if (!image) {
     return null;
   }
 
@@ -22,8 +26,8 @@ function toProductImport(offer: CanonicalOffer): ProductImport | null {
     description: null,
     brand: offer.brand,
     category: null,
-    image: offer.image,
-    images: [offer.image],
+    image,
+    images: [image],
     price: offer.price,
     oldPrice: offer.oldPrice,
     discount: null,
@@ -45,7 +49,7 @@ export async function persistCanonicalProducts(
 
   for (const product of products) {
     const imports = product.offers
-      .map(toProductImport)
+      .map((offer) => toProductImport(offer, product.image))
       .filter((item): item is ProductImport => item !== null);
 
     if (imports.length === 0) {

@@ -217,6 +217,80 @@ export function tokenize(value: string): string[] {
     .filter((token) => token.length > 0 && !STOP_WORDS.has(token));
 }
 
+export function wordsOf(value: string): string[] {
+  return normalizeMultistoreText(value)
+    .split(" ")
+    .map((token) => token.replace(/^\.+|\.+$/g, ""))
+    .filter((token) => token.length > 0);
+}
+
+const BRAND_PHRASES: string[][] = [
+  ["criado", "mais"],
+  ["i", "home"],
+];
+
+const KNOWN_BRANDS = new Set([
+  "ihome",
+  "jbl",
+  "samsung",
+  "xiaomi",
+  "motorola",
+  "philips",
+  "logitech",
+  "sony",
+  "lg",
+  "dell",
+  "lenovo",
+  "acer",
+  "positivo",
+  "multilaser",
+  "electrolux",
+  "brastemp",
+  "consul",
+  "mondial",
+  "arno",
+  "oster",
+  "bosch",
+  "midea",
+  "gree",
+  "tramontina",
+  "cadence",
+  "britania",
+]);
+
+function containsPhrase(words: string[], phrase: string[]): boolean {
+  if (phrase.length === 0 || words.length < phrase.length) {
+    return false;
+  }
+
+  for (let index = 0; index <= words.length - phrase.length; index += 1) {
+    const matched = phrase.every((token, offset) => words[index + offset] === token);
+    if (matched) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function extractBrand(text: string): string | null {
+  const words = wordsOf(text);
+
+  for (const phrase of BRAND_PHRASES) {
+    if (containsPhrase(words, phrase)) {
+      return phrase.join(" ");
+    }
+  }
+
+  for (const word of words) {
+    if (KNOWN_BRANDS.has(word)) {
+      return word;
+    }
+  }
+
+  return null;
+}
+
 export function isStopWord(token: string): boolean {
   return STOP_WORDS.has(token);
 }

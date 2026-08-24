@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildFingerprint,
   buildQueryIntent,
+  buildSearchPlan,
   clusterCandidates,
   compareFingerprints,
   normalizeCandidate,
@@ -96,7 +97,7 @@ assert.equal(testF.relation, "DIFFERENT", "F) MAIN vs ACCESSORY → DIFFERENT");
 
 const accessoryQuery = buildQueryIntent("estojo JBL Tune 520BT");
 assert.equal(accessoryQuery.requestedRole, "ACCESSORY");
-assert.equal(accessoryQuery.brand, null);
+assert.equal(accessoryQuery.brand, "jbl");
 const accessoryNormalized = normalizeCandidate(
   raw("Estojo para JBL Tune 520BT", { brand: "JBL" }),
 );
@@ -271,6 +272,83 @@ assert.equal(
   ihomeMulti.products[0]?.offers.length,
   2,
   "Fone iHome agrupa precos de duas lojas",
+);
+
+const ihomePlan = buildSearchPlan(
+  "Fones De Ouvido Ihome Wireless Rosa Resistentes A Agua",
+);
+assert.ok(
+  ihomePlan.some((item) => item.includes("ihome") && item.includes("fone")),
+  "iHome usa consulta curta com marca + classe",
+);
+
+const nightstandPlan = buildSearchPlan(
+  "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas",
+);
+assert.ok(
+  nightstandPlan.some((item) => item.includes("criado mais")),
+  "Mesa Criado Mais preserva a marca na consulta focada",
+);
+
+const cheapFurniture = processRawCandidates(
+  "Criado-Mudo em MDF com 2 Gavetas Corredicas e Puxadores",
+  [
+    raw("Criado-Mudo em MDF com 2 Gavetas Corredicas e Puxadores Compacto", {
+      marketplace: "SHOPEE",
+      marketplaceName: "Shopee",
+      externalId: "shopee-criado",
+      price: 156.99,
+    }),
+    raw("Criado Mudo MDF 2 Gavetas Puxadores Compacto", {
+      marketplace: "MAGAZINE_LUIZA",
+      marketplaceName: "Magazine Luiza",
+      externalId: "magalu-criado",
+      price: 89.9,
+    }),
+  ],
+);
+assert.equal(cheapFurniture.products.length, 1, "Criado-mudo equivalente vira um produto");
+assert.equal(
+  cheapFurniture.products[0]?.offers.length,
+  2,
+  "Criado-mudo junta Shopee e Magazine Luiza",
+);
+assert.equal(
+  cheapFurniture.products[0]?.price,
+  89.9,
+  "Preco canonico e sempre o menor entre as lojas",
+);
+assert.equal(
+  cheapFurniture.products[0]?.primaryMarketplace,
+  "Magazine Luiza",
+  "Loja principal segue a oferta mais barata",
+);
+
+const brandConflictFurniture = processRawCandidates(
+  "Mesa De Cabeceira Criado Mais Moveis 3 Gavetas",
+  [
+    raw("Mesa De Cabeceira Criado Mais Moveis Mdp 3 Gavetas", {
+      brand: "Criado Mais",
+      marketplace: "MERCADO_LIVRE",
+      marketplaceName: "Mercado Livre",
+      externalId: "ml-criado-mais",
+      price: 189,
+    }),
+    raw("Mesa de Cabeceira EJ Moveis Off White 3 Gavetas", {
+      brand: "EJ Moveis",
+      marketplace: "SHOPEE",
+      marketplaceName: "Shopee",
+      externalId: "shopee-ej",
+      price: 140.99,
+    }),
+  ],
+);
+assert.equal(
+  brandConflictFurniture.relevant.filter(
+    (item) => item.normalized.raw.externalId === "shopee-ej",
+  ).length,
+  0,
+  "Marca diferente nao entra no produto pesquisado",
 );
 
 console.log("multistore-v2: todos os casos globais passaram");
