@@ -286,8 +286,26 @@ const nightstandPlan = buildSearchPlan(
   "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas",
 );
 assert.ok(
-  nightstandPlan.some((item) => item.includes("criado mais")),
-  "Mesa Criado Mais preserva a marca na consulta focada",
+  nightstandPlan.some((item) => item.includes("criado mais") && item.includes("moveis")),
+  "Mesa Criado Mais usa consulta curta com marca + moveis",
+);
+
+const ihomeColorConflict = processRawCandidates(
+  "Fones De Ouvido Ihome Wireless Rosa Resistentes A Agua",
+  [
+    raw("iHome Fone de ouvido basico LifeTalks (preto)", {
+      brand: "iHome",
+      marketplace: "AMAZON",
+      marketplaceName: "Amazon",
+      externalId: "amz-lifetalks",
+      price: 49,
+    }),
+  ],
+);
+assert.equal(
+  ihomeColorConflict.products.length,
+  0,
+  "Fone iHome preto nao substitui o modelo rosa pesquisado",
 );
 
 const cheapFurniture = processRawCandidates(

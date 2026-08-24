@@ -70,6 +70,18 @@ type CatalogAttribute = {
   value_name?: string;
 };
 
+type CatalogBuyBox = {
+  item_id?: string;
+  price?: number;
+  original_price?: number | null;
+  permalink?: string;
+  seller_id?: number;
+  status?: string;
+  condition?: string;
+  currency_id?: string;
+  thumbnail?: string;
+};
+
 type CatalogProduct = {
   id?: string;
 
@@ -84,6 +96,8 @@ type CatalogProduct = {
   pictures?: CatalogPicture[];
 
   attributes?: CatalogAttribute[];
+
+  buy_box_winner?: CatalogBuyBox | null;
 };
 
 type CatalogOffer = {
@@ -793,6 +807,30 @@ function escolherOferta(
   )[0];
 }
 
+function ofertaDoBuyBoxDoCatalogo(
+  produto: CatalogProduct,
+): CatalogOffer | null {
+  const winner = produto.buy_box_winner;
+  const itemId = winner?.item_id?.trim();
+
+  if (!winner || !itemId) {
+    return null;
+  }
+
+  return {
+    item_id: itemId,
+    id: itemId,
+    seller_id: winner.seller_id,
+    price: winner.price,
+    original_price: winner.original_price ?? null,
+    currency_id: winner.currency_id,
+    condition: winner.condition ?? "new",
+    status: winner.status ?? "active",
+    permalink: winner.permalink,
+    thumbnail: winner.thumbnail,
+  };
+}
+
 async function descobrirDominio(
   query: string,
 ): Promise<string | null> {
@@ -1279,44 +1317,50 @@ async function carregarCandidato(
       );
     }
 
-    let ofertas:
-      CatalogItemsResponse;
-
-    try {
-      ofertas =
-        (await mercadoLivreFetch(
-          `/products/${productId}/items`,
-        )) as CatalogItemsResponse;
-    } catch (error) {
-      /*
-       * Alguns produtos ativos de catálogo não possuem
-       * publicações disponíveis naquele momento.
-       *
-       * Nesse caso o Mercado Livre pode responder
-       * 404 "No winners found".
-       *
-       * Isso não deve interromper a descoberta inteira.
-       */
-      console.warn(
-        `Produto ${productId} sem ofertas disponíveis:`,
-        error instanceof Error
-          ? error.message
-          : error,
-      );
-
-      return recusarCandidato(
-        titulo,
-        productId,
-        "offers-fetch",
-        "Catalogo sem publicacao compravel no momento.",
-        lexical.score,
-      );
-    }
-
-    const oferta =
+    let oferta =
       escolherOferta(
-        ofertas.results ?? [],
+        [
+          ofertaDoBuyBoxDoCatalogo(
+            produto,
+          ),
+        ].filter(
+          (item): item is CatalogOffer =>
+            Boolean(item),
+        ),
       );
+
+    /*
+     * Sem buy_box_winner, tentamos /items. 404
+     * "No winners found" nao pode derrubar o
+     * Discovery inteiro.
+     */
+    if (!oferta) {
+      try {
+        const ofertas =
+          (await mercadoLivreFetch(
+            `/products/${productId}/items`,
+          )) as CatalogItemsResponse;
+
+        oferta = escolherOferta(
+          ofertas.results ?? [],
+        );
+      } catch (error) {
+        console.warn(
+          `Produto ${productId} sem ofertas disponíveis:`,
+          error instanceof Error
+            ? error.message
+            : error,
+        );
+
+        return recusarCandidato(
+          titulo,
+          productId,
+          "offers-fetch",
+          "Catalogo sem publicacao compravel no momento.",
+          lexical.score,
+        );
+      }
+    }
 
     if (!oferta) {
       return recusarCandidato(
@@ -1537,13 +1581,17 @@ export async function buscarMercadoLivreComFontes(
       );
     }
 
+    const catalogHydrationLimit = Math.min(
+      Math.max(limit * 2, 8),
+      16,
+    );
     const productIds = Array.from(
       new Set(
         catalogResults
           .map((produto) => produto.id?.trim())
           .filter((id): id is string => Boolean(id)),
       ),
-    );
+    ).slice(0, catalogHydrationLimit);
 
     for (let index = 0; index < productIds.length; index += 4) {
       const lote = productIds.slice(index, index + 4);
@@ -1629,25 +1677,35 @@ export async function buscarMercadoLivreComFontes(
       await sources.searchItemsApi(query, searchLimit),
     );
 
-    if (sources.searchPublicLista || sources.searchPublicJm) {
-      if (sources.searchPublicLista) {
-        await coletarItens(
-          "public-search-lista",
-          await sources.searchPublicLista(query, searchLimit),
-        );
-      }
+    /*
+     * A busca HTML publica hoje cai em desafio/anti-bot.
+     * Se a items-api ja veio 403, insistir nas paginas
+     * publicas so estoura o tempo da pesquisa.
+     */
+    const pularBuscaPublica =
+      blockedSources.includes("items-api");
 
-      if (sources.searchPublicJm) {
+    if (!pularBuscaPublica) {
+      if (sources.searchPublicLista || sources.searchPublicJm) {
+        if (sources.searchPublicLista) {
+          await coletarItens(
+            "public-search-lista",
+            await sources.searchPublicLista(query, searchLimit),
+          );
+        }
+
+        if (sources.searchPublicJm) {
+          await coletarItens(
+            "public-search-jm",
+            await sources.searchPublicJm(query, searchLimit),
+          );
+        }
+      } else {
         await coletarItens(
-          "public-search-jm",
-          await sources.searchPublicJm(query, searchLimit),
+          "public-search",
+          await sources.searchPublicListings(query, searchLimit),
         );
       }
-    } else {
-      await coletarItens(
-        "public-search",
-        await sources.searchPublicListings(query, searchLimit),
-      );
     }
 
     const seenCatalog = new Set(

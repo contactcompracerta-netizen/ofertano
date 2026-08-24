@@ -38,13 +38,13 @@ function formatSearchAttribute(value: string | undefined): string {
   return value.replace(/(\d+)([a-z]+)/i, "$1 $2");
 }
 
-function classSearchHint(productClass: string): string {
+function classSearchHint(productClass: string, hasBrand: boolean): string {
   if (productClass === "headphone") {
     return "fone";
   }
 
   if (productClass === "mesa") {
-    return "mesa de cabeceira";
+    return hasBrand ? "moveis" : "mesa de cabeceira";
   }
 
   if (productClass === "UNKNOWN" || !productClass) {
@@ -56,7 +56,7 @@ function classSearchHint(productClass: string): string {
 
 export function buildSearchPlan(query: string): string[] {
   const intent = buildQueryIntent(query);
-  const classHint = classSearchHint(intent.productClass);
+  const classHint = classSearchHint(intent.productClass, Boolean(intent.brand));
   const focused = [
     intent.brand,
     classHint,
@@ -340,10 +340,25 @@ export async function acquireMarketplaces(
           }
         }
 
-        const brandHits = Array.from(merged.values()).filter((candidate) =>
-          titleHasBrand(candidate.title, intent.brand),
-        );
-        if (brandHits.length >= Math.min(4, limit)) {
+        const relevantHits = Array.from(merged.values()).filter((candidate) => {
+          if (!titleHasBrand(candidate.title, intent.brand)) {
+            return false;
+          }
+
+          const raw = toRawCandidate(candidate);
+          if (!raw) {
+            return false;
+          }
+
+          return (
+            scoreQueryRelevance(intent, normalizeCandidate(raw)).status ===
+            "RELEVANT"
+          );
+        });
+        const enoughHits = intent.brand
+          ? relevantHits.length >= 1
+          : relevantHits.length >= Math.min(4, limit);
+        if (enoughHits) {
           break;
         }
       }
@@ -415,7 +430,7 @@ export async function acquireMarketplaces(
 
 export async function searchMultistoreV2(
   query: string,
-  options: { persist?: boolean; limit?: number } = {},
+  options: { persist?: boolean; limit?: number; hunt?: boolean } = {},
 ): Promise<MultistoreV2Result> {
   const search = query.replace(/\s+/g, " ").trim();
   traceV2("query", { query: search });
@@ -438,11 +453,14 @@ export async function searchMultistoreV2(
   const knownKeys = new Set(
     rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
   );
-  const huntedClusters = await huntMissingStoreOffers(
-    processed.clusters,
-    knownKeys,
-    options.limit ?? 12,
-  );
+  const huntedClusters =
+    options.hunt === true
+      ? await huntMissingStoreOffers(
+          processed.clusters,
+          knownKeys,
+          options.limit ?? 12,
+        )
+      : processed.clusters;
   const products = huntedClusters
     .map(canonicalizeCluster)
     .filter((item): item is CanonicalProduct => item !== null)

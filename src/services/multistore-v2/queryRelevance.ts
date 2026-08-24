@@ -167,6 +167,16 @@ export function scoreQueryRelevance(
     );
   }
 
+  if (
+    intent.importantAttributes.color &&
+    fingerprint.color.value &&
+    intent.importantAttributes.color !== fingerprint.color.value
+  ) {
+    hardConflicts.push(
+      `color:${intent.importantAttributes.color}!=${fingerprint.color.value}`,
+    );
+  }
+
   if (intent.brand) {
     const brandTokens = intent.brand.split(" ").filter((token) => token.length >= 3);
     const missingBrand = brandTokens.filter(

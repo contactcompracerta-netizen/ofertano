@@ -258,13 +258,17 @@ async function runAcquisitionCases() {
     }),
   );
   assert.equal(
-    testC.candidates.length,
-    1,
+    testC.success,
+    true,
     "TESTE C: 403 na API nao encerra o Discovery.",
   );
   assert.equal(testC.degraded, true);
   assert.ok(testC.blockedSources?.includes("items-api"));
-  assert.ok(testC.sourcesTried?.includes("public-search"));
+  assert.equal(
+    testC.sourcesTried?.includes("public-search"),
+    false,
+    "TESTE C: items-api bloqueada nao dispara HTML publico.",
+  );
 
   const testD = await buscarMercadoLivreComFontes(
     request(),
@@ -291,12 +295,12 @@ async function runAcquisitionCases() {
   );
   assert.equal(testD.candidates.length, 0);
   assert.equal(testD.degraded, true);
-  assert.ok((testD.blockedSources?.length ?? 0) >= 2);
+  assert.ok((testD.blockedSources?.length ?? 0) >= 1);
 
   const testE = await buscarMercadoLivreComFontes(
     request(),
     fontes({
-      searchPublicListings: async () => ({
+      searchItemsApi: async () => ({
         status: "SUCCESS",
         httpStatus: 200,
         data: [
@@ -308,7 +312,6 @@ async function runAcquisitionCases() {
           }),
         ],
       }),
-      searchItemsApi: blockedItemsApi,
     }),
   );
   assert.equal(
