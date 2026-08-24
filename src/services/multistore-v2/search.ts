@@ -1,8 +1,13 @@
 import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
 import type {
+  DiscoveryAdapter,
   DiscoveryCandidate,
   MarketplaceDiscoveryResult,
 } from "@/services/discovery/core/types";
+import {
+  inferSearchOutcome,
+  withAcquisitionOutcome,
+} from "@/services/search/searchCompletionBarrier";
 
 import type {
   AcquisitionStatus,
@@ -56,6 +61,7 @@ function classSearchHint(productClass: string, hasBrand: boolean): string {
 
 export function buildSearchPlan(query: string): string[] {
   const intent = buildQueryIntent(query);
+  const original = query.replace(/\s+/g, " ").trim();
   const classHint = classSearchHint(intent.productClass, Boolean(intent.brand));
   const focused = [
     intent.brand,
@@ -66,10 +72,19 @@ export function buildSearchPlan(query: string): string[] {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+  const brandModel = [intent.brand, ...intent.modelTokens]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const productModel = [classHint, ...intent.modelTokens]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const distinctive = intent.distinctiveTokens.slice(0, 6).join(" ").trim();
 
   return Array.from(
     new Set(
-      [focused, query.replace(/\s+/g, " ").trim()].filter(
+      [original, focused, brandModel, productModel, distinctive].filter(
         (item) => item.length >= 2,
       ),
     ),
@@ -88,42 +103,31 @@ function titleHasBrand(title: string, brand: string | null): boolean {
 function mapAcquisitionStatus(
   result: MarketplaceDiscoveryResult,
 ): AcquisitionStatus {
-  if (result.searchOutcome === "BLOCKED") {
-    return "BLOCKED";
-  }
+  const outcome = inferSearchOutcome(result);
 
-  if (result.searchOutcome === "UNUSABLE") {
-    return "UNUSABLE";
-  }
-
-  if (result.searchOutcome === "ERROR" || result.searchOutcome === "NOT_RUN") {
-    return "ERROR";
-  }
-
-  if (result.searchOutcome === "EMPTY_VALID") {
-    return "EMPTY";
-  }
-
-  const usable = result.candidates.filter((item) => item.status === "FOUND");
-  if (usable.length > 0) {
+  if (outcome === "SEARCH_COMPLETED") {
     return "SUCCESS";
   }
 
-  if (result.error && /403|401|captcha|blocked|challenge/i.test(result.error)) {
+  if (outcome === "EMPTY_VALID") {
+    return "EMPTY";
+  }
+
+  if (outcome === "BLOCKED") {
     return "BLOCKED";
   }
 
-  if (result.error) {
-    return "ERROR";
+  if (outcome === "UNUSABLE") {
+    return "UNUSABLE";
   }
 
-  return "EMPTY";
+  return "ERROR";
 }
 
 function toRawCandidate(candidate: DiscoveryCandidate): RawCandidate | null {
   const title = candidate.title.trim();
-  const externalId = candidate.externalId.trim();
   const url = candidate.sourceUrl?.trim() || "";
+  const externalId = candidate.externalId.trim() || url;
 
   if (!title || !externalId) {
     return null;
@@ -219,7 +223,7 @@ async function huntMissingStoreOffers(
     })
     .slice(0, 3);
 
-  await Promise.all(
+  await Promise.allSettled(
     targets.map(async (cluster) => {
       const present = new Set(
         cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
@@ -313,8 +317,8 @@ async function huntMissingStoreOffers(
 export async function acquireMarketplaces(
   query: string,
   limit = 12,
+  adapters: DiscoveryAdapter[] = listarDiscoveryAdaptersAtivos(),
 ): Promise<MarketplaceAcquisition[]> {
-  const adapters = listarDiscoveryAdaptersAtivos();
   const plan = buildSearchPlan(query);
   const intent = buildQueryIntent(query);
 
@@ -325,12 +329,14 @@ export async function acquireMarketplaces(
       let scanned = 0;
 
       for (const searchQuery of plan) {
-        last = await adapter.searcher!({
-          query: searchQuery,
-          normalizedQuery: searchQuery,
-          limit,
-          mode: "MULTILOJA",
-        });
+        last = withAcquisitionOutcome(
+          await adapter.searcher!({
+            query: searchQuery,
+            normalizedQuery: searchQuery,
+            limit,
+            mode: "MULTILOJA",
+          }),
+        );
         scanned += last.scanned || last.candidates.length;
 
         for (const candidate of last.candidates) {
@@ -390,11 +396,19 @@ export async function acquireMarketplaces(
         result.reason instanceof Error
           ? result.reason.message
           : String(result.reason);
+      const status = mapAcquisitionStatus({
+        marketplace: adapter.marketplace,
+        query,
+        success: false,
+        candidates: [],
+        scanned: 0,
+        error,
+      });
 
       return {
         marketplace: adapter.marketplace,
         marketplaceName: adapter.marketplaceName,
-        status: "ERROR" as const,
+        status,
         raw: 0,
         usable: 0,
         error,
@@ -430,26 +444,49 @@ export async function acquireMarketplaces(
 
 export async function searchMultistoreV2(
   query: string,
-  options: { persist?: boolean; limit?: number; hunt?: boolean } = {},
+  options: {
+    persist?: boolean;
+    limit?: number;
+    hunt?: boolean;
+    adapters?: DiscoveryAdapter[];
+  } = {},
 ): Promise<MultistoreV2Result> {
   const search = query.replace(/\s+/g, " ").trim();
   traceV2("query", { query: search });
 
-  const acquisitions = await acquireMarketplaces(search, options.limit ?? 12);
+  const acquisitions = await acquireMarketplaces(
+    search,
+    options.limit ?? 12,
+    options.adapters,
+  );
   const marketplacesAttempted = acquisitions.map((item) => item.marketplace);
+  const marketplacesSucceeded = acquisitions
+    .filter((item) => item.status === "SUCCESS")
+    .map((item) => item.marketplace);
+
+  const rawCandidates = acquisitions.flatMap((item) => item.candidates);
+  const processed = processRawCandidates(search, rawCandidates);
+  const relevantByMarketplace = new Map<string, number>();
+  for (const candidate of processed.relevant) {
+    const code = candidate.normalized.raw.marketplace;
+    relevantByMarketplace.set(
+      code,
+      (relevantByMarketplace.get(code) ?? 0) + 1,
+    );
+  }
 
   for (const acquisition of acquisitions) {
     traceV2("marketplace", {
+      query: search,
       marketplace: acquisition.marketplace,
       status: acquisition.status,
       raw: acquisition.raw,
       usable: acquisition.usable,
+      relevant: relevantByMarketplace.get(acquisition.marketplace) ?? 0,
       error: acquisition.error,
     });
   }
 
-  const rawCandidates = acquisitions.flatMap((item) => item.candidates);
-  const processed = processRawCandidates(search, rawCandidates);
   const knownKeys = new Set(
     rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
   );
@@ -479,6 +516,7 @@ export async function searchMultistoreV2(
       brand: fingerprint.brand.value,
       model: fingerprint.model.value,
       status: candidate.status,
+      reason: candidate.reason,
     });
   }
 
@@ -494,9 +532,15 @@ export async function searchMultistoreV2(
   }
 
   const persistEnabled = options.persist !== false;
-  const persistedProductIds = persistEnabled
-    ? await persistCanonicalProducts(search, products)
-    : [];
+  let persistedProductIds: string[] = [];
+  if (persistEnabled) {
+    try {
+      persistedProductIds = await persistCanonicalProducts(search, products);
+    } catch (error) {
+      console.error("[MULTISTORE-V2] persistencia falhou", error);
+      persistedProductIds = products.map(() => "");
+    }
+  }
 
   const views = toViews(products, persistedProductIds);
   const multiStoreClusters = products.filter(
@@ -509,11 +553,12 @@ export async function searchMultistoreV2(
   traceV2("result", {
     query: search,
     marketplacesAttempted,
+    marketplacesSucceeded,
     rawCandidates: rawCandidates.length,
     relevantCandidates: processed.relevant.length,
     clusters: huntedClusters.length,
-    multiStoreClusters,
     singleStoreClusters,
+    multiStoreClusters,
   });
 
   return {
@@ -527,6 +572,7 @@ export async function searchMultistoreV2(
     views,
     persistedProductIds,
     marketplacesAttempted,
+    marketplacesSucceeded,
     multiStoreClusters,
     singleStoreClusters,
   };
@@ -544,6 +590,7 @@ export function emptyMultistoreResult(query: string): MultistoreV2Result {
     views: [],
     persistedProductIds: [],
     marketplacesAttempted: [] as MarketplaceCode[],
+    marketplacesSucceeded: [] as MarketplaceCode[],
     multiStoreClusters: 0,
     singleStoreClusters: 0,
   };

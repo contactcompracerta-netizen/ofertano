@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  acquireMarketplaces,
   buildFingerprint,
   buildQueryIntent,
   buildSearchPlan,
@@ -9,8 +10,14 @@ import {
   normalizeCandidate,
   processRawCandidates,
   scoreQueryRelevance,
+  searchMultistoreV2,
 } from "./index";
 import type { RawCandidate } from "./types";
+import type {
+  DiscoveryAdapter,
+  DiscoveryCandidate,
+  MarketplaceDiscoveryResult,
+} from "../discovery/core/types";
 
 function raw(
   title: string,
@@ -369,4 +376,174 @@ assert.equal(
   "Marca diferente nao entra no produto pesquisado",
 );
 
-console.log("multistore-v2: todos os casos globais passaram");
+assert.equal(
+  scoreQueryRelevance(
+    buildQueryIntent("Headphone MarcaX ZX100"),
+    normalizeCandidate(raw("Headphone MarcaX Bluetooth Preto", { brand: "MarcaX" })),
+  ).status,
+  "REJECTED",
+  "Modelo pedido na consulta precisa aparecer no candidato",
+);
+assert.equal(
+  scoreQueryRelevance(
+    buildQueryIntent("Headphone MarcaX ZX100"),
+    normalizeCandidate(raw("Headphone MarcaX ZX100 Bluetooth", { brand: "MarcaX" })),
+  ).status,
+  "RELEVANT",
+  "Candidato com o modelo pedido continua relevante",
+);
+
+function fakeAdapter(
+  marketplace: DiscoveryAdapter["marketplace"],
+  marketplaceName: string,
+  searcher: NonNullable<DiscoveryAdapter["searcher"]>,
+): DiscoveryAdapter {
+  return {
+    marketplace,
+    marketplaceName,
+    enabled: true,
+    searcher,
+  };
+}
+
+function foundCandidate(
+  extras: Partial<DiscoveryCandidate> & Pick<DiscoveryCandidate, "marketplace" | "externalId" | "title">,
+): DiscoveryCandidate {
+  return {
+    marketplaceName: extras.marketplaceName ?? extras.marketplace,
+    sourceUrl: extras.sourceUrl ?? `https://loja.example/${extras.externalId}`,
+    affiliateLink: extras.affiliateLink ?? null,
+    image: extras.image ?? "https://loja.example/img.jpg",
+    price: extras.price ?? 199,
+    oldPrice: extras.oldPrice ?? null,
+    brand: extras.brand ?? "JBL",
+    category: extras.category ?? null,
+    seller: extras.seller ?? null,
+    attributes: extras.attributes ?? {},
+    status: "FOUND",
+    error: null,
+    ...extras,
+  };
+}
+
+async function runAcquisitionContract() {
+  const calls: string[] = [];
+  const adapters = [
+    fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => {
+      calls.push("MERCADO_LIVRE");
+      throw new Error("Mercado Livre items-api retornou 403.");
+    }),
+    fakeAdapter("AMAZON", "Amazon", async () => {
+      calls.push("AMAZON");
+      return {
+        marketplace: "AMAZON",
+        query: "JBL Tune 520BT",
+        success: false,
+        scanned: 0,
+        candidates: [],
+        error: "Amazon bloqueou temporariamente a busca HTML automatizada.",
+      } satisfies MarketplaceDiscoveryResult;
+    }),
+    fakeAdapter("SHOPEE", "Shopee", async () => {
+      calls.push("SHOPEE");
+      return {
+        marketplace: "SHOPEE",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 3,
+        candidates: [
+          foundCandidate({
+            marketplace: "SHOPEE",
+            marketplaceName: "Shopee",
+            externalId: "shp-520",
+            title: "Headphone JBL Tune 520BT",
+            price: 189,
+          }),
+        ],
+      } satisfies MarketplaceDiscoveryResult;
+    }),
+    fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => {
+      calls.push("MAGAZINE_LUIZA");
+      return {
+        marketplace: "MAGAZINE_LUIZA",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 0,
+        candidates: [],
+        error: null,
+      } satisfies MarketplaceDiscoveryResult;
+    }),
+    fakeAdapter("ALIEXPRESS", "AliExpress", async () => {
+      calls.push("ALIEXPRESS");
+      throw new Error("AliExpress indisponivel.");
+    }),
+  ];
+
+  const acquisitions = await acquireMarketplaces("JBL Tune 520BT", 8, adapters);
+  assert.equal(new Set(calls).size, 5, "Todas as lojas habilitadas devem ser consultadas.");
+  assert.ok(
+    adapters.every((adapter) => calls.includes(adapter.marketplace)),
+    "Nenhuma loja habilitada pode ficar de fora da pesquisa.",
+  );
+  assert.equal(acquisitions.length, 5);
+  assert.equal(
+    acquisitions.find((item) => item.marketplace === "MERCADO_LIVRE")?.status,
+    "BLOCKED",
+  );
+  assert.equal(
+    acquisitions.find((item) => item.marketplace === "AMAZON")?.status,
+    "BLOCKED",
+  );
+  assert.equal(
+    acquisitions.find((item) => item.marketplace === "SHOPEE")?.status,
+    "SUCCESS",
+  );
+  assert.equal(
+    acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.status,
+    "EMPTY",
+  );
+  assert.equal(
+    acquisitions.find((item) => item.marketplace === "ALIEXPRESS")?.status,
+    "ERROR",
+  );
+
+  const mixed = await searchMultistoreV2("JBL Tune 520BT", {
+    persist: false,
+    adapters,
+  });
+  assert.ok(mixed.views.length >= 1, "Candidato relevante de uma loja nao vira zero.");
+  assert.equal(mixed.singleStoreClusters, mixed.products.length);
+  assert.ok(mixed.views[0]?.id.startsWith("v2-"), "Persistencia desligada nao apaga o cluster vivo.");
+  assert.deepEqual(mixed.marketplacesAttempted, [
+    "MERCADO_LIVRE",
+    "AMAZON",
+    "SHOPEE",
+    "MAGAZINE_LUIZA",
+    "ALIEXPRESS",
+  ]);
+  assert.deepEqual(mixed.marketplacesSucceeded, ["SHOPEE"]);
+
+  const noneAvailable = await searchMultistoreV2("lapis", {
+    persist: false,
+    adapters: adapters.map((adapter) =>
+      fakeAdapter(adapter.marketplace, adapter.marketplaceName, async () => {
+        throw new Error("HTTP 403");
+      }),
+    ),
+  });
+  assert.equal(noneAvailable.views.length, 0);
+  assert.equal(noneAvailable.marketplacesAttempted.length, 5);
+  assert.ok(
+    noneAvailable.acquisitions.every((item) => item.status === "BLOCKED" || item.status === "ERROR"),
+    "Nenhuma fonte disponivel nao pode crashar a busca.",
+  );
+}
+
+void runAcquisitionContract()
+  .then(() => {
+    console.log("multistore-v2: todos os casos globais passaram");
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

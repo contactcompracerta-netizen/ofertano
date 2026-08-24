@@ -567,6 +567,75 @@ async function runAcquisitionCases() {
     true,
     "Uma fonte bloqueada nao impede outra fonte publica de entregar candidato.",
   );
+
+  const thrownItemsApi = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchItemsApi: async () => {
+        throw new Error("Mercado Livre /sites/MLB/search falhou autenticado (403).");
+      },
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [listingItem],
+      }),
+    }),
+  );
+  assert.equal(
+    thrownItemsApi.candidates.some((entry) => entry.externalId === "MLB111222333"),
+    true,
+    "items-api lancando 403 continua para HTML publico.",
+  );
+  assert.ok(thrownItemsApi.blockedSources?.includes("items-api"));
+
+  const noIdCard = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchItemsApi: blockedItemsApi,
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            title: "Headphone MarcaX Wireless Rosa",
+            price: 149,
+            permalink: "https://produto.mercadolivre.com.br/MLB-4224584697-headphone",
+            thumbnail: "https://http2.mlstatic.com/item.jpg",
+          },
+        ],
+      }),
+    }),
+  );
+  assert.equal(
+    noIdCard.candidates.some((entry) =>
+      entry.externalId.includes("4224584697") || entry.sourceUrl.includes("4224584697"),
+    ),
+    true,
+    "Card publico com title+price+url e utilizavel sem items-api.",
+  );
+
+  const noneAvailable = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      discoverDomain: async () => {
+        throw new Error("dominio falhou");
+      },
+      searchCatalog: async () => {
+        throw new Error("catalogo HTTP 403");
+      },
+      searchItemsApi: async () => {
+        throw new Error("items HTTP 403");
+      },
+      searchPublicListings: async () => {
+        throw new Error("html HTTP 403");
+      },
+    }),
+  );
+  assert.equal(noneAvailable.candidates.length, 0);
+  assert.ok(
+    noneAvailable.searchOutcome === "BLOCKED" || noneAvailable.searchOutcome === "ERROR",
+    "Nenhuma fonte ML disponivel nao pode crashar.",
+  );
 }
 
 void runAcquisitionCases()

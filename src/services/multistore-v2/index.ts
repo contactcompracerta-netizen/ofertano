@@ -6,6 +6,7 @@ export { compareFingerprints } from "./pairMatcher";
 export { clusterCandidates } from "./cluster";
 export { canonicalizeCluster } from "./canonicalize";
 export {
+  acquireMarketplaces,
   buildSearchPlan,
   processRawCandidates,
   searchMultistoreV2,

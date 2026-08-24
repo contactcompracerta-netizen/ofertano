@@ -804,6 +804,7 @@ export async function buscarShopee(
        * posições de uma busca por "Galaxy A55 128GB".
        */
       if (
+        !modoMultiloja &&
         possuiAcessorioNaoSolicitado(
           titulo,
           query,

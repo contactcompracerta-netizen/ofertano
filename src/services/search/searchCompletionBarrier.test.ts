@@ -163,8 +163,7 @@ assert.equal(
     result("AMAZON", {
       success: false,
       scanned: 0,
-      error: "captcha challenge",
-      blockedSources: ["amazon-html"],
+      error: "Amazon bloqueou temporariamente a busca HTML automatizada.",
     }),
   ),
   "BLOCKED",
