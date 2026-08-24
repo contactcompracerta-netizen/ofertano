@@ -1,5 +1,9 @@
 import type { QueryIntent } from "./types";
 import {
+  extractIdentityAnchors,
+  hasStrongIdentity,
+} from "./identityAnchors";
+import {
   classifyProductClass,
   distinctiveTokensOf,
   extractBrand,
@@ -42,6 +46,8 @@ export function buildQueryIntent(query: string): QueryIntent {
     ...(material ? { material } : {}),
   };
 
+  const identityAnchors = extractIdentityAnchors(rawQuery);
+
   return {
     rawQuery,
     normalizedQuery: tokens.join(" "),
@@ -56,5 +62,7 @@ export function buildQueryIntent(query: string): QueryIntent {
       new Set([...brandTokens, ...distinctiveTokensOf(tokens)]),
     ),
     identityNumbers: extractIdentityNumbers(tokens),
+    identityAnchors,
+    hasStrongIdentity: hasStrongIdentity(identityAnchors),
   };
 }

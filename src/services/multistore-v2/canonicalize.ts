@@ -4,6 +4,11 @@ import type {
   ProductCluster,
 } from "./types";
 import type { MarketplaceCode } from "./types";
+import {
+  affiliateRank,
+  classifyListingAffiliate,
+  traceAffiliateAssessment,
+} from "./affiliateEligibility";
 
 function completeness(offer: {
   image: string | null;
@@ -17,6 +22,33 @@ function completeness(offer: {
     Number(Boolean(offer.url.trim())) * 2 +
     Number(Boolean(offer.affiliateLink?.trim()))
   );
+}
+
+function preferOffer(
+  current: CanonicalOffer,
+  next: CanonicalOffer,
+): CanonicalOffer {
+  if (
+    current.marketplace === "MERCADO_LIVRE" &&
+    next.marketplace === "MERCADO_LIVRE"
+  ) {
+    const currentRank = affiliateRank(current.affiliateStatus);
+    const nextRank = affiliateRank(next.affiliateStatus);
+    if (nextRank !== currentRank) {
+      return nextRank > currentRank ? next : current;
+    }
+  }
+
+  const currentScore = completeness(current);
+  const nextScore = completeness(next);
+  if (
+    nextScore > currentScore ||
+    (nextScore === currentScore && next.price < current.price)
+  ) {
+    return next;
+  }
+
+  return current;
 }
 
 export function canonicalizeCluster(
@@ -35,6 +67,15 @@ export function canonicalizeCluster(
       continue;
     }
 
+    const assessment = classifyListingAffiliate({
+      marketplace: raw.marketplace,
+      sourceUrl: url,
+      affiliateLink: raw.affiliateLink,
+      declaredStatus: raw.affiliateStatus,
+    });
+    raw.affiliateLink = assessment.affiliateLink;
+    raw.affiliateStatus = assessment.status;
+
     const offer: CanonicalOffer = {
       marketplace: raw.marketplace,
       marketplaceName: raw.marketplaceName,
@@ -45,24 +86,27 @@ export function canonicalizeCluster(
       price,
       oldPrice: null,
       brand: raw.brand,
-      affiliateLink: raw.affiliateLink,
+      affiliateLink: assessment.affiliateLink,
+      affiliateStatus: assessment.status,
       attributes: raw.attributes,
       seller: raw.seller,
     };
 
     const current = byMarketplace.get(raw.marketplace);
-    if (!current) {
-      byMarketplace.set(raw.marketplace, offer);
-      continue;
-    }
+    const selected = current ? preferOffer(current, offer) : offer;
+    byMarketplace.set(raw.marketplace, selected);
 
-    const currentScore = completeness(current);
-    const nextScore = completeness(offer);
-    if (
-      nextScore > currentScore ||
-      (nextScore === currentScore && offer.price < current.price)
-    ) {
-      byMarketplace.set(raw.marketplace, offer);
+    if (raw.marketplace === "MERCADO_LIVRE") {
+      traceAffiliateAssessment({
+        marketplace: raw.marketplace,
+        externalId: raw.externalId,
+        sourceUrl: url,
+        affiliateLink: assessment.affiliateLink,
+        status: assessment.status,
+        fallbackAttempt: Boolean(current),
+        selectedForCluster: selected.externalId === offer.externalId,
+        reason: assessment.reason,
+      });
     }
   }
 

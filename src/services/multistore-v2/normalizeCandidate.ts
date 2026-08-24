@@ -190,19 +190,67 @@ const CAPACITY_UNITS = new Set([
   "mm",
   "cm",
   "pol",
+  "gb",
+  "tb",
+  "mb",
+  "mah",
+  "grama",
+  "gramas",
+  "litro",
+  "litros",
+  "kilo",
+  "kilos",
+  "quilograma",
+  "quilogramas",
+  "mililitro",
+  "mililitros",
 ]);
+
+const CAPACITY_UNIT_CANON: Record<string, string> = {
+  l: "l",
+  litro: "l",
+  litros: "l",
+  ml: "ml",
+  mililitro: "ml",
+  mililitros: "ml",
+  kg: "kg",
+  kilo: "kg",
+  kilos: "kg",
+  quilograma: "kg",
+  quilogramas: "kg",
+  g: "g",
+  grama: "g",
+  gramas: "g",
+  w: "w",
+  v: "v",
+  mm: "mm",
+  cm: "cm",
+  pol: "pol",
+  gb: "gb",
+  tb: "tb",
+  mb: "mb",
+  mah: "mah",
+};
 
 const HOST_RELATION_PATTERN =
   /\b(?:compative(?:l|is)\s+com|compatible(?:s)?\s+with|fits|reposicao\s+para|substituicao\s+para|de\s+substituicao\s+para)\b/;
 
 const GENERIC_HOST_PATTERN = /\b(?:para|for)\b/;
 
+export function collapseThousandsSeparators(value: string): string {
+  return value.replace(/\b(\d{1,3}(?:\.\d{3})+)\b/g, (match) =>
+    match.replace(/\./g, ""),
+  );
+}
+
 export function normalizeMultistoreText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/(\d),(\d)/g, "$1.$2")
+  return collapseThousandsSeparators(
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/(\d),(\d)/g, "$1.$2"),
+  )
     .replace(/([a-z])(\d)/g, "$1 $2")
     .replace(/(\d)([a-z])/g, "$1 $2")
     .replace(/[^a-z0-9.]+/g, " ")
@@ -407,25 +455,34 @@ export function inferRole(text: string): ProductRole {
 }
 
 export function extractCapacity(tokens: string[]): string | null {
+  const found: string[] = [];
+
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
     const compact = token.replace(/\./g, "");
-    const unitMatch = token.match(/^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm)$/);
+    const unitMatch = token.match(
+      /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm|gb|tb|mb|mah)$/,
+    );
     if (unitMatch) {
-      return `${unitMatch[1]}${unitMatch[2]}`;
+      const unit = CAPACITY_UNIT_CANON[unitMatch[2]] ?? unitMatch[2];
+      found.push(`${unitMatch[1]}${unit}`);
+      continue;
     }
 
     const next = tokens[index + 1];
-    if (/^\d+(?:\.\d+)?$/.test(token) && next && CAPACITY_UNITS.has(next)) {
-      return `${token}${next}`;
+    const nextCanon = next ? CAPACITY_UNIT_CANON[next] : undefined;
+    if (/^\d+(?:\.\d+)?$/.test(token) && nextCanon) {
+      found.push(`${token}${nextCanon}`);
+      continue;
     }
 
-    if (/^\d+$/.test(compact) && next && CAPACITY_UNITS.has(next)) {
-      return `${token}${next}`;
+    if (/^\d+$/.test(compact) && nextCanon) {
+      found.push(`${compact}${nextCanon}`);
     }
   }
 
-  return null;
+  const storage = found.find((item) => /(gb|tb|mb)$/.test(item));
+  return storage ?? found[0] ?? null;
 }
 
 export function extractQuantity(tokens: string[]): string | null {
@@ -438,6 +495,14 @@ export function extractQuantity(tokens: string[]): string | null {
   }
 
   return null;
+}
+
+export function isCapacityOrQuantityUnit(token: string | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+
+  return CAPACITY_UNITS.has(token) || QUANTITY_UNITS.has(token) || Boolean(CAPACITY_UNIT_CANON[token]);
 }
 
 export function extractColor(tokens: string[]): string | null {

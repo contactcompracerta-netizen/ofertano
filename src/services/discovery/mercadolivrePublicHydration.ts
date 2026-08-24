@@ -1,3 +1,4 @@
+import { abortableFetch, isSearchAborted } from "@/lib/searchAbort";
 import { traceMultiloja } from "@/services/multiloja/trace";
 
 import {
@@ -367,7 +368,7 @@ async function fetchHtml(url: string): Promise<{
   finalUrl: string;
   contentType: string;
 }> {
-  const response = await fetch(url, {
+  const response = await abortableFetch(url, {
     method: "GET",
     headers: {
       Accept:
@@ -489,6 +490,9 @@ export async function hidratarItensComPaginaPublica(
   let blockedPages = 0;
 
   for (const item of next) {
+    if (isSearchAborted()) {
+      break;
+    }
     if (anuncioPublicoEstaCompleto(item)) {
       continue;
     }

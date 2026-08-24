@@ -331,10 +331,11 @@ async function criarOportunidadeNaFila(
        * O Mercado Livre entra diretamente na fila mesmo
        * sem link individual de afiliado.
        *
-       * O fallback temporário https://meli.la/1i7Te2C
-       * pertence somente à camada de apresentação da
-       * página do produto. Ele NÃO é salvo aqui como se
-       * fosse o link individual desta oferta.
+       * A URL comum do anúncio permanece em sourceUrl.
+       * affiliateLink só é preenchido depois, quando
+       * houver um link de afiliado realmente confirmado.
+       * A página pública não promove sourceUrl nem
+       * meli.la genérico a botão monetizado.
        */
       const createdOpportunity =
         await tx.productOpportunity.create({

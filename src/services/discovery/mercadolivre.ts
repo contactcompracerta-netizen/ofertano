@@ -1,4 +1,5 @@
 ﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
+import { isSearchAborted } from "@/lib/searchAbort";
 
 import type {
   DiscoveryCandidate,
@@ -1570,6 +1571,14 @@ export async function buscarMercadoLivreComFontes(
     const executarFonte = async <T,>(
       run: () => Promise<MercadoLivreSourceFetch<T[]>>,
     ): Promise<MercadoLivreSourceFetch<T[]>> => {
+      if (isSearchAborted() || request.signal?.aborted) {
+        return {
+          status: "ERROR",
+          httpStatus: null,
+          data: [],
+          reason: "TIMEOUT: orcamento de busca esgotado.",
+        };
+      }
       try {
         return await run();
       } catch (error) {
@@ -1632,6 +1641,9 @@ export async function buscarMercadoLivreComFontes(
     ).slice(0, catalogHydrationLimit);
 
     for (let index = 0; index < productIds.length; index += 4) {
+      if (isSearchAborted() || request.signal?.aborted) {
+        break;
+      }
       const lote = productIds.slice(index, index + 4);
       scanned += lote.length;
       evaluations.push(
@@ -1690,6 +1702,9 @@ export async function buscarMercadoLivreComFontes(
         | "public-search-jm",
       fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
     ) => {
+      if (isSearchAborted() || request.signal?.aborted) {
+        return;
+      }
       const before = evaluations.filter((item) => item.kept).length;
       let items = fetch.data ?? [];
 
@@ -1789,6 +1804,9 @@ export async function buscarMercadoLivreComFontes(
           (variant) => variant.toLowerCase() !== query.toLowerCase(),
         );
         for (const variant of variants.slice(0, 2)) {
+          if (isSearchAborted() || request.signal?.aborted) {
+            break;
+          }
           if (evaluations.filter((item) => item.kept).length > 0) {
             break;
           }
@@ -1815,6 +1833,9 @@ export async function buscarMercadoLivreComFontes(
       evaluations.map((item) => item.externalId.trim()).filter(Boolean),
     );
     for (const catalogId of Array.from(new Set(catalogIds))) {
+      if (isSearchAborted() || request.signal?.aborted) {
+        break;
+      }
       if (seenCatalog.has(catalogId)) {
         continue;
       }

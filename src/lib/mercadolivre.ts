@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { abortableFetch } from "@/lib/searchAbort";
 
 const BASE_URL = "https://api.mercadolibre.com";
 
@@ -113,7 +114,7 @@ export async function mercadoLivreFetch(
     }
 
     authenticatedResponse =
-      await fetch(url, {
+      await abortableFetch(url, {
         ...init,
         headers,
       });
@@ -195,7 +196,7 @@ export async function mercadoLivreFetch(
   }
 
   const publicResponse =
-    await fetch(url, {
+    await abortableFetch(url, {
       ...init,
       headers: publicHeaders,
     });
@@ -234,7 +235,7 @@ export async function mercadoLivrePublicFetch(
   }
 
   const response =
-    await fetch(
+    await abortableFetch(
       `${BASE_URL}${endpoint}`,
       {
         ...init,

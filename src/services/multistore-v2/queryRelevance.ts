@@ -2,6 +2,7 @@ import type { QueryIntent, ScoredCandidate } from "./types";
 import type { NormalizedCandidate } from "./types";
 import { buildFingerprint } from "./fingerprint";
 import { classesAreIncompatible, normalizeMultistoreText } from "./normalizeCandidate";
+import { candidateExpressesAnchor } from "./identityAnchors";
 
 function tokenWeight(token: string, intent: QueryIntent): number {
   if (intent.modelTokens.includes(token) || intent.identityNumbers.includes(token)) {
@@ -165,7 +166,13 @@ export function scoreQueryRelevance(
     (number) => !candidateHasToken(number, candidateTokens, candidateText),
   );
   if (intent.identityNumbers.length > 0 && missingIdentityNumbers.length > 0) {
-    hardConflicts.push(`identityNumber:${missingIdentityNumbers.join(",")}!=ausente`);
+    const uncovered = missingIdentityNumbers.filter(
+      (number) =>
+        !intent.identityAnchors.some((anchor) => anchor.value.includes(number)),
+    );
+    if (uncovered.length > 0) {
+      hardConflicts.push(`identityNumber:${uncovered.join(",")}!=ausente`);
+    }
   }
 
   if (
@@ -209,6 +216,20 @@ export function scoreQueryRelevance(
         (brandTokens.length > 1 && missingBrand.length > 0))
     ) {
       hardConflicts.push(`brand:${intent.brand}!=ausente`);
+    }
+  }
+
+  if (intent.hasStrongIdentity) {
+    const missingAnchors = intent.identityAnchors
+      .filter((anchor) => anchor.required)
+      .filter(
+        (anchor) =>
+          !candidateExpressesAnchor(anchor, candidateText, fingerprint),
+      );
+    if (missingAnchors.length > 0) {
+      hardConflicts.push(
+        `identityAnchor:${missingAnchors.map((anchor) => anchor.value).join(",")}!=ausente`,
+      );
     }
   }
 

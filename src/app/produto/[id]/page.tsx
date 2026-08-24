@@ -12,6 +12,13 @@ import MarketplaceClickAnchor from "@/components/analytics/MarketplaceClickAncho
 import AnalyticsListingScope from "@/components/analytics/AnalyticsListingScope";
 import ProductImpression from "@/components/analytics/ProductImpression";
 import ProductViewTracker from "@/components/analytics/ProductViewTracker";
+import {
+  ehMarketplaceMercadoLivre,
+  escolherOfertaPrincipalCompravel,
+  resolverHrefCompraPublica,
+  resolverHrefProprioOfertaPublica,
+  resolverLinkLegadoPrincipal,
+} from "@/lib/affiliates/publicPurchase";
 import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
@@ -56,79 +63,6 @@ function formatarMarketplace(marketplace: string) {
       .replace(/\b\w/g, (letra) => letra.toUpperCase())
   );
 }
-
-function ehMarketplaceMercadoLivre(marketplace: string | null | undefined) {
-  const valor = marketplace
-    ?.trim()
-    .toUpperCase()
-    .replaceAll(" ", "_");
-
-  return valor === "MERCADO_LIVRE";
-}
-
-function ehLinkIndividualMercadoLivre(
-  link: string | null | undefined,
-) {
-  const valor = link?.trim();
-
-  if (!valor) {
-    return false;
-  }
-
-  try {
-    const url = new URL(valor);
-    const host = url.hostname
-      .toLowerCase()
-      .replace(/^www\./, "");
-
-    const hostMercadoLivre =
-      host === "mercadolivre.com.br" ||
-      host.endsWith(".mercadolivre.com.br") ||
-      host === "mercadolibre.com" ||
-      host.endsWith(".mercadolibre.com") ||
-      host === "meli.la" ||
-      host.endsWith(".meli.la");
-
-    if (!hostMercadoLivre) {
-      return false;
-    }
-
-    // Links curtos meli.la podem ser gerados pelo Link Builder.
-    // O antigo fallback genérico do Ofertano nunca deve voltar a ser tratado
-    // como link individual de afiliado.
-    if (host === "meli.la" || host.endsWith(".meli.la")) {
-      const caminhoCurto = url.pathname
-        .replace(/\/+$/, "")
-        .toLowerCase();
-
-      return caminhoCurto !== "/1i7te2c";
-    }
-
-    const caminho = decodeURIComponent(url.pathname);
-
-    // Catálogo e user-product não são tratados como links individuais de compra.
-    if (/\/p\/MLB\d+/i.test(caminho) || /\/up\/MLBU\d+/i.test(caminho)) {
-      return false;
-    }
-
-    if (/MLB-?\d+/i.test(caminho)) {
-      return true;
-    }
-
-    const itemId =
-      url.searchParams.get("item_id") ??
-      url.searchParams.get("wid");
-
-    return Boolean(
-      itemId && /^MLB-?\d+$/i.test(itemId.trim()),
-    );
-  } catch {
-    return false;
-  }
-}
-
-const LINK_AFILIADO_FALLBACK_MERCADO_LIVRE =
-  "https://meli.la/1i7Te2C";
 
 function limparMarca(marca: string | null | undefined) {
   const valor = marca?.trim();
@@ -993,67 +927,38 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
    *
    * Regras:
    * - somente produto EXACT;
-   * - oferta ACTIVE e disponível;
+   * - oferta disponível com status comprável;
    * - preço válido;
-   * - Mercado Livre pode usar temporariamente o link afiliado fallback;
-   * - nas demais lojas, exige link individual de afiliado;
+   * - Mercado Livre usa somente affiliateLink confirmado;
+   * - sourceUrl, URL MLB comum e meli.la genérico nunca viram
+   *   botão monetizado;
+   * - se a oferta ML atual não tiver afiliado, outra oferta ML
+   *   do mesmo Product pode ser usada no CTA principal;
+   *   produto diferente não;
+   * - cada linha/card de MarketplaceOffer usa somente o href
+   *   próprio daquela oferta, nunca o afiliado de uma irmã;
+   * - nas demais lojas, exige affiliateLink próprio;
    * - entre as ofertas elegíveis, vence sempre o menor preço.
    *
    * Product.affiliateLink permanece apenas como compatibilidade
    * para registros antigos que ainda não tenham MarketplaceOffer
-   * comprável. Ele nunca deve sobrescrever uma oferta EXACT válida.
+   * comprável. Ele nunca deve sobrescrever uma oferta EXACT válida
+   * nem promover URL comum do Mercado Livre a afiliado.
    */
-  const ofertasCompraveisExact = ofertasComparador
-    .filter((oferta) => {
-      const link = oferta.affiliateLink?.trim();
-      const ofertaMercadoLivre =
-        ehMarketplaceMercadoLivre(oferta.marketplace);
-      const linkValido = ofertaMercadoLivre
-        ? ehLinkIndividualMercadoLivre(link) ||
-          Boolean(LINK_AFILIADO_FALLBACK_MERCADO_LIVRE)
-        : Boolean(link);
-      const statusValido = ofertaMercadoLivre
-        ? oferta.status !== "UNAVAILABLE" &&
-          oferta.status !== "ERROR"
-        : oferta.status === "ACTIVE";
-
-      return (
-        oferta.matchStatus === "EXACT" &&
-        linkValido &&
-        statusValido &&
-        oferta.available &&
-        Number.isFinite(oferta.price) &&
-        oferta.price > 0
-      );
-    })
-    .sort((a, b) => a.price - b.price);
-
   const ofertaPrincipalComLink =
-    ofertasCompraveisExact[0] ?? null;
-
-  const linkLegadoPrincipalBruto =
-    produto.affiliateLink?.trim() ?? "";
+    escolherOfertaPrincipalCompravel(ofertasComparador);
 
   const linkOfertaPrincipal = ofertaPrincipalComLink
-    ? ehMarketplaceMercadoLivre(
-        ofertaPrincipalComLink.marketplace,
-      )
-      ? ehLinkIndividualMercadoLivre(
-          ofertaPrincipalComLink.affiliateLink,
-        )
-        ? ofertaPrincipalComLink.affiliateLink?.trim() || ""
-        : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
-      : ofertaPrincipalComLink.affiliateLink?.trim() || ""
+    ? resolverHrefCompraPublica(
+        ofertaPrincipalComLink,
+        ofertasComparador,
+      ) ?? ""
     : "";
 
-  const linkLegadoPrincipal =
-    ehMarketplaceMercadoLivre(produto.store)
-      ? ehLinkIndividualMercadoLivre(
-          linkLegadoPrincipalBruto,
-        )
-        ? linkLegadoPrincipalBruto
-        : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
-      : linkLegadoPrincipalBruto;
+  const linkLegadoPrincipal = resolverLinkLegadoPrincipal(
+    produto.store,
+    produto.affiliateLink,
+  );
 
   const linkPrincipal =
     linkOfertaPrincipal ||
@@ -1402,31 +1307,26 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   }`}
                 >
                   {ofertasComparador.map((oferta) => {
-                    const link = oferta.affiliateLink?.trim();
-
                     const ofertaMercadoLivre =
                       ehMarketplaceMercadoLivre(oferta.marketplace);
-
-                    const linkIndividualValido = ofertaMercadoLivre
-                      ? ehLinkIndividualMercadoLivre(link)
-                      : Boolean(link);
 
                     const ofertaDisponivel =
                       oferta.available &&
                       oferta.status !== "UNAVAILABLE" &&
                       oferta.status !== "ERROR";
 
+                    const linkMonetizado = resolverHrefProprioOfertaPublica(
+                      oferta,
+                    );
+
                     const linkDestino = ofertaMercadoLivre
                       ? ofertaDisponivel
-                        ? linkIndividualValido && link
-                          ? link
-                          : LINK_AFILIADO_FALLBACK_MERCADO_LIVRE
+                        ? linkMonetizado
                         : null
-                      : linkIndividualValido &&
+                      : linkMonetizado &&
                           oferta.status === "ACTIVE" &&
-                          oferta.available &&
-                          link
-                        ? link
+                          oferta.available
+                        ? linkMonetizado
                         : null;
 
                     const linkAtivo = Boolean(linkDestino);

@@ -2,6 +2,8 @@ import "dotenv/config";
 import { searchMultistoreV2 } from "./search";
 
 const queries = [
+  "Peg 4.000 Sem Sabor De 20 Gramas",
+  "Filtro de barro",
   "JBL Tune 520BT",
   "panela de pressão 4,5L",
   "lapis",

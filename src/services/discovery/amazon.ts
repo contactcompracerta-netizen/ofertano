@@ -9,6 +9,7 @@ import type {
   MarketplaceDiscoveryResult,
 } from "./core/types";
 import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
+import { abortableFetch, isSearchAborted } from "@/lib/searchAbort";
 
 const SERPAPI_ENDPOINT =
   "https://serpapi.com/search.json";
@@ -1144,7 +1145,7 @@ async function consultarAmazonDireta(
   );
 
   try {
-    const response = await fetch(url, {
+    const response = await abortableFetch(url, {
       method: "GET",
       headers: {
         Accept:
@@ -1278,7 +1279,7 @@ async function consultarSerpApi(
   );
 
   try {
-    const response = await fetch(url, {
+    const response = await abortableFetch(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -1435,6 +1436,22 @@ export async function buscarAmazon(
   const apiKey =
     process.env.SERPAPI_API_KEY
       ?.trim();
+
+  if (isSearchAborted() || request.signal?.aborted) {
+    return {
+      marketplace: MARKETPLACE,
+      query,
+      success: directResults.length > 0,
+      candidates: criarCandidatos(
+        directResults,
+        query,
+        limit,
+        collectOnly,
+      ),
+      scanned: directResults.length,
+      error: directError ?? "TIMEOUT: orcamento de busca esgotado.",
+    };
+  }
 
   if (!apiKey) {
     return {

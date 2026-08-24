@@ -14,4 +14,10 @@ export {
 } from "./search";
 export { persistCanonicalProducts } from "./persist";
 export { traceV2 } from "./trace";
+export { extractIdentityAnchors, hasStrongIdentity } from "./identityAnchors";
+export {
+  classifyListingAffiliate,
+  isConfirmedAffiliateLink,
+} from "./affiliateEligibility";
+export { DEFAULT_SEARCH_BUDGET } from "./timeBudget";
 export * from "./types";

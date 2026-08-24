@@ -7,11 +7,13 @@ import {
   buildSearchPlan,
   clusterCandidates,
   compareFingerprints,
+  extractIdentityAnchors,
   normalizeCandidate,
   processRawCandidates,
   scoreQueryRelevance,
   searchMultistoreV2,
 } from "./index";
+import { classifyListingAffiliate } from "./affiliateEligibility";
 import type { RawCandidate } from "./types";
 import type {
   DiscoveryAdapter,
@@ -35,6 +37,7 @@ function raw(
     category: extras.category ?? null,
     seller: extras.seller ?? null,
     affiliateLink: extras.affiliateLink ?? null,
+    affiliateStatus: extras.affiliateStatus,
     attributes: extras.attributes ?? {},
   };
 }
@@ -393,6 +396,294 @@ assert.equal(
   "Candidato com o modelo pedido continua relevante",
 );
 
+const pegQuery = "Peg 4.000 Sem Sabor De 20 Gramas";
+const pegIntent = buildQueryIntent(pegQuery);
+assert.equal(pegIntent.hasStrongIdentity, true, "PEG 4.000 e ancora de identidade");
+assert.ok(
+  pegIntent.identityAnchors.some((anchor) => anchor.value === "peg4000"),
+  "4.000 colapsa para peg4000",
+);
+assert.equal(pegIntent.importantAttributes.capacity, "20g");
+assert.ok(
+  !pegIntent.identityAnchors.some((anchor) => /20g|20gramas|24cores/.test(anchor.value)),
+  "20 gramas nao vira ancora de identidade",
+);
+
+const pegProcessed = processRawCandidates(pegQuery, [
+  raw("PEG 4000 Sem Sabor 20g", { marketplace: "AMAZON", brand: null, externalId: "peg-1" }),
+  raw("Colorau Paprika Defumada 20g Sem Sabor", {
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    brand: null,
+    externalId: "paprika",
+  }),
+  raw("Colageno Hidrolisado 20g Sem Sabor", {
+    marketplace: "SHOPEE",
+    marketplaceName: "Shopee",
+    brand: null,
+    externalId: "colageno",
+  }),
+  raw("Snack Integral 20g Sem Sabor", {
+    marketplace: "MAGAZINE_LUIZA",
+    marketplaceName: "Magazine Luiza",
+    brand: null,
+    externalId: "snack",
+  }),
+  raw("PEG 4.000 Po 20 Gramas Sem Sabor", {
+    marketplace: "SHOPEE",
+    marketplaceName: "Shopee",
+    brand: null,
+    externalId: "peg-5",
+  }),
+]);
+const pegRelevantIds = pegProcessed.relevant.map((item) => item.normalized.raw.externalId);
+assert.equal(pegRelevantIds.includes("peg-1"), true, "A) PEG correto permanece relevante");
+assert.equal(pegRelevantIds.includes("peg-5"), true, "A) segundo PEG correto permanece relevante");
+assert.equal(pegRelevantIds.includes("paprika"), false, "B) paprika nao entra por 20g/sem sabor");
+assert.equal(pegRelevantIds.includes("colageno"), false, "C) colageno nao entra por 20g/sem sabor");
+assert.equal(pegRelevantIds.includes("snack"), false, "D) snack nao entra por 20g/sem sabor");
+assert.equal(
+  pegProcessed.scored.filter((item) => item.status === "REJECTED").length,
+  3,
+  "falsos positivos sao rejeitados antes do clustering",
+);
+assert.ok(
+  pegProcessed.products.every((product) =>
+    product.offers.every((offer) => !["paprika", "colageno", "snack"].includes(offer.externalId)),
+  ),
+  "E) clustering nao junta paprika/colageno/snack ao PEG",
+);
+assert.equal(
+  pegProcessed.products.some((product) => product.offers.length >= 2),
+  true,
+  "os dois PEG corretos podem formar cluster multi-loja",
+);
+
+const galaxyIntent = buildQueryIntent("Samsung Galaxy A55 256GB");
+assert.equal(galaxyIntent.hasStrongIdentity, true);
+assert.ok(galaxyIntent.identityAnchors.some((anchor) => anchor.value === "a55"));
+assert.equal(galaxyIntent.importantAttributes.capacity, "256gb");
+assert.equal(
+  scoreQueryRelevance(
+    galaxyIntent,
+    normalizeCandidate(
+      raw("Smartphone Samsung Galaxy A55 256GB", { brand: "Samsung", externalId: "a55-ok" }),
+    ),
+  ).status,
+  "RELEVANT",
+  "Galaxy A55 pedido continua relevante",
+);
+assert.equal(
+  scoreQueryRelevance(
+    galaxyIntent,
+    normalizeCandidate(
+      raw("Smartphone Samsung Galaxy A15 256GB", { brand: "Samsung", externalId: "a15-no" }),
+    ),
+  ).status,
+  "REJECTED",
+  "A15 nao substitui A55",
+);
+assert.equal(
+  scoreQueryRelevance(
+    galaxyIntent,
+    normalizeCandidate(
+      raw("Samsung Galaxy A55 5G Dual SIM 256 GB Preto 8 GB RAM", {
+        brand: "Samsung",
+        externalId: "a55-5g",
+      }),
+    ),
+  ).status,
+  "RELEVANT",
+  "5G de rede nao vira capacidade 5g quando ha GB no titulo",
+);
+
+const jblIntent = buildQueryIntent("JBL Tune 520BT");
+assert.equal(jblIntent.hasStrongIdentity, true);
+assert.ok(
+  extractIdentityAnchors("JBL Tune 520BT").some(
+    (anchor) => anchor.value === "520bt" || anchor.value === "tune520bt" || anchor.value === "tune520",
+  ),
+);
+
+const panelaIntent = buildQueryIntent("panela de pressao 4,5L");
+assert.equal(panelaIntent.hasStrongIdentity, false, "4,5L nao e modelo/SKU");
+assert.equal(panelaIntent.importantAttributes.capacity, "4.5l");
+
+const lapisColorsIntent = buildQueryIntent("lapis 24 cores");
+assert.equal(lapisColorsIntent.hasStrongIdentity, false, "24 cores nao e identidade");
+assert.equal(lapisColorsIntent.importantAttributes.quantity, "24cores");
+
+const filtroIntent = buildQueryIntent("Filtro de barro");
+assert.equal(filtroIntent.hasStrongIdentity, false, "consulta generica permanece aberta");
+const filtroGeneric = processRawCandidates("Filtro de barro", [
+  raw("Filtro de barro 8 litros tradicional", { marketplace: "AMAZON", externalId: "filtro-a" }),
+  raw("Filtro de barro 6 litros com torneira", { marketplace: "SHOPEE", marketplaceName: "Shopee", externalId: "filtro-b" }),
+]);
+assert.ok(filtroGeneric.relevant.length >= 1, "filtro de barro continua encontravel");
+
+const mlSource = "https://produto.mercadolivre.com.br/MLB-111";
+const mlAffiliate = "https://meli.la/abc123ready";
+const affiliateCase1 = processRawCandidates("Headphone MarcaX ZX100", [
+  raw("Headphone MarcaX ZX100 Bluetooth", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-a",
+    price: 90,
+    url: `${mlSource}-a`,
+    affiliateLink: null,
+    affiliateStatus: "INELIGIBLE",
+  }),
+  raw("Fone MarcaX ZX100", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-b",
+    price: 95,
+    url: `${mlSource}-b`,
+    affiliateLink: mlAffiliate,
+    affiliateStatus: "READY",
+  }),
+  raw("Headphone MarcaX ZX200 Bluetooth", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-c",
+    price: 80,
+    url: `${mlSource}-c`,
+    affiliateLink: "https://meli.la/otherproduct",
+    affiliateStatus: "READY",
+  }),
+]);
+const zx100 = affiliateCase1.products.find((product) =>
+  product.offers.some((offer) => offer.externalId === "mlb-b" || offer.externalId === "mlb-a"),
+);
+assert.ok(zx100, "CASO 1: produto ZX100 continua existindo");
+assert.equal(zx100?.offers[0]?.externalId, "mlb-b", "CASO 1: escolhe o SAME elegivel");
+assert.equal(zx100?.offers[0]?.affiliateLink, mlAffiliate);
+assert.equal(
+  zx100?.offers.some((offer) => offer.externalId === "mlb-c"),
+  false,
+  "CASO 1: jamais escolhe produto diferente so porque monetiza",
+);
+
+const affiliateCase2 = processRawCandidates("Headphone MarcaX ZX100", [
+  raw("Headphone MarcaX ZX100", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-in-1",
+    price: 90,
+    url: `${mlSource}-in1`,
+    affiliateStatus: "INELIGIBLE",
+  }),
+  raw("Fone MarcaX ZX100 Bluetooth", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-in-2",
+    price: 91,
+    url: `${mlSource}-in2`,
+    affiliateStatus: "INELIGIBLE",
+  }),
+  raw("Headphone MarcaX ZX100 Amazon", {
+    brand: "MarcaX",
+    marketplace: "AMAZON",
+    marketplaceName: "Amazon",
+    externalId: "amz-ok",
+    price: 110,
+    url: "https://amazon.example/zx100",
+    affiliateLink: "https://amazon.example/zx100?tag=ofertano",
+    affiliateStatus: "READY",
+  }),
+]);
+assert.equal(affiliateCase2.products.length, 1, "CASO 2: produto continua existindo");
+const case2Ml = affiliateCase2.products[0]?.offers.find((offer) => offer.marketplace === "MERCADO_LIVRE");
+const case2Amz = affiliateCase2.products[0]?.offers.find((offer) => offer.marketplace === "AMAZON");
+assert.ok(case2Amz, "CASO 2: Amazon permanece");
+assert.equal(case2Amz?.affiliateLink, "https://amazon.example/zx100?tag=ofertano");
+assert.equal(case2Ml?.affiliateLink ?? null, null, "CASO 2: ML nao ganha falso affiliateLink");
+
+const promoted = classifyListingAffiliate({
+  marketplace: "MERCADO_LIVRE",
+  sourceUrl: "https://produto.mercadolivre.com.br/MLB-333",
+  affiliateLink: "https://produto.mercadolivre.com.br/MLB-333",
+});
+assert.equal(promoted.status, "UNKNOWN", "CASO 3: sourceUrl nao vira afiliada");
+assert.equal(promoted.affiliateLink, null);
+const affiliateCase3 = processRawCandidates("Headphone MarcaX ZX100", [
+  raw("Headphone MarcaX ZX100", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-src",
+    url: "https://produto.mercadolivre.com.br/MLB-333",
+    affiliateLink: "https://produto.mercadolivre.com.br/MLB-333",
+  }),
+]);
+assert.equal(affiliateCase3.products[0]?.offers[0]?.affiliateLink ?? null, null, "CASO 3: persistencia sem promocao");
+assert.notEqual(affiliateCase3.products[0]?.offers[0]?.affiliateStatus, "READY");
+
+const affiliateCase4 = processRawCandidates("Headphone MarcaX ZX100", [
+  raw("Headphone MarcaX ZX100", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-err",
+    affiliateStatus: "ERROR",
+  }),
+  raw("Headphone MarcaX ZX100 Amazon", {
+    brand: "MarcaX",
+    marketplace: "AMAZON",
+    externalId: "amz-err",
+    affiliateLink: "https://amazon.example/zx100?tag=ofertano",
+  }),
+]);
+assert.equal(affiliateCase4.products.length, 1, "CASO 4: busca global continua");
+assert.equal(
+  affiliateCase4.products[0]?.offers.find((offer) => offer.marketplace === "MERCADO_LIVRE")?.affiliateStatus,
+  "ERROR",
+  "CASO 4: falha tecnica nao vira INELIGIBLE",
+);
+
+const affiliateCase6 = processRawCandidates("Headphone MarcaX ZX100", [
+  raw("Headphone MarcaX ZX100", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-90",
+    price: 90,
+    affiliateStatus: "INELIGIBLE",
+  }),
+  raw("Fone MarcaX ZX100 Preto", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-95",
+    price: 95,
+    affiliateLink: mlAffiliate,
+    affiliateStatus: "READY",
+  }),
+  raw("Headphone MarcaX ZX200 Barato", {
+    brand: "MarcaX",
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "mlb-80-diff",
+    price: 80,
+    affiliateLink: "https://meli.la/zx200",
+    affiliateStatus: "READY",
+  }),
+]);
+const case6Ml = affiliateCase6.products.find((product) =>
+  product.offers.some((offer) => offer.externalId === "mlb-95" || offer.externalId === "mlb-90"),
+);
+assert.equal(case6Ml?.offers.find((offer) => offer.marketplace === "MERCADO_LIVRE")?.externalId, "mlb-95");
+assert.equal(
+  case6Ml?.offers.some((offer) => offer.externalId === "mlb-80-diff"),
+  false,
+  "CASO 6: R$ 80 de produto diferente nunca substitui o SAME",
+);
+
 function fakeAdapter(
   marketplace: DiscoveryAdapter["marketplace"],
   marketplaceName: string,
@@ -537,6 +828,249 @@ async function runAcquisitionContract() {
     noneAvailable.acquisitions.every((item) => item.status === "BLOCKED" || item.status === "ERROR"),
     "Nenhuma fonte disponivel nao pode crashar a busca.",
   );
+
+  const tightBudget = {
+    globalMs: 800,
+    marketplaceMs: 350,
+    fetchMs: 200,
+    persistReserveMs: 50,
+    hangGraceMs: 40,
+  };
+  const hangUntilAbort = (signal?: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 30_000);
+      signal?.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+
+  let hangCalls = 0;
+  const timeoutAdapters = [
+    fakeAdapter("AMAZON", "Amazon", async (request) => ({
+      marketplace: "AMAZON",
+      query: request.query,
+      success: true,
+      scanned: 1,
+      candidates: [
+        foundCandidate({
+          marketplace: "AMAZON",
+          marketplaceName: "Amazon",
+          externalId: "amz-fast",
+          title: "Headphone JBL Tune 520BT",
+          price: 199,
+        }),
+      ],
+      error: null,
+    })),
+    fakeAdapter("SHOPEE", "Shopee", async (request) => {
+      hangCalls += 1;
+      await hangUntilAbort(request.signal);
+      return {
+        marketplace: "SHOPEE",
+        query: request.query,
+        success: false,
+        scanned: 0,
+        candidates: [],
+        error: "ainda rodando",
+      };
+    }),
+    fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => ({
+      marketplace: "MAGAZINE_LUIZA",
+      query: "JBL Tune 520BT",
+      success: false,
+      scanned: 0,
+      candidates: [],
+      error: "Magazine Luiza bloqueou a busca HTML.",
+    })),
+    fakeAdapter("ALIEXPRESS", "AliExpress", async () => {
+      throw new Error("AliExpress indisponivel.");
+    }),
+    fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => {
+      throw new Error("Mercado Livre items-api retornou 403.");
+    }),
+  ];
+
+  const timeoutStarted = Date.now();
+  const timeoutResult = await searchMultistoreV2("JBL Tune 520BT", {
+    persist: false,
+    adapters: timeoutAdapters,
+    budget: tightBudget,
+  });
+  const timeoutElapsed = Date.now() - timeoutStarted;
+  assert.ok(timeoutElapsed < 2_000, `CASO timeout: terminou em ${timeoutElapsed}ms, dentro do orcamento`);
+  assert.ok(timeoutResult.views.length >= 1, "CASO timeout: resultado valido da loja rapida permanece");
+  assert.equal(
+    timeoutResult.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status,
+    "TIMEOUT",
+  );
+  assert.equal(
+    timeoutResult.acquisitions.find((item) => item.marketplace === "AMAZON")?.status,
+    "SUCCESS",
+  );
+  assert.equal(
+    timeoutResult.acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.status,
+    "BLOCKED",
+  );
+  assert.ok(hangCalls >= 1, "adapter pendurado foi consultado e cancelado");
+
+  let panelaCalls = 0;
+  const partialTimeout = await searchMultistoreV2("panela de pressao 4,5L", {
+    persist: false,
+    budget: tightBudget,
+    adapters: [
+      fakeAdapter("AMAZON", "Amazon", async (request) => {
+        panelaCalls += 1;
+        if (panelaCalls === 1) {
+          return {
+            marketplace: "AMAZON",
+            query: request.query,
+            success: true,
+            scanned: 1,
+            candidates: [
+              foundCandidate({
+                marketplace: "AMAZON",
+                marketplaceName: "Amazon",
+                brand: null,
+                externalId: "panela-1",
+                title: "Panela de pressao 4,5L antiaderente",
+                price: 129,
+              }),
+            ],
+            error: null,
+          };
+        }
+        await hangUntilAbort(request.signal);
+        return {
+          marketplace: "AMAZON",
+          query: request.query,
+          success: false,
+          scanned: 0,
+          candidates: [],
+          error: null,
+        };
+      }),
+    ],
+  });
+  assert.equal(
+    partialTimeout.acquisitions[0]?.status,
+    "TIMEOUT",
+    "TIMEOUT diagnostica marketplace que nao fechou no orcamento",
+  );
+  assert.ok(
+    (partialTimeout.acquisitions[0]?.usable ?? 0) >= 1,
+    "candidatos parciais do adapter lento sao preservados",
+  );
+
+  const affiliateTimeoutStarted = Date.now();
+  const affiliateTimeout = await searchMultistoreV2("JBL Tune 520BT", {
+    persist: false,
+    budget: tightBudget,
+    adapters: [
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "AMAZON",
+            marketplaceName: "Amazon",
+            externalId: "amz-aff",
+            title: "JBL Tune 520BT",
+            price: 199,
+            affiliateLink: "https://amazon.example/520?tag=ofertano",
+          }),
+        ],
+        error: null,
+      })),
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
+        marketplace: "MERCADO_LIVRE",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            externalId: "mlb-aff-timeout",
+            title: "Headphone JBL Tune 520BT",
+            price: 189,
+            sourceUrl: "https://produto.mercadolivre.com.br/MLB-520",
+            affiliateLink: null,
+          }),
+        ],
+        error: null,
+      })),
+    ],
+    affiliateResolver: async (_input, signal) => {
+      await hangUntilAbort(signal);
+      return { status: "READY", affiliateLink: "https://meli.la/should-not-apply" };
+    },
+  });
+  assert.ok(
+    Date.now() - affiliateTimeoutStarted < 2_000,
+    "CASO 5: validacao de afiliado respeita o time budget",
+  );
+  assert.ok(affiliateTimeout.views.length >= 1, "CASO 5: outros resultados permanecem");
+  const timedMl = affiliateTimeout.products[0]?.offers.find(
+    (offer) => offer.marketplace === "MERCADO_LIVRE",
+  );
+  assert.notEqual(timedMl?.affiliateStatus, "INELIGIBLE");
+  assert.equal(timedMl?.affiliateLink ?? null, null, "CASO 5: nao finge que sourceUrl e afiliada");
+
+  const technicalAffiliate = await searchMultistoreV2("JBL Tune 520BT", {
+    persist: false,
+    adapters: [
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "AMAZON",
+            marketplaceName: "Amazon",
+            externalId: "amz-tech",
+            title: "JBL Tune 520BT",
+            price: 199,
+            affiliateLink: "https://amazon.example/520?tag=ofertano",
+          }),
+        ],
+        error: null,
+      })),
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
+        marketplace: "MERCADO_LIVRE",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            externalId: "mlb-tech",
+            title: "Headphone JBL Tune 520BT",
+            price: 189,
+            sourceUrl: "https://produto.mercadolivre.com.br/MLB-520b",
+          }),
+        ],
+        error: null,
+      })),
+    ],
+    affiliateResolver: async () => {
+      throw new Error("oauth 500");
+    },
+  });
+  const techMl = technicalAffiliate.products[0]?.offers.find(
+    (offer) => offer.marketplace === "MERCADO_LIVRE",
+  );
+  assert.equal(techMl?.affiliateStatus, "ERROR", "CASO 4 fluxo vivo: erro tecnico");
+  assert.notEqual(techMl?.affiliateStatus, "INELIGIBLE");
+  assert.ok(technicalAffiliate.views.length >= 1);
 }
 
 void runAcquisitionContract()

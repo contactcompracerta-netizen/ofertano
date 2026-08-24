@@ -4,6 +4,7 @@ import type {
     MarketplaceDiscoveryResult,
   } from "./core/types";
   import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
+  import { abortableFetch } from "@/lib/searchAbort";
   
   const MARKETPLACE = "MAGAZINE_LUIZA" as const;
   const MARKETPLACE_NAME = "Magazine Luiza" as const;
@@ -1261,7 +1262,7 @@ async function descobrirBuildIdAtual():
       `https://${MAGAZINE_VOCE_HOST}/${MAGAZINE_VOCE_STORE}/`;
 
     const response =
-      await fetch(
+      await abortableFetch(
         url,
         {
           method: "GET",
@@ -1443,7 +1444,7 @@ async function consultarMagazineLuizaComBuildId(
 
   try {
     const response =
-      await fetch(
+      await abortableFetch(
         url.toString(),
         {
           method:

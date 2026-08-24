@@ -6,6 +6,7 @@ import type {
   MarketplaceDiscoveryResult,
 } from "./core/types";
 import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
+import { abortableFetch } from "@/lib/searchAbort";
 
 const MARKETPLACE = "ALIEXPRESS" as const;
 const MARKETPLACE_NAME = "AliExpress" as const;
@@ -1268,7 +1269,7 @@ async function consultarAliExpress(
 
   try {
     const response =
-      await fetch(
+      await abortableFetch(
         ENDPOINT,
         {
           method: "POST",

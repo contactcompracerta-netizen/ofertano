@@ -62,9 +62,9 @@ import type {
   
     mode?: "DEFAULT" | "MULTILOJA";
 
-
-  
     targetProductId?: string | null;
+
+    signal?: AbortSignal;
   };
   
   export type MarketplaceSearchOutcome =

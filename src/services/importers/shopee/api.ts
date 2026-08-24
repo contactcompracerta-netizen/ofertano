@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { abortableFetch } from "@/lib/searchAbort";
 
 const SHOPEE_GRAPHQL_ENDPOINT =
   "https://open-api.affiliate.shopee.com.br/graphql";
@@ -146,7 +147,7 @@ async function executarGraphqlShopee<T>(
   );
 
   try {
-    const response = await fetch(
+    const response = await abortableFetch(
       SHOPEE_GRAPHQL_ENDPOINT,
       {
         method: "POST",
@@ -387,7 +388,7 @@ async function fetchPaginaShopee(
   );
 
   try {
-    return await fetch(
+    return await abortableFetch(
       url.toString(),
       {
         method: "GET",

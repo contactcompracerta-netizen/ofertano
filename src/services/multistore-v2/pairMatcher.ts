@@ -212,12 +212,52 @@ export function compareFingerprints(
     };
   }
 
-  const sharedIdentityNumber = first.identityNumbers.some((number) =>
-    second.identityNumbers.includes(number),
+  const sharedAnchors = (first.identityAnchors ?? []).filter((anchor) =>
+    (second.identityAnchors ?? []).includes(anchor),
+  );
+  if (
+    sharedAnchors.length > 0 &&
+    brandAligned &&
+    (sameClass || !first.productClass.value || !second.productClass.value)
+  ) {
+    positiveEvidence.push("identityAnchor");
+    if (sameClass) {
+      positiveEvidence.push("productClass");
+    }
+    return {
+      relation: "SAME",
+      hardConflicts,
+      positiveEvidence,
+      confidence: 0.9,
+    };
+  }
+
+  if (
+    first.identityAnchors.length > 0 &&
+    second.identityAnchors.length > 0 &&
+    sharedAnchors.length === 0
+  ) {
+    hardConflicts.push(
+      `identityAnchor:${first.identityAnchors.join(",")}!=${second.identityAnchors.join(",")}`,
+    );
+    return {
+      relation: "DIFFERENT",
+      hardConflicts,
+      positiveEvidence,
+      confidence: 0.95,
+    };
+  }
+
+  const sharedStrongIdentityNumber = first.identityNumbers.some(
+    (number) =>
+      second.identityNumbers.includes(number) &&
+      (number.length >= 4 ||
+        (first.identityAnchors.some((anchor) => anchor.includes(number)) &&
+          second.identityAnchors.some((anchor) => anchor.includes(number)))),
   );
 
   if (
-    sharedIdentityNumber &&
+    sharedStrongIdentityNumber &&
     brandAligned &&
     (sameClass || !first.productClass.value || !second.productClass.value)
   ) {
@@ -378,6 +418,9 @@ export function mergeFingerprints(
     ),
     identityNumbers: Array.from(
       new Set([...base.identityNumbers, ...extra.identityNumbers]),
+    ),
+    identityAnchors: Array.from(
+      new Set([...(base.identityAnchors ?? []), ...(extra.identityAnchors ?? [])]),
     ),
     lexicalSignature: Array.from(
       new Set([...base.lexicalSignature, ...extra.lexicalSignature]),

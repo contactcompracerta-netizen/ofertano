@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 
+import { abortableFetch } from "@/lib/searchAbort";
 import { traceMultiloja } from "@/services/multiloja/trace";
 
 export type MercadoLivreListingItem = {
@@ -768,7 +769,7 @@ async function fetchHtml(url: string): Promise<{
   finalUrl: string;
   contentType: string;
 }> {
-  const response = await fetch(url, {
+  const response = await abortableFetch(url, {
     method: "GET",
     headers: {
       Accept:

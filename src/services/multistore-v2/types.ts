@@ -10,7 +10,21 @@ export type AcquisitionStatus =
   | "EMPTY"
   | "BLOCKED"
   | "ERROR"
-  | "UNUSABLE";
+  | "UNUSABLE"
+  | "TIMEOUT";
+
+export type IdentityAnchorKind =
+  | "MODEL"
+  | "SKU"
+  | "ALPHANUMERIC"
+  | "LETTER_NUMBER"
+  | "BOUND_NUMBER";
+
+export type IdentityAnchor = {
+  value: string;
+  kind: IdentityAnchorKind;
+  required: boolean;
+};
 
 export type Confidence = "HIGH" | "MEDIUM" | "LOW" | "NONE";
 
@@ -27,7 +41,11 @@ export type ProductRole =
   | "REPLACEMENT_PART"
   | "UNKNOWN";
 
-export type PairRelation = "SAME" | "DIFFERENT" | "UNKNOWN";
+export type AffiliateStatus =
+  | "READY"
+  | "INELIGIBLE"
+  | "UNKNOWN"
+  | "ERROR";
 
 export type EvidenceField<T> = {
   value: T | null;
@@ -47,6 +65,8 @@ export type QueryIntent = {
   normalizedTokens: string[];
   distinctiveTokens: string[];
   identityNumbers: string[];
+  identityAnchors: IdentityAnchor[];
+  hasStrongIdentity: boolean;
 };
 
 export type RawCandidate = {
@@ -61,6 +81,7 @@ export type RawCandidate = {
   category: string | null;
   seller: string | null;
   affiliateLink: string | null;
+  affiliateStatus?: AffiliateStatus;
   attributes: Record<string, string>;
   raw?: unknown;
 };
@@ -72,6 +93,7 @@ export type MarketplaceAcquisition = {
   raw: number;
   usable: number;
   error: string | null;
+  elapsedMs: number;
   candidates: RawCandidate[];
 };
 
@@ -106,6 +128,7 @@ export type ProductFingerprint = {
   importantAttributes: Record<string, string>;
   distinctiveTokens: string[];
   identityNumbers: string[];
+  identityAnchors: string[];
   lexicalSignature: string[];
 };
 
@@ -121,6 +144,8 @@ export type ScoredCandidate = {
   status: "RELEVANT" | "REJECTED";
   reason: string;
 };
+
+export type PairRelation = "SAME" | "DIFFERENT" | "UNKNOWN";
 
 export type PairVerdict = {
   relation: PairRelation;
@@ -165,6 +190,7 @@ export type CanonicalOffer = {
   oldPrice: number | null;
   brand: string | null;
   affiliateLink: string | null;
+  affiliateStatus?: AffiliateStatus;
   attributes: Record<string, string>;
   seller: string | null;
 };

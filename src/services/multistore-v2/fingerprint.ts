@@ -20,6 +20,7 @@ import {
   normalizeMultistoreText,
   tokenize,
 } from "./normalizeCandidate";
+import { extractIdentityAnchors } from "./identityAnchors";
 
 function field<T>(
   value: T | null,
@@ -119,6 +120,7 @@ export function buildFingerprint(
     },
     distinctiveTokens: distinctiveTokensOf(soldTokens),
     identityNumbers: extractIdentityNumbers(soldTokens),
+    identityAnchors: extractIdentityAnchors(title).map((anchor) => anchor.value),
     lexicalSignature: soldTokens,
   };
 }
