@@ -140,9 +140,30 @@ function registerItem(
   const current = items.get(id) ?? { id };
   const next: MercadoLivreListingItem = {
     ...current,
-    ...extra,
     id,
   };
+
+  if (extra.title?.trim()) {
+    next.title = extra.title.trim();
+  }
+  if (typeof extra.price === "number" && extra.price > 0) {
+    next.price = extra.price;
+  }
+  if (extra.permalink?.trim()) {
+    next.permalink = extra.permalink.trim();
+  }
+  if (extra.thumbnail?.trim()) {
+    next.thumbnail = extra.thumbnail.trim();
+  }
+  if (extra.condition?.trim()) {
+    next.condition = extra.condition.trim();
+  }
+  if (extra.currency_id?.trim()) {
+    next.currency_id = extra.currency_id.trim();
+  }
+  if (extra.status?.trim()) {
+    next.status = extra.status.trim();
+  }
 
   if (!next.permalink) {
     next.permalink = `https://produto.mercadolivre.com.br/MLB-${id.replace("MLB", "")}`;
@@ -521,12 +542,17 @@ function extractFromHtmlSelectors(
       .find(".andes-money-amount__fraction, .price-tag-fraction, .poly-price__current")
       .first()
       .text();
+    const image =
+      node.find("img").first().attr("data-src") ||
+      node.find("img").first().attr("src") ||
+      "";
 
     used = true;
     registerItem(items, idMatch[1], {
       title: title || undefined,
       price: parsePrice(priceText),
       permalink: href || undefined,
+      thumbnail: image || undefined,
     });
   });
 
@@ -576,7 +602,7 @@ export function analisarPaginaDeBuscaPublica(html: string): {
     strategies.push("mlb-anchors");
   }
 
-  if (items.size === 0 && extractFromHtmlSelectors(html, items)) {
+  if (extractFromHtmlSelectors(html, items)) {
     strategies.push("html-selectors");
   }
 
@@ -653,6 +679,13 @@ function classifyPublicPage(
     };
   }
 
+  if (items.length > 0) {
+    return {
+      status: "SUCCESS",
+      reason: "Pagina publica entregou anuncios extraidos do HTML.",
+    };
+  }
+
   if (diagnostics.challengeDetected) {
     return {
       status: "BLOCKED",
@@ -664,12 +697,6 @@ function classifyPublicPage(
     return {
       status: "BLOCKED",
       reason: "Pagina publica redirecionou para login.",
-    };
-  }
-
-  if (items.length > 0) {
-    return {
-      status: "SUCCESS",
     };
   }
 

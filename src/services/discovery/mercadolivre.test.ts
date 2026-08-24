@@ -10,6 +10,11 @@ import {
   classificarErroFonteMercadoLivre,
   extrairItensDaPaginaDeBuscaPublica,
 } from "./mercadolivrePublicSearch";
+import {
+  extrairProdutoDaPaginaPublica,
+  gerarVariantesDeConsultaPublica,
+  hidratarItensComPaginaPublica,
+} from "./mercadolivrePublicHydration";
 
 const QUERY = "Headphone MarcaX Wireless Rosa";
 
@@ -186,6 +191,49 @@ assert.equal(
   "TESTE 11: pagina valida sem resultados e EMPTY verdadeiro.",
 );
 
+const completeCardHtml = `
+<html>
+  <body class="ui-search-page">
+    <li class="ui-search-layout__item">
+      <a href="https://produto.mercadolivre.com.br/MLB-4224584697-headphone">
+        <h2 class="ui-search-item__title">Headphone MarcaX Wireless Rosa</h2>
+        <span class="andes-money-amount__fraction">149</span>
+        <img src="https://http2.mlstatic.com/item.jpg" />
+      </a>
+    </li>
+  </body>
+</html>
+`;
+const completeCard = extrairItensDaPaginaDeBuscaPublica(completeCardHtml).find(
+  (entry) => entry.id === "MLB4224584697",
+);
+assert.equal(completeCard?.title, "Headphone MarcaX Wireless Rosa");
+assert.equal(completeCard?.price, 149);
+assert.ok(completeCard?.permalink?.includes("MLB-4224584697"));
+
+const productPage = extrairProdutoDaPaginaPublica(`
+<html>
+  <head>
+    <title>Headphone MarcaX Wireless Rosa</title>
+    <meta property="og:title" content="Headphone MarcaX Wireless Rosa" />
+    <meta property="og:url" content="https://produto.mercadolivre.com.br/MLB-4224584697-headphone" />
+    <meta property="product:price:amount" content="149.90" />
+    <script type="application/ld+json">
+      {"@type":"Product","name":"Headphone MarcaX Wireless Rosa","sku":"MLB4224584697","url":"https://produto.mercadolivre.com.br/MLB-4224584697-headphone","offers":{"@type":"Offer","price":"149.90"}}
+    </script>
+  </head>
+</html>
+`);
+assert.equal(productPage?.id, "MLB4224584697");
+assert.equal(productPage?.title, "Headphone MarcaX Wireless Rosa");
+assert.equal(productPage?.price, 149.9);
+
+const queryVariants = gerarVariantesDeConsultaPublica(
+  "Ihome wireless rosa resistente a agua",
+);
+assert.equal(queryVariants[0], "Ihome wireless rosa resistente a agua");
+assert.ok(queryVariants.length >= 2);
+
 const listingItem = item({
   id: "MLB111222333",
   title: "Headphone MarcaX Wireless Rosa",
@@ -266,8 +314,13 @@ async function runAcquisitionCases() {
   assert.ok(testC.blockedSources?.includes("items-api"));
   assert.equal(
     testC.sourcesTried?.includes("public-search"),
-    false,
-    "TESTE C: items-api bloqueada nao dispara HTML publico.",
+    true,
+    "TESTE C: items-api bloqueada continua para HTML publico.",
+  );
+  assert.equal(
+    testC.candidates.some((entry) => entry.externalId === "MLB111222333"),
+    true,
+    "TESTE C: card publico vira candidato utilizavel.",
   );
 
   const testD = await buscarMercadoLivreComFontes(
@@ -377,6 +430,142 @@ async function runAcquisitionCases() {
     testF.candidates.some((entry) => entry.externalId === "MLB111222333"),
     true,
     "TESTE F: API de anuncios nao pode ser pulada quando o catalogo ja devolveu oferta.",
+  );
+
+  const catalogWithoutWinner = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLB-CATALOG-EMPTY",
+            name: "Headphone MarcaX Wireless Rosa",
+            status: "active",
+          },
+        ],
+      }),
+      loadCatalogCandidate: async () => ({
+        title: "Headphone MarcaX Wireless Rosa",
+        externalId: "MLB-CATALOG-EMPTY",
+        stage: "offers-fetch",
+        status: "DROPPED",
+        reason: "Catalogo sem publicacao compravel no momento.",
+        lexicalScore: 0.7,
+      }),
+      searchItemsApi: blockedItemsApi,
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [listingItem],
+      }),
+    }),
+  );
+  assert.equal(
+    catalogWithoutWinner.candidates.some(
+      (entry) => entry.externalId === "MLB111222333",
+    ),
+    true,
+    "Catalogo sem winner + busca publica entrega candidato.",
+  );
+
+  const idsSurviveHydrationFailure = await hidratarItensComPaginaPublica(
+    [
+      {
+        id: "MLB4224584697",
+        permalink: "https://produto.mercadolivre.com.br/MLB-4224584697",
+      },
+    ],
+    async () => {
+      throw new Error("hidratacao falhou");
+    },
+  );
+  assert.equal(idsSurviveHydrationFailure.items.length, 1);
+  assert.equal(idsSurviveHydrationFailure.items[0]?.id, "MLB4224584697");
+
+  const hydratedFromItemPage = await hidratarItensComPaginaPublica(
+    [
+      {
+        id: "MLB4224584697",
+        permalink: "https://produto.mercadolivre.com.br/MLB-4224584697",
+      },
+    ],
+    async () => ({
+      id: "MLB4224584697",
+      title: "Headphone MarcaX Wireless Rosa",
+      price: 149,
+      permalink: "https://produto.mercadolivre.com.br/MLB-4224584697-headphone",
+    }),
+  );
+  assert.equal(
+    hydratedFromItemPage.items[0]?.title,
+    "Headphone MarcaX Wireless Rosa",
+  );
+  assert.equal(hydratedFromItemPage.items[0]?.price, 149);
+
+  const blockedItemPage = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchItemsApi: blockedItemsApi,
+      searchPublicListings: async () => ({
+        status: "BLOCKED",
+        httpStatus: 403,
+        data: [],
+        reason: "Pagina publica bloqueada.",
+      }),
+    }),
+  );
+  assert.equal(blockedItemPage.success, true);
+  assert.ok(blockedItemPage.blockedSources?.includes("public-search"));
+
+  const otherBrandStillAcquired = await buscarMercadoLivreComFontes(
+    request("Headphone Wireless Rosa"),
+    fontes({
+      searchItemsApi: blockedItemsApi,
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          item({
+            id: "MLB555444333",
+            title: "Headphone Sony Wireless Rosa",
+          }),
+        ],
+      }),
+    }),
+  );
+  assert.equal(
+    otherBrandStillAcquired.candidates.some(
+      (entry) => entry.externalId === "MLB555444333",
+    ),
+    true,
+    "Aquisicao ML nao aplica regra de marca; entrega o candidato para o Matcher.",
+  );
+
+  const oneSourceBlocked = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchItemsApi: blockedItemsApi,
+      searchPublicLista: async () => ({
+        status: "BLOCKED",
+        httpStatus: 403,
+        data: [],
+        reason: "lista bloqueada",
+      }),
+      searchPublicJm: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [listingItem],
+      }),
+    }),
+  );
+  assert.equal(
+    oneSourceBlocked.candidates.some(
+      (entry) => entry.externalId === "MLB111222333",
+    ),
+    true,
+    "Uma fonte bloqueada nao impede outra fonte publica de entregar candidato.",
   );
 }
 

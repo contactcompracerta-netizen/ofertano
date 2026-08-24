@@ -23,6 +23,13 @@ import {
   type MercadoLivreListingItem,
   type MercadoLivreSourceFetch,
 } from "./mercadolivrePublicSearch";
+import {
+  gerarVariantesDeConsultaPublica,
+  hidratarItensComPaginaPublica,
+  rastrearAquisicaoMercadoLivre,
+  rastrearResumoAquisicaoMercadoLivre,
+  buscarPaginaPublicaDoAnuncio,
+} from "./mercadolivrePublicHydration";
 
 type DomainDiscoveryResult = {
   domain_id?: string;
@@ -184,6 +191,9 @@ export type MercadoLivreAcquisitionSources = {
     query: string,
     limit: number,
   ) => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>;
+  hydratePublicItem?: (
+    item: SiteSearchItem,
+  ) => Promise<SiteSearchItem | null>;
 };
 
 type CandidateEvaluation = MarketplaceFilterEvent & {
@@ -1481,6 +1491,8 @@ function fontesPadraoMercadoLivre(): MercadoLivreAcquisitionSources {
     searchPublicListings: pesquisarPaginaPublica,
     searchPublicLista: pesquisarPaginaPublicaLista,
     searchPublicJm: pesquisarPaginaPublicaJm,
+    hydratePublicItem: async (item) =>
+      (await buscarPaginaPublicaDoAnuncio(item)).data,
   };
 }
 
@@ -1635,25 +1647,32 @@ export async function buscarMercadoLivreComFontes(
       fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
     ) => {
       const before = evaluations.filter((item) => item.kept).length;
+      let items = fetch.data ?? [];
 
-      if (fetch.status === "SUCCESS" || fetch.status === "EMPTY") {
-        const seen = new Set(
-          evaluations
-            .map((item) => item.externalId.trim())
-            .filter(Boolean),
+      if (items.length > 0 && sources.hydratePublicItem) {
+        const hydrated = await hidratarItensComPaginaPublica(
+          items,
+          sources.hydratePublicItem,
         );
+        items = hydrated.items;
+      }
 
-        for (const item of fetch.data) {
-          const itemId = item.id?.trim() ?? "";
-          if (itemId && seen.has(itemId)) {
-            continue;
-          }
-          if (itemId) {
-            seen.add(itemId);
-          }
-          scanned += 1;
-          evaluations.push(converterItemBusca(item, query));
+      const seen = new Set(
+        evaluations
+          .map((item) => item.externalId.trim())
+          .filter(Boolean),
+      );
+
+      for (const item of items) {
+        const itemId = item.id?.trim() ?? "";
+        if (itemId && seen.has(itemId)) {
+          continue;
         }
+        if (itemId) {
+          seen.add(itemId);
+        }
+        scanned += 1;
+        evaluations.push(converterItemBusca(item, query));
       }
 
       const after = evaluations.filter((item) => item.kept).length;
@@ -1663,13 +1682,30 @@ export async function buscarMercadoLivreComFontes(
       registrarFonte(
         query,
         source,
-        fetch,
+        { ...fetch, data: items },
         Math.max(0, after - before),
         sourcesTried,
         blockedSources,
         unusableSources,
         rawTotal,
       );
+      rastrearAquisicaoMercadoLivre({
+        query,
+        source,
+        requestedUrl: fetch.diagnostics?.requestedUrl ?? "",
+        finalUrl: fetch.diagnostics?.finalUrl ?? "",
+        httpStatus: fetch.httpStatus,
+        contentType: fetch.diagnostics?.contentType ?? "",
+        bodyLength: fetch.diagnostics?.bodyLength ?? items.length,
+        pageTitle: fetch.diagnostics?.pageTitle ?? "",
+        idsFound: items.filter((item) => item.id).length,
+        cardsFound: items.length,
+        jsonLdFound: fetch.diagnostics?.containsJsonLd ? 1 : 0,
+        embeddedStateFound: fetch.diagnostics?.containsStructuredState ? 1 : 0,
+        usableCandidates: Math.max(0, after - before),
+        status: fetch.status,
+        reason: fetch.reason ?? "",
+      });
     };
 
     await coletarItens(
@@ -1677,34 +1713,52 @@ export async function buscarMercadoLivreComFontes(
       await sources.searchItemsApi(query, searchLimit),
     );
 
-    /*
-     * A busca HTML publica hoje cai em desafio/anti-bot.
-     * Se a items-api ja veio 403, insistir nas paginas
-     * publicas so estoura o tempo da pesquisa.
-     */
-    const pularBuscaPublica =
-      blockedSources.includes("items-api");
-
-    if (!pularBuscaPublica) {
-      if (sources.searchPublicLista || sources.searchPublicJm) {
-        if (sources.searchPublicLista) {
-          await coletarItens(
-            "public-search-lista",
-            await sources.searchPublicLista(query, searchLimit),
-          );
-        }
-
-        if (sources.searchPublicJm) {
-          await coletarItens(
-            "public-search-jm",
-            await sources.searchPublicJm(query, searchLimit),
-          );
-        }
-      } else {
+    if (sources.searchPublicLista || sources.searchPublicJm) {
+      if (sources.searchPublicLista) {
         await coletarItens(
-          "public-search",
-          await sources.searchPublicListings(query, searchLimit),
+          "public-search-lista",
+          await sources.searchPublicLista(query, searchLimit),
         );
+      }
+
+      if (sources.searchPublicJm) {
+        await coletarItens(
+          "public-search-jm",
+          await sources.searchPublicJm(query, searchLimit),
+        );
+      }
+    } else {
+      await coletarItens(
+        "public-search",
+        await sources.searchPublicListings(query, searchLimit),
+      );
+    }
+
+    if (evaluations.filter((item) => item.kept).length === 0) {
+      const publicBlocked =
+        blockedSources.includes("public-search") ||
+        (blockedSources.includes("public-search-lista") &&
+          blockedSources.includes("public-search-jm"));
+      if (!publicBlocked) {
+        const variants = gerarVariantesDeConsultaPublica(query).filter(
+          (variant) => variant.toLowerCase() !== query.toLowerCase(),
+        );
+        for (const variant of variants.slice(0, 2)) {
+          if (evaluations.filter((item) => item.kept).length > 0) {
+            break;
+          }
+          if (sources.searchPublicLista) {
+            await coletarItens(
+              "public-search-lista",
+              await sources.searchPublicLista(variant, searchLimit),
+            );
+          } else {
+            await coletarItens(
+              "public-search",
+              await sources.searchPublicListings(variant, searchLimit),
+            );
+          }
+        }
       }
     }
 
@@ -1753,6 +1807,34 @@ export async function buscarMercadoLivreComFontes(
       accepted: candidatos.length,
     });
 
+    const partialCandidates = evaluations.filter(
+      (item) => item.externalId && item.externalId !== "(sem id)",
+    ).length;
+    const listingSources = sourcesTried.filter(
+      (source) =>
+        source === "items-api" || source.startsWith("public-search"),
+    );
+    const listingCompleted = listingSources.filter(
+      (source) =>
+        !blockedSources.includes(source) &&
+        !unusableSources.includes(source),
+    );
+    const searchOutcome =
+      candidatos.length > 0
+        ? "SEARCH_COMPLETED"
+        : listingSources.length > 0 && listingCompleted.length === 0
+          ? "BLOCKED"
+          : "EMPTY_VALID";
+
+    rastrearResumoAquisicaoMercadoLivre({
+      query,
+      sourcesTried,
+      blockedSources,
+      partialCandidates,
+      usableCandidates: candidatos.length,
+      result: searchOutcome,
+    });
+
     return {
       marketplace: "MERCADO_LIVRE",
       query,
@@ -1764,6 +1846,7 @@ export async function buscarMercadoLivreComFontes(
       blockedSources,
       unusableSources,
       sourcesTried,
+      searchOutcome,
     };
   } catch (error) {
     const mensagem =
@@ -1789,6 +1872,7 @@ export async function buscarMercadoLivreComFontes(
       blockedSources,
       unusableSources,
       sourcesTried,
+      searchOutcome: "ERROR",
     };
   }
 }
