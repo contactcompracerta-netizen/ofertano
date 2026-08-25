@@ -10,6 +10,11 @@ import type {
 } from "./core/types";
 import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
 import { abortableFetch, isSearchAborted } from "@/lib/searchAbort";
+import {
+  classificarMensagemAquisicao,
+  montarDiscoveryResult,
+  type AcquisitionStatus,
+} from "./acquisitionOutcome";
 
 const SERPAPI_ENDPOINT =
   "https://serpapi.com/search.json";
@@ -22,19 +27,19 @@ const MARKETPLACE_NAME = "Amazon" as const;
 const TIMEOUT_MS = 25_000;
 const MAX_RESULTS = 20;
 
-function criarLinkAfiliadoAmazon(
+export function criarLinkAfiliadoAmazon(
   asin: string,
 ): string | null {
   const tag =
-    process.env.AMAZON_ASSOCIATE_TAG
-      ?.trim();
+    process.env.AMAZON_ASSOCIATE_TAG?.trim() ||
+    "ofertano-20";
 
-  if (!tag) {
+  if (!/^[A-Z0-9]{10}$/i.test(asin)) {
     return null;
   }
 
   return (
-    `https://www.amazon.com.br/dp/${asin}` +
+    `https://www.amazon.com.br/dp/${asin.toUpperCase()}` +
     `/ref=nosim?tag=${encodeURIComponent(tag)}`
   );
 }
@@ -695,6 +700,8 @@ function normalizarImagem(
     const amazonImageHost =
       hostname === "media-amazon.com" ||
       hostname.endsWith(".media-amazon.com") ||
+      hostname === "images-amazon.com" ||
+      hostname.endsWith(".images-amazon.com") ||
       hostname ===
         "ssl-images-amazon.com" ||
       hostname.endsWith(
@@ -752,7 +759,7 @@ function possuiSinalDeDisponibilidade(
   return true;
 }
 
-function criarCandidatos(
+export function criarCandidatos(
   results: SerpApiOrganicResult[],
   query: string,
   limit: number,
@@ -959,21 +966,68 @@ function extrairMarcaDoTitulo(
     marca.slice(1);
 }
 
+function primeiroSrcset(
+  value: string | null,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const first = value.split(",")[0]?.trim().split(/\s+/)[0];
+  return first || null;
+}
+
+function extrairImagemAmazonDoBloco(
+  block: string,
+): string | undefined {
+  const imageTag =
+    block.match(
+      /<img\b[^>]*class=["'][^"']*\bs-image\b[^"']*["'][^>]*>/i,
+    )?.[0] ?? "";
+
+  return (
+    extrairAtributoHtml(imageTag, "src") ||
+    extrairAtributoHtml(imageTag, "data-src") ||
+    extrairAtributoHtml(imageTag, "data-a-hires") ||
+    primeiroSrcset(extrairAtributoHtml(imageTag, "srcset")) ||
+    undefined
+  );
+}
+
 function extrairPrecoAmazonDoBloco(
   block: string,
 ): number | null {
   const priceBlock =
     block.match(
       /<span\b[^>]*class=["'][^"']*\ba-price\b[^"']*["'][^>]*>[\s\S]*?<\/span>\s*<\/span>/i,
-    )?.[0] ?? block;
+    )?.[0] ?? "";
 
-  const priceText =
+  const fromPriceClass = normalizarPreco(
     priceBlock.match(
       /R\$\s*[0-9.]+(?:,[0-9]{2})?/i,
-    )?.[0] ?? null;
+    )?.[0] ?? null,
+  );
+
+  if (fromPriceClass) {
+    return fromPriceClass;
+  }
+
+  for (const match of block.matchAll(
+    /<span\b[^>]*class=["'][^"']*\ba-offscreen\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
+  )) {
+    const offscreen = normalizarPreco(
+      extrairTextoHtml(match[1] ?? ""),
+    );
+
+    if (offscreen) {
+      return offscreen;
+    }
+  }
 
   return normalizarPreco(
-    priceText,
+    block.match(
+      /R\$\s*[0-9.]+(?:,[0-9]{2})?/i,
+    )?.[0] ?? null,
   );
 }
 
@@ -995,7 +1049,7 @@ function extrairPrecoAnteriorAmazonDoBloco(
   );
 }
 
-function extrairResultadosAmazonHtml(
+export function extrairResultadosAmazonHtml(
   html: string,
 ): SerpApiOrganicResult[] {
   const markers = Array.from(
@@ -1052,16 +1106,10 @@ function extrairResultadosAmazonHtml(
       continue;
     }
 
-    const imageTag =
-      block.match(
-        /<img\b[^>]*class=["'][^"']*\bs-image\b[^"']*["'][^>]*>/i,
-      )?.[0] ?? "";
-
     const thumbnail =
-      extrairAtributoHtml(
-        imageTag,
-        "src",
-      ) ?? undefined;
+      extrairImagemAmazonDoBloco(
+        block,
+      );
 
     const price =
       extrairPrecoAmazonDoBloco(
@@ -1108,9 +1156,68 @@ function extrairResultadosAmazonHtml(
   return results;
 }
 
+export function classificarPaginaAmazon(
+  html: string,
+  httpStatus: number,
+): AcquisitionStatus {
+  if (httpStatus === 401 || httpStatus === 403 || httpStatus === 429) {
+    return "BLOCKED";
+  }
+
+  if (httpStatus >= 500 && httpStatus !== 0) {
+    return "ERROR";
+  }
+
+  const probe = normalizarTexto(html.slice(0, 250_000));
+
+  if (
+    probe.includes("digite os caracteres") ||
+    probe.includes("enter the characters you see below") ||
+    probe.includes("api services support amazon com") ||
+    probe.includes("opfcaptcha") ||
+    probe.includes("robot check") ||
+    probe.includes("unusual traffic")
+  ) {
+    return "BLOCKED";
+  }
+
+  const results = extrairResultadosAmazonHtml(html);
+
+  if (results.length > 0) {
+    return "SUCCESS";
+  }
+
+  if (
+    /nao encontramos|nenhum resultado|nao ha resultados|did not match any products|no results for/i.test(
+      probe,
+    )
+  ) {
+    return "EMPTY";
+  }
+
+  if (
+    html.includes('data-component-type="s-search-result"') ||
+    html.includes("s-main-slot")
+  ) {
+    return "EMPTY";
+  }
+
+  if (html.trim().length < 2_000) {
+    return "UNUSABLE";
+  }
+
+  return "UNUSABLE";
+}
+
+type AmazonSourceFetch = {
+  status: AcquisitionStatus;
+  results: SerpApiOrganicResult[];
+  error: string | null;
+};
+
 async function consultarAmazonDireta(
   query: string,
-): Promise<SerpApiOrganicResult[]> {
+): Promise<AmazonSourceFetch> {
   const url = new URL(
     AMAZON_SEARCH_ENDPOINT,
   );
@@ -1126,15 +1233,13 @@ async function consultarAmazonDireta(
   );
 
   const tag =
-    process.env.AMAZON_ASSOCIATE_TAG
-      ?.trim();
+    process.env.AMAZON_ASSOCIATE_TAG?.trim() ||
+    "ofertano-20";
 
-  if (tag) {
-    url.searchParams.set(
-      "tag",
-      tag,
-    );
-  }
+  url.searchParams.set(
+    "tag",
+    tag,
+  );
 
   const controller =
     new AbortController();
@@ -1168,47 +1273,63 @@ async function consultarAmazonDireta(
     const html =
       await response.text();
 
-    if (!response.ok) {
-      throw new Error(
-        `Amazon busca direta respondeu HTTP ${response.status}.`,
-      );
-    }
-
-    const normalizedHtml =
-      normalizarTexto(
-        html.slice(0, 250_000),
-      );
-
-    if (
-      normalizedHtml.includes(
-        "digite os caracteres",
-      ) ||
-      normalizedHtml.includes(
-        "enter the characters you see below",
-      ) ||
-      normalizedHtml.includes(
-        "api services support amazon com",
-      )
-    ) {
-      throw new Error(
-        "Amazon bloqueou temporariamente a busca HTML automatizada.",
-      );
-    }
-
-    return extrairResultadosAmazonHtml(
+    const pageStatus = classificarPaginaAmazon(
       html,
+      response.status,
     );
+
+    if (pageStatus === "BLOCKED") {
+      return {
+        status: "BLOCKED",
+        results: [],
+        error:
+          `Amazon bloqueou temporariamente a busca HTML automatizada. HTTP ${response.status}.`,
+      };
+    }
+
+    if (!response.ok && pageStatus !== "SUCCESS") {
+      return {
+        status: classificarMensagemAquisicao(
+          `HTTP ${response.status}`,
+          response.status,
+        ),
+        results: [],
+        error: `Amazon busca direta respondeu HTTP ${response.status}.`,
+      };
+    }
+
+    const results = extrairResultadosAmazonHtml(html);
+
+    return {
+      status: results.length > 0 ? "SUCCESS" : pageStatus === "UNUSABLE" ? "UNUSABLE" : "EMPTY",
+      results,
+      error:
+        pageStatus === "UNUSABLE"
+          ? "Amazon HTML sem estrutura de resultados interpretavel."
+          : null,
+    };
   } catch (error) {
     if (
       error instanceof Error &&
       error.name === "AbortError"
     ) {
-      throw new Error(
-        "A busca direta da Amazon ultrapassou 18 segundos.",
-      );
+      return {
+        status: "TIMEOUT",
+        results: [],
+        error: "TIMEOUT: a busca direta da Amazon ultrapassou 18 segundos.",
+      };
     }
 
-    throw error;
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Erro desconhecido na busca direta da Amazon.";
+
+    return {
+      status: classificarMensagemAquisicao(message),
+      results: [],
+      error: message,
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -1349,170 +1470,152 @@ export async function buscarAmazon(
   const query = request.query.trim();
 
   if (!query) {
-    return {
+    return montarDiscoveryResult({
       marketplace: MARKETPLACE,
       query,
-      success: false,
       candidates: [],
       scanned: 0,
-      error:
-        "Informe um produto para buscar na Amazon.",
-    };
+      status: "ERROR",
+      error: "Informe um produto para buscar na Amazon.",
+    });
   }
 
-  const collectOnly =
-    request.mode === "MULTILOJA";
-  const limit = normalizarLimite(
-    request.limit,
+  const collectOnly = request.mode === "MULTILOJA";
+  const limit = normalizarLimite(request.limit);
+  const sourcesTried: string[] = [];
+  const blockedSources: string[] = [];
+  const unusableSources: string[] = [];
+
+  const htmlFetch = await consultarAmazonDireta(query);
+  sourcesTried.push("amazon-html");
+
+  if (htmlFetch.status === "BLOCKED") {
+    blockedSources.push("amazon-html");
+  }
+
+  if (htmlFetch.status === "UNUSABLE") {
+    unusableSources.push("amazon-html");
+  }
+
+  const htmlCandidates = criarCandidatos(
+    htmlFetch.results,
+    query,
+    limit,
+    collectOnly,
   );
 
-  let directResults:
-    SerpApiOrganicResult[] = [];
-  let directError: string | null = null;
+  console.log(
+    "[Amazon Discovery] Busca direta:",
+    JSON.stringify({
+      query,
+      status: htmlFetch.status,
+      scanned: htmlFetch.results.length,
+      candidates: htmlCandidates.length,
+      asins: htmlCandidates.map((candidate) => candidate.externalId),
+    }),
+  );
 
-  /*
-   * Fonte primária: a própria página pública de busca da Amazon.
-   *
-   * Assim a Amazon não fica dependente da cota da SerpApi.
-   * A SerpApi permanece somente como fallback quando a Amazon
-   * bloquear a busca HTML ou não devolver candidatos válidos.
-   */
-  try {
-    directResults =
-      await consultarAmazonDireta(
-        query,
-      );
-
-    const directCandidates =
-      criarCandidatos(
-        directResults,
-        query,
-        limit,
-        collectOnly,
-      );
-
-    console.log(
-      "[Amazon Discovery] Busca direta:",
-      JSON.stringify({
-        query,
-        scanned:
-          directResults.length,
-        candidates:
-          directCandidates.length,
-        asins:
-          directCandidates.map(
-            (candidate) =>
-              candidate.externalId,
-          ),
-      }),
-    );
-
-    if (
-      directCandidates.length > 0
-    ) {
-      return {
-        marketplace: MARKETPLACE,
-        query,
-        success: true,
-        candidates:
-          directCandidates,
-        scanned:
-          directResults.length,
-        error: null,
-      };
-    }
-  } catch (error) {
-    directError =
-      error instanceof Error
-        ? error.message
-        : "Erro desconhecido na busca direta da Amazon.";
-
-    console.warn(
-      "[Amazon Discovery] Busca direta indisponível:",
-      directError,
-    );
-  }
-
-  const apiKey =
-    process.env.SERPAPI_API_KEY
-      ?.trim();
-
-  if (isSearchAborted() || request.signal?.aborted) {
-    return {
+  if (htmlCandidates.length > 0) {
+    return montarDiscoveryResult({
       marketplace: MARKETPLACE,
       query,
-      success: directResults.length > 0,
-      candidates: criarCandidatos(
-        directResults,
-        query,
-        limit,
-        collectOnly,
-      ),
-      scanned: directResults.length,
-      error: directError ?? "TIMEOUT: orcamento de busca esgotado.",
-    };
+      candidates: htmlCandidates,
+      scanned: htmlFetch.results.length,
+      status: "SUCCESS",
+      sourcesTried,
+      blockedSources,
+      unusableSources,
+      degraded: blockedSources.length > 0,
+    });
+  }
+
+  const apiKey = process.env.SERPAPI_API_KEY?.trim();
+
+  if (isSearchAborted() || request.signal?.aborted) {
+    return montarDiscoveryResult({
+      marketplace: MARKETPLACE,
+      query,
+      candidates: htmlCandidates,
+      scanned: htmlFetch.results.length,
+      status: "TIMEOUT",
+      error: htmlFetch.error ?? "TIMEOUT: orcamento de busca esgotado.",
+      sourcesTried,
+      blockedSources,
+      unusableSources,
+      degraded: blockedSources.length > 0,
+    });
   }
 
   if (!apiKey) {
-    return {
+    const status: AcquisitionStatus =
+      htmlFetch.status === "SUCCESS" || htmlFetch.status === "EMPTY"
+        ? "EMPTY"
+        : htmlFetch.status;
+
+    return montarDiscoveryResult({
       marketplace: MARKETPLACE,
       query,
-      success:
-        directError === null,
       candidates: [],
-      scanned:
-        directResults.length,
+      scanned: htmlFetch.results.length,
+      status,
       error:
-        directError ??
-        "A busca direta da Amazon terminou sem candidatos compatíveis e a SerpApi não está configurada como fallback.",
-    };
+        htmlFetch.error ??
+        "A busca direta da Amazon terminou sem candidatos e a SerpApi nao esta configurada como fallback.",
+      sourcesTried,
+      blockedSources,
+      unusableSources,
+      degraded: blockedSources.length > 0,
+    });
   }
 
-  try {
-    const serpResults =
-      await consultarSerpApi(
-        apiKey,
-        query,
-      );
+  sourcesTried.push("amazon-serpapi");
 
-    const candidates =
-      criarCandidatos(
-        serpResults,
-        query,
-        limit,
-        collectOnly,
-      );
+  try {
+    const serpResults = await consultarSerpApi(apiKey, query);
+    const candidates = criarCandidatos(
+      serpResults,
+      query,
+      limit,
+      collectOnly,
+    );
 
     console.log(
       "[Amazon Discovery] Fallback SerpApi:",
       JSON.stringify({
         query,
-        scanned:
-          serpResults.length,
-        candidates:
-          candidates.length,
-        asins:
-          candidates.map(
-            (candidate) =>
-              candidate.externalId,
-          ),
+        scanned: serpResults.length,
+        candidates: candidates.length,
+        asins: candidates.map((candidate) => candidate.externalId),
       }),
     );
 
-    return {
+    const status: AcquisitionStatus =
+      candidates.length > 0
+        ? "SUCCESS"
+        : serpResults.length > 0 || htmlFetch.status === "EMPTY"
+          ? "EMPTY"
+          : htmlFetch.status === "BLOCKED"
+            ? "BLOCKED"
+            : htmlFetch.status === "UNUSABLE"
+              ? "UNUSABLE"
+              : "EMPTY";
+
+    return montarDiscoveryResult({
       marketplace: MARKETPLACE,
       query,
-      success: true,
       candidates,
-      scanned:
-        directResults.length +
-        serpResults.length,
+      scanned: htmlFetch.results.length + serpResults.length,
+      status,
       error:
         candidates.length > 0
           ? null
-          : directError ??
-            "As fontes Amazon terminaram, mas não encontraram ofertas com ASIN, preço, imagem e identidade compatíveis.",
-    };
+          : htmlFetch.error ??
+            "As fontes Amazon terminaram, mas nao encontraram ofertas com ASIN, preco, imagem e identidade compativeis.",
+      sourcesTried,
+      blockedSources,
+      unusableSources,
+      degraded: blockedSources.length > 0,
+    });
   } catch (error) {
     const serpError =
       error instanceof Error
@@ -1520,25 +1623,38 @@ export async function buscarAmazon(
         : "Erro desconhecido na descoberta da Amazon.";
 
     console.warn(
-      "[Amazon Discovery] Fallback SerpApi indisponível:",
+      "[Amazon Discovery] Fallback SerpApi indisponivel:",
       serpError,
     );
 
-    return {
+    const serpStatus = classificarMensagemAquisicao(serpError);
+    if (serpStatus === "BLOCKED") {
+      blockedSources.push("amazon-serpapi");
+    }
+    if (serpStatus === "UNUSABLE") {
+      unusableSources.push("amazon-serpapi");
+    }
+
+    const status: AcquisitionStatus =
+      htmlFetch.status === "BLOCKED" || serpStatus === "BLOCKED"
+        ? "BLOCKED"
+        : serpStatus === "TIMEOUT"
+          ? "TIMEOUT"
+          : htmlFetch.status === "EMPTY"
+            ? serpStatus
+            : htmlFetch.status;
+
+    return montarDiscoveryResult({
       marketplace: MARKETPLACE,
       query,
-      success:
-        directError === null,
       candidates: [],
-      scanned:
-        directResults.length,
-      error: [
-        directError,
-        serpError,
-      ]
-        .filter(Boolean)
-        .join(" | ")
-        .slice(0, 1000),
-    };
+      scanned: htmlFetch.results.length,
+      status,
+      error: [htmlFetch.error, serpError].filter(Boolean).join(" | ").slice(0, 1000),
+      sourcesTried,
+      blockedSources,
+      unusableSources,
+      degraded: blockedSources.length > 0,
+    });
   }
 }

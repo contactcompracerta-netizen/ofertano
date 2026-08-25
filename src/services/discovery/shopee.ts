@@ -9,6 +9,10 @@ import type {
   MarketplaceDiscoveryResult,
 } from "./core/types";
 import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
+import {
+  classificarMensagemAquisicao,
+  montarDiscoveryResult,
+} from "./acquisitionOutcome";
 
 const TERMOS_ACESSORIOS = [
   "capa",
@@ -673,24 +677,96 @@ function converterPreco(
   return numero;
 }
 
-function ofertaValida(
+export function urlPublicaShopee(
+  shopId: string | number,
+  itemId: string | number,
+): string {
+  return `https://shopee.com.br/product/${shopId}/${itemId}`;
+}
+
+export function normalizarImagemShopee(
+  valor: string | null | undefined,
+): string | null {
+  const texto = valor?.trim() ?? "";
+
+  if (!texto) {
+    return null;
+  }
+
+  if (/^https?:\/\/cf\.shopee\.com\.br\/file\//i.test(texto)) {
+    try {
+      const url = new URL(texto);
+      return `${url.protocol}//${url.host}${url.pathname}`;
+    } catch {
+      return null;
+    }
+  }
+
+  const fileId =
+    texto.match(/\/file\/([^?&#/"']+)/i)?.[1] ??
+    (/^[a-z0-9][a-z0-9._-]{15,}$/i.test(texto) ? texto : null);
+
+  if (!fileId) {
+    try {
+      const url = new URL(texto);
+      if (url.protocol === "https:" || url.protocol === "http:") {
+        return texto;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  return `https://cf.shopee.com.br/file/${fileId}`;
+}
+
+function ofertaIdentificavel(
   oferta: ShopeeAffiliateOffer,
 ): boolean {
   return Boolean(
-    Number.isFinite(
-      Number(oferta.itemId),
-    ) &&
+    Number.isFinite(Number(oferta.itemId)) &&
     Number(oferta.itemId) > 0 &&
-    Number.isFinite(
-      Number(oferta.shopId),
-    ) &&
+    Number.isFinite(Number(oferta.shopId)) &&
     Number(oferta.shopId) > 0 &&
     oferta.productName?.trim() &&
-    oferta.offerLink?.trim() &&
-    converterPreco(
-      oferta.price,
-    ),
+    converterPreco(oferta.price),
   );
+}
+
+export function montarCandidatoShopee(
+  oferta: ShopeeAffiliateOffer,
+): DiscoveryCandidate | null {
+  if (!ofertaIdentificavel(oferta)) {
+    return null;
+  }
+
+  const shopId = String(oferta.shopId);
+  const itemId = String(oferta.itemId);
+  const sourceUrl = urlPublicaShopee(shopId, itemId);
+  const affiliateLink = oferta.offerLink?.trim() || null;
+  const categoria =
+    Array.isArray(oferta.productCatIds) && oferta.productCatIds.length > 0
+      ? String(oferta.productCatIds[oferta.productCatIds.length - 1])
+      : null;
+
+  return {
+    marketplace: "SHOPEE",
+    marketplaceName: "Shopee",
+    externalId: `${shopId}.${itemId}`,
+    sourceUrl,
+    affiliateLink:
+      affiliateLink && affiliateLink !== sourceUrl ? affiliateLink : null,
+    title: oferta.productName.trim(),
+    image: normalizarImagemShopee(oferta.imageUrl),
+    price: converterPreco(oferta.price),
+    oldPrice: null,
+    category: categoria,
+    brand: null,
+    seller: oferta.shopName?.trim() || null,
+    status: "FOUND",
+    error: null,
+  };
 }
 
 export async function buscarShopee(
@@ -709,24 +785,14 @@ export async function buscarShopee(
     );
 
   if (!query) {
-    return {
-      marketplace:
-        "SHOPEE",
-
+    return montarDiscoveryResult({
+      marketplace: "SHOPEE",
       query,
-
-      success:
-        false,
-
-      candidates:
-        [],
-
-      scanned:
-        0,
-
-      error:
-        "Consulta vazia.",
-    };
+      candidates: [],
+      scanned: 0,
+      status: "ERROR",
+      error: "Consulta vazia.",
+    });
   }
 
   try {
@@ -760,16 +826,13 @@ export async function buscarShopee(
     for (
       const oferta of ofertas
     ) {
-      if (
-        !ofertaValida(
-          oferta,
-        )
-      ) {
+      const candidato = montarCandidatoShopee(oferta);
+
+      if (!candidato) {
         continue;
       }
 
-      const titulo =
-        oferta.productName.trim();
+      const titulo = candidato.title;
 
       if (
         possuiCondicaoNaoNova(
@@ -835,104 +898,18 @@ export async function buscarShopee(
         continue;
       }
 
-      const externalId =
-        `${oferta.shopId}.${oferta.itemId}`;
-
-      if (
-        ids.has(externalId)
-      ) {
+      if (ids.has(candidato.externalId)) {
         continue;
       }
 
-      ids.add(
-        externalId,
-      );
-
-      const preco =
-        converterPreco(
-          oferta.price,
-        );
-
-      if (!preco) {
-        continue;
-      }
-
-      const categoria =
-        Array.isArray(
-          oferta.productCatIds,
-        ) &&
-        oferta.productCatIds.length > 0
-          ? String(
-              oferta.productCatIds[
-                oferta.productCatIds.length -
-                  1
-              ],
-            )
-          : null;
+      ids.add(candidato.externalId);
 
       encontrados.push({
-        relevance:
-          relevancia,
-
-        sales:
-          Number.isFinite(
-            Number(
-              oferta.sales,
-            ),
-          )
-            ? Number(
-                oferta.sales,
-              )
-            : 0,
-
-        candidate: {
-          marketplace:
-            "SHOPEE",
-
-          marketplaceName:
-            "Shopee",
-
-          externalId,
-
-          sourceUrl:
-            oferta.productLink
-              ?.trim() ||
-            oferta.offerLink.trim(),
-
-          affiliateLink:
-            oferta.offerLink.trim(),
-
-          title:
-            titulo,
-
-          image:
-            oferta.imageUrl
-              ?.trim() ||
-            null,
-
-          price:
-            preco,
-
-          oldPrice:
-            null,
-
-          category:
-            categoria,
-
-          brand:
-            null,
-
-          seller:
-            oferta.shopName
-              ?.trim() ||
-            null,
-
-          status:
-            "FOUND",
-
-          error:
-            null,
-        },
+        relevance: relevancia,
+        sales: Number.isFinite(Number(oferta.sales))
+          ? Number(oferta.sales)
+          : 0,
+        candidate: candidato,
       });
     }
 
@@ -990,50 +967,31 @@ export async function buscarShopee(
             resultado.candidate,
         );
 
-    return {
-      marketplace:
-        "SHOPEE",
-
+    return montarDiscoveryResult({
+      marketplace: "SHOPEE",
       query,
-
-      success:
-        true,
-
-      candidates:
-        candidatos,
-
-      scanned:
-        ofertas.length,
-
-      error:
-        null,
-    };
+      candidates: candidatos,
+      scanned: ofertas.length,
+      status: candidatos.length > 0 ? "SUCCESS" : "EMPTY",
+      sourcesTried: ["shopee-affiliate-api"],
+    });
   } catch (error) {
     const mensagem =
       error instanceof Error
         ? error.message
         : "Erro desconhecido.";
+    const status = classificarMensagemAquisicao(mensagem);
 
-    return {
-      marketplace:
-        "SHOPEE",
-
+    return montarDiscoveryResult({
+      marketplace: "SHOPEE",
       query,
-
-      success:
-        false,
-
-      candidates:
-        [],
-
-      scanned:
-        0,
-
-      error:
-        mensagem.slice(
-          0,
-          1000,
-        ),
-    };
+      candidates: [],
+      scanned: 0,
+      status,
+      error: mensagem.slice(0, 1000),
+      sourcesTried: ["shopee-affiliate-api"],
+      blockedSources: status === "BLOCKED" ? ["shopee-affiliate-api"] : [],
+      unusableSources: status === "UNUSABLE" ? ["shopee-affiliate-api"] : [],
+    });
   }
 }

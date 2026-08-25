@@ -5,6 +5,11 @@ import type {
   } from "./core/types";
   import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
   import { abortableFetch } from "@/lib/searchAbort";
+  import {
+    classificarMensagemAquisicao,
+    montarDiscoveryResult,
+    type AcquisitionStatus,
+  } from "./acquisitionOutcome";
   
   const MARKETPLACE = "MAGAZINE_LUIZA" as const;
   const MARKETPLACE_NAME = "Magazine Luiza" as const;
@@ -201,6 +206,13 @@ import type {
     };
   };
   
+  type MagazineVoceAttribute = {
+    label?: string;
+    type?: string;
+    current?: string;
+    value?: string;
+  };
+
   type MagazineVoceProduct = {
     id?: string | number;
     variationId?: string | number;
@@ -209,17 +221,18 @@ import type {
     path?: string;
     image?: string;
     available?: boolean;
-  
+
     brand?:
       | MagazineVoceBrand
       | string;
-  
+
     category?:
       | MagazineVoceCategory
       | string;
-  
+
     price?: MagazineVocePrice;
     seller?: MagazineVoceSeller;
+    attributes?: MagazineVoceAttribute[];
   };
   
   type MagazineVoceResponse = {
@@ -227,6 +240,16 @@ import type {
       data?: {
         search?: {
           products?: MagazineVoceProduct[];
+        };
+      };
+    };
+
+    props?: {
+      pageProps?: {
+        data?: {
+          search?: {
+            products?: MagazineVoceProduct[];
+          };
         };
       };
     };
@@ -1037,6 +1060,27 @@ import type {
       null
     );
   }
+
+  export function obterAtributosMagazineLuiza(
+    produto: MagazineVoceProduct,
+  ): Record<string, string> {
+    const atributos: Record<string, string> = {};
+
+    if (!Array.isArray(produto.attributes)) {
+      return atributos;
+    }
+
+    for (const item of produto.attributes) {
+      const chave = item.label?.trim() || item.type?.trim();
+      const valor = item.current?.trim() || item.value?.trim();
+
+      if (chave && valor) {
+        atributos[chave] = valor;
+      }
+    }
+
+    return atributos;
+  }
   
   function normalizarImagem(
     rawUrl:
@@ -1081,43 +1125,83 @@ import type {
     }
   }
   
-  function criarUrlAfiliada(
-    produto: MagazineVoceProduct,
+  function caminhoProdutoSemLoja(
+    pathname: string,
+  ): string {
+    const tinhaBarraFinal =
+      pathname.endsWith("/") && pathname !== "/";
+    const partes = pathname
+      .split("/")
+      .filter(Boolean);
+
+    if (
+      partes[0]?.toLowerCase() ===
+      MAGAZINE_VOCE_STORE
+    ) {
+      partes.shift();
+    }
+
+    const caminho = `/${partes.join("/")}`;
+    return tinhaBarraFinal && caminho !== "/"
+      ? `${caminho}/`
+      : caminho;
+  }
+
+  export function criarUrlPublicaMagazineLuiza(
+    rawUrl: string | null | undefined,
   ): string | null {
-    const caminho =
-      produto.url?.trim() ||
-      produto.path?.trim();
-  
-    if (!caminho) {
+    const valor = rawUrl?.trim();
+
+    if (!valor) {
       return null;
     }
-  
+
     try {
-      if (
-        /^https?:\/\//i.test(
-          caminho,
-        )
-      ) {
-        const url =
-          new URL(caminho);
-  
-        url.protocol =
-          "https:";
-  
-        url.hostname =
-          MAGAZINE_VOCE_HOST;
-  
-        return url.toString();
+      const url = /^https?:\/\//i.test(valor)
+        ? new URL(valor)
+        : new URL(
+            valor.startsWith("/")
+              ? `https://${MAGAZINE_VOCE_HOST}${valor}`
+              : `https://${MAGAZINE_VOCE_HOST}/${valor}`,
+          );
+
+      const caminho = caminhoProdutoSemLoja(url.pathname);
+
+      if (caminho === "/") {
+        return null;
       }
-  
-      const path =
-        caminho.startsWith("/")
-          ? caminho
-          : `/${caminho}`;
-  
-      return (
-        `https://${MAGAZINE_VOCE_HOST}${path}`
-      );
+
+      return `https://www.magazineluiza.com.br${caminho}${url.search}`;
+    } catch {
+      return null;
+    }
+  }
+
+  export function criarUrlAfiliadaMagazineLuiza(
+    rawUrl: string | null | undefined,
+  ): string | null {
+    const valor = rawUrl?.trim();
+
+    if (!valor) {
+      return null;
+    }
+
+    try {
+      const url = /^https?:\/\//i.test(valor)
+        ? new URL(valor)
+        : new URL(
+            valor.startsWith("/")
+              ? `https://${MAGAZINE_VOCE_HOST}${valor}`
+              : `https://${MAGAZINE_VOCE_HOST}/${valor}`,
+          );
+
+      const caminho = caminhoProdutoSemLoja(url.pathname);
+
+      if (caminho === "/") {
+        return null;
+      }
+
+      return `https://${MAGAZINE_VOCE_HOST}/${MAGAZINE_VOCE_STORE}${caminho}${url.search}`;
     } catch {
       return null;
     }
@@ -1149,6 +1233,7 @@ import type {
   
   function obterExternalId(
     produto: MagazineVoceProduct,
+    sourceUrl: string | null,
     affiliateLink: string | null,
   ): string | null {
     const variationId =
@@ -1162,9 +1247,8 @@ import type {
     }
   
     const codigoUrl =
-      extrairCodigoDaUrl(
-        affiliateLink,
-      );
+      extrairCodigoDaUrl(affiliateLink) ||
+      extrairCodigoDaUrl(sourceUrl);
   
     if (codigoUrl) {
       return codigoUrl;
@@ -1417,7 +1501,129 @@ function criarUrlBusca(
   
     return url;
   }
-  
+
+export function extrairProdutosMagazineLuiza(
+  payload: unknown,
+): MagazineVoceProduct[] | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const root = payload as MagazineVoceResponse;
+  const candidates = [
+    root.pageProps?.data?.search?.products,
+    root.props?.pageProps?.data?.search?.products,
+  ];
+
+  for (const produtos of candidates) {
+    if (Array.isArray(produtos)) {
+      return produtos;
+    }
+  }
+
+  return null;
+}
+
+export function classificarPaginaMagazineLuiza(
+  html: string,
+  httpStatus: number,
+): AcquisitionStatus {
+  if (httpStatus === 401 || httpStatus === 403 || httpStatus === 429) {
+    return "BLOCKED";
+  }
+
+  const probe = html.slice(0, 80_000).toLowerCase();
+
+  if (
+    /captcha|challenge|access denied|unusual traffic|digite os caracteres|cf-browser-verification/.test(
+      probe,
+    )
+  ) {
+    return "BLOCKED";
+  }
+
+  if (httpStatus >= 500) {
+    return "ERROR";
+  }
+
+  return "SUCCESS";
+}
+
+async function consultarMagazineLuizaHtml(
+  query: string,
+): Promise<MagazineVoceProduct[]> {
+  const termo = encodeURIComponent(query.trim());
+  const url =
+    `https://${MAGAZINE_VOCE_HOST}/${MAGAZINE_VOCE_STORE}/busca/${termo}/`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await abortableFetch(url, {
+      method: "GET",
+      cache: "no-store",
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      },
+      signal: controller.signal,
+    });
+
+    const html = await response.text();
+    const pageStatus = classificarPaginaMagazineLuiza(html, response.status);
+
+    if (pageStatus === "BLOCKED") {
+      throw new Error(
+        `Magazine Luiza bloqueou a busca HTML. HTTP ${response.status}.`,
+      );
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `Magazine Luiza HTML respondeu HTTP ${response.status}.`,
+      );
+    }
+
+    const nextDataMatch = html.match(
+      /<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
+    );
+
+    if (nextDataMatch?.[1]) {
+      const nextData = JSON.parse(nextDataMatch[1]) as {
+        buildId?: string;
+      } & MagazineVoceResponse;
+      const buildId = validarBuildId(nextData.buildId);
+      if (buildId) {
+        magazineLuizaBuildIdCache = buildId;
+      }
+
+      const produtos = extrairProdutosMagazineLuiza(nextData);
+      if (produtos) {
+        return produtos;
+      }
+    }
+
+    throw new Error(
+      "Magazine Luiza HTML sem estrutura de produtos interpretavel.",
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(
+        "TIMEOUT: a busca HTML do Magazine Luiza ultrapassou 25 segundos.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
   
 async function consultarMagazineLuizaComBuildId(
   query: string,
@@ -1506,8 +1712,20 @@ async function consultarMagazineLuizaComBuildId(
           "application/json",
         )
     ) {
+      const body = await response.text();
+      const pageStatus = classificarPaginaMagazineLuiza(
+        body,
+        response.status,
+      );
+
+      if (pageStatus === "BLOCKED") {
+        throw new Error(
+          `Magazine Luiza bloqueou a busca JSON. HTTP ${response.status}.`,
+        );
+      }
+
       throw new Error(
-        "Magazine Luiza n?o retornou JSON na busca.",
+        "Magazine Luiza nao retornou JSON na busca.",
       );
     }
 
@@ -1516,17 +1734,11 @@ async function consultarMagazineLuizaComBuildId(
         MagazineVoceResponse;
 
     const produtos =
-      resposta
-        .pageProps
-        ?.data
-        ?.search
-        ?.products;
+      extrairProdutosMagazineLuiza(
+        resposta,
+      );
 
-    if (
-      !Array.isArray(
-        produtos,
-      )
-    ) {
+    if (!produtos) {
       throw new Error(
         "Magazine Luiza retornou JSON sem a lista de produtos esperada.",
       );
@@ -1553,51 +1765,45 @@ async function consultarMagazineLuizaComBuildId(
 async function consultarMagazineLuiza(
   query: string,
 ): Promise<MagazineVoceProduct[]> {
-  /*
-   * Primeiro usamos cache/env para evitar
-   * buscar a p?gina inicial toda vez.
-   */
-  const buildIdInicial =
-    obterBuildIdInicial();
+  const tentarJson = async (): Promise<MagazineVoceProduct[] | null> => {
+    const buildIdInicial = obterBuildIdInicial();
 
-  if (buildIdInicial) {
-    const produtos =
-      await consultarMagazineLuizaComBuildId(
+    if (buildIdInicial) {
+      const produtos = await consultarMagazineLuizaComBuildId(
         query,
         buildIdInicial,
       );
 
+      if (produtos) {
+        return produtos;
+      }
+    }
+
+    magazineLuizaBuildIdCache = null;
+    const buildIdAtual = await descobrirBuildIdAtual();
+    return consultarMagazineLuizaComBuildId(query, buildIdAtual);
+  };
+
+  try {
+    const produtos = await tentarJson();
+
     if (produtos) {
       return produtos;
     }
+  } catch (jsonError) {
+    try {
+      return await consultarMagazineLuizaHtml(query);
+    } catch (htmlError) {
+      const jsonMessage =
+        jsonError instanceof Error ? jsonError.message : String(jsonError);
+      const htmlMessage =
+        htmlError instanceof Error ? htmlError.message : String(htmlError);
+      throw new Error(`${jsonMessage} | ${htmlMessage}`.slice(0, 1000));
+    }
   }
 
-  /*
-   * O ID expirou ou n?o estava configurado.
-   * Descobrimos automaticamente o build atual.
-   */
-  magazineLuizaBuildIdCache =
-    null;
-
-  const buildIdAtual =
-    await descobrirBuildIdAtual();
-
-  const produtos =
-    await consultarMagazineLuizaComBuildId(
-      query,
-      buildIdAtual,
-    );
-
-  if (!produtos) {
-    magazineLuizaBuildIdCache =
-      null;
-
-    throw new Error(
-      "Magazine Luiza: o buildId rec?m-descoberto n?o foi aceito pelo endpoint de busca.",
-    );
-  }
-
-  return produtos;
+  magazineLuizaBuildIdCache = null;
+  return consultarMagazineLuizaHtml(query);
 }
 
 export async function buscarMagazineLuiza(
@@ -1616,24 +1822,14 @@ export async function buscarMagazineLuiza(
       );
   
     if (!query) {
-      return {
-        marketplace:
-          MARKETPLACE,
-  
+      return montarDiscoveryResult({
+        marketplace: MARKETPLACE,
         query,
-  
-        success:
-          false,
-  
-        candidates:
-          [],
-  
-        scanned:
-          0,
-  
-        error:
-          "Consulta vazia.",
-      };
+        candidates: [],
+        scanned: 0,
+        status: "ERROR",
+        error: "Consulta vazia.",
+      });
     }
   
     try {
@@ -1760,23 +1956,26 @@ export async function buscarMagazineLuiza(
           continue;
         }
   
-        const affiliateLink =
-          criarUrlAfiliada(
-            produto,
-          );
-  
-        if (!affiliateLink) {
-          continue;
-        }
+        const caminho =
+          produto.url?.trim() ||
+          produto.path?.trim() ||
+          (produto.variationId || produto.id
+            ? `/p/${produto.variationId || produto.id}/`
+            : "");
+
+        const sourceUrl = criarUrlPublicaMagazineLuiza(caminho);
+        const affiliateLink = criarUrlAfiliadaMagazineLuiza(caminho);
   
         const externalId =
           obterExternalId(
             produto,
+            sourceUrl,
             affiliateLink,
           );
   
         if (
           !externalId ||
+          !sourceUrl ||
           ids.has(
             externalId,
           )
@@ -1815,8 +2014,7 @@ export async function buscarMagazineLuiza(
   
             externalId,
   
-            sourceUrl:
-              affiliateLink,
+            sourceUrl,
   
             affiliateLink,
   
@@ -1844,6 +2042,11 @@ export async function buscarMagazineLuiza(
   
             brand:
               obterMarca(
+                produto,
+              ),
+
+            attributes:
+              obterAtributosMagazineLuiza(
                 produto,
               ),
   
@@ -1922,49 +2125,37 @@ export async function buscarMagazineLuiza(
               resultado.candidate,
           );
   
-      return {
-        marketplace:
-          MARKETPLACE,
-  
+      return montarDiscoveryResult({
+        marketplace: MARKETPLACE,
         query,
-  
-        success:
-          true,
-  
         candidates,
-  
-        scanned:
-          produtos.length,
-  
-        error:
-          null,
-      };
+        scanned: produtos.length,
+        status: candidates.length > 0 ? "SUCCESS" : "EMPTY",
+        sourcesTried: ["magazinevoce-json", "magazinevoce-html"],
+      });
     } catch (error) {
       const mensagem =
         error instanceof Error
           ? error.message
           : "Erro desconhecido.";
-  
-      return {
-        marketplace:
-          MARKETPLACE,
-  
+      const status = classificarMensagemAquisicao(mensagem);
+
+      return montarDiscoveryResult({
+        marketplace: MARKETPLACE,
         query,
-  
-        success:
-          false,
-  
-        candidates:
-          [],
-  
-        scanned:
-          0,
-  
-        error:
-          mensagem.slice(
-            0,
-            1000,
-          ),
-      };
+        candidates: [],
+        scanned: 0,
+        status,
+        error: mensagem.slice(0, 1000),
+        sourcesTried: ["magazinevoce-json", "magazinevoce-html"],
+        blockedSources:
+          status === "BLOCKED"
+            ? ["magazinevoce-json", "magazinevoce-html"]
+            : [],
+        unusableSources:
+          status === "UNUSABLE"
+            ? ["magazinevoce-json"]
+            : [],
+      });
     }
   }

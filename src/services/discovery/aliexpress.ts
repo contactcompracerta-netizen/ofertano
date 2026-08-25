@@ -7,6 +7,10 @@ import type {
 } from "./core/types";
 import { ehAcessorioNaoSolicitadoPelaConsulta } from "@/services/identity";
 import { abortableFetch } from "@/lib/searchAbort";
+import {
+  classificarMensagemAquisicao,
+  montarDiscoveryResult,
+} from "./acquisitionOutcome";
 
 const MARKETPLACE = "ALIEXPRESS" as const;
 const MARKETPLACE_NAME = "AliExpress" as const;
@@ -953,7 +957,7 @@ function extrairPrecoContextualPdpNpi(
   }
 }
 
-function obterPreco(
+export function obterPreco(
   produto: AliExpressProduct,
 ): number | null {
   const contextual =
@@ -1004,12 +1008,21 @@ function obterPreco(
       produto.sale_price_currency,
     )
   ) {
-    return converterPreco(
+    const valor = converterPreco(
       produto.sale_price,
     );
+
+    if (valor) {
+      return valor;
+    }
   }
 
-  return null;
+  return (
+    converterPreco(produto.target_sale_price) ??
+    converterPreco(produto.target_app_sale_price) ??
+    converterPreco(produto.sale_price) ??
+    converterPreco(produto.app_sale_price)
+  );
 }
 
 function obterPrecoAnterior(
@@ -1208,6 +1221,8 @@ async function consultarAliExpress(
     target_language:
       "PT",
 
+    format: "json",
+
     ship_to_country:
       "BR",
 
@@ -1242,6 +1257,13 @@ async function consultarAliExpress(
       "shop_name",
     ].join(","),
   };
+
+  const trackingId =
+    process.env.ALIEXPRESS_TRACKING_ID?.trim();
+
+  if (trackingId) {
+    parametros.tracking_id = trackingId;
+  }
 
   const assinatura =
     gerarAssinatura(
@@ -1510,6 +1532,27 @@ async function consultarAliExpress(
   }
 }
 
+export function extrairIdProdutoAliExpress(
+  produto: Pick<
+    AliExpressProduct,
+    "product_id" | "product_detail_url"
+  >,
+): string | null {
+  const direto = String(produto.product_id ?? "").trim();
+
+  if (/^\d{8,}$/.test(direto)) {
+    return direto;
+  }
+
+  const url = produto.product_detail_url?.trim() ?? "";
+  return (
+    url.match(/\/item\/(\d+)\.html/i)?.[1] ??
+    url.match(/\/item\/(\d+)/i)?.[1] ??
+    url.match(/[?&]productIds?=(\d{8,})/i)?.[1] ??
+    (direto || null)
+  );
+}
+
 function urlHttpValida(
   valor:
     | string
@@ -1556,24 +1599,14 @@ export async function buscarAliExpress(
     );
 
   if (!query) {
-    return {
-      marketplace:
-        MARKETPLACE,
-
+    return montarDiscoveryResult({
+      marketplace: MARKETPLACE,
       query,
-
-      success:
-        false,
-
-      candidates:
-        [],
-
-      scanned:
-        0,
-
-      error:
-        "Consulta vazia.",
-    };
+      candidates: [],
+      scanned: 0,
+      status: "ERROR",
+      error: "Consulta vazia.",
+    });
   }
 
   try {
@@ -1608,10 +1641,9 @@ export async function buscarAliExpress(
       const produto of produtos
     ) {
       const externalId =
-        String(
-          produto.product_id ??
-            "",
-        ).trim();
+        extrairIdProdutoAliExpress(
+          produto,
+        ) ?? "";
 
       const titulo =
         produto.product_title
@@ -1864,50 +1896,34 @@ export async function buscarAliExpress(
             resultado.candidate,
         );
 
-    return {
-      marketplace:
-        MARKETPLACE,
-
+    return montarDiscoveryResult({
+      marketplace: MARKETPLACE,
       query,
-
-      success:
-        true,
-
       candidates,
-
-      scanned:
-        produtos.length,
-
-      error:
-        null,
-    };
+      scanned: produtos.length,
+      status: candidates.length > 0 ? "SUCCESS" : "EMPTY",
+      sourcesTried: ["aliexpress-affiliate-api"],
+    });
   } catch (error) {
     const mensagem =
       error instanceof Error
         ? error.message
         : "Erro desconhecido.";
+    const status = classificarMensagemAquisicao(mensagem);
 
-    return {
-      marketplace:
-        MARKETPLACE,
-
+    return montarDiscoveryResult({
+      marketplace: MARKETPLACE,
       query,
-
-      success:
-        false,
-
-      candidates:
-        [],
-
-      scanned:
-        0,
-
-      error:
-        mensagem.slice(
-          0,
-          1000,
-        ),
-    };
+      candidates: [],
+      scanned: 0,
+      status,
+      error: mensagem.slice(0, 1000),
+      sourcesTried: ["aliexpress-affiliate-api"],
+      blockedSources:
+        status === "BLOCKED" ? ["aliexpress-affiliate-api"] : [],
+      unusableSources:
+        status === "UNUSABLE" ? ["aliexpress-affiliate-api"] : [],
+    });
   }
 }
 
