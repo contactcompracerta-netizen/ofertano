@@ -16,6 +16,7 @@ import {
   extractModelTokens,
   extractBrand,
   extractQuantity,
+  extractSize,
   inferRole,
   normalizeMultistoreText,
   tokenize,
@@ -61,12 +62,13 @@ export function buildFingerprint(
   const quantity = extractQuantity(soldTokens);
   const color = extractColor(soldTokens);
   const material = extractMaterial(soldTokens);
+  const size = extractSize(soldTokens);
   const model = sku || modelTokens[0] || null;
   const family = soldClass !== "UNKNOWN" ? soldClass : null;
 
   return {
     soldItem: field(
-      tokenize(split.sold).slice(0, 3).join(" ") || null,
+      split.sold || null,
       split.sold ? "MEDIUM" : "NONE",
       "TITLE",
     ),
@@ -107,7 +109,7 @@ export function buildFingerprint(
       "TITLE",
     ),
     capacity: field(capacity, capacity ? "HIGH" : "NONE", capacity ? "TITLE" : "UNKNOWN"),
-    size: emptyField<string>(),
+    size: field(size, size ? "HIGH" : "NONE", size ? "TITLE" : "UNKNOWN"),
     color: field(color, color ? "MEDIUM" : "NONE", color ? "TITLE" : "UNKNOWN"),
     quantity: field(quantity, quantity ? "HIGH" : "NONE", quantity ? "TITLE" : "UNKNOWN"),
     material: field(material, material ? "MEDIUM" : "NONE", material ? "TITLE" : "UNKNOWN"),
@@ -117,6 +119,7 @@ export function buildFingerprint(
       ...(quantity ? { quantity } : {}),
       ...(color ? { color } : {}),
       ...(material ? { material } : {}),
+      ...(size ? { size } : {}),
     },
     distinctiveTokens: distinctiveTokensOf(soldTokens),
     identityNumbers: extractIdentityNumbers(soldTokens),

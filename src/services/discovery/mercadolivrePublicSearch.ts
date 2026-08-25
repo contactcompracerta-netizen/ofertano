@@ -2,6 +2,11 @@ import * as cheerio from "cheerio";
 
 import { abortableFetch } from "@/lib/searchAbort";
 import { traceMultiloja } from "@/services/multiloja/trace";
+import {
+  extractMercadoLivreIdentities,
+  extractMercadoLivreIdentitiesFromUrl,
+  normalizeListingId,
+} from "./mercadolivreIds";
 
 export type MercadoLivreListingItem = {
   id?: string;
@@ -67,11 +72,11 @@ export type MercadoLivreSourceFetch<T> = {
 
 export type PublicSearchStrategyId = "public-search-lista" | "public-search-jm";
 
-const ITEM_ID_PATTERN = /\bMLB-?(\d{8,})\b/gi;
+const ITEM_ID_PATTERN = /\bMLB(?!U)-?(\d{8,})\b/gi;
 const PRODUCT_URL_PATTERN =
   /https?:\/\/(?:www\.)?produto\.mercadolivre\.com\.br\/MLB-(\d+)/gi;
 const ITEM_PATH_PATTERN =
-  /https?:\/\/(?:www\.)?mercadolivre\.com\.br\/[^"'\\\s]*MLB-(\d+)/gi;
+  /https?:\/\/(?:www\.)?mercadolivre\.com\.br\/[^"'\\\s]*MLB(?!U)-(\d+)/gi;
 const CATALOG_PATH_PATTERN = /\/p\/MLB-?(\d{8,})/gi;
 const WID_ITEM_PATTERN = /[?&#]wid=MLB-?(\d{8,})/gi;
 
@@ -118,13 +123,7 @@ const SEARCH_PAGE_MARKERS = [
 ];
 
 function normalizeItemId(raw: string): string | null {
-  const digits = raw.replace(/\D/g, "");
-
-  if (digits.length < 8) {
-    return null;
-  }
-
-  return `MLB${digits}`;
+  return normalizeListingId(raw);
 }
 
 function registerItem(
@@ -268,17 +267,17 @@ function extractFromJsonLd(
                 : listItem;
             const url = String(product.url ?? listItem.url ?? "");
             const sku = String(product.sku ?? product.productID ?? "");
-            const idMatch =
-              url.match(/MLB-?(\d{8,})/i) ??
-              sku.match(/MLB-?(\d{8,})/i);
+            const listingId =
+              extractMercadoLivreIdentitiesFromUrl(url).listingIds[0] ??
+              extractMercadoLivreIdentities(`${url} ${sku}`).listingIds[0];
 
-            if (!idMatch?.[1]) {
+            if (!listingId) {
               continue;
             }
 
             const offers = product.offers as Record<string, unknown> | undefined;
             used = true;
-            registerItem(items, idMatch[1], {
+            registerItem(items, listingId, {
               title: String(product.name ?? "").trim() || undefined,
               price: parsePrice(offers?.price),
               permalink: url || undefined,
@@ -290,17 +289,17 @@ function extractFromJsonLd(
         if (type.includes("Product")) {
           const url = String(record.url ?? "");
           const sku = String(record.sku ?? record.productID ?? "");
-          const idMatch =
-            url.match(/MLB-?(\d{8,})/i) ??
-            sku.match(/MLB-?(\d{8,})/i);
+          const listingId =
+            extractMercadoLivreIdentitiesFromUrl(url).listingIds[0] ??
+            extractMercadoLivreIdentities(`${url} ${sku}`).listingIds[0];
 
-          if (!idMatch?.[1]) {
+          if (!listingId) {
             continue;
           }
 
           const offers = record.offers as Record<string, unknown> | undefined;
           used = true;
-          registerItem(items, idMatch[1], {
+          registerItem(items, listingId, {
             title: String(record.name ?? "").trim() || undefined,
             price: parsePrice(offers?.price),
             permalink: url || undefined,
@@ -340,13 +339,16 @@ function walkForListings(
 
   const record = value as Record<string, unknown>;
   const rawId = String(record.id ?? record.item_id ?? record.itemId ?? "");
-  const id = /MLB-?\d{8,}/i.test(rawId) ? normalizeItemId(rawId) : null;
+  const permalink = String(
+    record.permalink ?? record.url ?? record.permalink_url ?? "",
+  );
+  const id =
+    normalizeItemId(rawId) ??
+    extractMercadoLivreIdentitiesFromUrl(permalink).listingIds[0] ??
+    extractMercadoLivreIdentities(rawId).listingIds[0];
 
   if (id) {
     const title = String(record.title ?? record.name ?? "").trim();
-    const permalink = String(
-      record.permalink ?? record.url ?? record.permalink_url ?? "",
-    );
     const price = parsePrice(
       record.price ??
         (record.price as { amount?: unknown } | undefined)?.amount ??
@@ -526,11 +528,11 @@ function extractFromHtmlSelectors(
       node.attr("data-item-id") ??
       node.attr("id") ??
       "";
-    const idMatch =
-      href.match(/MLB-?(\d{8,})/i) ??
-      dataId.match(/MLB-?(\d{8,})/i);
+    const listingId =
+      extractMercadoLivreIdentitiesFromUrl(href).listingIds[0] ??
+      extractMercadoLivreIdentities(`${href} ${dataId}`).listingIds[0];
 
-    if (!idMatch?.[1] || /\/p\//i.test(href)) {
+    if (!listingId) {
       return;
     }
 
@@ -549,7 +551,7 @@ function extractFromHtmlSelectors(
       "";
 
     used = true;
-    registerItem(items, idMatch[1], {
+    registerItem(items, listingId, {
       title: title || undefined,
       price: parsePrice(priceText),
       permalink: href || undefined,
@@ -574,6 +576,15 @@ export function analisarPaginaDeBuscaPublica(html: string): {
   const items = new Map<string, MercadoLivreListingItem>();
   const strategies: string[] = [];
   const catalogIds = new Set<string>();
+  const identities = extractMercadoLivreIdentities(html);
+
+  for (const catalogId of identities.catalogIds) {
+    catalogIds.add(catalogId);
+  }
+
+  for (const listingId of identities.listingIds) {
+    registerItem(items, listingId);
+  }
 
   for (const match of html.matchAll(CATALOG_PATH_PATTERN)) {
     if (match[1]) {

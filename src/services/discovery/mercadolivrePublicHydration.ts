@@ -1,5 +1,7 @@
 import { abortableFetch, isSearchAborted } from "@/lib/searchAbort";
 import { traceMultiloja } from "@/services/multiloja/trace";
+import { buildMarketplaceQueryVariants } from "@/services/multistore-v2/queryPlan";
+import { extractMercadoLivreIdentitiesFromUrl, normalizeListingId } from "./mercadolivreIds";
 
 import {
   anuncioPublicoEstaCompleto,
@@ -7,60 +9,6 @@ import {
   type MercadoLivreSourceFetch,
   type MercadoLivreSourceStatus,
 } from "./mercadolivrePublicSearch";
-
-const STOP_WORDS = new Set([
-  "a",
-  "as",
-  "o",
-  "os",
-  "de",
-  "da",
-  "do",
-  "das",
-  "dos",
-  "e",
-  "em",
-  "no",
-  "na",
-  "nos",
-  "nas",
-  "um",
-  "uma",
-  "com",
-  "para",
-  "por",
-  "the",
-  "of",
-  "and",
-]);
-
-const SECONDARY_TOKENS = new Set([
-  "resistente",
-  "resistentes",
-  "agua",
-  "prova",
-  "original",
-  "novo",
-  "nova",
-  "kit",
-  "promocao",
-  "oferta",
-  "barato",
-  "frete",
-  "portatil",
-  "retratil",
-  "retractil",
-  "mdp",
-  "mdf",
-]);
-
-function normalizeToken(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
 
 function parsePrice(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
@@ -91,14 +39,7 @@ function parsePrice(value: unknown): number | undefined {
 }
 
 function normalizeItemId(raw: string | undefined): string | null {
-  if (!raw) {
-    return null;
-  }
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length < 8) {
-    return null;
-  }
-  return `MLB${digits}`;
+  return normalizeListingId(raw ?? "");
 }
 
 export function mesclarItemParcial(
@@ -144,98 +85,20 @@ export function gerarVariantesDeConsultaPublica(query: string): string[] {
     return [];
   }
 
-  const tokens = original
-    .split(" ")
-    .map(normalizeToken)
-    .filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
-
-  const reduced = tokens.filter((token) => !SECONDARY_TOKENS.has(token));
-  const variants = [original];
-
-  if (reduced.length >= 2) {
-    variants.push(reduced.join(" "));
-  }
-
-  const pickBestWindow = (source: string[], size: number): string | null => {
-    if (source.length < size) {
-      return null;
-    }
-    let best: string[] = source.slice(0, size);
-    let bestScore = -1;
-    for (let index = 0; index <= source.length - size; index += 1) {
-      const window = source.slice(index, index + size);
-      const score = window.reduce((sum, token) => {
-        const numeric = /^\d/.test(token) ? 4 : 0;
-        return sum + token.length + numeric;
-      }, 0);
-      if (score > bestScore) {
-        best = window;
-        bestScore = score;
-      }
-    }
-    return best.join(" ");
-  };
-
-  const window2 = pickBestWindow(reduced, 2);
-  if (window2) {
-    variants.push(window2);
-  }
-  const window3 = pickBestWindow(reduced, 3);
-  if (window3) {
-    variants.push(window3);
-  }
-
-  return Array.from(
-    new Set(variants.map((item) => item.replace(/\s+/g, " ").trim()).filter(Boolean)),
-  ).slice(0, 4);
+  const planned = buildMarketplaceQueryVariants(original);
+  return Array.from(new Set([original, ...planned])).slice(0, 6);
 }
 
 export function rastrearAquisicaoMercadoLivre(
   fields: Record<string, unknown>,
 ): void {
   traceMultiloja("ml-acquisition", fields);
-
-  const serialized = Object.entries(fields)
-    .filter(([, value]) => value !== undefined)
-    .map(([key, value]) => {
-      if (Array.isArray(value)) {
-        return `${key}=[${value.join(",")}]`;
-      }
-      if (typeof value === "string" && (value.includes(" ") || value.includes("="))) {
-        return `${key}="${value.replace(/"/g, '\\"')}"`;
-      }
-      return `${key}=${value}`;
-    })
-    .join(" ");
-
-  console.info(
-    serialized ? `[ML-ACQUISITION] ${serialized}` : "[ML-ACQUISITION]",
-  );
 }
 
 export function rastrearResumoAquisicaoMercadoLivre(
   fields: Record<string, unknown>,
 ): void {
   traceMultiloja("ml-acquisition-summary", fields);
-
-  const serialized = Object.entries(fields)
-    .filter(([, value]) => value !== undefined)
-    .map(([key, value]) => {
-      if (Array.isArray(value)) {
-        return `${key}=[${value.join(",")}]`;
-      }
-      if (typeof value === "string" && (value.includes(" ") || value.includes("="))) {
-        return `${key}="${value.replace(/"/g, '\\"')}"`;
-      }
-      return `${key}=${value}`;
-    })
-    .join(" ");
-
-  console.info(
-    serialized
-      ? `[ML-ACQUISITION-SUMMARY] ${serialized}`
-      : "[ML-ACQUISITION-SUMMARY]",
-  );
 }
 
 function extractMeta(html: string, property: string): string {
@@ -289,7 +152,11 @@ export function extrairProdutoDaPaginaPublica(
               ? String(record.image[0] ?? "")
               : "";
         item = mesclarItemParcial(item, {
-          id: normalizeItemId(sku) ?? normalizeItemId(url) ?? undefined,
+          id:
+            extractMercadoLivreIdentitiesFromUrl(url).listingIds[0] ??
+            normalizeItemId(sku) ??
+            normalizeItemId(url) ??
+            undefined,
           title: String(record.name ?? "").trim() || undefined,
           price: parsePrice(offers?.price),
           permalink: url || undefined,
@@ -317,8 +184,10 @@ export function extrairProdutoDaPaginaPublica(
 
   item = mesclarItemParcial(item, {
     id:
+      extractMercadoLivreIdentitiesFromUrl(canonical).listingIds[0] ??
       normalizeItemId(canonical) ??
-      normalizeItemId(html.match(/\bMLB-?(\d{8,})\b/i)?.[0]) ??
+      extractMercadoLivreIdentitiesFromUrl(html.match(/\bhttps?:\/\/[^\s"'<>]+/i)?.[0] ?? "").listingIds[0] ??
+      normalizeItemId(html.match(/\bMLB(?!U)-?(\d{8,})\b/i)?.[0]) ??
       undefined,
     title: ogTitle || pageTitle?.replace(/\s+/g, " ").trim() || undefined,
     price: parsePrice(ogPrice) ?? parsePrice(fraction),

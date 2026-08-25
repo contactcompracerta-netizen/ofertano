@@ -112,6 +112,23 @@ assert.ok(
   "wid ao lado de /p/ precisa virar anuncio compravel, nao ser descartado como catalogo.",
 );
 
+const userProductHtml = `
+  <a href="https://www.mercadolivre.com.br/polia-virabrequim/up/MLBU123456789?pdp_filters=item_id%3AMLB1967745737">Polia</a>
+`;
+assert.ok(
+  extrairItensDaPaginaDeBuscaPublica(userProductHtml).some(
+    (entry) => entry.id === "MLB1967745737",
+  ),
+  "pdp_filters em URL /up/MLBU precisa expor o listing MLB.",
+);
+assert.equal(
+  extrairItensDaPaginaDeBuscaPublica(userProductHtml).some(
+    (entry) => entry.id === "MLB123456789",
+  ),
+  false,
+  "MLBU nao pode virar listing MLB.",
+);
+
 const blocked = classificarErroFonteMercadoLivre(
   new Error(
     "Mercado Livre /sites/MLB/search?q=teste falhou autenticado (403) e publico (403).",
@@ -635,6 +652,123 @@ async function runAcquisitionCases() {
   assert.ok(
     noneAvailable.searchOutcome === "BLOCKED" || noneAvailable.searchOutcome === "ERROR",
     "Nenhuma fonte ML disponivel nao pode crashar.",
+  );
+
+  const catalogOnlyKeepsGoing = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLBU123456789",
+            name: "Headphone MarcaX Wireless Rosa",
+            status: "active",
+          },
+        ],
+      }),
+      loadCatalogCandidate: async () => ({
+        title: "Headphone MarcaX Wireless Rosa",
+        externalId: "MLBU123456789",
+        stage: "offers-fetch",
+        status: "DROPPED",
+        reason: "Catalogo sem listing compravel.",
+        lexicalScore: 0.4,
+      }),
+      searchItemsApi: blockedItemsApi,
+      searchPublicLista: async () => ({
+        status: "BLOCKED",
+        httpStatus: 403,
+        data: [],
+        reason: "lista 403",
+      }),
+      searchPublicJm: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [listingItem],
+      }),
+    }),
+  );
+  assert.equal(
+    catalogOnlyKeepsGoing.candidates.some((entry) => entry.externalId === "MLB111222333"),
+    true,
+    "catalogo sem listing nao encerra a cadeia; public-search-jm ainda entrega",
+  );
+  assert.equal(
+    catalogOnlyKeepsGoing.searchOutcome,
+    "SEARCH_COMPLETED",
+  );
+
+  const partialSurvivesHydration403 = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLBU123456789",
+            name: "Headphone MarcaX Wireless Rosa",
+            status: "active",
+          },
+        ],
+      }),
+      loadCatalogCandidate: async () => ({
+        title: "Headphone MarcaX Wireless Rosa",
+        externalId: "MLBU123456789",
+        stage: "offers-fetch",
+        status: "DROPPED",
+        reason: "Catalogo sem winner.",
+        lexicalScore: 0.4,
+      }),
+      searchItemsApi: blockedItemsApi,
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLB1967745737",
+            title: "Headphone MarcaX Wireless Rosa",
+            permalink: "https://produto.mercadolivre.com.br/MLB-1967745737",
+            price: 149,
+          },
+        ],
+      }),
+      hydratePublicItem: async () => {
+        throw new Error("HTTP 403");
+      },
+    }),
+  );
+  assert.equal(
+    partialSurvivesHydration403.candidates.some(
+      (entry) => entry.externalId === "MLB1967745737",
+    ),
+    true,
+    "listing com titulo/preco no HTML sobrevive a hidratacao 403",
+  );
+
+  const catalogBlockedPublicOk = await buscarMercadoLivreComFontes(
+    request(),
+    fontes({
+      searchCatalog: async () => ({
+        status: "BLOCKED",
+        httpStatus: 403,
+        data: [],
+        reason: "catalog 403",
+      }),
+      searchItemsApi: blockedItemsApi,
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [listingItem],
+      }),
+    }),
+  );
+  assert.equal(catalogBlockedPublicOk.searchOutcome, "SEARCH_COMPLETED");
+  assert.equal(
+    catalogBlockedPublicOk.candidates.some((entry) => entry.externalId === "MLB111222333"),
+    true,
   );
 }
 

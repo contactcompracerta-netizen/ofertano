@@ -67,6 +67,12 @@ export type QueryIntent = {
   identityNumbers: string[];
   identityAnchors: IdentityAnchor[];
   hasStrongIdentity: boolean;
+  productCore: string[];
+  compatibilityTarget: string | null;
+  soldText: string;
+  hostText: string | null;
+  productClassConfidence: "HIGH" | "MEDIUM" | "LOW" | "NONE";
+  weakModifiers: string[];
 };
 
 export type RawCandidate = {
@@ -132,6 +138,25 @@ export type ProductFingerprint = {
   lexicalSignature: string[];
 };
 
+export type RelevanceEvidenceState = "MATCH" | "UNKNOWN" | "CONFLICT" | "MISSING";
+
+export type QueryRelevanceEvidence = {
+  accepted: boolean;
+  productClassCompatibility: RelevanceEvidenceState;
+  productCoreCoverage: RelevanceEvidenceState;
+  brandCompatibility: RelevanceEvidenceState;
+  strongIdentityCompatibility: RelevanceEvidenceState;
+  attributeMatches: string[];
+  attributeMissing: string[];
+  attributeConflicts: string[];
+  compatibilityMatches: string[];
+  compatibilityConflicts: string[];
+  distinctiveTermsMatched: string[];
+  distinctiveTermsMissing: string[];
+  weakTokenContribution: number;
+  roleCompatibility: RelevanceEvidenceState;
+};
+
 export type ScoredCandidate = {
   id: string;
   normalized: NormalizedCandidate;
@@ -143,6 +168,7 @@ export type ScoredCandidate = {
   hardConflicts: string[];
   status: "RELEVANT" | "REJECTED";
   reason: string;
+  evidence: QueryRelevanceEvidence;
 };
 
 export type PairRelation = "SAME" | "DIFFERENT" | "UNKNOWN";

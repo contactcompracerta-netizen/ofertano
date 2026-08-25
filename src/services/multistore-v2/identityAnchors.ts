@@ -7,6 +7,7 @@ import {
   tokenize,
   normalizeMultistoreText,
   isCapacityOrQuantityUnit,
+  isSizeHint,
 } from "./normalizeCandidate";
 
 const QUANTITATIVE_COMPACT =
@@ -103,7 +104,11 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
       continue;
     }
 
-    if (isCapacityOrQuantityUnit(tokens[index + 2])) {
+    if (isCapacityOrQuantityUnit(tokens[index + 2]) || isSizeHint(current)) {
+      continue;
+    }
+
+    if (/^(19|20)\d{2}$/.test(nextDigits)) {
       continue;
     }
 

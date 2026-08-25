@@ -125,11 +125,11 @@ export function compareFingerprints(
   }
 
   if (
-    first.quantity.value &&
-    second.quantity.value &&
-    first.quantity.value !== second.quantity.value
+    first.size.value &&
+    second.size.value &&
+    first.size.value !== second.size.value
   ) {
-    hardConflicts.push(`quantity:${first.quantity.value}!=${second.quantity.value}`);
+    hardConflicts.push(`size:${first.size.value}!=${second.size.value}`);
   }
 
   if (
@@ -300,7 +300,10 @@ export function compareFingerprints(
   }
 
   const furnitureClass =
-    first.productClass.value === "mesa" || second.productClass.value === "mesa";
+    first.productClass.value === "nightstand" ||
+    second.productClass.value === "nightstand" ||
+    first.productClass.value === "furniture" ||
+    second.productClass.value === "furniture";
   const furnitureAttributesAligned =
     furnitureClass &&
     attributeMatches.includes("quantity") &&

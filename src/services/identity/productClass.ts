@@ -25,6 +25,14 @@ export type ProductClassId =
   | "CONSOLE"
   | "BLENDER"
   | "FURNITURE"
+  | "FURNITURE_PART"
+  | "BOOK"
+  | "APPAREL"
+  | "TOY"
+  | "AUTOMOTIVE_PULLEY_CRANKSHAFT"
+  | "AUTOMOTIVE_PULLEY_ALTERNATOR"
+  | "AUTOMOTIVE_CRANKSHAFT"
+  | "AUTOMOTIVE_BELT"
   | "CASE_ACCESSORY"
   | "CONSUMABLE"
   | "UNKNOWN";
@@ -42,6 +50,64 @@ type ProductClassFamily = {
  * separado: aqui classificamos o TIPO vendido, nao o papel.
  */
 const PRODUCT_CLASS_FAMILIES: ProductClassFamily[] = [
+  {
+    id: "AUTOMOTIVE_PULLEY_CRANKSHAFT",
+    phrases: [
+      "polia virabrequim",
+      "polia de virabrequim",
+      "polia do virabrequim",
+    ],
+    tokens: [],
+  },
+  {
+    id: "AUTOMOTIVE_PULLEY_ALTERNATOR",
+    phrases: [
+      "polia alternador",
+      "polia do alternador",
+      "polia de alternador",
+    ],
+    tokens: [],
+  },
+  {
+    id: "AUTOMOTIVE_CRANKSHAFT",
+    phrases: ["virabrequim completo"],
+    tokens: ["virabrequim"],
+  },
+  {
+    id: "AUTOMOTIVE_BELT",
+    phrases: ["correia dentada", "correia de comando"],
+    tokens: ["correia"],
+  },
+  {
+    id: "BOOK",
+    phrases: [],
+    tokens: ["livro", "livros", "ebook"],
+  },
+  {
+    id: "APPAREL",
+    phrases: ["kit calcinha"],
+    tokens: [
+      "calcinha",
+      "sutia",
+      "lingerie",
+      "camiseta",
+      "camisa",
+      "calca",
+      "vestido",
+      "blusa",
+      "cueca",
+    ],
+  },
+  {
+    id: "TOY",
+    phrases: ["brinquedo infantil"],
+    tokens: ["brinquedo", "brinquedos"],
+  },
+  {
+    id: "FURNITURE_PART",
+    phrases: ["pe palito", "pe para movel", "pe de movel"],
+    tokens: [],
+  },
   {
     id: "AUDIO_HEADPHONE",
     phrases: [
@@ -309,7 +375,8 @@ export function classeEhProdutoPrincipal(
     id !== "UNKNOWN" &&
     id !== "CASE_ACCESSORY" &&
     id !== "CONSUMABLE" &&
-    id !== "REMOTE"
+    id !== "REMOTE" &&
+    id !== "FURNITURE_PART"
   );
 }
 

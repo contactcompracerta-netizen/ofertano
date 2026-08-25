@@ -15,7 +15,11 @@ import { traceMultiloja } from "@/services/multiloja/trace";
 import {
   searchMultistoreV2,
   usarMotorMultistoreV2,
+  buildQueryIntent,
+  scoreQueryRelevance,
+  normalizeCandidate,
 } from "@/services/multistore-v2";
+import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
 
 function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -55,7 +59,16 @@ function textFilters(value: string): Prisma.ProductWhereInput[] {
 }
 
 function catalogFilter(query: string): Prisma.ProductWhereInput {
-  const terms = query.split(/\s+/).map((term) => term.trim()).filter(Boolean);
+  const terms = query
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter((term) => {
+      if (!term) {
+        return false;
+      }
+
+      return !isWeakModifier(normalizeConceptText(term));
+    });
 
   return {
     active: true,
@@ -63,11 +76,15 @@ function catalogFilter(query: string): Prisma.ProductWhereInput {
     image: { not: "" },
     OR: [
       ...textFilters(query),
-      {
-        AND: terms.map((term) => ({
-          OR: termVariants(term).flatMap((variant) => textFilters(variant)),
-        })),
-      },
+      ...(terms.length > 0
+        ? [
+            {
+              AND: terms.map((term) => ({
+                OR: termVariants(term).flatMap((variant) => textFilters(variant)),
+              })),
+            },
+          ]
+        : []),
     ],
   };
 }
@@ -122,11 +139,26 @@ function matchesQuery(
   product: CatalogIdentityProduct,
   query: string,
 ): boolean {
-  return avaliarCompatibilidadeComConsulta(query, {
-    title: product.canonicalName?.trim() || product.name,
-    brand: product.brand,
-    attributes: catalogIdentityAttributes(product),
-  }).compatible;
+  const title = product.canonicalName?.trim() || product.name;
+  const scored = scoreQueryRelevance(
+    buildQueryIntent(query),
+    normalizeCandidate({
+      marketplace: "AMAZON",
+      marketplaceName: "Amazon",
+      externalId: `catalog:${title.slice(0, 24)}`,
+      title,
+      price: 1,
+      url: "https://ofertano.local/catalog",
+      image: "https://ofertano.local/img.jpg",
+      brand: product.brand,
+      category: null,
+      seller: null,
+      affiliateLink: null,
+      attributes: catalogIdentityAttributes(product),
+    }),
+  );
+
+  return scored.status === "RELEVANT";
 }
 
 async function searchCatalog(query: string) {

@@ -3,6 +3,11 @@ import type {
   ProductRole,
   RawCandidate,
 } from "./types";
+import {
+  classifyProductConcept,
+  classesAreIncompatible as conceptClassesAreIncompatible,
+  detectVehicleHostSplit,
+} from "./productConcepts";
 
 const STOP_WORDS = new Set([
   "a",
@@ -89,25 +94,14 @@ const CLASS_GROUPS: string[][] = [
   ["notebook", "laptop"],
   ["furadeira", "parafusadeira"],
   ["panela", "cacarola", "cafeteira"],
-  ["mesa", "criado", "cabeceira", "comoda", "rack", "estante", "sofa", "moveis"],
+  ["nightstand", "mesa", "criado", "cabeceira", "comoda", "rack", "estante", "sofa", "moveis"],
   ["lapis", "caneta", "grafite"],
   ["estojo", "case", "capa"],
   ["barbeador", "aparador", "maquina"],
   ["liquidificador", "batedeira"],
   ["aspirador"],
+  ["polia", "virabrequim", "correia"],
 ];
-
-const CLASS_INCOMPATIBLE = new Map<string, Set<string>>([
-  ["headphone", new Set(["speaker", "smartphone", "furadeira", "panela", "mesa", "lapis", "estojo"])],
-  ["speaker", new Set(["headphone", "smartphone", "furadeira", "panela", "mesa", "lapis"])],
-  ["smartphone", new Set(["headphone", "speaker", "furadeira", "panela", "mesa", "lapis", "estojo"])],
-  ["furadeira", new Set(["headphone", "speaker", "smartphone", "panela", "mesa", "lapis"])],
-  ["panela", new Set(["headphone", "speaker", "smartphone", "furadeira", "mesa", "lapis"])],
-  ["mesa", new Set(["headphone", "speaker", "smartphone", "furadeira", "panela", "lapis"])],
-  ["lapis", new Set(["headphone", "speaker", "smartphone", "furadeira", "panela", "mesa"])],
-  ["estojo", new Set(["headphone", "smartphone", "furadeira", "panela", "mesa"])],
-  ["barbeador", new Set(["headphone", "smartphone", "furadeira", "panela", "mesa", "lapis"])],
-]);
 
 const COLOR_WORDS = new Set([
   "preto",
@@ -178,6 +172,14 @@ const QUANTITY_UNITS = new Set([
   "unidades",
   "litros",
   "pcs",
+]);
+
+const SIZE_HINTS = new Set([
+  "tamanho",
+  "tam",
+  "size",
+  "numero",
+  "nr",
 ]);
 
 const CAPACITY_UNITS = new Set([
@@ -272,11 +274,6 @@ export function wordsOf(value: string): string[] {
     .filter((token) => token.length > 0);
 }
 
-const BRAND_PHRASES: string[][] = [
-  ["criado", "mais"],
-  ["i", "home"],
-];
-
 const KNOWN_BRANDS = new Set([
   "ihome",
   "jbl",
@@ -306,29 +303,8 @@ const KNOWN_BRANDS = new Set([
   "britania",
 ]);
 
-function containsPhrase(words: string[], phrase: string[]): boolean {
-  if (phrase.length === 0 || words.length < phrase.length) {
-    return false;
-  }
-
-  for (let index = 0; index <= words.length - phrase.length; index += 1) {
-    const matched = phrase.every((token, offset) => words[index + offset] === token);
-    if (matched) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 export function extractBrand(text: string): string | null {
   const words = wordsOf(text);
-
-  for (const phrase of BRAND_PHRASES) {
-    if (containsPhrase(words, phrase)) {
-      return phrase.join(" ");
-    }
-  }
 
   for (const word of words) {
     if (KNOWN_BRANDS.has(word)) {
@@ -369,29 +345,14 @@ export function classGroupOf(token: string): string | null {
 }
 
 export function classifyProductClass(text: string): string {
-  const tokens = tokenize(text);
-  for (const token of tokens) {
-    const group = classGroupOf(token);
-    if (group) {
-      return group;
-    }
-  }
-  return "UNKNOWN";
+  return classifyProductConcept(text).id;
 }
 
 export function classesAreIncompatible(
   first: string,
   second: string,
 ): boolean {
-  if (!first || !second || first === "UNKNOWN" || second === "UNKNOWN") {
-    return false;
-  }
-
-  if (first === second) {
-    return false;
-  }
-
-  return CLASS_INCOMPATIBLE.get(first)?.has(second) ?? false;
+  return conceptClassesAreIncompatible(first, second);
 }
 
 export function detectHostSplit(normalizedTitle: string): {
@@ -409,6 +370,15 @@ export function detectHostSplit(normalizedTitle: string): {
     };
   }
 
+  const vehicle = detectVehicleHostSplit(normalizedTitle);
+  if (vehicle) {
+    return {
+      sold: vehicle.sold,
+      host: vehicle.host,
+      relation: "vehicle",
+    };
+  }
+
   const generic = normalizedTitle.match(GENERIC_HOST_PATTERN);
 
   if (generic && generic.index !== undefined) {
@@ -421,7 +391,7 @@ export function detectHostSplit(normalizedTitle: string): {
 
     if (
       soldIsAccessory ||
-      (soldClass !== "UNKNOWN" && hostClass !== "UNKNOWN" && soldClass !== hostClass)
+      (hostClass !== "UNKNOWN" && soldClass !== hostClass)
     ) {
       return {
         sold: sold || normalizedTitle,
@@ -443,12 +413,28 @@ export function inferRole(text: string): ProductRole {
   const split = detectHostSplit(normalized);
   const soldTokens = tokenize(split.sold);
 
-  if (soldTokens.some(isReplacementHead) || split.relation?.includes("reposicao") || split.relation?.includes("substituicao")) {
+  if (soldTokens.some(isReplacementHead)) {
     return "REPLACEMENT_PART";
   }
 
-  if (soldTokens.some(isAccessoryHead) || Boolean(split.relation)) {
+  if (soldTokens.some(isAccessoryHead)) {
     return "ACCESSORY";
+  }
+
+  const soldClass = classifyProductClass(split.sold);
+  if (soldClass === "case_accessory" || soldClass === "furniture_part") {
+    return "ACCESSORY";
+  }
+
+  if (soldClass === "consumable" || soldClass === "vacuum_part") {
+    return "REPLACEMENT_PART";
+  }
+
+  if (soldClass === "UNKNOWN" && split.host) {
+    const hostClass = classifyProductClass(split.host);
+    if (hostClass !== "UNKNOWN") {
+      return "ACCESSORY";
+    }
   }
 
   return soldTokens.length > 0 ? "MAIN" : "UNKNOWN";
@@ -497,12 +483,28 @@ export function extractQuantity(tokens: string[]): string | null {
   return null;
 }
 
+export function extractSize(tokens: string[]): string | null {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    const next = tokens[index + 1];
+    if (SIZE_HINTS.has(token) && next && /^(?:\d{1,2}|[x]*[ppg]|gg|xg|xxg|xl|xxl)$/.test(next)) {
+      return next;
+    }
+  }
+
+  return null;
+}
+
 export function isCapacityOrQuantityUnit(token: string | undefined): boolean {
   if (!token) {
     return false;
   }
 
   return CAPACITY_UNITS.has(token) || QUANTITY_UNITS.has(token) || Boolean(CAPACITY_UNIT_CANON[token]);
+}
+
+export function isSizeHint(token: string | undefined): boolean {
+  return Boolean(token && SIZE_HINTS.has(token));
 }
 
 export function extractColor(tokens: string[]): string | null {
@@ -517,6 +519,18 @@ export function extractModelTokens(tokens: string[]): string[] {
   const models: string[] = [];
 
   for (const token of tokens) {
+    if (isCapacityOrQuantityUnit(token)) {
+      continue;
+    }
+
+    if (/^(19|20)\d{2}$/.test(token)) {
+      continue;
+    }
+
+    if (/^\d+(?:\.\d+)?(l|ml|kg|g|w|v|mm|cm|gb|tb|mb|mah)$/.test(token)) {
+      continue;
+    }
+
     if (/^(?=.*[a-z])(?=.*\d)[a-z0-9]{3,}$/.test(token) && token.length >= 3) {
       models.push(token);
     }
@@ -525,7 +539,11 @@ export function extractModelTokens(tokens: string[]): string[] {
   for (let index = 0; index < tokens.length - 1; index += 1) {
     const current = tokens[index]!;
     const next = tokens[index + 1]!;
-    if (/^[a-z]{2,}$/.test(current) && /^\d{2,}$/.test(next) && !QUANTITY_UNITS.has(tokens[index + 2] ?? "") && !CAPACITY_UNITS.has(tokens[index + 2] ?? "")) {
+    if (/^(19|20)\d{2}$/.test(next)) {
+      continue;
+    }
+
+    if (/^[a-z]{1,}$/.test(current) && /^\d{2,}$/.test(next) && !QUANTITY_UNITS.has(tokens[index + 2] ?? "") && !CAPACITY_UNITS.has(tokens[index + 2] ?? "") && !isSizeHint(current)) {
       if (!isAttributeWord(current) && !classGroupOf(current) && !isAccessoryHead(current)) {
         models.push(`${current}${next}`);
       }
@@ -546,12 +564,16 @@ export function extractIdentityNumbers(tokens: string[]): string[] {
       continue;
     }
 
+    if (/^(19|20)\d{2}$/.test(token)) {
+      continue;
+    }
+
     if (next && (CAPACITY_UNITS.has(next) || QUANTITY_UNITS.has(next))) {
       continue;
     }
 
     const previous = tokens[index - 1];
-    if (previous && CAPACITY_UNITS.has(previous)) {
+    if (previous && (CAPACITY_UNITS.has(previous) || SIZE_HINTS.has(previous))) {
       continue;
     }
 

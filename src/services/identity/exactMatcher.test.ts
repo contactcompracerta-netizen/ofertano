@@ -1002,5 +1002,29 @@ assert.equal(
   false,
   "Lustre iHome nao pode entrar na consulta de fone.",
 );
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    ihomeQuery,
+    listing("Motor para aspirador iHome", "iHome"),
+  ).compatible,
+  false,
+  "Motor de aspirador iHome nao entra na consulta de fone.",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta(
+    nightstandQuery,
+    listing("O Cara Mais Esperto do Facebook", null),
+  ).compatible,
+  false,
+  "Livro nao entra na consulta de mesa de cabeceira.",
+);
+assert.equal(
+  classificarClasseProduto("Polia Virabrequim Fiat Linea 1.9"),
+  "AUTOMOTIVE_PULLEY_CRANKSHAFT",
+);
+assert.equal(
+  classificarClasseProduto("Polia alternador Fiat Linea 1.9"),
+  "AUTOMOTIVE_PULLEY_ALTERNATOR",
+);
 
 console.log("identity exact matcher: todos os casos globais passaram");

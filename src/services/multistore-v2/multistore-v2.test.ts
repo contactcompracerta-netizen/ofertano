@@ -291,13 +291,24 @@ assert.ok(
   ihomePlan.some((item) => item.includes("ihome") && item.includes("fone")),
   "iHome usa consulta curta com marca + classe",
 );
+assert.ok(
+  ihomePlan.every((item) => item.trim() !== "ihome"),
+  "consulta de fone nao pode reduzir so para a marca",
+);
 
 const nightstandPlan = buildSearchPlan(
   "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas",
 );
 assert.ok(
-  nightstandPlan.some((item) => item.includes("criado mais") && item.includes("moveis")),
-  "Mesa Criado Mais usa consulta curta com marca + moveis",
+  nightstandPlan.some(
+    (item) =>
+      item.includes("mesa de cabeceira") || item.includes("criado mudo"),
+  ),
+  "consulta de mesa de cabeceira preserva o nucleo do produto",
+);
+assert.ok(
+  nightstandPlan.every((item) => item.trim() !== "mais"),
+  "termo fraco isolado nao vira query de marketplace",
 );
 
 const ihomeColorConflict = processRawCandidates(
@@ -375,8 +386,20 @@ assert.equal(
   brandConflictFurniture.relevant.filter(
     (item) => item.normalized.raw.externalId === "shopee-ej",
   ).length,
-  0,
-  "Marca diferente nao entra no produto pesquisado",
+  1,
+  "mesa de cabeceira equivalente de outra marca continua relevante sem marca forte na consulta",
+);
+assert.ok(
+  brandConflictFurniture.products.length >= 1,
+  "consulta de movel sem SKU continua aberta",
+);
+assert.equal(
+  brandConflictFurniture.products.some((product) =>
+    product.offers.some((offer) => offer.externalId === "ml-criado-mais") &&
+    product.offers.some((offer) => offer.externalId === "shopee-ej"),
+  ),
+  false,
+  "marcas distintas nao contaminam o mesmo cluster",
 );
 
 assert.equal(

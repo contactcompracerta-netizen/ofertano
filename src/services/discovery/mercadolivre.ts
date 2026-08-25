@@ -31,6 +31,11 @@ import {
   rastrearResumoAquisicaoMercadoLivre,
   buscarPaginaPublicaDoAnuncio,
 } from "./mercadolivrePublicHydration";
+import {
+  extractMercadoLivreIdentitiesFromUrl,
+  isUserProductId,
+  normalizeListingId,
+} from "./mercadolivreIds";
 
 type DomainDiscoveryResult = {
   domain_id?: string;
@@ -870,6 +875,47 @@ async function descobrirDominio(
   }
 }
 
+function evaluationCompleteness(item: CandidateEvaluation): number {
+  const candidate = item.kept?.candidate;
+  if (!candidate) {
+    return 0;
+  }
+
+  return (
+    Number(Boolean(candidate.title.trim())) * 3 +
+    Number(candidate.price != null && candidate.price > 0) * 3 +
+    Number(Boolean(candidate.sourceUrl.trim())) * 2 +
+    Number(Boolean(candidate.image?.trim()))
+  );
+}
+
+function consolidateEvaluations(
+  items: CandidateEvaluation[],
+): CandidateEvaluation[] {
+  const byId = new Map<string, CandidateEvaluation>();
+  const leftovers: CandidateEvaluation[] = [];
+
+  for (const item of items) {
+    const listingId =
+      normalizeListingId(item.kept?.candidate.externalId || item.externalId) ??
+      "";
+    if (!listingId || isUserProductId(listingId)) {
+      leftovers.push(item);
+      continue;
+    }
+
+    const current = byId.get(listingId);
+    if (!current || evaluationCompleteness(item) > evaluationCompleteness(current)) {
+      byId.set(listingId, {
+        ...item,
+        externalId: listingId,
+      });
+    }
+  }
+
+  return [...byId.values(), ...leftovers];
+}
+
 function recusarCandidato(
   title: string,
   externalId: string,
@@ -1163,10 +1209,15 @@ function converterItemBusca(
 ): CandidateEvaluation {
   const titulo = item.title?.trim() ?? "";
   const permalink = item.permalink?.trim() ?? "";
-  const idFromPermalink = permalink.match(/MLB-?(\d{8,})/i)?.[1];
-  const itemId =
+  const fromPermalink = extractMercadoLivreIdentitiesFromUrl(permalink);
+  const rawId =
     item.id?.trim() ||
-    (idFromPermalink ? `MLB${idFromPermalink}` : "");
+    fromPermalink.listingIds[0] ||
+    "";
+  const listingFromRaw = isUserProductId(rawId)
+    ? fromPermalink.listingIds[0] ?? ""
+    : normalizeListingId(rawId) ?? fromPermalink.listingIds[0] ?? "";
+  const itemId = listingFromRaw;
   const sourceUrl =
     permalink ||
     (itemId ? `https://www.mercadolivre.com.br/item/${itemId}` : "");
@@ -1180,6 +1231,16 @@ function converterItemBusca(
       itemId || "(sem id)",
       "normalize",
       "Item sem titulo e sem id/url.",
+      lexical.score,
+    );
+  }
+
+  if (isUserProductId(rawId) && !itemId) {
+    return recusarCandidato(
+      titulo,
+      rawId,
+      "catalog-only",
+      "Identidade MLBU sem listing MLB compravel.",
       lexical.score,
     );
   }
@@ -1202,13 +1263,20 @@ function converterItemBusca(
     !Number.isFinite(item.price) ||
     item.price <= 0
   ) {
-    return recusarCandidato(
-      titulo,
-      externalId,
-      "price",
-      "Item sem preco compravel.",
-      lexical.score,
-    );
+    const partialUsable =
+      mode === "MULTILOJA" &&
+      Boolean(titulo) &&
+      Boolean(externalId) &&
+      Boolean(sourceUrl);
+    if (!partialUsable) {
+      return recusarCandidato(
+        titulo,
+        externalId,
+        "price",
+        "Item sem preco compravel.",
+        lexical.score,
+      );
+    }
   }
 
   if (item.currency_id && item.currency_id !== "BRL") {
@@ -1238,6 +1306,8 @@ function converterItemBusca(
   const oldPrice =
     typeof item.original_price === "number" &&
     Number.isFinite(item.original_price) &&
+    typeof item.price === "number" &&
+    Number.isFinite(item.price) &&
     item.original_price > item.price
       ? item.original_price
       : null;
@@ -1259,7 +1329,7 @@ function converterItemBusca(
         affiliateLink: null,
         title: titulo,
         image: item.thumbnail?.trim() || null,
-        price: item.price,
+        price: typeof item.price === "number" && item.price > 0 ? item.price : null,
         oldPrice,
         category: item.category_id ?? null,
         brand,
@@ -1340,6 +1410,13 @@ async function carregarCandidato(
       }
     }
 
+    const listingFromPermalink = extractMercadoLivreIdentitiesFromUrl(
+      produto.permalink ?? "",
+    );
+    const listingIdFromCatalog =
+      listingFromPermalink.listingIds.find((id) => !isUserProductId(id)) ??
+      null;
+
     let oferta =
       escolherOferta(
         [
@@ -1374,14 +1451,39 @@ async function carregarCandidato(
             ? error.message
             : error,
         );
+      }
+    }
 
-        return recusarCandidato(
-          titulo,
-          productId,
-          "offers-fetch",
-          "Catalogo sem publicacao compravel no momento.",
-          lexical.score,
-        );
+    if (!oferta && listingIdFromCatalog && mode === "MULTILOJA") {
+      const listingUrl = criarUrlPublicaItem(listingIdFromCatalog);
+      if (listingUrl) {
+        return {
+          title: titulo,
+          externalId: listingIdFromCatalog,
+          stage: "candidate",
+          status: "KEPT",
+          reason: "Listing extraido do catalogo/user-product sem winner da API.",
+          lexicalScore: lexical.score,
+          kept: {
+            relevance: lexical.score,
+            candidate: {
+              marketplace: "MERCADO_LIVRE",
+              marketplaceName: "Mercado Livre",
+              externalId: listingIdFromCatalog,
+              sourceUrl: listingUrl,
+              affiliateLink: null,
+              title: titulo,
+              image: obterImagem(produto),
+              price: produto.buy_box_winner?.price ?? null,
+              oldPrice: null,
+              category: null,
+              brand: obterMarca(produto),
+              seller: null,
+              status: "FOUND",
+              error: null,
+            },
+          },
+        };
       }
     }
 
@@ -1395,8 +1497,11 @@ async function carregarCandidato(
       );
     }
 
+    const itemIdRaw = oferta.item_id?.trim() ?? "";
     const itemId =
-      oferta.item_id?.trim();
+      normalizeListingId(itemIdRaw) ??
+      listingIdFromCatalog ??
+      "";
 
     const sourceUrl =
       obterUrlOfertaIndividual(
@@ -1860,13 +1965,14 @@ export async function buscarMercadoLivreComFontes(
         }
     }
 
+    const consolidated = consolidateEvaluations(evaluations);
     rastrearFiltrosMarketplace({
       marketplace: "MERCADO_LIVRE",
       query,
-      events: evaluations,
+      events: consolidated,
     });
 
-    const kept = evaluations.filter((item) => item.kept);
+    const kept = consolidated.filter((item) => item.kept);
     const candidatos = kept
       .sort((first, second) => {
         const firstRelevance = first.kept?.relevance ?? 0;
@@ -1905,12 +2011,18 @@ export async function buscarMercadoLivreComFontes(
         !blockedSources.includes(source) &&
         !unusableSources.includes(source),
     );
+    const catalogOnly =
+      productIds.length > 0 &&
+      candidatos.length === 0 &&
+      listingCompleted.length > 0;
     const searchOutcome =
       candidatos.length > 0
         ? "SEARCH_COMPLETED"
         : listingSources.length > 0 && listingCompleted.length === 0
           ? "BLOCKED"
-          : "EMPTY_VALID";
+          : catalogOnly
+            ? "UNUSABLE"
+            : "EMPTY_VALID";
 
     rastrearResumoAquisicaoMercadoLivre({
       query,

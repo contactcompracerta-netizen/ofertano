@@ -21,14 +21,14 @@ import type {
   ScoredCandidate,
 } from "./types";
 import { buildQueryIntent } from "./queryIntent";
-import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
 import { scoreQueryRelevance } from "./queryRelevance";
 import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
 import { persistCanonicalProducts } from "./persist";
 import { traceV2 } from "./trace";
 import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
-import { humanizeAnchor } from "./identityAnchors";
+import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
+import { buildSearchPlan } from "./queryPlan";
 import {
   DEFAULT_SEARCH_BUDGET,
   createSearchDeadline,
@@ -54,70 +54,7 @@ export function usarMotorMultistoreV2(): boolean {
   return value !== "legacy";
 }
 
-function formatSearchAttribute(value: string | undefined): string {
-  if (!value) {
-    return "";
-  }
-
-  return value.replace(/(\d+)([a-z]+)/i, "$1 $2");
-}
-
-function classSearchHint(productClass: string, hasBrand: boolean): string {
-  if (productClass === "headphone") {
-    return "fone";
-  }
-
-  if (productClass === "mesa") {
-    return hasBrand ? "moveis" : "mesa de cabeceira";
-  }
-
-  if (productClass === "UNKNOWN" || !productClass) {
-    return "";
-  }
-
-  return productClass;
-}
-
-export function buildSearchPlan(query: string): string[] {
-  const intent = buildQueryIntent(query);
-  const original = query.replace(/\s+/g, " ").trim();
-  const classHint = classSearchHint(intent.productClass, Boolean(intent.brand));
-  const focused = [
-    intent.brand,
-    classHint,
-    formatSearchAttribute(intent.importantAttributes.quantity),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const brandModel = [intent.brand, ...intent.modelTokens]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const productModel = [classHint, ...intent.modelTokens]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const distinctive = intent.distinctiveTokens.slice(0, 6).join(" ").trim();
-  const identityQueries = intent.identityAnchors.flatMap((anchor) => [
-    anchor.value,
-    humanizeAnchor(anchor.value),
-  ]);
-
-  return Array.from(
-    new Set(
-      [
-        original,
-        focused,
-        brandModel,
-        productModel,
-        distinctive,
-        ...identityQueries,
-      ].filter((item) => item.length >= 2),
-    ),
-  );
-}
+export { buildSearchPlan };
 
 function titleHasBrand(title: string, brand: string | null): boolean {
   if (!brand) {

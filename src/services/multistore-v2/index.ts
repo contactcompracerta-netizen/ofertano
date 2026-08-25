@@ -1,4 +1,5 @@
 export { buildQueryIntent } from "./queryIntent";
+export { buildQueryCore } from "./queryCore";
 export { normalizeCandidate } from "./normalizeCandidate";
 export { buildFingerprint } from "./fingerprint";
 export { scoreQueryRelevance } from "./queryRelevance";
