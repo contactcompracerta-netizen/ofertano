@@ -8,7 +8,7 @@
     "build": "npm run check:encoding && prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/services/identity/exactMatcher.test.ts && npx tsx src/services/search/publicSearchMultiloja.test.ts && npx tsx src/services/search/searchCompletionBarrier.test.ts && npx tsx src/services/discovery/mercadolivre.test.ts && npx tsx src/services/discovery/mercadolivreIds.test.ts && npx tsx src/services/discovery/marketplaceAcquisition.test.ts && npx tsx src/services/multistore-v2/multistore-v2.test.ts && npx tsx src/services/multistore-v2/queryRelevance.regression.test.ts && npx tsx src/services/analytics/analytics.test.ts && npx tsx src/lib/favorites/favorites.test.ts && npx tsx src/lib/affiliates/publicPurchase.test.ts",
+    "test": "npx tsx src/services/identity/exactMatcher.test.ts && npx tsx src/services/search/publicSearchMultiloja.test.ts && npx tsx src/services/search/searchCompletionBarrier.test.ts && npx tsx src/services/discovery/mercadolivre.test.ts && npx tsx src/services/discovery/mercadolivreIds.test.ts && npx tsx src/services/discovery/marketplaceAcquisition.test.ts && npx tsx src/services/multistore-v2/multistore-v2.test.ts && npx tsx src/services/multistore-v2/queryRelevance.regression.test.ts && npx tsx src/services/multistore-v2/persist.test.ts && npx tsx src/services/analytics/analytics.test.ts && npx tsx src/lib/favorites/favorites.test.ts && npx tsx src/lib/affiliates/publicPurchase.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

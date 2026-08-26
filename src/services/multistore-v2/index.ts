@@ -13,7 +13,8 @@ export {
   searchMultistoreV2,
   usarMotorMultistoreV2,
 } from "./search";
-export { persistCanonicalProducts } from "./persist";
+export { persistCanonicalProducts, persistSelectedSearchClusters, scheduleSelectedClusterPersist } from "./persist";
+export type { PersistProductFn, PersistCanonicalOptions } from "./persist";
 export { traceV2 } from "./trace";
 export { extractIdentityAnchors, hasStrongIdentity } from "./identityAnchors";
 export {

@@ -30,6 +30,7 @@ export type ProductConceptId =
   | "console"
   | "blender"
   | "nightstand"
+  | "suit"
   | "furniture"
   | "furniture_part"
   | "lapis"
@@ -197,6 +198,13 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
     phrases: [],
     tokens: ["livro", "livros", "ebook"],
     coreMode: "token",
+  },
+  {
+    id: "suit",
+    phrases: ["terno completo", "terno masculino"],
+    tokens: ["terno", "ternos", "suit", "suits"],
+    coreMode: "token",
+    synonyms: [["terno", "ternos", "suit", "suits"]],
   },
   {
     id: "apparel",
@@ -444,6 +452,7 @@ const AUTOMOTIVE_CONCEPTS = new Set<ProductConceptId>([
 
 const CONCEPT_PARENTS: Partial<Record<ProductConceptId, ProductConceptId>> = {
   nightstand: "furniture",
+  suit: "apparel",
   automotive_pulley_crankshaft: "automotive_pulley",
   automotive_pulley_alternator: "automotive_pulley",
   automotive_pulley: "automotive_part",
@@ -560,8 +569,19 @@ export function normalizeConceptText(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function tokenBoundaryMatch(text: string, token: string): boolean {
-  return new RegExp(`(?:^|\\s)${token}(?:\\s|$)`).test(` ${text} `);
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    return false;
+  }
+
+  return new RegExp(`(?:^|\\s)${escapeRegex(normalizedToken)}(?:\\s|$)`).test(
+    ` ${text} `,
+  );
 }
 
 function contentTokens(text: string): string[] {
@@ -576,7 +596,7 @@ function phraseAppears(normalized: string, phrase: string): boolean {
     return false;
   }
 
-  if (normalized.includes(normalizedPhrase)) {
+  if (tokenBoundaryMatch(normalized, normalizedPhrase)) {
     return true;
   }
 
@@ -597,6 +617,35 @@ function phraseAppears(normalized: string, phrase: string): boolean {
   }
 
   return false;
+}
+
+export function lexicalTokenAppears(text: string, token: string): boolean {
+  const normalizedText = normalizeConceptText(text);
+  const normalizedToken = normalizeConceptText(token);
+  if (!normalizedText || !normalizedToken) {
+    return false;
+  }
+
+  return phraseAppears(normalizedText, normalizedToken);
+}
+
+export function conceptLexicalTokens(id: ProductConceptId): string[] {
+  if (id === "UNKNOWN") {
+    return [];
+  }
+
+  const family = familyById(id);
+  if (!family) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      [...family.phrases, ...(family.synonyms ?? []).flat(), ...family.tokens].flatMap(
+        (item) => contentTokens(item),
+      ),
+    ),
+  );
 }
 
 export function conceptIsA(
@@ -689,6 +738,10 @@ function familyScore(family: ConceptFamily, normalized: string): {
   }
 
   if (family.id === "furniture" && /\bcabeceira\b|\bcriado mudo\b/.test(normalized)) {
+    score = 0;
+  }
+
+  if (family.id === "apparel" && /\bterno\b|\bsuits?\b/.test(normalized)) {
     score = 0;
   }
 
@@ -852,6 +905,10 @@ export function canonicalClassToken(id: ProductConceptId): string {
 
   if (id === "nightstand") {
     return "mesa de cabeceira";
+  }
+
+  if (id === "suit") {
+    return "terno";
   }
 
   if (id === "water_filter") {

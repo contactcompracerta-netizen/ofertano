@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { after } from "next/server";
 
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
@@ -89,17 +90,19 @@ export default async function HomePage({
 
   /*
    * Com pesquisa:
-   *
-   * 1. procura primeiro no catálogo;
-   * 2. se não existir, executa Discovery;
-   * 3. publica/agrupar canonicamente;
-   * 4. retorna os produtos encontrados.
+   * busca e clustering no caminho da resposta; persistencia Prisma
+   * so depois, via after(), sem prender o HTML.
    */
   const pesquisaIniciadaEm = Date.now();
   const resultado =
     await searchCatalogOrDiscover(
       busca,
       5,
+      {
+        schedulePersist: (task) => {
+          after(task);
+        },
+      },
     );
   const searchDurationMs = Date.now() - pesquisaIniciadaEm;
 

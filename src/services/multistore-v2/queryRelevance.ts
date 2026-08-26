@@ -14,6 +14,7 @@ import {
   compareProductConcepts,
   isVehicleBrandToken,
   isWeakModifier,
+  lexicalTokenAppears,
 } from "./productConcepts";
 
 function tokenWeight(token: string, intent: QueryIntent): number {
@@ -45,21 +46,30 @@ function tokenWeight(token: string, intent: QueryIntent): number {
 }
 
 function candidateHasToken(token: string, tokens: Set<string>, text: string): boolean {
+  if (!token) {
+    return false;
+  }
+
   if (tokens.has(token)) {
     return true;
   }
 
-  if (token.length <= 3) {
-    return new RegExp(`(?:^|\\s)${token}(?:\\s|$)`).test(` ${text} `);
-  }
-
-  if (text.includes(token)) {
+  if (lexicalTokenAppears(text, token)) {
     return true;
   }
 
-  const compactText = text.replace(/\s+/g, "");
-  const compactToken = token.replace(/\s+/g, "");
-  return compactText.includes(compactToken);
+  /*
+   * Codigos de modelo/identidade podem aparecer compactos
+   * (520bt vs 520 bt). Tokens lexicais alfabetizados nunca
+   * usam substring arbitraria — isso aceitaria terno em interno.
+   */
+  if (!/\d/.test(token)) {
+    return false;
+  }
+
+  const compactText = normalizeMultistoreText(text).replace(/\s+/g, "");
+  const compactToken = normalizeMultistoreText(token).replace(/\s+/g, "");
+  return compactToken.length >= 3 && compactText.includes(compactToken);
 }
 
 function emptyEvidence(
@@ -351,7 +361,7 @@ export function scoreQueryRelevance(
   if (core.compatibilityTokens.length > 0) {
     const hostText = fingerprint.hostItem.value || candidateText;
     for (const token of core.compatibilityTokens) {
-      if (candidateHasToken(token, candidateTokens, hostText) || hostText.includes(token)) {
+      if (candidateHasToken(token, candidateTokens, hostText)) {
         compatibilityMatches.push(token);
       }
     }

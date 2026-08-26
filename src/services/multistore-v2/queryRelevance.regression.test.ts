@@ -9,6 +9,7 @@ import {
   processRawCandidates,
   scoreQueryRelevance,
 } from "./index";
+import { buildQueryCore } from "./queryCore";
 import type { RawCandidate } from "./types";
 
 function raw(
@@ -34,6 +35,111 @@ function raw(
 function relevance(query: string, title: string, extras: Partial<RawCandidate> = {}) {
   return scoreQueryRelevance(buildQueryIntent(query), normalizeCandidate(raw(title, extras)));
 }
+
+const suitQuery = "Terno azul";
+const suitCore = buildQueryCore(suitQuery);
+assert.equal(
+  suitCore.productClass,
+  "suit",
+  "terno precisa de conceito de produto na taxonomia v2, nao de regra da consulta",
+);
+assert.ok(
+  suitCore.productCoreLabels.some((label) => label.includes("terno") || label.includes("suit")),
+  "o nucleo lexical de terno e a frase/token do conceito, nao substring",
+);
+assert.equal(
+  relevance(suitQuery, "Terno azul completo paletó e calça").status,
+  "RELEVANT",
+  "terno completo paleto e calca e o produto pedido",
+);
+assert.equal(
+  relevance(suitQuery, "Terno masculino slim azul marinho").status,
+  "RELEVANT",
+  "terno masculino slim azul marinho e o produto pedido",
+);
+assert.equal(
+  relevance(suitQuery, "Lingerie azul uso interno").status,
+  "REJECTED",
+  "interno nao satisfaz o token terno",
+);
+assert.equal(
+  relevance(suitQuery, "Biquíni azul forro interno").status,
+  "REJECTED",
+  "interno nao satisfaz o token terno",
+);
+assert.equal(
+  relevance(suitQuery, "Jaqueta azul uso externo").status,
+  "REJECTED",
+  "externo nao satisfaz o token terno",
+);
+assert.equal(
+  relevance(suitQuery, "Eterno azul perfume").status,
+  "REJECTED",
+  "eterno nao satisfaz o token terno",
+);
+assert.equal(
+  relevance(suitQuery, "Calça social azul bolso interno").status,
+  "REJECTED",
+  "interno nao satisfaz o token terno",
+);
+assert.equal(
+  relevance(suitQuery, "Lingerie azul uso interno").matchedTerms.includes("terno"),
+  false,
+  "matching lexical nao pode aceitar terno como substring de interno",
+);
+assert.equal(
+  relevance(suitQuery, "Jaqueta azul uso externo").matchedTerms.includes("terno"),
+  false,
+  "matching lexical nao pode aceitar terno como substring de externo",
+);
+assert.equal(
+  relevance(suitQuery, "Eterno azul perfume").matchedTerms.includes("terno"),
+  false,
+  "matching lexical nao pode aceitar terno como substring de eterno",
+);
+
+const bedsideQuery = "mesa de cabeceira";
+const bedsideCore = buildQueryCore(bedsideQuery);
+assert.equal(
+  bedsideCore.productClass,
+  "nightstand",
+  "mesa de cabeceira e um conceito composto, nao mesa + cabeceira independentes",
+);
+assert.ok(
+  bedsideCore.productCoreLabels.some(
+    (label) =>
+      label.includes("mesa de cabeceira") || label.includes("criado mudo"),
+  ),
+);
+assert.equal(
+  bedsideCore.distinctiveTokens.includes("mesa"),
+  false,
+  "mesa isolada nao e sinal suficiente do nucleo composto",
+);
+assert.equal(
+  bedsideCore.distinctiveTokens.includes("cabeceira"),
+  false,
+  "cabeceira isolada nao e sinal suficiente do nucleo composto",
+);
+assert.equal(
+  relevance(bedsideQuery, "Mesa de Cabeceira 3 Gavetas MDF").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance(bedsideQuery, "Criado Mudo 3 Gavetas MDF").status,
+  "RELEVANT",
+  "criado mudo e equivalente comercial de mesa de cabeceira",
+);
+assert.equal(
+  relevance(bedsideQuery, "Mesa de Jantar 6 Lugares").status,
+  "REJECTED",
+  "mesa de jantar nao e mesa de cabeceira",
+);
+assert.equal(
+  relevance(bedsideQuery, "Cabeceira Estofada Queen Azul").status,
+  "REJECTED",
+  "cabeceira de cama nao e mesa de cabeceira",
+);
 
 const nightstandQuery =
   "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas";

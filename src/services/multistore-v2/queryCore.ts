@@ -4,9 +4,11 @@ import {
   candidateCoversConcept,
   classifyProductConcept,
   compareProductConcepts,
+  conceptLexicalTokens,
   isAutomotiveConcept,
   isVehicleBrandToken,
   isWeakModifier,
+  normalizeConceptText,
   type ConceptCompatibility,
   type ProductConceptId,
 } from "./productConcepts";
@@ -150,6 +152,14 @@ export function buildQueryCore(query: string): QueryCore {
     classified.matchedPhrase,
     canonicalClassToken(classified.id),
   ].filter((item): item is string => Boolean(item && item.trim()));
+  const absorbedCoreTokens = new Set([
+    ...productCoreLabels.flatMap((label) =>
+      normalizeConceptText(label)
+        .split(" ")
+        .filter((token) => token.length > 0 && !isWeakModifier(token)),
+    ),
+    ...conceptLexicalTokens(classified.id),
+  ]);
 
   const distinctiveTokens = Array.from(
     new Set(
@@ -161,6 +171,10 @@ export function buildQueryCore(query: string): QueryCore {
           }
 
           if (/^\d+$/.test(token) || /^(19|20)\d{2}$/.test(token)) {
+            return false;
+          }
+
+          if (absorbedCoreTokens.has(token)) {
             return false;
           }
 

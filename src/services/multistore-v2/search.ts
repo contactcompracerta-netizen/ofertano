@@ -24,7 +24,7 @@ import { buildQueryIntent } from "./queryIntent";
 import { scoreQueryRelevance } from "./queryRelevance";
 import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
-import { persistCanonicalProducts } from "./persist";
+import { persistCanonicalProducts, type PersistProductFn } from "./persist";
 import { traceV2 } from "./trace";
 import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
@@ -561,6 +561,11 @@ async function applyAffiliateLayer(
   }
 }
 
+/*
+ * persist: true aguarda saveProduct no caminho da busca (scripts/batch).
+ * persist: false (ou omitido) nao toca Prisma; a Home agenda persistencia
+ * pos-resposta via after() + persistSelectedSearchClusters.
+ */
 export async function searchMultistoreV2(
   query: string,
   options: {
@@ -570,10 +575,12 @@ export async function searchMultistoreV2(
     adapters?: DiscoveryAdapter[];
     budget?: SearchBudget;
     affiliateResolver?: AffiliateResolver;
+    persistProduct?: PersistProductFn;
   } = {},
 ): Promise<MultistoreV2Result> {
   const search = query.replace(/\s+/g, " ").trim();
   const budget = options.budget ?? DEFAULT_SEARCH_BUDGET;
+  const limit = options.limit ?? 12;
   const deadline = createSearchDeadline(budget);
   traceV2("query", {
     query: search,
@@ -584,7 +591,7 @@ export async function searchMultistoreV2(
   try {
     const acquisitions = await acquireMarketplaces(
       search,
-      options.limit ?? 12,
+      limit,
       options.adapters,
       budget,
       deadline,
@@ -632,7 +639,7 @@ export async function searchMultistoreV2(
         ? await huntMissingStoreOffers(
             processed.clusters,
             knownKeys,
-            options.limit ?? 12,
+            limit,
             deadline,
           )
         : processed.clusters;
@@ -640,8 +647,15 @@ export async function searchMultistoreV2(
       .map(canonicalizeCluster)
       .filter((item): item is CanonicalProduct => item !== null)
       .sort((first, second) => first.price - second.price);
+    const selectedProducts = products.slice(0, limit);
+    const selectedClusterIds = new Set(
+      selectedProducts.map((product) => product.clusterId),
+    );
+    const selectedClusters = huntedClusters.filter((cluster) =>
+      selectedClusterIds.has(cluster.clusterId),
+    );
 
-    for (const cluster of huntedClusters) {
+    for (const cluster of selectedClusters) {
       const canonical = canonicalizeCluster(cluster);
       traceV2("cluster", {
         clusterId: cluster.clusterId,
@@ -652,32 +666,54 @@ export async function searchMultistoreV2(
       });
     }
 
-    const persistEnabled =
-      options.persist !== false &&
-      deadline.remainingMs() > budget.persistReserveMs;
+    const persistEnabled = options.persist === true && deadline.remainingMs() > 0;
     let persistedProductIds: string[] = [];
+    const persistStartedAt = Date.now();
     if (persistEnabled) {
       try {
-        persistedProductIds = await persistCanonicalProducts(search, products);
+        persistedProductIds = await persistCanonicalProducts(
+          search,
+          selectedProducts,
+          {
+            limit,
+            deadline,
+            persistProduct: options.persistProduct,
+          },
+        );
       } catch (error) {
         console.error("[MULTISTORE-V2] persistencia falhou", error);
-        persistedProductIds = products.map(() => "");
+        persistedProductIds = selectedProducts.map(() => "");
       }
-    } else if (options.persist !== false) {
-      persistedProductIds = products.map(() => "");
-      traceV2("persist-skipped", {
-        query: search,
-        remainingMs: deadline.remainingMs(),
-      });
+    } else {
+      persistedProductIds = selectedProducts.map(() => "");
+      traceV2(
+        options.persist === true ? "persist-skipped" : "persist-deferred",
+        {
+          query: search,
+          remainingMs: deadline.remainingMs(),
+          selected: selectedProducts.length,
+        },
+      );
     }
 
-    const views = toViews(products, persistedProductIds);
-    const multiStoreClusters = products.filter(
+    const persistElapsedMs = Date.now() - persistStartedAt;
+    const persistedCount = persistedProductIds.filter(Boolean).length;
+    const views = toViews(selectedProducts, persistedProductIds);
+    const multiStoreClusters = selectedProducts.filter(
       (item) => item.marketplaces.length >= 2,
     ).length;
-    const singleStoreClusters = products.filter(
+    const singleStoreClusters = selectedProducts.filter(
       (item) => item.marketplaces.length === 1,
     ).length;
+
+    traceV2("persist", {
+      query: search,
+      selected: selectedProducts.length,
+      attempted: persistEnabled ? selectedProducts.length : 0,
+      persisted: persistedCount,
+      elapsedMs: persistElapsedMs,
+      remainingMs: deadline.remainingMs(),
+    });
 
     traceV2("result", {
       query: search,
@@ -688,9 +724,11 @@ export async function searchMultistoreV2(
       marketplacesSucceeded,
       rawCandidates: rawCandidates.length,
       relevantCandidates: processed.relevant.length,
-      clusters: huntedClusters.length,
+      clusters: selectedClusters.length,
       singleStoreClusters,
       multiStoreClusters,
+      persistElapsedMs,
+      persisted: persistedCount,
     });
 
     return {
@@ -699,8 +737,8 @@ export async function searchMultistoreV2(
       acquisitions,
       rawCandidates: rawCandidates.length,
       relevantCandidates: processed.relevant,
-      clusters: huntedClusters,
-      products,
+      clusters: selectedClusters,
+      products: selectedProducts,
       views,
       persistedProductIds,
       marketplacesAttempted,

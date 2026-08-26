@@ -1,8 +1,31 @@
 import type { ProductImport } from "@/services/importers/core/types";
-import { saveProduct } from "@/services/database/saveProduct";
+import {
+  saveProduct,
+  type SaveProductOptions,
+} from "@/services/database/saveProduct";
 
 import type { CanonicalOffer, CanonicalProduct, MarketplaceCode } from "./types";
 import { marketplaceLabel } from "./canonicalize";
+import type { SearchDeadline } from "./timeBudget";
+
+export type PersistProductFn = (
+  product: ProductImport,
+  affiliateLink?: string | null,
+  options?: SaveProductOptions,
+) => Promise<{ id: string }>;
+
+export type PersistDeadline = Pick<
+  SearchDeadline,
+  "expired" | "remainingMs"
+> & {
+  budget?: Pick<SearchDeadline["budget"], "hangGraceMs">;
+};
+
+export type PersistCanonicalOptions = {
+  limit?: number;
+  deadline?: PersistDeadline;
+  persistProduct?: PersistProductFn;
+};
 
 function toMarketplaceName(code: MarketplaceCode): ProductImport["marketplace"] {
   return marketplaceLabel(code) as ProductImport["marketplace"];
@@ -41,13 +64,44 @@ function toProductImport(
   };
 }
 
+function canStartPersistWrite(deadline?: PersistDeadline): boolean {
+  if (!deadline) {
+    return true;
+  }
+
+  if (deadline.expired()) {
+    return false;
+  }
+
+  const floor = deadline.budget?.hangGraceMs ?? 0;
+  return deadline.remainingMs() > floor;
+}
+
+/*
+ * saveProduct abre uma transacao Prisma longa, sem AbortSignal.
+ * Nao usamos Promise.race(timeout): o write continuaria em background
+ * e geraria efeito colateral orfao. A estrategia e nao iniciar novas
+ * gravacoes quando o budget acabou, e esperar as que ja comecaram.
+ */
 export async function persistCanonicalProducts(
   query: string,
   products: CanonicalProduct[],
+  options: PersistCanonicalOptions = {},
 ): Promise<string[]> {
+  const persistProduct = options.persistProduct ?? saveProduct;
+  const limit =
+    options.limit === undefined
+      ? products.length
+      : Math.max(0, Math.min(options.limit, products.length));
+  const selected = products.slice(0, limit);
   const ids: string[] = [];
 
-  for (const product of products) {
+  for (const product of selected) {
+    if (!canStartPersistWrite(options.deadline)) {
+      ids.push("");
+      continue;
+    }
+
     const imports = product.offers
       .map((offer) => toProductImport(offer, product.image))
       .filter((item): item is ProductImport => item !== null);
@@ -59,7 +113,12 @@ export async function persistCanonicalProducts(
 
     try {
       const [first, ...rest] = imports;
-      const saved = await saveProduct(first!, first!.affiliateLink, {
+      if (!canStartPersistWrite(options.deadline)) {
+        ids.push("");
+        continue;
+      }
+
+      const saved = await persistProduct(first!, first!.affiliateLink, {
         discoverySource: "ON_DEMAND_SEARCH",
         autoCreated: true,
         sourceQuery: query,
@@ -68,7 +127,11 @@ export async function persistCanonicalProducts(
       ids.push(saved.id);
 
       for (const offer of rest) {
-        await saveProduct(offer, offer.affiliateLink, {
+        if (!canStartPersistWrite(options.deadline)) {
+          break;
+        }
+
+        await persistProduct(offer, offer.affiliateLink, {
           targetProductId: saved.id,
           verifiedExactMatch: true,
           discoverySource: "ON_DEMAND_SEARCH",
@@ -83,4 +146,51 @@ export async function persistCanonicalProducts(
   }
 
   return ids;
+}
+
+export async function persistSelectedSearchClusters(
+  query: string,
+  products: CanonicalProduct[],
+  options: PersistCanonicalOptions = {},
+): Promise<string[]> {
+  const limit =
+    options.limit === undefined
+      ? products.length
+      : Math.max(0, Math.min(options.limit, products.length));
+  const selected = products.slice(0, limit);
+
+  try {
+    return await persistCanonicalProducts(query, selected, {
+      ...options,
+      limit: selected.length,
+    });
+  } catch (error) {
+    console.error("[MULTISTORE-V2] persistencia pos-resposta falhou", error);
+    return selected.map(() => "");
+  }
+}
+
+export function scheduleSelectedClusterPersist(
+  schedule: (task: () => Promise<void>) => void,
+  query: string,
+  products: CanonicalProduct[],
+  options: PersistCanonicalOptions = {},
+): number {
+  const limit =
+    options.limit === undefined
+      ? products.length
+      : Math.max(0, Math.min(options.limit, products.length));
+  const selected = products.slice(0, limit);
+  if (selected.length === 0) {
+    return 0;
+  }
+
+  schedule(async () => {
+    await persistSelectedSearchClusters(query, selected, {
+      ...options,
+      limit: selected.length,
+    });
+  });
+
+  return selected.length;
 }

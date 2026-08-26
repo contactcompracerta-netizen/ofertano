@@ -9,7 +9,7 @@ import {
 } from "@/services/identity";
 import { persistPublicSearchCluster } from "@/services/search/persistPublicSearchCluster";
 import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
-import type { DiscoveryCandidate } from "@/services/discovery/core/types";
+import type { DiscoveryAdapter, DiscoveryCandidate } from "@/services/discovery/core/types";
 import type { ProductImport } from "@/services/importers/core/types";
 import { traceMultiloja } from "@/services/multiloja/trace";
 import {
@@ -18,6 +18,8 @@ import {
   buildQueryIntent,
   scoreQueryRelevance,
   normalizeCandidate,
+  scheduleSelectedClusterPersist,
+  type PersistProductFn,
 } from "@/services/multistore-v2";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
 
@@ -382,9 +384,16 @@ async function importExactOffers(
   });
 }
 
+export type PublicSearchOptions = {
+  schedulePersist?: (task: () => Promise<void>) => void;
+  persistProduct?: PersistProductFn;
+  adapters?: DiscoveryAdapter[];
+};
+
 export async function searchCatalogOrDiscover(
   query: string,
   discoveryLimit = 5,
+  options: PublicSearchOptions = {},
 ): Promise<SearchCatalogOrDiscoverResult> {
   const search = normalizeQuery(query);
 
@@ -400,10 +409,24 @@ export async function searchCatalogOrDiscover(
 
   if (usarMotorMultistoreV2()) {
     try {
+      const limit = Math.max(discoveryLimit, 12);
       const v2 = await searchMultistoreV2(search, {
-        persist: true,
-        limit: Math.max(discoveryLimit, 12),
+        persist: false,
+        limit,
+        adapters: options.adapters,
       });
+
+      if (v2.products.length > 0 && options.schedulePersist) {
+        scheduleSelectedClusterPersist(
+          options.schedulePersist,
+          search,
+          v2.products,
+          {
+            limit,
+            persistProduct: options.persistProduct,
+          },
+        );
+      }
 
       if (v2.views.length > 0) {
         return {
