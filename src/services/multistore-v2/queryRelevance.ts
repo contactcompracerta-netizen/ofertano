@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { buildFingerprint } from "./fingerprint";
 import { detectHostSplit, normalizeMultistoreText } from "./normalizeCandidate";
-import { candidateExpressesAnchor } from "./identityAnchors";
+import { alphanumericCodeOccurs, candidateSatisfiesIdentityAnchor } from "./identityAnchors";
 import { buildQueryCore, productCoreCoverage, roleCompatibility } from "./queryCore";
 import {
   classifyProductConcept,
@@ -59,17 +59,16 @@ function candidateHasToken(token: string, tokens: Set<string>, text: string): bo
   }
 
   /*
-   * Codigos de modelo/identidade podem aparecer compactos
-   * (520bt vs 520 bt). Tokens lexicais alfabetizados nunca
-   * usam substring arbitraria — isso aceitaria terno em interno.
+   * Codigos de modelo/identidade podem aparecer com separador de
+   * apresentacao (520bt vs 520 bt). Tokens lexicais alfabetizados
+   * nunca usam substring — isso aceitaria terno em interno.
+   * Compacto colado com includes aceitaria 520BT2 e A550.
    */
   if (!/\d/.test(token)) {
     return false;
   }
 
-  const compactText = normalizeMultistoreText(text).replace(/\s+/g, "");
-  const compactToken = normalizeMultistoreText(token).replace(/\s+/g, "");
-  return compactToken.length >= 3 && compactText.includes(compactToken);
+  return alphanumericCodeOccurs(text, token);
 }
 
 function emptyEvidence(
@@ -100,7 +99,7 @@ export function scoreQueryRelevance(
 ): ScoredCandidate {
   const fingerprint = buildFingerprint(candidate);
   const candidateTokens = new Set(candidate.tokens);
-  const candidateText = candidate.normalizedText;
+  const candidateText = candidate.rawText;
   const core = buildQueryCore(intent.rawQuery);
   const soldText =
     detectHostSplit(candidate.normalizedText).sold || candidate.rawText;
@@ -219,7 +218,10 @@ export function scoreQueryRelevance(
     candidateModels.length === 0 ||
     intent.modelTokens.some((token) =>
       candidateModels.some(
-        (model) => model === token || model.includes(token) || token.includes(model),
+        (model) =>
+          model === token ||
+          alphanumericCodeOccurs(model, token) ||
+          alphanumericCodeOccurs(token, model),
       ),
     ) ||
     (
@@ -346,7 +348,12 @@ export function scoreQueryRelevance(
       .filter((anchor) => anchor.required)
       .filter(
         (anchor) =>
-          !candidateExpressesAnchor(anchor, candidateText, fingerprint),
+          !candidateSatisfiesIdentityAnchor(
+            anchor,
+            intent.identityAnchors,
+            candidateText,
+            fingerprint,
+          ),
       );
     if (missingAnchors.length > 0) {
       strongIdentity = "CONFLICT";

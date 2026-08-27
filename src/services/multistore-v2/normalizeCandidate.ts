@@ -75,6 +75,22 @@ const ACCESSORY_HEADS = new Set([
   "saco",
   "sacos",
   "refill",
+  "puxador",
+  "puxadores",
+  "ferragem",
+  "dobradica",
+  "dobradicas",
+  "broche",
+  "colar",
+  "brinco",
+  "brincos",
+  "pingente",
+  "joia",
+  "joias",
+  "poster",
+  "adesivo",
+  "adesivos",
+  "quadro",
 ]);
 
 const REPLACEMENT_HEADS = new Set([
@@ -237,7 +253,7 @@ const CAPACITY_UNIT_CANON: Record<string, string> = {
 const HOST_RELATION_PATTERN =
   /\b(?:compative(?:l|is)\s+com|compatible(?:s)?\s+with|fits|reposicao\s+para|substituicao\s+para|de\s+substituicao\s+para)\b/;
 
-const GENERIC_HOST_PATTERN = /\b(?:para|for)\b/;
+const GENERIC_HOST_PATTERN = /\b(?:para|for|p)\b/;
 
 export function collapseThousandsSeparators(value: string): string {
   return value.replace(/\b(\d{1,3}(?:\.\d{3})+)\b/g, (match) =>
@@ -355,6 +371,14 @@ export function classesAreIncompatible(
   return conceptClassesAreIncompatible(first, second);
 }
 
+const ACCESSORY_LIKE_CLASSES = new Set([
+  "case_accessory",
+  "furniture_part",
+  "vacuum_part",
+  "consumable",
+  "jewelry",
+]);
+
 export function detectHostSplit(normalizedTitle: string): {
   sold: string;
   host: string | null;
@@ -391,6 +415,7 @@ export function detectHostSplit(normalizedTitle: string): {
 
     if (
       soldIsAccessory ||
+      ACCESSORY_LIKE_CLASSES.has(soldClass) ||
       (hostClass !== "UNKNOWN" && soldClass !== hostClass)
     ) {
       return {
@@ -401,6 +426,11 @@ export function detectHostSplit(normalizedTitle: string): {
     }
   }
 
+  const implicit = detectImplicitHostSplit(normalizedTitle);
+  if (implicit) {
+    return implicit;
+  }
+
   return {
     sold: normalizedTitle,
     host: null,
@@ -408,26 +438,78 @@ export function detectHostSplit(normalizedTitle: string): {
   };
 }
 
+function detectImplicitHostSplit(normalizedTitle: string): {
+  sold: string;
+  host: string | null;
+  relation: string | null;
+} | null {
+  const words = wordsOf(normalizedTitle);
+  let headIndex = -1;
+
+  for (let index = 0; index < words.length; index += 1) {
+    const token = words[index]!;
+    if (isReplacementHead(token) || isAccessoryHead(token)) {
+      headIndex = index;
+      break;
+    }
+  }
+
+  if (headIndex < 0) {
+    return null;
+  }
+
+  const prefix = words.slice(0, headIndex).join(" ");
+  if (prefix) {
+    const prefixClass = classifyProductClass(prefix);
+    if (prefixClass !== "UNKNOWN" && !ACCESSORY_LIKE_CLASSES.has(prefixClass)) {
+      return null;
+    }
+  }
+
+  const sold = words.slice(0, headIndex + 1).join(" ").trim();
+  const host = words.slice(headIndex + 1).join(" ").trim();
+  if (!sold || !host) {
+    return null;
+  }
+
+  const hostClass = classifyProductClass(host);
+  const soldClass = classifyProductClass(sold);
+  if (hostClass === "UNKNOWN" || soldClass === hostClass) {
+    return null;
+  }
+
+  return {
+    sold,
+    host,
+    relation: "host-context",
+  };
+}
+
 export function inferRole(text: string): ProductRole {
   const normalized = normalizeMultistoreText(text);
   const split = detectHostSplit(normalized);
   const soldTokens = tokenize(split.sold);
-
-  if (soldTokens.some(isReplacementHead)) {
-    return "REPLACEMENT_PART";
-  }
-
-  if (soldTokens.some(isAccessoryHead)) {
-    return "ACCESSORY";
-  }
-
   const soldClass = classifyProductClass(split.sold);
-  if (soldClass === "case_accessory" || soldClass === "furniture_part") {
-    return "ACCESSORY";
+
+  if (ACCESSORY_LIKE_CLASSES.has(soldClass)) {
+    return soldClass === "consumable" || soldClass === "vacuum_part"
+      ? "REPLACEMENT_PART"
+      : "ACCESSORY";
   }
 
-  if (soldClass === "consumable" || soldClass === "vacuum_part") {
-    return "REPLACEMENT_PART";
+  for (const token of soldTokens) {
+    if (isReplacementHead(token)) {
+      return "REPLACEMENT_PART";
+    }
+
+    if (isAccessoryHead(token)) {
+      return "ACCESSORY";
+    }
+
+    const tokenClass = classifyProductClass(token);
+    if (tokenClass !== "UNKNOWN" && !ACCESSORY_LIKE_CLASSES.has(tokenClass)) {
+      break;
+    }
   }
 
   if (soldClass === "UNKNOWN" && split.host) {

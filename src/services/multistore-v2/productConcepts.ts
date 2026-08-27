@@ -31,6 +31,8 @@ export type ProductConceptId =
   | "blender"
   | "nightstand"
   | "suit"
+  | "swimwear"
+  | "jewelry"
   | "furniture"
   | "furniture_part"
   | "lapis"
@@ -201,10 +203,52 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
   },
   {
     id: "suit",
-    phrases: ["terno completo", "terno masculino"],
+    phrases: [
+      "terno completo",
+      "terno masculino",
+      "terno social",
+      "conjunto social",
+      "paleto e calca",
+      "paleto calca",
+    ],
     tokens: ["terno", "ternos", "suit", "suits"],
     coreMode: "token",
-    synonyms: [["terno", "ternos", "suit", "suits"]],
+    synonyms: [
+      ["terno", "ternos", "suit", "suits"],
+      ["conjunto social", "paleto e calca", "paleto calca"],
+    ],
+  },
+  {
+    id: "swimwear",
+    phrases: [
+      "terno de biquini",
+      "terno de banho",
+      "roupa de banho",
+    ],
+    tokens: [
+      "biquini",
+      "bikini",
+      "bandeau",
+      "maio",
+      "sunga",
+      "croche",
+    ],
+    coreMode: "token",
+  },
+  {
+    id: "jewelry",
+    phrases: [],
+    tokens: [
+      "broche",
+      "colar",
+      "brinco",
+      "brincos",
+      "anel",
+      "joia",
+      "joias",
+      "pingente",
+    ],
+    coreMode: "token",
   },
   {
     id: "apparel",
@@ -312,8 +356,8 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
       "pe de movel",
       "puxador para movel",
     ],
-    tokens: [],
-    coreMode: "phrase",
+    tokens: ["puxador", "puxadores", "ferragem", "dobradica", "dobradicas"],
+    coreMode: "token",
   },
   {
     id: "furniture",
@@ -453,6 +497,7 @@ const AUTOMOTIVE_CONCEPTS = new Set<ProductConceptId>([
 const CONCEPT_PARENTS: Partial<Record<ProductConceptId, ProductConceptId>> = {
   nightstand: "furniture",
   suit: "apparel",
+  swimwear: "apparel",
   automotive_pulley_crankshaft: "automotive_pulley",
   automotive_pulley_alternator: "automotive_pulley",
   automotive_pulley: "automotive_part",
@@ -742,7 +787,39 @@ function familyScore(family: ConceptFamily, normalized: string): {
   }
 
   if (family.id === "apparel" && /\bterno\b|\bsuits?\b/.test(normalized)) {
-    score = 0;
+    const swimwear = familyById("swimwear");
+    const jewelry = familyById("jewelry");
+    if (
+      (!swimwear || !familyHasHit(swimwear, normalized)) &&
+      (!jewelry || !familyHasHit(jewelry, normalized))
+    ) {
+      score = 0;
+    }
+  }
+
+  if (family.id === "suit") {
+    const swimwear = familyById("swimwear");
+    const jewelry = familyById("jewelry");
+    if (swimwear && familyHasHit(swimwear, normalized)) {
+      score = 0;
+    } else if (jewelry && familyHasHit(jewelry, normalized)) {
+      const jewelryIndex = firstHitTokenIndex(jewelry, normalized);
+      const suitIndex = firstHitTokenIndex(family, normalized);
+      if (jewelryIndex < suitIndex) {
+        score = 0;
+      }
+    }
+  }
+
+  if (family.id === "nightstand") {
+    const part = familyById("furniture_part");
+    if (part && familyHasHit(part, normalized)) {
+      const partIndex = firstHitTokenIndex(part, normalized);
+      const standIndex = firstHitTokenIndex(family, normalized);
+      if (partIndex < standIndex) {
+        score = 0;
+      }
+    }
   }
 
   return { score, index };
@@ -803,6 +880,42 @@ function familyById(id: ProductConceptId): ConceptFamily | undefined {
   return CONCEPT_FAMILIES.find((family) => family.id === id);
 }
 
+function familyHasHit(family: ConceptFamily, normalized: string): boolean {
+  return (
+    family.phrases.some((phrase) => phraseAppears(normalized, phrase)) ||
+    family.tokens.some((token) => tokenBoundaryMatch(normalized, token))
+  );
+}
+
+function firstHitTokenIndex(family: ConceptFamily, normalized: string): number {
+  const textTokens = contentTokens(normalized);
+  let best = Number.POSITIVE_INFINITY;
+
+  for (const phrase of family.phrases) {
+    const phraseTokens = contentTokens(phrase);
+    if (phraseTokens.length === 0 || phraseTokens.length > textTokens.length) {
+      continue;
+    }
+
+    for (let index = 0; index <= textTokens.length - phraseTokens.length; index += 1) {
+      if (phraseTokens.every((token, offset) => textTokens[index + offset] === token)) {
+        best = Math.min(best, index);
+        break;
+      }
+    }
+  }
+
+  for (const token of family.tokens) {
+    const normalizedToken = normalizeConceptText(token);
+    const index = textTokens.indexOf(normalizedToken);
+    if (index >= 0) {
+      best = Math.min(best, index);
+    }
+  }
+
+  return best;
+}
+
 export function conceptSynonymPhrases(id: ProductConceptId): string[] {
   const family = familyById(id);
   if (!family) {
@@ -829,6 +942,15 @@ export function candidateCoversConcept(
   const classified = classifyProductConcept(candidateText);
   if (classified.id === conceptId || conceptIsA(classified.id, conceptId)) {
     return true;
+  }
+
+  /*
+   * Menção textual do conceito pedido nao cobre o nucleo quando o item
+   * vendido ja foi classificado como outra coisa — isso e HOST/homonimo,
+   * nao o produto pedido.
+   */
+  if (classified.id !== "UNKNOWN") {
+    return false;
   }
 
   const family = familyById(conceptId);

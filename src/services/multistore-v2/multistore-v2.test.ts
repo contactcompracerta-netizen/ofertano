@@ -528,6 +528,114 @@ assert.ok(
   ),
 );
 
+const isolatedJblIntent = buildQueryIntent("520BT");
+assert.equal(isolatedJblIntent.hasStrongIdentity, true);
+assert.ok(isolatedJblIntent.identityAnchors.some((anchor) => anchor.value === "520bt"));
+assert.equal(
+  scoreQueryRelevance(
+    isolatedJblIntent,
+    normalizeCandidate(raw("JBL Tune 520BT", { brand: "JBL", externalId: "520bt-spaced-ok" })),
+  ).status,
+  "RELEVANT",
+  "consulta isolada 520BT aceita o codigo com fronteira real",
+);
+assert.equal(
+  scoreQueryRelevance(
+    isolatedJblIntent,
+    normalizeCandidate(raw("JBL Tune520BT", { brand: "JBL", externalId: "tune520bt-no" })),
+  ).status,
+  "REJECTED",
+  "consulta isolada 520BT nao aceita Tune520BT sem a linha na query",
+);
+assert.equal(
+  scoreQueryRelevance(
+    isolatedJblIntent,
+    normalizeCandidate(raw("JBL Tune X520BT", { brand: "JBL", externalId: "x520bt-no" })),
+  ).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita X520BT",
+);
+assert.equal(
+  scoreQueryRelevance(
+    isolatedJblIntent,
+    normalizeCandidate(raw("JBL AB520BT", { brand: "JBL", externalId: "ab520bt-no" })),
+  ).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita AB520BT",
+);
+assert.equal(
+  scoreQueryRelevance(
+    jblIntent,
+    normalizeCandidate(raw("JBL Tune520BT", { brand: "JBL", externalId: "tune520bt-with-line" })),
+  ).status,
+  "RELEVANT",
+  "consulta com linha Tune aceita Tune520BT",
+);
+assert.equal(
+  scoreQueryRelevance(
+    jblIntent,
+    normalizeCandidate(raw("JBL AB520BT", { brand: "JBL", externalId: "ab520bt-with-line" })),
+  ).status,
+  "REJECTED",
+  "consulta com linha Tune rejeita AB520BT",
+);
+
+const isolatedGalaxyIntent = buildQueryIntent("A55");
+assert.equal(isolatedGalaxyIntent.hasStrongIdentity, true);
+assert.ok(isolatedGalaxyIntent.identityAnchors.some((anchor) => anchor.value === "a55"));
+assert.equal(
+  scoreQueryRelevance(
+    isolatedGalaxyIntent,
+    normalizeCandidate(
+      raw("Samsung Galaxy A55", { brand: "Samsung", externalId: "a55-isolated-ok" }),
+    ),
+  ).status,
+  "RELEVANT",
+  "consulta isolada A55 aceita Galaxy A55",
+);
+assert.equal(
+  scoreQueryRelevance(
+    isolatedGalaxyIntent,
+    normalizeCandidate(
+      raw("Samsung GalaxyA55", { brand: "Samsung", externalId: "galaxya55-isolated-no" }),
+    ),
+  ).status,
+  "REJECTED",
+  "consulta isolada A55 nao aceita GalaxyA55 sem a linha na query",
+);
+assert.equal(
+  scoreQueryRelevance(
+    isolatedGalaxyIntent,
+    normalizeCandidate(
+      raw("Samsung Galaxy XA55", { brand: "Samsung", externalId: "xa55-no" }),
+    ),
+  ).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita XA55",
+);
+
+const galaxyLineIntent = buildQueryIntent("Samsung Galaxy A55");
+assert.equal(
+  scoreQueryRelevance(
+    galaxyLineIntent,
+    normalizeCandidate(
+      raw("Samsung GalaxyA55", { brand: "Samsung", externalId: "galaxya55-with-line" }),
+    ),
+  ).status,
+  "RELEVANT",
+  "consulta com linha Galaxy aceita GalaxyA55",
+);
+assert.equal(
+  scoreQueryRelevance(
+    galaxyLineIntent,
+    normalizeCandidate(
+      raw("Samsung ABA55", { brand: "Samsung", externalId: "aba55-with-line" }),
+    ),
+  ).status,
+  "REJECTED",
+  "consulta com linha Galaxy rejeita ABA55",
+);
+
 const panelaIntent = buildQueryIntent("panela de pressao 4,5L");
 assert.equal(panelaIntent.hasStrongIdentity, false, "4,5L nao e modelo/SKU");
 assert.equal(panelaIntent.importantAttributes.capacity, "4.5l");

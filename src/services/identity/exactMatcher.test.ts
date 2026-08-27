@@ -802,6 +802,27 @@ assert.equal(samsungBrand.queryBrand, "samsung");
 assert.equal(samsungBrand.brandCompatibility, "MATCH");
 assert.equal(samsungBrand.compatible, true);
 
+assert.equal(
+  avaliarCompatibilidadeComConsulta("520BT", listing("JBL Tune 520BT", "JBL")).status,
+  "ACCEPTED",
+  "consulta isolada 520BT aceita o modelo JBL Tune 520BT",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta("520BT", listing("JBL Tune X520BT", "JBL")).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita X520BT",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta("A55", listing("Samsung Galaxy A55", "Samsung")).status,
+  "ACCEPTED",
+  "consulta isolada A55 aceita Galaxy A55",
+);
+assert.equal(
+  avaliarCompatibilidadeComConsulta("A55", listing("Samsung Galaxy XA55", "Samsung")).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita XA55",
+);
+
 const brandMismatch = avaliarCompatibilidadeComConsulta(
   "Headphone Sony Wireless",
   listing("Headphone JBL Wireless", "JBL"),

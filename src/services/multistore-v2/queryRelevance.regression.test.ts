@@ -58,6 +58,68 @@ assert.equal(
   "terno masculino slim azul marinho e o produto pedido",
 );
 assert.equal(
+  relevance(suitQuery, "Conjunto social paletó e calça azul").status,
+  "RELEVANT",
+  "conjunto social paleto e calca e equivalente comercial de terno",
+);
+assert.equal(
+  relevance(suitQuery, "Paletó e calça social azul").status,
+  "RELEVANT",
+  "paleto e calca social e equivalente comercial de terno",
+);
+assert.equal(
+  relevance(suitQuery, "Terno Azul com Broche").status,
+  "RELEVANT",
+  "terno com broche continua o terno vendido; joia posterior nao vira o sold item",
+);
+assert.equal(
+  relevance(suitQuery, "Terno Azul com Broche").fingerprint.productClass.value,
+  "suit",
+);
+assert.equal(
+  relevance(suitQuery, "Terno Azul com Broche").fingerprint.role.value,
+  "MAIN",
+);
+assert.equal(
+  relevance(suitQuery, "Terno Social Azul com Lenço").status,
+  "RELEVANT",
+  "terno com lenco continua o terno vendido",
+);
+assert.equal(
+  relevance(suitQuery, "Terno de biquíni azul").status,
+  "REJECTED",
+  "terno de biquini nao e terno social",
+);
+assert.equal(
+  relevance(suitQuery, "Bandeau biquíni terno azul").status,
+  "REJECTED",
+  "roupa de banho com a palavra terno nao e terno social",
+);
+assert.equal(
+  relevance(suitQuery, "9 pçs azul alça macia crochê terno kit").status,
+  "REJECTED",
+  "kit de croche/banho com a palavra terno nao e terno social",
+);
+assert.equal(
+  relevance(suitQuery, "Broche de Escorpião Azul").status,
+  "REJECTED",
+  "broche/joia nao e terno social",
+);
+assert.equal(
+  relevance(suitQuery, "Broche de Escorpião Azul terno").status,
+  "REJECTED",
+  "acessorio que menciona terno nao e o terno pedido",
+);
+
+const bikiniFp = relevance(suitQuery, "Terno de biquíni azul");
+assert.notEqual(bikiniFp.fingerprint.productClass.value, "suit");
+assert.equal(
+  bikiniFp.evidence.productClassCompatibility === "CONFLICT" ||
+    bikiniFp.hardConflicts.some((item) => item.startsWith("productClass:") || item.startsWith("productCore:")),
+  true,
+  "rejeicao de terno de biquini precisa ser classe do item vendido, nao blacklist de titulo",
+);
+assert.equal(
   relevance(suitQuery, "Lingerie azul uso interno").status,
   "REJECTED",
   "interno nao satisfaz o token terno",
@@ -139,6 +201,58 @@ assert.equal(
   relevance(bedsideQuery, "Cabeceira Estofada Queen Azul").status,
   "REJECTED",
   "cabeceira de cama nao e mesa de cabeceira",
+);
+assert.equal(
+  relevance(bedsideQuery, "Mesa de Cabeceira 3 Gavetas com puxadores retro").status,
+  "RELEVANT",
+  "mesa de cabeceira continua o item vendido quando puxador e so detalhe posterior",
+);
+assert.equal(
+  relevance(bedsideQuery, "Puxador Alça Retrô P/ Mesa De Cabeceira").status,
+  "REJECTED",
+  "puxador para mesa de cabeceira e acessorio, nao o movel",
+);
+assert.equal(
+  relevance(bedsideQuery, "Kit 7 Puxador De Armário Mesa Cabeceira Quarto").status,
+  "REJECTED",
+  "kit de puxadores nao e mesa de cabeceira",
+);
+assert.equal(
+  relevance(
+    bedsideQuery,
+    "6 Puxadores Ponto De Armário Retrô Mesa De Cabeceira",
+  ).status,
+  "REJECTED",
+  "ferragem/puxador com mesa de cabeceira so no hospedeiro nao e o movel",
+);
+assert.equal(
+  relevance(
+    bedsideQuery,
+    "Kit Com 3 Puxador De Penteadeira Mesa De Cabeceira",
+  ).status,
+  "REJECTED",
+  "puxador de penteadeira nao e mesa de cabeceira",
+);
+assert.equal(
+  relevance(
+    bedsideQuery,
+    "Poster anime desenhos mesa de cabeceira quarto",
+  ).status,
+  "REJECTED",
+  "decoracao que so menciona mesa de cabeceira nao e o movel",
+);
+
+const puxadorFp = relevance(
+  bedsideQuery,
+  "Puxador Alça Retrô P/ Mesa De Cabeceira",
+);
+assert.equal(puxadorFp.fingerprint.role.value, "ACCESSORY");
+assert.notEqual(puxadorFp.fingerprint.productClass.value, "nightstand");
+assert.equal(
+  puxadorFp.evidence.roleCompatibility === "CONFLICT" ||
+    puxadorFp.hardConflicts.some((item) => item.startsWith("productClass:") || item.startsWith("productCore:")),
+  true,
+  "rejeicao do puxador precisa ser papel ou nucleo do item vendido, nao blacklist de titulo",
 );
 
 const nightstandQuery =
@@ -291,6 +405,217 @@ assert.equal(
   ).status,
   "REJECTED",
   "polia de outro fabricante nao entra na consulta Linea",
+);
+
+const jblModelQuery = "JBL Tune 520BT";
+assert.equal(
+  relevance(jblModelQuery, "Headphone JBL Tune 520BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "520BT compacto e o modelo pedido",
+);
+assert.equal(
+  relevance(jblModelQuery, "Headphone JBL Tune 520 BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "espaco de apresentacao nao quebra o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "Headphone JBL Tune 520-BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "hifen de apresentacao nao quebra o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "Headphone JBL Tune 1520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "1520BT nao satisfaz o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "Headphone JBL Tune 520BT2", { brand: "JBL" }).status,
+  "REJECTED",
+  "520BT2 nao satisfaz o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "Headphone JBL Tune 520BT20", { brand: "JBL" }).status,
+  "REJECTED",
+  "520BT20 nao satisfaz o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "JBL Tune520BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "Tune520BT compacto continua o mesmo codigo 520BT quando a consulta tem a linha Tune",
+);
+assert.equal(
+  relevance(jblModelQuery, "JBL Tune 520BTX", { brand: "JBL" }).status,
+  "REJECTED",
+  "letra colada no codigo 520BTX nao e o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "JBL Tune X520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "X520BT como codigo unico nao e o modelo 520BT",
+);
+assert.equal(
+  relevance(jblModelQuery, "JBL AB520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "AB520BT nao alinha a linha Tune da consulta",
+);
+assert.equal(
+  relevance(jblModelQuery, "JBL XX520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "XX520BT nao alinha a linha Tune da consulta",
+);
+
+const galaxyModelQuery = "Samsung Galaxy A55 256GB";
+assert.equal(
+  relevance(galaxyModelQuery, "Smartphone Samsung Galaxy A55 256GB", {
+    brand: "Samsung",
+  }).status,
+  "RELEVANT",
+  "A55 compacto e o modelo pedido",
+);
+assert.equal(
+  relevance(galaxyModelQuery, "Samsung Galaxy A55 5G Dual SIM 256 GB", {
+    brand: "Samsung",
+  }).status,
+  "RELEVANT",
+  "5G e especificacao separada, nao continuacao de A55",
+);
+assert.equal(
+  relevance(galaxyModelQuery, "Smartphone Samsung Galaxy A550 256GB", {
+    brand: "Samsung",
+  }).status,
+  "REJECTED",
+  "A550 nao satisfaz o modelo A55",
+);
+assert.equal(
+  relevance(galaxyModelQuery, "Smartphone Samsung Galaxy A551 256GB", {
+    brand: "Samsung",
+  }).status,
+  "REJECTED",
+  "A551 nao satisfaz o modelo A55",
+);
+assert.equal(
+  relevance(galaxyModelQuery, "Samsung Galaxy A55B", { brand: "Samsung" }).status,
+  "REJECTED",
+  "letra colada no codigo A55B nao e o modelo A55",
+);
+assert.equal(
+  relevance("Samsung Galaxy A55", "Samsung GalaxyA55", { brand: "Samsung" }).status,
+  "RELEVANT",
+  "GalaxyA55 e apresentacao da linha Galaxy pedida na consulta",
+);
+assert.equal(
+  relevance("Samsung Galaxy A55", "Samsung ABA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "ABA55 nao alinha a linha Galaxy da consulta",
+);
+assert.equal(
+  relevance("Samsung Galaxy A55", "Samsung XXA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "XXA55 nao alinha a linha Galaxy da consulta",
+);
+assert.equal(
+  relevance("Samsung Galaxy A55", "Samsung XA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "XA55 nao alinha a linha Galaxy da consulta",
+);
+
+const isolatedJblQuery = "520BT";
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune 520BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "consulta isolada 520BT aceita o modelo com marca e linha",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune 520 BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "consulta isolada 520BT aceita espaco de apresentacao",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune 520-BT", { brand: "JBL" }).status,
+  "RELEVANT",
+  "consulta isolada 520BT aceita hifen de apresentacao",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT nao prova que Tune e a linha do codigo",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL AB520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita prefixo colado AB520BT",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL XX520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita prefixo colado XX520BT",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL PRO520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita prefixo colado PRO520BT",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune 1520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita prefixo numerico 1520BT",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune 520BT2", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita sufixo numerico 520BT2",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune 520BTX", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita sufixo de letra 520BTX",
+);
+assert.equal(
+  relevance(isolatedJblQuery, "JBL Tune X520BT", { brand: "JBL" }).status,
+  "REJECTED",
+  "consulta isolada 520BT rejeita letra isolada colada X520BT",
+);
+
+const isolatedGalaxyQuery = "A55";
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung Galaxy A55", { brand: "Samsung" }).status,
+  "RELEVANT",
+  "consulta isolada A55 aceita Galaxy A55",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung Galaxy A55 5G", { brand: "Samsung" }).status,
+  "RELEVANT",
+  "consulta isolada A55 aceita 5G como especificacao separada",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung GalaxyA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "consulta isolada A55 nao prova que Galaxy e a linha do codigo",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung ABA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita prefixo colado ABA55",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung XXA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita prefixo colado XXA55",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung Galaxy A550", { brand: "Samsung" }).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita A550",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung Galaxy A55B", { brand: "Samsung" }).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita sufixo de letra A55B",
+);
+assert.equal(
+  relevance(isolatedGalaxyQuery, "Samsung Galaxy XA55", { brand: "Samsung" }).status,
+  "REJECTED",
+  "consulta isolada A55 rejeita letra isolada colada XA55",
 );
 
 assert.equal(buildQueryIntent("capa para smartphone Novatech Pulse").requestedRole, "ACCESSORY");
