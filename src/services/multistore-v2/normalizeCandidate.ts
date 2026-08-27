@@ -6,6 +6,7 @@ import type {
 import {
   classifyProductConcept,
   classesAreIncompatible as conceptClassesAreIncompatible,
+  conceptFirstContentIndex,
   detectVehicleHostSplit,
 } from "./productConcepts";
 
@@ -99,9 +100,66 @@ const REPLACEMENT_HEADS = new Set([
   "peca",
   "refill",
   "filtro",
+  "filtros",
   "saco",
   "sacos",
+  "peso",
+  "pesos",
+  "valvula",
+  "valvulas",
+  "vela",
+  "velas",
+  "torneira",
+  "torneiras",
+  "anel",
+  "aneis",
+  "borracha",
+  "borrachas",
+  "recipiente",
+  "recipientes",
+  "cuba",
+  "cubas",
+  "forro",
+  "forros",
+  "tigela",
+  "tigelas",
 ]);
+
+const REPLACEMENT_PHRASES = [
+  "tigela interna",
+  "tigelas internas",
+  "cuba interna",
+  "cubas internas",
+  "recipiente interno",
+  "recipientes internos",
+  "forro interno",
+  "forros internos",
+  "revestimento interno",
+];
+
+const REPLACEMENT_SEMANTICS = new Set([
+  "substituicao",
+  "substituicoes",
+  "reposicao",
+  "reposicoes",
+  "replacement",
+  "replacements",
+  "substituto",
+  "substituta",
+  "substitutos",
+  "substitutas",
+]);
+
+const HOST_LINK_WORDS = new Set(["para", "for", "p", "de", "da", "do", "das", "dos"]);
+
+const ACCESSORY_PHRASES = [
+  "vidro temperado",
+  "protetor de tela",
+  "pelicula protetora",
+  "pelicula de vidro",
+  "screen protector",
+  "tempered glass",
+];
 
 const CLASS_GROUPS: string[][] = [
   ["headphone", "fone", "fones", "headset", "earbuds", "earphone", "auricular", "ouvido", "ouvidos"],
@@ -377,7 +435,201 @@ const ACCESSORY_LIKE_CLASSES = new Set([
   "vacuum_part",
   "consumable",
   "jewelry",
+  "screen_protector",
 ]);
+
+function primaryProductStartsAt(words: string[], index: number): boolean {
+  const fromHere = words.slice(index).join(" ");
+  const classified = classifyProductConcept(fromHere);
+  if (classified.id === "UNKNOWN" || ACCESSORY_LIKE_CLASSES.has(classified.id)) {
+    return false;
+  }
+
+  return conceptFirstContentIndex(fromHere, classified.id) === 0;
+}
+
+function phraseStartsAt(words: string[], index: number, phrase: string): boolean {
+  const phraseTokens = normalizeMultistoreText(phrase).split(" ").filter(Boolean);
+  if (phraseTokens.length === 0 || index + phraseTokens.length > words.length) {
+    return false;
+  }
+
+  return phraseTokens.every((token, offset) => words[index + offset] === token);
+}
+
+function partHeadAt(
+  words: string[],
+  index: number,
+): { token: string; span: number; role: "REPLACEMENT_PART" | "ACCESSORY" } | null {
+  for (const phrase of REPLACEMENT_PHRASES) {
+    if (phraseStartsAt(words, index, phrase)) {
+      return {
+        token: words[index]!,
+        span: normalizeMultistoreText(phrase).split(" ").filter(Boolean).length,
+        role: "REPLACEMENT_PART",
+      };
+    }
+  }
+
+  for (const phrase of ACCESSORY_PHRASES) {
+    if (phraseStartsAt(words, index, phrase)) {
+      return {
+        token: words[index]!,
+        span: normalizeMultistoreText(phrase).split(" ").filter(Boolean).length,
+        role: "ACCESSORY",
+      };
+    }
+  }
+
+  const token = words[index]!;
+  if (isReplacementHead(token)) {
+    return { token, span: 1, role: "REPLACEMENT_PART" };
+  }
+
+  if (isAccessoryHead(token)) {
+    return { token, span: 1, role: "ACCESSORY" };
+  }
+
+  return null;
+}
+
+function innerPieceAt(
+  words: string[],
+  index: number,
+): { token: string; span: number; role: "REPLACEMENT_PART" } | null {
+  for (const phrase of REPLACEMENT_PHRASES) {
+    if (phraseStartsAt(words, index, phrase)) {
+      return {
+        token: words[index]!,
+        span: normalizeMultistoreText(phrase).split(" ").filter(Boolean).length,
+        role: "REPLACEMENT_PART",
+      };
+    }
+  }
+
+  return null;
+}
+
+function isReplacementSemanticsToken(token: string): boolean {
+  return REPLACEMENT_SEMANTICS.has(token);
+}
+
+function isSkippableHostLink(token: string): boolean {
+  if (isCapacityOrQuantityUnit(token)) {
+    return true;
+  }
+
+  if (HOST_LINK_WORDS.has(token)) {
+    return true;
+  }
+
+  return STOP_WORDS.has(token) && token !== "com" && token !== "sem";
+}
+
+function followingPrimaryProduct(words: string[], fromIndex: number): boolean {
+  for (let index = fromIndex; index < words.length; index += 1) {
+    const token = words[index]!;
+    if (isSkippableHostLink(token)) {
+      continue;
+    }
+
+    return primaryProductStartsAt(words, index);
+  }
+
+  return false;
+}
+
+function firstPrimaryProductIndex(
+  words: string[],
+  end = words.length,
+): number | null {
+  for (let index = 0; index < end; index += 1) {
+    const token = words[index]!;
+    if (STOP_WORDS.has(token) || isCapacityOrQuantityUnit(token)) {
+      continue;
+    }
+
+    if (primaryProductStartsAt(words, index)) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function firstUnabsorbedPartHead(
+  words: string[],
+): { token: string; index: number; span: number; role: "REPLACEMENT_PART" | "ACCESSORY" } | null {
+  let seenPrimary = false;
+  let innerPiece: {
+    token: string;
+    index: number;
+    span: number;
+    role: "REPLACEMENT_PART";
+  } | null = null;
+  let explicitPiece: {
+    token: string;
+    index: number;
+    span: number;
+    role: "REPLACEMENT_PART" | "ACCESSORY";
+  } | null = null;
+  const hasReplacementSemantics = words.some((token) =>
+    isReplacementSemanticsToken(token),
+  );
+
+  for (let index = 0; index < words.length; index += 1) {
+    const token = words[index]!;
+    if (STOP_WORDS.has(token) || isCapacityOrQuantityUnit(token)) {
+      continue;
+    }
+
+    const head = partHeadAt(words, index);
+    if (head && primaryProductStartsAt(words, index)) {
+      if (!seenPrimary) {
+        return null;
+      }
+
+      continue;
+    }
+
+    if (!seenPrimary) {
+      if (head) {
+        return { ...head, index };
+      }
+
+      if (primaryProductStartsAt(words, index)) {
+        seenPrimary = true;
+      }
+
+      continue;
+    }
+
+    const inner = innerPieceAt(words, index);
+    if (inner && !innerPiece) {
+      innerPiece = { ...inner, index };
+    }
+
+    if (
+      head &&
+      head.role === "REPLACEMENT_PART" &&
+      followingPrimaryProduct(words, index + head.span) &&
+      !explicitPiece
+    ) {
+      explicitPiece = { ...head, index };
+    }
+  }
+
+  if (innerPiece && hasReplacementSemantics) {
+    return innerPiece;
+  }
+
+  return explicitPiece;
+}
+
+function hostHasIdentitySignal(host: string): boolean {
+  const tokens = tokenize(host);
+  return extractModelTokens(tokens).length > 0 || extractIdentityNumbers(tokens).length > 0;
+}
 
 export function detectHostSplit(normalizedTitle: string): {
   sold: string;
@@ -408,15 +660,19 @@ export function detectHostSplit(normalizedTitle: string): {
   if (generic && generic.index !== undefined) {
     const sold = normalizedTitle.slice(0, generic.index).trim();
     const host = normalizedTitle.slice(generic.index + generic[0].length).trim();
-    const soldTokens = tokenize(sold);
-    const soldIsAccessory = soldTokens.some(isAccessoryHead) || soldTokens.some(isReplacementHead);
     const soldClass = classifyProductClass(sold);
     const hostClass = classifyProductClass(host);
+    const soldIsAccessory =
+      Boolean(firstUnabsorbedPartHead(wordsOf(sold))) ||
+      ACCESSORY_LIKE_CLASSES.has(soldClass);
+    const hostUsable =
+      hostClass !== "UNKNOWN" || hostHasIdentitySignal(host);
 
     if (
-      soldIsAccessory ||
-      ACCESSORY_LIKE_CLASSES.has(soldClass) ||
-      (hostClass !== "UNKNOWN" && soldClass !== hostClass)
+      hostUsable &&
+      (soldIsAccessory ||
+        ACCESSORY_LIKE_CLASSES.has(soldClass) ||
+        (hostClass !== "UNKNOWN" && soldClass !== hostClass))
     ) {
       return {
         sold: sold || normalizedTitle,
@@ -444,21 +700,36 @@ function detectImplicitHostSplit(normalizedTitle: string): {
   relation: string | null;
 } | null {
   const words = wordsOf(normalizedTitle);
-  let headIndex = -1;
-
-  for (let index = 0; index < words.length; index += 1) {
-    const token = words[index]!;
-    if (isReplacementHead(token) || isAccessoryHead(token)) {
-      headIndex = index;
-      break;
-    }
-  }
-
-  if (headIndex < 0) {
+  const head = firstUnabsorbedPartHead(words);
+  if (!head) {
     return null;
   }
 
-  const prefix = words.slice(0, headIndex).join(" ");
+  const prefixHostIndex = firstPrimaryProductIndex(words, head.index);
+  if (prefixHostIndex !== null) {
+    const hostTokens = words.slice(prefixHostIndex, head.index);
+    while (hostTokens.length > 0 && STOP_WORDS.has(hostTokens[hostTokens.length - 1]!)) {
+      hostTokens.pop();
+    }
+    const sold = words.slice(head.index).join(" ").trim();
+    const host = hostTokens.join(" ").trim();
+    if (!sold || !host) {
+      return null;
+    }
+
+    const hostClass = classifyProductClass(host);
+    if (hostClass === "UNKNOWN" && !hostHasIdentitySignal(host)) {
+      return null;
+    }
+
+    return {
+      sold,
+      host,
+      relation: "host-context",
+    };
+  }
+
+  const prefix = words.slice(0, head.index).join(" ");
   if (prefix) {
     const prefixClass = classifyProductClass(prefix);
     if (prefixClass !== "UNKNOWN" && !ACCESSORY_LIKE_CLASSES.has(prefixClass)) {
@@ -466,15 +737,34 @@ function detectImplicitHostSplit(normalizedTitle: string): {
     }
   }
 
-  const sold = words.slice(0, headIndex + 1).join(" ").trim();
-  const host = words.slice(headIndex + 1).join(" ").trim();
+  let hostStart = head.index + head.span;
+  if (head.role === "REPLACEMENT_PART") {
+    for (let index = head.index + head.span; index < words.length; index += 1) {
+      const token = words[index]!;
+      if (STOP_WORDS.has(token) || isCapacityOrQuantityUnit(token)) {
+        continue;
+      }
+
+      if (primaryProductStartsAt(words, index)) {
+        hostStart = index;
+        break;
+      }
+    }
+  }
+
+  const sold = words.slice(0, hostStart).join(" ").trim();
+  const host = words.slice(hostStart).join(" ").trim();
   if (!sold || !host) {
     return null;
   }
 
   const hostClass = classifyProductClass(host);
   const soldClass = classifyProductClass(sold);
-  if (hostClass === "UNKNOWN" || soldClass === hostClass) {
+  if (soldClass === hostClass && hostClass !== "UNKNOWN") {
+    return null;
+  }
+
+  if (hostClass === "UNKNOWN" && !hostHasIdentitySignal(host)) {
     return null;
   }
 
@@ -488,8 +778,13 @@ function detectImplicitHostSplit(normalizedTitle: string): {
 export function inferRole(text: string): ProductRole {
   const normalized = normalizeMultistoreText(text);
   const split = detectHostSplit(normalized);
-  const soldTokens = tokenize(split.sold);
+  const soldWords = wordsOf(split.sold);
   const soldClass = classifyProductClass(split.sold);
+  const head = firstUnabsorbedPartHead(soldWords);
+
+  if (head) {
+    return head.role;
+  }
 
   if (ACCESSORY_LIKE_CLASSES.has(soldClass)) {
     return soldClass === "consumable" || soldClass === "vacuum_part"
@@ -497,29 +792,14 @@ export function inferRole(text: string): ProductRole {
       : "ACCESSORY";
   }
 
-  for (const token of soldTokens) {
-    if (isReplacementHead(token)) {
-      return "REPLACEMENT_PART";
-    }
-
-    if (isAccessoryHead(token)) {
-      return "ACCESSORY";
-    }
-
-    const tokenClass = classifyProductClass(token);
-    if (tokenClass !== "UNKNOWN" && !ACCESSORY_LIKE_CLASSES.has(tokenClass)) {
-      break;
-    }
-  }
-
   if (soldClass === "UNKNOWN" && split.host) {
     const hostClass = classifyProductClass(split.host);
-    if (hostClass !== "UNKNOWN") {
+    if (hostClass !== "UNKNOWN" || hostHasIdentitySignal(split.host)) {
       return "ACCESSORY";
     }
   }
 
-  return soldTokens.length > 0 ? "MAIN" : "UNKNOWN";
+  return soldWords.some((token) => !STOP_WORDS.has(token)) ? "MAIN" : "UNKNOWN";
 }
 
 export function extractCapacity(tokens: string[]): string | null {
@@ -597,11 +877,22 @@ export function extractMaterial(tokens: string[]): string | null {
   return tokens.find((token) => MATERIAL_WORDS.has(token)) ?? null;
 }
 
+export function isQuantitativeCompactToken(token: string | null | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+
+  const compact = token.replace(/[\s.-]+/g, "");
+  return /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm|pol|gb|tb|mb|mah|litros?|gramas?)$/.test(
+    compact,
+  );
+}
+
 export function extractModelTokens(tokens: string[]): string[] {
   const models: string[] = [];
 
   for (const token of tokens) {
-    if (isCapacityOrQuantityUnit(token)) {
+    if (isCapacityOrQuantityUnit(token) || isQuantitativeCompactToken(token)) {
       continue;
     }
 

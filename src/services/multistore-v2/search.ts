@@ -29,6 +29,7 @@ import { traceV2 } from "./trace";
 import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
 import { buildSearchPlan } from "./queryPlan";
+import { rankCanonicalProducts } from "./rank";
 import {
   DEFAULT_SEARCH_BUDGET,
   createSearchDeadline,
@@ -135,9 +136,11 @@ export function processRawCandidates(
   );
   const relevant = scored.filter((item) => item.status === "RELEVANT");
   const clusters = clusterCandidates(relevant);
-  const products = clusters
-    .map(canonicalizeCluster)
-    .filter((item): item is CanonicalProduct => item !== null);
+  const products = rankCanonicalProducts(
+    clusters
+      .map(canonicalizeCluster)
+      .filter((item): item is CanonicalProduct => item !== null),
+  );
 
   return { intent, scored, relevant, clusters, products };
 }
@@ -643,17 +646,17 @@ export async function searchMultistoreV2(
             deadline,
           )
         : processed.clusters;
-    const products = huntedClusters
-      .map(canonicalizeCluster)
-      .filter((item): item is CanonicalProduct => item !== null)
-      .sort((first, second) => first.price - second.price);
+    const products = rankCanonicalProducts(
+      huntedClusters
+        .map(canonicalizeCluster)
+        .filter((item): item is CanonicalProduct => item !== null),
+    );
     const selectedProducts = products.slice(0, limit);
-    const selectedClusterIds = new Set(
-      selectedProducts.map((product) => product.clusterId),
-    );
-    const selectedClusters = huntedClusters.filter((cluster) =>
-      selectedClusterIds.has(cluster.clusterId),
-    );
+    const selectedClusters = selectedProducts
+      .map((product) =>
+        huntedClusters.find((cluster) => cluster.clusterId === product.clusterId),
+      )
+      .filter((cluster): cluster is NonNullable<typeof cluster> => Boolean(cluster));
 
     for (const cluster of selectedClusters) {
       const canonical = canonicalizeCluster(cluster);

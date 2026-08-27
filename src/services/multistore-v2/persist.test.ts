@@ -22,6 +22,7 @@ function canonicalProduct(
     primaryMarketplace: extras.primaryMarketplace ?? "Amazon",
     marketplaces: extras.marketplaces ?? ["AMAZON"],
     confidence: extras.confidence ?? 1,
+    rankTier: extras.rankTier ?? 0,
     offers: extras.offers ?? [
       {
         marketplace: "AMAZON",

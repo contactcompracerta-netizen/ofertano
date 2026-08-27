@@ -41,6 +41,8 @@ export type ProductRole =
   | "REPLACEMENT_PART"
   | "UNKNOWN";
 
+export type RankTier = 0 | 1 | 2 | 3;
+
 export type AffiliateStatus =
   | "READY"
   | "INELIGIBLE"
@@ -136,6 +138,7 @@ export type ProductFingerprint = {
   identityNumbers: string[];
   identityAnchors: string[];
   lexicalSignature: string[];
+  marketplaceCategory: EvidenceField<string>;
 };
 
 export type RelevanceEvidenceState = "MATCH" | "UNKNOWN" | "CONFLICT" | "MISSING";
@@ -169,6 +172,7 @@ export type ScoredCandidate = {
   status: "RELEVANT" | "REJECTED";
   reason: string;
   evidence: QueryRelevanceEvidence;
+  rankTier: RankTier;
 };
 
 export type PairRelation = "SAME" | "DIFFERENT" | "UNKNOWN";
@@ -203,6 +207,7 @@ export type CanonicalProduct = {
   offers: CanonicalOffer[];
   marketplaces: string[];
   confidence: number;
+  rankTier: RankTier;
 };
 
 export type CanonicalOffer = {

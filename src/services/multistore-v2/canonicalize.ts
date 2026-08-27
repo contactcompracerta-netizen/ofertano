@@ -9,6 +9,7 @@ import {
   classifyListingAffiliate,
   traceAffiliateAssessment,
 } from "./affiliateEligibility";
+import { clusterRankTier } from "./rank";
 
 function completeness(offer: {
   image: string | null;
@@ -135,6 +136,7 @@ export function canonicalizeCluster(
     offers,
     marketplaces: offers.map((offer) => offer.marketplace),
     confidence: cluster.confidence,
+    rankTier: clusterRankTier(cluster.members.map((member) => member.candidate)),
   };
 }
 

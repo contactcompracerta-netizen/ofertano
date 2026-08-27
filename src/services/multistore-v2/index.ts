@@ -17,6 +17,9 @@ export { persistCanonicalProducts, persistSelectedSearchClusters, scheduleSelect
 export type { PersistProductFn, PersistCanonicalOptions } from "./persist";
 export { traceV2 } from "./trace";
 export { extractIdentityAnchors, hasStrongIdentity } from "./identityAnchors";
+export { rankCanonicalProducts, assignRankTier } from "./rank";
+export { interpretMarketplaceCategory } from "./marketplaceCategory";
+export { inferRole, detectHostSplit } from "./normalizeCandidate";
 export {
   classifyListingAffiliate,
   isConfirmedAffiliateLink,

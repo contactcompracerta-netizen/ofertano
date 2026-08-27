@@ -18,10 +18,12 @@ import {
   extractQuantity,
   extractSize,
   inferRole,
+  isQuantitativeCompactToken,
   normalizeMultistoreText,
   tokenize,
 } from "./normalizeCandidate";
 import { extractIdentityAnchors } from "./identityAnchors";
+import { interpretMarketplaceCategory } from "./marketplaceCategory";
 
 function field<T>(
   value: T | null,
@@ -42,15 +44,31 @@ export function buildFingerprint(
   const normalized = normalizeMultistoreText(title);
   const split = detectHostSplit(normalized);
   const soldTokens = tokenize(split.sold);
-  const hostTokens = split.host ? tokenize(split.host) : [];
   const role = inferRole(title);
   const soldClass = classifyProductClass(split.sold);
+  const category = interpretMarketplaceCategory(candidate.raw.category);
+  const categoryClass =
+    category.kind === "TEXT" && category.conceptId !== "UNKNOWN"
+      ? category.conceptId
+      : null;
+  const titleClass = soldClass !== "UNKNOWN" ? soldClass : null;
+  const resolvedClass = titleClass ?? categoryClass;
+  const classSource = titleClass
+    ? "TITLE"
+    : categoryClass
+      ? "STRUCTURED_ATTRIBUTE"
+      : "UNKNOWN";
+  const classConfidence = titleClass
+    ? "HIGH"
+    : categoryClass
+      ? "MEDIUM"
+      : "NONE";
   const modelTokens = [
     ...extractModelTokens(soldTokens),
     ...(candidate.structuredModel
       ? [normalizeMultistoreText(candidate.structuredModel).replace(/\s+/g, "")]
       : []),
-  ];
+  ].filter((token) => token && !isQuantitativeCompactToken(token));
   const sku = candidate.structuredSku
     ? normalizeMultistoreText(candidate.structuredSku).replace(/\s+/g, "")
     : null;
@@ -64,7 +82,7 @@ export function buildFingerprint(
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
   const model = sku || modelTokens[0] || null;
-  const family = soldClass !== "UNKNOWN" ? soldClass : null;
+  const family = resolvedClass ?? null;
 
   return {
     soldItem: field(
@@ -73,7 +91,7 @@ export function buildFingerprint(
       "TITLE",
     ),
     hostItem: field(
-      split.host ? hostTokens.slice(0, 4).join(" ") : null,
+      split.host || null,
       split.host ? "MEDIUM" : "NONE",
       split.host ? "TITLE" : "UNKNOWN",
     ),
@@ -83,9 +101,9 @@ export function buildFingerprint(
       "TITLE",
     ),
     productClass: field(
-      soldClass === "UNKNOWN" ? null : soldClass,
-      soldClass === "UNKNOWN" ? "NONE" : "HIGH",
-      soldClass === "UNKNOWN" ? "UNKNOWN" : "TITLE",
+      resolvedClass,
+      classConfidence,
+      classSource,
     ),
     brand: field(
       brand,
@@ -125,5 +143,14 @@ export function buildFingerprint(
     identityNumbers: extractIdentityNumbers(soldTokens),
     identityAnchors: extractIdentityAnchors(title).map((anchor) => anchor.value),
     lexicalSignature: soldTokens,
+    marketplaceCategory: field(
+      category.raw,
+      category.kind === "NUMERIC_ID" || category.kind === "CODE"
+        ? "NONE"
+        : category.kind === "TEXT"
+          ? "MEDIUM"
+          : "NONE",
+      category.raw ? "STRUCTURED_ATTRIBUTE" : "UNKNOWN",
+    ),
   };
 }

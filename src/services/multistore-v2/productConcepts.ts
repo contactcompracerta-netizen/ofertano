@@ -20,6 +20,8 @@ export type ProductConceptId =
   | "book"
   | "apparel"
   | "cookware"
+  | "pressure_cooker"
+  | "rice_cooker"
   | "cutlery"
   | "remote"
   | "usb_drive"
@@ -37,6 +39,8 @@ export type ProductConceptId =
   | "furniture_part"
   | "lapis"
   | "water_filter"
+  | "clay_water_filter"
+  | "screen_protector"
   | "automotive_pulley_crankshaft"
   | "automotive_pulley_alternator"
   | "automotive_crankshaft"
@@ -54,6 +58,7 @@ type ConceptFamily = {
   tokens: string[];
   coreMode: "phrase" | "token";
   synonyms?: string[][];
+  allOf?: string[][];
 };
 
 /*
@@ -274,8 +279,27 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
     coreMode: "token",
   },
   {
+    id: "pressure_cooker",
+    phrases: ["panela de pressao", "pressure cooker"],
+    tokens: [],
+    coreMode: "phrase",
+    allOf: [["panela", "pressao"]],
+  },
+  {
+    id: "rice_cooker",
+    phrases: [
+      "panela de arroz",
+      "panela eletrica de arroz",
+      "rice cooker",
+      "electric rice cooker",
+    ],
+    tokens: [],
+    coreMode: "phrase",
+    allOf: [["panela", "arroz"]],
+  },
+  {
     id: "cookware",
-    phrases: ["panela de pressao"],
+    phrases: [],
     tokens: ["panela", "frigideira", "cacarola"],
     coreMode: "token",
   },
@@ -372,10 +396,31 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
     coreMode: "token",
   },
   {
-    id: "water_filter",
-    phrases: ["filtro de barro", "filtro de agua"],
+    id: "clay_water_filter",
+    phrases: ["filtro de barro"],
     tokens: [],
     coreMode: "phrase",
+    allOf: [["filtro", "barro"]],
+  },
+  {
+    id: "water_filter",
+    phrases: ["filtro de agua", "filtro de torneira"],
+    tokens: [],
+    coreMode: "phrase",
+  },
+  {
+    id: "screen_protector",
+    phrases: [
+      "vidro temperado",
+      "protetor de tela",
+      "pelicula protetora",
+      "pelicula de vidro",
+      "screen protector",
+      "tempered glass",
+    ],
+    tokens: [],
+    coreMode: "phrase",
+    allOf: [["vidro", "temperado"]],
   },
   {
     id: "automotive_pulley_crankshaft",
@@ -498,6 +543,9 @@ const CONCEPT_PARENTS: Partial<Record<ProductConceptId, ProductConceptId>> = {
   nightstand: "furniture",
   suit: "apparel",
   swimwear: "apparel",
+  clay_water_filter: "water_filter",
+  pressure_cooker: "cookware",
+  rice_cooker: "cookware",
   automotive_pulley_crankshaft: "automotive_pulley",
   automotive_pulley_alternator: "automotive_pulley",
   automotive_pulley: "automotive_part",
@@ -686,9 +734,12 @@ export function conceptLexicalTokens(id: ProductConceptId): string[] {
 
   return Array.from(
     new Set(
-      [...family.phrases, ...(family.synonyms ?? []).flat(), ...family.tokens].flatMap(
-        (item) => contentTokens(item),
-      ),
+      [
+        ...family.phrases,
+        ...(family.synonyms ?? []).flat(),
+        ...family.tokens,
+        ...(family.allOf ?? []).flat(),
+      ].flatMap((item) => contentTokens(item)),
     ),
   );
 }
@@ -757,6 +808,22 @@ function familyScore(family: ConceptFamily, normalized: string): {
       score += 1;
       index = Math.min(index, normalized.indexOf(token));
     }
+  }
+
+  for (const group of family.allOf ?? []) {
+    if (!allOfGroupHits(normalized, group)) {
+      continue;
+    }
+
+    const first = group
+      .map((token) => normalized.indexOf(token))
+      .filter((position) => position >= 0);
+    score += Math.max(2, group.length * 4);
+    index = Math.min(index, first.length > 0 ? Math.min(...first) : 0);
+  }
+
+  if (hasMoreSpecificChildHit(family, normalized)) {
+    score = 0;
   }
 
   if (
@@ -861,7 +928,11 @@ export function classifyProductConcept(text: string): {
   }
 
   const phrase =
-    best.family.phrases.find((item) => phraseAppears(normalized, item)) ?? null;
+    best.family.phrases.find((item) => phraseAppears(normalized, item)) ??
+    (best.family.allOf ?? [])
+      .find((group) => allOfGroupHits(normalized, group))
+      ?.join(" ") ??
+    null;
   const confidence =
     phrase || best.score >= 4
       ? "HIGH"
@@ -880,11 +951,35 @@ function familyById(id: ProductConceptId): ConceptFamily | undefined {
   return CONCEPT_FAMILIES.find((family) => family.id === id);
 }
 
+function allOfGroupHits(normalized: string, group: string[]): boolean {
+  return group.every((token) => tokenBoundaryMatch(normalized, token));
+}
+
 function familyHasHit(family: ConceptFamily, normalized: string): boolean {
   return (
     family.phrases.some((phrase) => phraseAppears(normalized, phrase)) ||
-    family.tokens.some((token) => tokenBoundaryMatch(normalized, token))
+    family.tokens.some((token) => tokenBoundaryMatch(normalized, token)) ||
+    (family.allOf ?? []).some((group) => allOfGroupHits(normalized, group))
   );
+}
+
+function hasMoreSpecificChildHit(family: ConceptFamily, normalized: string): boolean {
+  return CONCEPT_FAMILIES.some(
+    (candidate) =>
+      CONCEPT_PARENTS[candidate.id] === family.id && familyHasHit(candidate, normalized),
+  );
+}
+
+export function conceptFirstContentIndex(
+  text: string,
+  id: ProductConceptId,
+): number {
+  const family = familyById(id);
+  if (!family || id === "UNKNOWN") {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return firstHitTokenIndex(family, normalizeConceptText(text));
 }
 
 function firstHitTokenIndex(family: ConceptFamily, normalized: string): number {
@@ -913,6 +1008,15 @@ function firstHitTokenIndex(family: ConceptFamily, normalized: string): number {
     }
   }
 
+  for (const group of family.allOf ?? []) {
+    const indexes = group
+      .map((token) => textTokens.indexOf(normalizeConceptText(token)))
+      .filter((index) => index >= 0);
+    if (indexes.length === group.length) {
+      best = Math.min(best, Math.min(...indexes));
+    }
+  }
+
   return best;
 }
 
@@ -922,11 +1026,12 @@ export function conceptSynonymPhrases(id: ProductConceptId): string[] {
     return [];
   }
 
-  return Array.from(
+    return Array.from(
     new Set([
       ...family.phrases,
       ...(family.synonyms ?? []).flat(),
       ...family.tokens,
+      ...(family.allOf ?? []).map((group) => group.join(" ")),
     ]),
   );
 }
@@ -968,6 +1073,10 @@ export function candidateCoversConcept(
       group.some((item) => phraseAppears(normalized, item)),
     )
   ) {
+    return true;
+  }
+
+  if ((family.allOf ?? []).some((group) => allOfGroupHits(normalized, group))) {
     return true;
   }
 
@@ -1033,8 +1142,24 @@ export function canonicalClassToken(id: ProductConceptId): string {
     return "terno";
   }
 
-  if (id === "water_filter") {
+  if (id === "clay_water_filter") {
     return "filtro de barro";
+  }
+
+  if (id === "water_filter") {
+    return "filtro de agua";
+  }
+
+  if (id === "pressure_cooker") {
+    return "panela de pressao";
+  }
+
+  if (id === "rice_cooker") {
+    return "panela de arroz";
+  }
+
+  if (id === "screen_protector") {
+    return "vidro temperado";
   }
 
   if (id === "automotive_pulley_crankshaft") {

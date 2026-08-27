@@ -116,11 +116,14 @@ assert.equal(accessoryRelevance.status, "RELEVANT", "G) query de ACCESSORY permi
 
 const mainQuery = buildQueryIntent("JBL Tune 520BT");
 assert.equal(mainQuery.requestedRole, "MAIN");
+const accessoryOnMain = scoreQueryRelevance(mainQuery, accessoryNormalized);
 assert.equal(
-  scoreQueryRelevance(mainQuery, accessoryNormalized).status,
-  "REJECTED",
-  "F/G) acessorio nao entra na query MAIN",
+  accessoryOnMain.status,
+  "RELEVANT",
+  "F/G) acessorio com HOST do produto pedido entra na query MAIN em tier inferior",
 );
+assert.equal(accessoryOnMain.rankTier, 2);
+assert.equal(accessoryOnMain.fingerprint.role.value, "ACCESSORY");
 
 const singleton = processRawCandidates("JBL Tune 520BT", [
   raw("JBL Tune 520BT Bluetooth", { brand: "JBL", marketplace: "AMAZON", externalId: "amz-520" }),
@@ -209,9 +212,10 @@ const phoneCase = scoreQueryRelevance(
 assert.equal(phoneCase.fingerprint.role.value, "ACCESSORY");
 assert.equal(
   phoneCase.status,
-  "REJECTED",
-  "Capa/caso nao entra na consulta do produto principal.",
+  "RELEVANT",
+  "Capa/caso com HOST do aparelho pedido entra em tier inferior.",
 );
+assert.equal(phoneCase.rankTier, 2);
 
 const clustered = clusterCandidates([
   scoreQueryRelevance(
@@ -231,11 +235,15 @@ const clustered = clusterCandidates([
   ),
 ].filter((item) => item.status === "RELEVANT"));
 assert.equal(
-  clustered.every((cluster) =>
-    cluster.members.every((member) => member.candidate.fingerprint.role.value !== "ACCESSORY"),
+  clustered.some(
+    (cluster) =>
+      cluster.members.some((member) => member.candidate.fingerprint.role.value === "MAIN") &&
+      cluster.members.some(
+        (member) => member.candidate.fingerprint.role.value === "ACCESSORY",
+      ),
   ),
-  true,
-  "Acessorio nao entra no cluster do produto principal na query MAIN",
+  false,
+  "MAIN e ACCESSORY nao compartilham o mesmo cluster",
 );
 
 const nightstandQuery = "Mesa De Cabeceira Criado Mais Moveis Mdp/mdf 3 Gavetas";

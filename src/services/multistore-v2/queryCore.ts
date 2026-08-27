@@ -122,7 +122,7 @@ export function buildQueryCore(query: string): QueryCore {
   const classified = classifyProductConcept(split.sold || rawQuery);
   const soldTokens = tokenize(split.sold);
   const allTokens = tokenize(rawQuery);
-  const brand = extractKnownBrand(split.sold, classified.id);
+  const brand = extractKnownBrand(rawQuery, classified.id);
   const brandTokens = brand
     ? brand.split(" ").filter((token) => token.length >= 3)
     : [];
@@ -257,21 +257,37 @@ export function productCoreCoverage(
     : "UNKNOWN";
 }
 
+function isAccessoryLikeRole(role: ProductRole): boolean {
+  return role === "ACCESSORY" || role === "REPLACEMENT_PART";
+}
+
 export function roleCompatibility(
   queryRole: ProductRole,
   candidateRole: ProductRole,
+  hostCompatibleWithQuery = false,
 ): ConceptCompatibility {
-  const queryAccessory = queryRole === "ACCESSORY";
-  const candidateAccessory = candidateRole === "ACCESSORY";
-  if (queryAccessory !== candidateAccessory) {
-    return "CONFLICT";
+  const queryAccessory = isAccessoryLikeRole(queryRole);
+  const candidateAccessory = isAccessoryLikeRole(candidateRole);
+
+  if (queryAccessory) {
+    if (candidateAccessory) {
+      return "MATCH";
+    }
+
+    if (candidateRole === "MAIN") {
+      return "CONFLICT";
+    }
+
+    return "UNKNOWN";
   }
 
-  const queryPart = queryRole === "REPLACEMENT_PART";
-  const candidatePart = candidateRole === "REPLACEMENT_PART";
-  if (queryPart !== candidatePart && queryRole !== "UNKNOWN" && candidateRole !== "UNKNOWN") {
-    return "CONFLICT";
+  if (candidateRole === "MAIN" || candidateRole === "UNKNOWN") {
+    return "MATCH";
   }
 
-  return "MATCH";
+  if (candidateAccessory) {
+    return hostCompatibleWithQuery ? "MATCH" : "CONFLICT";
+  }
+
+  return "UNKNOWN";
 }

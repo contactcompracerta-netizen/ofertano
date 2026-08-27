@@ -1,5 +1,5 @@
-import type { PairVerdict, ProductFingerprint } from "./types";
-import { classesAreIncompatible } from "./normalizeCandidate";
+import type { PairVerdict, ProductFingerprint, ProductRole } from "./types";
+import { classesAreIncompatible, isQuantitativeCompactToken } from "./normalizeCandidate";
 
 function reliable<T>(
   field: { value: T | null; confidence: string },
@@ -54,6 +54,40 @@ function tokenOverlap(first: string[], second: string[]): number {
   const intersection = first.filter((token) => right.has(token)).length;
   const union = new Set([...first, ...second]).size;
   return union === 0 ? 0 : intersection / union;
+}
+
+function isAccessoryLikeRole(role: ProductRole | null | undefined): boolean {
+  return role === "ACCESSORY" || role === "REPLACEMENT_PART";
+}
+
+function soldItemsCompatible(
+  first: ProductFingerprint,
+  second: ProductFingerprint,
+): boolean {
+  const sameClass =
+    Boolean(first.productClass.value) &&
+    first.productClass.value === second.productClass.value;
+  if (sameClass) {
+    return true;
+  }
+
+  if (sameText(first.soldItem.value, second.soldItem.value)) {
+    return true;
+  }
+
+  const soldOverlap = tokenOverlap(first.lexicalSignature, second.lexicalSignature);
+  const bothAccessory =
+    isAccessoryLikeRole(first.role.value) && isAccessoryLikeRole(second.role.value);
+
+  if (bothAccessory) {
+    return soldOverlap >= 0.66;
+  }
+
+  if (!first.productClass.value && !second.productClass.value) {
+    return soldOverlap >= 0.4;
+  }
+
+  return soldOverlap >= 0.5;
 }
 
 export function compareFingerprints(
@@ -142,6 +176,32 @@ export function compareFingerprints(
     );
   }
 
+  const soldCompatible = soldItemsCompatible(first, second);
+  const soldOverlap = tokenOverlap(first.lexicalSignature, second.lexicalSignature);
+  const sharedAnchorsEarly = (first.identityAnchors ?? []).filter((anchor) =>
+    (second.identityAnchors ?? []).includes(anchor),
+  );
+  const sharedModelLike =
+    (Boolean(first.model.value) &&
+      Boolean(second.model.value) &&
+      modelsCompatible(first.model.value, second.model.value)) ||
+    sharedAnchorsEarly.length > 0;
+
+  if (
+    sharedModelLike &&
+    !soldCompatible &&
+    soldOverlap < 0.3 &&
+    (Boolean(first.productClass.value) ||
+      Boolean(second.productClass.value) ||
+      (isAccessoryLikeRole(first.role.value) &&
+        isAccessoryLikeRole(second.role.value)) ||
+      (first.role.value === "MAIN" && second.role.value === "MAIN"))
+  ) {
+    hardConflicts.push(
+      `soldItem:${first.soldItem.value ?? "?"}!=${second.soldItem.value ?? "?"}`,
+    );
+  }
+
   if (hardConflicts.length > 0) {
     return {
       relation: "DIFFERENT",
@@ -176,6 +236,9 @@ export function compareFingerprints(
     brandsCompatible(first.brand.value, second.brand.value);
   const sameModel =
     Boolean(first.model.value) &&
+    Boolean(second.model.value) &&
+    !isQuantitativeCompactToken(first.model.value) &&
+    !isQuantitativeCompactToken(second.model.value) &&
     modelsCompatible(first.model.value, second.model.value);
   const sameClass =
     Boolean(first.productClass.value) &&
@@ -189,7 +252,7 @@ export function compareFingerprints(
     second.lexicalSignature,
   );
 
-  if (sameBrand && sameModel) {
+  if (sameBrand && sameModel && soldCompatible) {
     positiveEvidence.push("brand", "model");
     return {
       relation: "SAME",
@@ -199,16 +262,28 @@ export function compareFingerprints(
     };
   }
 
-  if (sameModel && (sameClass || !first.productClass.value || !second.productClass.value)) {
-    positiveEvidence.push("model");
-    if (sameClass) {
-      positiveEvidence.push("productClass");
-    }
+  if (sameModel && sameClass && soldCompatible) {
+    positiveEvidence.push("model", "productClass");
     return {
       relation: "SAME",
       hardConflicts,
       positiveEvidence,
-      confidence: sameClass ? 0.9 : 0.82,
+      confidence: 0.9,
+    };
+  }
+
+  if (
+    sameModel &&
+    soldCompatible &&
+    !first.productClass.value &&
+    !second.productClass.value
+  ) {
+    positiveEvidence.push("model");
+    return {
+      relation: "SAME",
+      hardConflicts,
+      positiveEvidence,
+      confidence: 0.82,
     };
   }
 
@@ -218,7 +293,8 @@ export function compareFingerprints(
   if (
     sharedAnchors.length > 0 &&
     brandAligned &&
-    (sameClass || !first.productClass.value || !second.productClass.value)
+    soldCompatible &&
+    (sameClass || (!first.productClass.value && !second.productClass.value))
   ) {
     positiveEvidence.push("identityAnchor");
     if (sameClass) {
@@ -259,7 +335,8 @@ export function compareFingerprints(
   if (
     sharedStrongIdentityNumber &&
     brandAligned &&
-    (sameClass || !first.productClass.value || !second.productClass.value)
+    soldCompatible &&
+    (sameClass || (!first.productClass.value && !second.productClass.value))
   ) {
     positiveEvidence.push("identityNumber");
     if (sameClass) {
@@ -278,16 +355,19 @@ export function compareFingerprints(
     first.quantity.value && first.quantity.value === second.quantity.value ? "quantity" : null,
     first.material.value && first.material.value === second.material.value ? "material" : null,
   ].filter((item): item is string => Boolean(item));
+  const identityAttributeMatches = attributeMatches.filter((item) => item !== "capacity");
 
   if (
     brandAligned &&
-    (sameClass || !first.productClass.value || !second.productClass.value) &&
+    soldCompatible &&
+    (sameClass || (!first.productClass.value && !second.productClass.value)) &&
     !first.model.value &&
     !second.model.value &&
-    (distinctiveOverlap >= 0.66 || (distinctiveOverlap >= 0.4 && attributeMatches.length >= 1)) &&
+    (distinctiveOverlap >= 0.66 ||
+      (distinctiveOverlap >= 0.4 && identityAttributeMatches.length >= 1)) &&
     lexicalOverlap >= 0.35
   ) {
-    positiveEvidence.push("lexical", ...attributeMatches);
+    positiveEvidence.push("lexical", ...identityAttributeMatches);
     if (sameClass) {
       positiveEvidence.push("productClass");
     }
@@ -428,5 +508,6 @@ export function mergeFingerprints(
     lexicalSignature: Array.from(
       new Set([...base.lexicalSignature, ...extra.lexicalSignature]),
     ),
+    marketplaceCategory: pick(base.marketplaceCategory, extra.marketplaceCategory),
   };
 }

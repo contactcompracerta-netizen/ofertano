@@ -1,21 +1,36 @@
 import type {
   NormalizedCandidate,
+  ProductFingerprint,
   QueryIntent,
   QueryRelevanceEvidence,
+  RankTier,
   RelevanceEvidenceState,
   ScoredCandidate,
 } from "./types";
 import { buildFingerprint } from "./fingerprint";
-import { detectHostSplit, normalizeMultistoreText } from "./normalizeCandidate";
-import { alphanumericCodeOccurs, candidateSatisfiesIdentityAnchor } from "./identityAnchors";
-import { buildQueryCore, productCoreCoverage, roleCompatibility } from "./queryCore";
 import {
+  detectHostSplit,
+  normalizeMultistoreText,
+  tokenize,
+} from "./normalizeCandidate";
+import { alphanumericCodeOccurs, candidateSatisfiesIdentityAnchor } from "./identityAnchors";
+import {
+  buildQueryCore,
+  productCoreCoverage,
+  roleCompatibility,
+  type QueryCore,
+} from "./queryCore";
+import {
+  candidateCoversConcept,
   classifyProductConcept,
   compareProductConcepts,
+  conceptFirstContentIndex,
   isVehicleBrandToken,
   isWeakModifier,
   lexicalTokenAppears,
 } from "./productConcepts";
+import { interpretMarketplaceCategory } from "./marketplaceCategory";
+import { assignRankTier } from "./rank";
 
 function tokenWeight(token: string, intent: QueryIntent): number {
   if (isWeakModifier(token)) {
@@ -71,6 +86,85 @@ function candidateHasToken(token: string, tokens: Set<string>, text: string): bo
   return alphanumericCodeOccurs(text, token);
 }
 
+function isAccessoryLikeRole(role: string | null | undefined): boolean {
+  return role === "ACCESSORY" || role === "REPLACEMENT_PART";
+}
+
+function queryBindingContext(intent: QueryIntent): string[] {
+  const identity = new Set([
+    ...intent.modelTokens.map((item) => item.replace(/\s+/g, "")),
+    ...intent.identityNumbers,
+    ...intent.identityAnchors.map((anchor) => anchor.value),
+  ]);
+
+  return intent.distinctiveTokens.filter((token) => {
+    const compact = token.replace(/\s+/g, "");
+    if (identity.has(token) || identity.has(compact)) {
+      return false;
+    }
+
+    if (/^(?=.*[a-z])(?=.*\d)[a-z0-9]+$/.test(compact)) {
+      return false;
+    }
+
+    return token.length >= 3;
+  });
+}
+
+function hostCompatibleWithQuery(
+  intent: QueryIntent,
+  core: QueryCore,
+  fingerprint: ProductFingerprint,
+): boolean {
+  const host = fingerprint.hostItem.value;
+  if (!host) {
+    return false;
+  }
+
+  const hostTokens = new Set(tokenize(host));
+  if (
+    core.productClass !== "UNKNOWN" &&
+    core.productClassConfidence !== "NONE"
+  ) {
+    if (!candidateCoversConcept(core.productClass, host)) {
+      return false;
+    }
+
+    if (conceptFirstContentIndex(host, core.productClass) !== 0) {
+      return false;
+    }
+  }
+
+  if (intent.modelTokens.length > 0) {
+    const modelHits = intent.modelTokens.filter((token) =>
+      candidateHasToken(token, hostTokens, host),
+    );
+    if (modelHits.length === 0) {
+      return false;
+    }
+  }
+
+  const binding = queryBindingContext(intent);
+  if (
+    (core.productClass === "UNKNOWN" || core.productClassConfidence === "NONE") &&
+    binding.length > 0 &&
+    !binding.some((token) => candidateHasToken(token, hostTokens, host))
+  ) {
+    return false;
+  }
+
+  if (intent.identityAnchors.length > 0 && intent.modelTokens.length === 0) {
+    const hostHits = intent.identityAnchors.filter((anchor) =>
+      alphanumericCodeOccurs(host, anchor.value, "alnum"),
+    );
+    if (hostHits.length === 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function emptyEvidence(
   extras: Partial<QueryRelevanceEvidence> = {},
 ): QueryRelevanceEvidence {
@@ -103,12 +197,24 @@ export function scoreQueryRelevance(
   const core = buildQueryCore(intent.rawQuery);
   const soldText =
     detectHostSplit(candidate.normalizedText).sold || candidate.rawText;
-  const candidateClass = classifyProductConcept(soldText);
-  const classCompatibility = compareProductConcepts(
+  const candidateAccessory = isAccessoryLikeRole(fingerprint.role.value);
+  const queryWantsMain =
+    intent.requestedRole === "MAIN" || intent.requestedRole === "UNKNOWN";
+  const hostOk =
+    candidateAccessory && queryWantsMain
+      ? hostCompatibleWithQuery(intent, core, fingerprint)
+      : false;
+  const classText =
+    candidateAccessory && queryWantsMain && fingerprint.hostItem.value
+      ? fingerprint.hostItem.value
+      : soldText;
+  const candidateClass = classifyProductConcept(classText);
+  let classCompatibility = compareProductConcepts(
     core.productClass,
     candidateClass.id,
   );
-  const coreCoverage = productCoreCoverage(core, soldText);
+  const coreText = classText;
+  const coreCoverage = productCoreCoverage(core, coreText);
   const coreCoverageState: RelevanceEvidenceState =
     coreCoverage === "MATCH" || coreCoverage === "CONFLICT"
       ? coreCoverage
@@ -118,6 +224,7 @@ export function scoreQueryRelevance(
   const roleState = roleCompatibility(
     intent.requestedRole,
     fingerprint.role.value ?? "UNKNOWN",
+    hostOk,
   );
 
   const matchedTerms = intent.normalizedTokens.filter((token) =>
@@ -172,11 +279,39 @@ export function scoreQueryRelevance(
     );
   }
 
+  const category = interpretMarketplaceCategory(candidate.raw.category);
   if (
+    category.kind === "TEXT" &&
+    category.conceptId !== "UNKNOWN" &&
+    core.productClass !== "UNKNOWN" &&
+    core.productClassConfidence !== "NONE"
+  ) {
+    const categoryCompatibility = compareProductConcepts(
+      core.productClass,
+      category.conceptId,
+    );
+    if (categoryCompatibility === "CONFLICT") {
+      hardConflicts.push(`category:${core.productClass}!=${category.conceptId}`);
+    } else if (
+      categoryCompatibility === "MATCH" &&
+      classCompatibility === "UNKNOWN"
+    ) {
+      classCompatibility = "MATCH";
+    }
+  }
+
+  if (
+    !candidateAccessory &&
     core.productClass !== "UNKNOWN" &&
     coreCoverage !== "MATCH"
   ) {
     hardConflicts.push(`productCore:${core.productClass}!=ausente`);
+  }
+
+  if (candidateAccessory && queryWantsMain && !hostOk) {
+    hardConflicts.push(
+      `host:${core.soldText || intent.rawQuery}!=ausente`,
+    );
   }
 
   if (roleState === "CONFLICT") {
@@ -391,6 +526,23 @@ export function scoreQueryRelevance(
     }
   }
 
+  const modelPresent =
+    intent.modelTokens.length > 0 && missingModels.length === 0;
+  const binding = queryBindingContext(intent);
+  const bindingPresent = binding.some((token) =>
+    candidateHasToken(token, candidateTokens, candidateText),
+  );
+  const queryClassUnknown =
+    core.productClass === "UNKNOWN" || core.productClassConfidence === "NONE";
+  if (
+    queryClassUnknown &&
+    binding.length > 0 &&
+    (intent.modelTokens.length > 0 || intent.hasStrongIdentity) &&
+    !bindingPresent
+  ) {
+    hardConflicts.push(`identityContext:${binding.join(",")}!=ausente`);
+  }
+
   const brandCompatibility: RelevanceEvidenceState = intent.brand
     ? hardConflicts.some((item) => item.startsWith("brand:"))
       ? "CONFLICT"
@@ -415,9 +567,13 @@ export function scoreQueryRelevance(
     roleCompatibility: roleState,
   });
 
-  const modelPresent =
-    intent.modelTokens.length > 0 && missingModels.length === 0;
-  const queryRelevance = Math.min(1, twoSided);
+  const modelPresentEnough =
+    modelPresent && (!queryClassUnknown || binding.length === 0 || bindingPresent);
+  const discriminativeMissing =
+    attributeMissing.includes("capacity") ||
+    attributeMissing.includes("quantity") ||
+    attributeMissing.includes("size");
+  let queryRelevance = Math.min(1, twoSided);
   let status: ScoredCandidate["status"] = "RELEVANT";
   let reason = "Candidato representa o produto pedido.";
 
@@ -425,7 +581,7 @@ export function scoreQueryRelevance(
     status = "REJECTED";
     reason = `Conflito comprovado: ${hardConflicts.join(", ")}.`;
   } else if (
-    !modelPresent &&
+    !modelPresentEnough &&
     intent.distinctiveTokens.length > 0 &&
     missingDistinctive.length === intent.distinctiveTokens.length &&
     coreCoverage !== "MATCH"
@@ -435,12 +591,36 @@ export function scoreQueryRelevance(
   } else if (
     queryCoverage < 0.18 &&
     twoSided < 0.12 &&
-    !modelPresent &&
+    !modelPresentEnough &&
     coreCoverage !== "MATCH"
   ) {
     status = "REJECTED";
     reason = "Cobertura lexical insuficiente para a consulta.";
   }
+
+  if (status === "RELEVANT" && discriminativeMissing) {
+    queryRelevance *= 0.82;
+  }
+
+  const classOk =
+    classCompatibility === "MATCH" ||
+    core.productClass === "UNKNOWN" ||
+    core.productClassConfidence === "NONE";
+  const coreOk =
+    coreCoverage === "MATCH" ||
+    core.productClass === "UNKNOWN" ||
+    core.productClassConfidence === "NONE" ||
+    (candidateAccessory && hostOk);
+  const rankTier: RankTier = assignRankTier({
+    status,
+    role: fingerprint.role.value,
+    strongIdentity:
+      (intent.hasStrongIdentity && strongIdentity === "MATCH") ||
+      (Boolean(intent.modelTokens.length) && modelPresentEnough),
+    classOk,
+    coreOk,
+    discriminativeMissing,
+  });
 
   evidence.accepted = status === "RELEVANT";
 
@@ -456,5 +636,6 @@ export function scoreQueryRelevance(
     status,
     reason,
     evidence,
+    rankTier,
   };
 }
