@@ -9,11 +9,17 @@ export { canonicalizeCluster } from "./canonicalize";
 export {
   acquireMarketplaces,
   buildSearchPlan,
+  coverageStatusOf,
   processRawCandidates,
   searchMultistoreV2,
   usarMotorMultistoreV2,
 } from "./search";
-export { persistCanonicalProducts, persistSelectedSearchClusters, scheduleSelectedClusterPersist } from "./persist";
+export {
+  isClusterPublishable,
+  persistCanonicalProducts,
+  persistSelectedSearchClusters,
+  scheduleSelectedClusterPersist,
+} from "./persist";
 export type { PersistProductFn, PersistCanonicalOptions } from "./persist";
 export { traceV2 } from "./trace";
 export { extractIdentityAnchors, hasStrongIdentity } from "./identityAnchors";

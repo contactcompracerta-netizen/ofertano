@@ -977,6 +977,12 @@ assert.ok(
 );
 
 const motoQuery = "Moto G35";
+const motoShort = relevance(motoQuery, "Moto G35 5G Dual Sim");
+assert.equal(motoShort.status, "RELEVANT", "titulo curto sem productClass continua telefone valido");
+assert.equal(motoShort.fingerprint.productClass.value, null);
+assert.equal(motoShort.fingerprint.role.value, "MAIN");
+assert.ok(motoShort.rankTier <= 1);
+
 const motoPhone = relevance(motoQuery, "Smartphone Motorola Moto G35");
 assert.equal(motoPhone.status, "RELEVANT");
 assert.equal(motoPhone.fingerprint.role.value, "MAIN");
@@ -1403,5 +1409,253 @@ assert.ok(
   torneiraFiltro.fingerprint.role.value === "REPLACEMENT_PART" ||
     torneiraFiltro.fingerprint.role.value === "ACCESSORY",
 );
+
+const damperQuery = "Amortecedor do porta malas linea 2009";
+const damperCore = buildQueryCore(damperQuery);
+assert.ok(
+  damperCore.distinctiveContext.includes("linea"),
+  "Linea permanece contexto distintivo de host mesmo sem marca Fiat na consulta",
+);
+assert.equal(
+  relevance(damperQuery, "Amortecedor Porta Malas Fiat Linea 2009 2010 2011 2012").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance(damperQuery, "Amortecedor tampa porta malas Linea 2008 a 2012").status,
+  "RELEVANT",
+  "faixa que contem 2009 e mala no singular continuam o host pedido",
+);
+assert.equal(
+  relevance(damperQuery, "Amortecedor Porta Malas Peugeot 207").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(damperQuery, "Amortecedor Porta Malas Renault Clio").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(damperQuery, "Amortecedor Porta Malas Fiat Punto").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(damperQuery, "Amortecedor Porta Malas VW Golf").status,
+  "REJECTED",
+);
+assert.equal(
+  compareFingerprints(
+    relevance(damperQuery, "Amortecedor de porta malas fiat linea 2009-2016").fingerprint,
+    relevance(damperQuery, "Amortecedor Porta Malas Peugeot 207 Passion 2009 2010 2011").fingerprint,
+  ).relation,
+  "DIFFERENT",
+  "hosts Linea e Peugeot nunca entram no mesmo Compare",
+);
+
+const nitroGamerQuery = "Notebook Nitro gamer";
+const nitroGamerCore = buildQueryCore(nitroGamerQuery);
+assert.ok(nitroGamerCore.distinctiveContext.includes("nitro"));
+assert.equal(nitroGamerCore.distinctiveContext.includes("gamer"), false);
+assert.equal(
+  relevance(nitroGamerQuery, "Notebook Gamer Acer Nitro V15 Intel Core i5 RTX 4050").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance(nitroGamerQuery, "Notebook Gamer Lenovo IdeaPad Gaming 3i").status,
+  "REJECTED",
+  "Nitro e contexto distintivo de linha; notebook gamer sem Nitro nao e PRIMARY",
+);
+assert.equal(
+  relevance(nitroGamerQuery, "Notebook Lenovo").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance("Notebook gamer", "Notebook Gamer Lenovo IdeaPad Gaming 3i").status,
+  "RELEVANT",
+  "consulta ampla por notebook gamer continua ampla",
+);
+assert.equal(
+  relevance(nitroGamerQuery, "Fonte Compativel Para Notebook Gamer Acer Aspire Nitro 19v").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance(nitroGamerQuery, "Fonte Compativel Para Notebook Gamer Acer Aspire Nitro 19v").rankTier,
+  2,
+);
+
+const adultSuitQuery = "Terno azul adulto";
+const adultSuitValid = relevance(
+  adultSuitQuery,
+  "Terno Adulto Azul Royal (Paletó + Calça) Microfibra",
+);
+assert.equal(adultSuitValid.status, "RELEVANT");
+assert.ok(adultSuitValid.rankTier <= 1);
+assert.deepEqual([...adultSuitValid.evidence.attributeMatches].sort(), ["age", "color"]);
+
+const ternoDeReis = relevance(adultSuitQuery, "Terno De Reis");
+assert.equal(
+  ternoDeReis.status,
+  "RELEVANT",
+  "Terno De Reis permanece candidato ambiguo; ausencia de azul/adulto nao e conflito",
+);
+assert.notEqual(
+  ternoDeReis.status,
+  "REJECTED",
+  "nao rejeitar por blacklist de Reis",
+);
+assert.equal(ternoDeReis.fingerprint.productClass.value, "suit");
+assert.equal(ternoDeReis.fingerprint.role.value, "MAIN");
+assert.equal(ternoDeReis.fingerprint.color.value, null);
+assert.ok(ternoDeReis.evidence.attributeMissing.includes("color"));
+assert.ok(ternoDeReis.evidence.attributeMissing.includes("age"));
+assert.equal(ternoDeReis.evidence.attributeConflicts.length, 0);
+assert.equal(
+  ternoDeReis.rankTier,
+  3,
+  "atributos explicitos ausentes diminuem para TIER 3; nao inventam MATCH",
+);
+assert.ok(
+  ternoDeReis.rankTier > adultSuitValid.rankTier,
+  "terno confirmado com azul+adulto fica acima do candidato ambiguo",
+);
+assert.equal(
+  relevance(adultSuitQuery, "Fantasia Cosplay Traje Personagem Terno Azul").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(adultSuitQuery, "1010 detetive Conan cosplay traje Shinichi Kudo azul terno uniforme adulto").status,
+  "REJECTED",
+  "rejeicao e de classe costume/cosplay, nao de personagem",
+);
+assert.equal(
+  relevance(adultSuitQuery, "Terno Infantil Azul Menino").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(adultSuitQuery, "10cm roupas de boneca azul marrom terno").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(adultSuitQuery, "Terno azul sem fio pular corda adulto Indoor").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(adultSuitQuery, "Gravata azul para terno adulto").rankTier,
+  2,
+);
+assert.equal(
+  relevance(adultSuitQuery, "Broche para terno azul").rankTier,
+  2,
+);
+assert.equal(
+  relevance(adultSuitQuery, "Maiô terno de banho azul adulto").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(
+    adultSuitQuery,
+    "Uniforme de coro universitário cheerleading traje azul jogos desempenho traje adulto",
+  ).status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(
+    adultSuitQuery,
+    "Cenário Fotográfico 2,60x1,75 Culto De Homens Terno Azul",
+  ).status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(adultSuitQuery, "Calça de terno executivo azul adulto").status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(
+    adultSuitQuery,
+    "Azul Preto Aranha Terno Manga Longa Compressão Topo Masculino Secagem Rápida Treino Ciclismo",
+  ).status,
+  "REJECTED",
+);
+assert.equal(
+  relevance(
+    adultSuitQuery,
+    "2026 novo desempenho latino vestido de dança feminino sexy terno azul",
+  ).status,
+  "REJECTED",
+);
+assert.equal(
+  relevance("Nivel laser dwalt", "Tripé de Nível Laser DEWALT DW0881T").rankTier,
+  2,
+);
+assert.equal(
+  relevance("Nivel laser dwalt", "Tripé de Nível Laser DEWALT DW0881T").fingerprint.role.value,
+  "ACCESSORY",
+);
+
+const laserQuery = "Nivel laser dwalt";
+const laserCore = buildQueryCore(laserQuery);
+assert.equal(laserCore.productClass, "laser_level");
+assert.ok(laserCore.distinctiveContext.includes("dwalt"));
+assert.equal(
+  relevance(laserQuery, "Nível Laser DeWalt DW088K").status,
+  "RELEVANT",
+  "typo conservador dwalt~dewalt no contexto da marca",
+);
+assert.equal(
+  relevance(laserQuery, "DEWALT Trena a laser 30m compacta DWHT77100").status,
+  "REJECTED",
+  "trena laser nao equivale a nivel laser",
+);
+assert.equal(
+  relevance(laserQuery, "Nível a Laser NLR020 Recarregável 20 Metros Vonder").status,
+  "REJECTED",
+  "nivel laser sem o contexto distintivo da marca pedida nao vence so pela classe",
+);
+assert.equal(
+  relevance(laserQuery, "Nivel A Laser 2 Linhas Verdes Bosch Gll 12-22").status,
+  "REJECTED",
+);
+
+const oppoQuery = "Oppo A6F";
+assert.equal(
+  relevance(oppoQuery, "Smartphone OPPO A6F 128GB").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance(
+    oppoQuery,
+    "Capa para OPPO A6X, Capa para Telefone OPPO A6F A6X A5",
+  ).status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance(
+    oppoQuery,
+    "Capa para OPPO A6X, Capa para Telefone OPPO A6T, Capa para OPPO A6C, Capa para OPPO A6T Pro A6 5G, Capa traseira de silicone rígida magnética colorida à prova de choque.",
+  ).status,
+  "REJECTED",
+);
+
+const cheapestThree = processRawCandidates("JBL Tune 520BT", [
+  raw("JBL Tune 520BT Preto", {
+    marketplace: "AMAZON",
+    marketplaceName: "Amazon",
+    externalId: "store-a",
+    price: 150,
+  }),
+  raw("JBL Tune 520BT Bluetooth", {
+    marketplace: "MERCADO_LIVRE",
+    marketplaceName: "Mercado Livre",
+    externalId: "store-b",
+    price: 99,
+  }),
+  raw("Headphone JBL Tune 520BT", {
+    marketplace: "SHOPEE",
+    marketplaceName: "Shopee",
+    externalId: "store-c",
+    price: 120,
+  }),
+]);
+assert.equal(cheapestThree.products[0]?.price, 99, "canonical = menor preco entre equivalentes");
+assert.equal(cheapestThree.products[0]?.primaryMarketplace, "Mercado Livre");
+assert.equal(cheapestThree.products[0]?.offers.length, 3, "compareCount >= 2");
 
 console.log("query relevance regression: todos os casos estruturais passaram");

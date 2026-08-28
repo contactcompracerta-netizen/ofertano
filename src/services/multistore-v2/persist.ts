@@ -25,7 +25,29 @@ export type PersistCanonicalOptions = {
   limit?: number;
   deadline?: PersistDeadline;
   persistProduct?: PersistProductFn;
+  headsOnly?: boolean;
+  existingIds?: string[];
 };
+
+/*
+ * Publicacao != relevancia.
+ * TIER 0/1 PRIMARY e TIER 2 ACCESSORY separado podem publicar.
+ * TIER 3 ambiguo nao vira oferta confirmada.
+ * Publicacao exige coverageStatus COMPLETE e pelo menos 1 oferta valida.
+ * INCOMPLETE (TIMEOUT/BLOCKED/ERROR/UNUSABLE/NOT_RUN) nunca publica,
+ * mesmo com 2+ ofertas: a menor oferta so e final apos cobertura completa.
+ */
+export function isClusterPublishable(product: CanonicalProduct): boolean {
+  if (product.rankTier === 3) {
+    return false;
+  }
+
+  if (product.offers.length <= 0) {
+    return false;
+  }
+
+  return product.coverageStatus === "COMPLETE";
+}
 
 function toMarketplaceName(code: MarketplaceCode): ProductImport["marketplace"] {
   return marketplaceLabel(code) as ProductImport["marketplace"];
@@ -95,8 +117,15 @@ export async function persistCanonicalProducts(
       : Math.max(0, Math.min(options.limit, products.length));
   const selected = products.slice(0, limit);
   const ids: string[] = [];
+  const existingIds = options.existingIds ?? [];
+  const headsOnly = options.headsOnly === true;
 
   for (const product of selected) {
+    if (!isClusterPublishable(product)) {
+      ids.push("");
+      continue;
+    }
+
     if (!canStartPersistWrite(options.deadline)) {
       ids.push("");
       continue;
@@ -111,20 +140,43 @@ export async function persistCanonicalProducts(
       continue;
     }
 
+    const existingId = existingIds[ids.length]?.trim() || "";
+    if (existingId && headsOnly) {
+      ids.push(existingId);
+      continue;
+    }
+
+    let recorded = false;
     try {
       const [first, ...rest] = imports;
-      if (!canStartPersistWrite(options.deadline)) {
+      if (!first) {
         ids.push("");
+        recorded = true;
         continue;
       }
 
-      const saved = await persistProduct(first!, first!.affiliateLink, {
-        discoverySource: "ON_DEMAND_SEARCH",
-        autoCreated: true,
-        sourceQuery: query,
-      });
+      let savedId = existingId;
+      if (!savedId) {
+        if (!canStartPersistWrite(options.deadline)) {
+          ids.push("");
+          recorded = true;
+          continue;
+        }
 
-      ids.push(saved.id);
+        const saved = await persistProduct(first, first.affiliateLink, {
+          discoverySource: "ON_DEMAND_SEARCH",
+          autoCreated: true,
+          sourceQuery: query,
+        });
+        savedId = saved.id;
+      }
+
+      ids.push(savedId);
+      recorded = true;
+
+      if (headsOnly) {
+        continue;
+      }
 
       for (const offer of rest) {
         if (!canStartPersistWrite(options.deadline)) {
@@ -132,7 +184,7 @@ export async function persistCanonicalProducts(
         }
 
         await persistProduct(offer, offer.affiliateLink, {
-          targetProductId: saved.id,
+          targetProductId: savedId,
           verifiedExactMatch: true,
           discoverySource: "ON_DEMAND_SEARCH",
           autoCreated: true,
@@ -141,7 +193,9 @@ export async function persistCanonicalProducts(
       }
     } catch (error) {
       console.error("[MULTISTORE-V2] persistencia falhou para cluster", product.clusterId, error);
-      ids.push("");
+      if (!recorded) {
+        ids.push("");
+      }
     }
   }
 

@@ -8,6 +8,7 @@ import {
   isAutomotiveConcept,
   isVehicleBrandToken,
   isWeakModifier,
+  isGenericDescriptor,
   normalizeConceptText,
   type ConceptCompatibility,
   type ProductConceptId,
@@ -16,6 +17,8 @@ import {
   detectHostSplit,
   extractCapacity,
   extractColor,
+  extractAge,
+  extractQueryYear,
   extractIdentityNumbers,
   extractMaterial,
   extractModelTokens,
@@ -23,6 +26,9 @@ import {
   extractSize,
   inferRole,
   isStopWord,
+  isAttributeWord,
+  isAccessoryHead,
+  isReplacementHead,
   normalizeMultistoreText,
   tokenize,
   wordsOf,
@@ -82,6 +88,7 @@ export type QueryCore = {
   weakModifiers: string[];
   requestedRole: ProductRole;
   distinctiveTokens: string[];
+  distinctiveContext: string[];
   normalizedTokens: string[];
   hasStrongIdentity: boolean;
 };
@@ -129,6 +136,8 @@ export function buildQueryCore(query: string): QueryCore {
   const capacity = extractCapacity(soldTokens);
   const quantity = extractQuantity(soldTokens);
   const color = extractColor(soldTokens);
+  const age = extractAge(tokenize(rawQuery));
+  const year = extractQueryYear(rawQuery);
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
   const modelTokens = extractModelTokens(soldTokens);
@@ -183,6 +192,32 @@ export function buildQueryCore(query: string): QueryCore {
       ],
     ),
   );
+  const distinctiveContext = distinctiveTokens.filter((token) => {
+    if (isGenericDescriptor(token) || isAttributeWord(token) || isAccessoryHead(token) || isReplacementHead(token)) {
+      return false;
+    }
+
+    if (brandTokens.includes(token)) {
+      return false;
+    }
+
+    if (modelTokens.includes(token)) {
+      return false;
+    }
+
+    if (Object.values({
+      ...(capacity ? { capacity } : {}),
+      ...(quantity ? { quantity } : {}),
+      ...(color ? { color } : {}),
+      ...(material ? { material } : {}),
+      ...(size ? { size } : {}),
+      ...(age ? { age } : {}),
+    }).some((value) => value === token || value.includes(token))) {
+      return false;
+    }
+
+    return true;
+  });
 
   return {
     rawQuery,
@@ -203,11 +238,14 @@ export function buildQueryCore(query: string): QueryCore {
       ...(color ? { color } : {}),
       ...(material ? { material } : {}),
       ...(size ? { size } : {}),
+      ...(age ? { age } : {}),
+      ...(year ? { year } : {}),
     },
     compatibilityTokens,
     weakModifiers,
     requestedRole: inferSoldRole(split.sold, split.host),
     distinctiveTokens,
+    distinctiveContext,
     normalizedTokens: allTokens,
     hasStrongIdentity: hasStrongIdentity(identityAnchors),
   };
@@ -227,6 +265,7 @@ export function queryIntentFromCore(core: QueryCore): QueryIntent {
     importantAttributes: core.attributes,
     normalizedTokens: core.normalizedTokens,
     distinctiveTokens: core.distinctiveTokens,
+    distinctiveContext: core.distinctiveContext,
     identityNumbers: core.identityNumbers,
     identityAnchors: core.identityAnchors,
     hasStrongIdentity: core.hasStrongIdentity,

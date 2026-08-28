@@ -19,6 +19,8 @@ import {
   scoreQueryRelevance,
   normalizeCandidate,
   scheduleSelectedClusterPersist,
+  persistCanonicalProducts,
+  isClusterPublishable,
   type PersistProductFn,
 } from "@/services/multistore-v2";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
@@ -412,23 +414,49 @@ export async function searchCatalogOrDiscover(
       const limit = Math.max(discoveryLimit, 12);
       const v2 = await searchMultistoreV2(search, {
         persist: false,
+        hunt: true,
         limit,
         adapters: options.adapters,
       });
 
-      if (v2.products.length > 0 && options.schedulePersist) {
-        scheduleSelectedClusterPersist(
-          options.schedulePersist,
-          search,
-          v2.products,
-          {
-            limit,
-            persistProduct: options.persistProduct,
-          },
-        );
-      }
+      const publishableProducts = v2.products.filter(isClusterPublishable);
+      if (publishableProducts.length > 0 && (options.schedulePersist || options.persistProduct)) {
+        const headIds = await persistCanonicalProducts(search, publishableProducts, {
+          limit,
+          headsOnly: true,
+          persistProduct: options.persistProduct,
+        });
 
-      if (v2.views.length > 0) {
+        if (options.schedulePersist) {
+          scheduleSelectedClusterPersist(
+            options.schedulePersist,
+            search,
+            publishableProducts,
+            {
+              limit,
+              persistProduct: options.persistProduct,
+              existingIds: headIds,
+            },
+          );
+        }
+
+        const views = v2.views.flatMap((view, index) => {
+          const id = headIds[index]?.trim();
+          if (!id) {
+            return [];
+          }
+
+          return [{ ...view, id }];
+        });
+
+        if (views.length > 0) {
+          return {
+            query: search,
+            source: "DISCOVERY",
+            products: views as Awaited<ReturnType<typeof searchCatalog>>,
+          };
+        }
+      } else if (v2.views.length > 0) {
         return {
           query: search,
           source: "DISCOVERY",

@@ -1,5 +1,5 @@
 import type { PairVerdict, ProductFingerprint, ProductRole } from "./types";
-import { classesAreIncompatible, isQuantitativeCompactToken } from "./normalizeCandidate";
+import { classesAreIncompatible, isQuantitativeCompactToken, tokenize } from "./normalizeCandidate";
 
 function reliable<T>(
   field: { value: T | null; confidence: string },
@@ -54,6 +54,43 @@ function tokenOverlap(first: string[], second: string[]): number {
   const intersection = first.filter((token) => right.has(token)).length;
   const union = new Set([...first, ...second]).size;
   return union === 0 ? 0 : intersection / union;
+}
+
+function hostTokens(fingerprint: ProductFingerprint): string[] {
+  if (!fingerprint.hostItem.value) {
+    return [];
+  }
+
+  return tokenize(fingerprint.hostItem.value).filter(
+    (token) => !/^(19|20)\d{2}$/.test(token) && token.length >= 3,
+  );
+}
+
+function hostsCompatible(
+  first: ProductFingerprint,
+  second: ProductFingerprint,
+): boolean {
+  const left = hostTokens(first);
+  const right = hostTokens(second);
+  if (left.length === 0 || right.length === 0) {
+    const present = left.length > 0 ? left : right;
+    const missing = left.length > 0 ? second : first;
+    if (present.length === 0) {
+      return true;
+    }
+
+    const haystack = [
+      missing.hostItem.value,
+      missing.soldItem.value,
+      missing.lexicalSignature.join(" "),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const haystackTokens = new Set(tokenize(haystack));
+    return present.some((token) => haystackTokens.has(token) && token.length >= 4);
+  }
+
+  return tokenOverlap(left, right) > 0;
 }
 
 function isAccessoryLikeRole(role: ProductRole | null | undefined): boolean {
@@ -113,6 +150,12 @@ export function compareFingerprints(
   ) {
     hardConflicts.push(
       `productClass:${first.productClass.value}!=${second.productClass.value}`,
+    );
+  }
+
+  if (!hostsCompatible(first, second)) {
+    hardConflicts.push(
+      `host:${first.hostItem.value ?? first.soldItem.value ?? "?"}!=${second.hostItem.value ?? second.soldItem.value ?? "?"}`,
     );
   }
 

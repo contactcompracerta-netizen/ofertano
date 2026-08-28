@@ -24,11 +24,16 @@ import { buildQueryIntent } from "./queryIntent";
 import { scoreQueryRelevance } from "./queryRelevance";
 import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
-import { persistCanonicalProducts, type PersistProductFn } from "./persist";
+import {
+  isClusterPublishable,
+  persistCanonicalProducts,
+  type PersistProductFn,
+} from "./persist";
 import { traceV2 } from "./trace";
 import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
 import { buildSearchPlan } from "./queryPlan";
+export { buildSearchPlan };
 import { rankCanonicalProducts } from "./rank";
 import {
   DEFAULT_SEARCH_BUDGET,
@@ -55,7 +60,15 @@ export function usarMotorMultistoreV2(): boolean {
   return value !== "legacy";
 }
 
-export { buildSearchPlan };
+export function coverageStatusOf(
+  acquisitions: MarketplaceAcquisition[],
+): "COMPLETE" | "INCOMPLETE" {
+  return acquisitions.some(
+    (item) => item.status !== "SUCCESS" && item.status !== "EMPTY",
+  )
+    ? "INCOMPLETE"
+    : "COMPLETE";
+}
 
 function titleHasBrand(title: string, brand: string | null): boolean {
   if (!brand) {
@@ -85,6 +98,10 @@ function mapAcquisitionStatus(
 
   if (outcome === "UNUSABLE") {
     return "UNUSABLE";
+  }
+
+  if (outcome === "NOT_RUN") {
+    return "NOT_RUN";
   }
 
   return "ERROR";
@@ -200,6 +217,7 @@ async function huntMissingStoreOffers(
   knownKeys: Set<string>,
   limit: number,
   deadline: SearchDeadline,
+  adapters: DiscoveryAdapter[] = listarDiscoveryAdaptersAtivos(),
 ): Promise<ProductCluster[]> {
   if (deadline.remainingMs() < 4_000) {
     return clusters;
@@ -214,7 +232,6 @@ async function huntMissingStoreOffers(
   }
 
   const huntAbort = composeAbortSignal(huntMs, deadline.signal);
-  const adapters = listarDiscoveryAdaptersAtivos();
   const nextClusters = clusters.map((cluster) => ({
     ...cluster,
     members: [...cluster.members],
@@ -644,14 +661,24 @@ export async function searchMultistoreV2(
             knownKeys,
             limit,
             deadline,
+            options.adapters ?? listarDiscoveryAdaptersAtivos(),
           )
         : processed.clusters;
+    const coverageStatus = coverageStatusOf(acquisitions);
     const products = rankCanonicalProducts(
       huntedClusters
         .map(canonicalizeCluster)
         .filter((item): item is CanonicalProduct => item !== null),
-    );
-    const selectedProducts = products.slice(0, limit);
+    ).map((product) => {
+      const withCoverage = { ...product, coverageStatus };
+      return {
+        ...withCoverage,
+        publishable: isClusterPublishable(withCoverage),
+      };
+    });
+    const selectedProducts = products
+      .filter((product) => product.publishable)
+      .slice(0, limit);
     const selectedClusters = selectedProducts
       .map((product) =>
         huntedClusters.find((cluster) => cluster.clusterId === product.clusterId),

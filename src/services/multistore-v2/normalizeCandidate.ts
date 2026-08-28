@@ -64,6 +64,8 @@ const ACCESSORY_HEADS = new Set([
   "carregador",
   "adaptador",
   "suporte",
+  "tripe",
+  "tripes",
   "bolsa",
   "protetor",
   "almofada",
@@ -92,6 +94,10 @@ const ACCESSORY_HEADS = new Set([
   "adesivo",
   "adesivos",
   "quadro",
+  "gravata",
+  "gravatas",
+  "clipe",
+  "clipes",
 ]);
 
 const REPLACEMENT_HEADS = new Set([
@@ -871,6 +877,92 @@ export function isSizeHint(token: string | undefined): boolean {
 
 export function extractColor(tokens: string[]): string | null {
   return tokens.find((token) => COLOR_WORDS.has(token)) ?? null;
+}
+
+const CHILD_AGE_TOKENS = new Set([
+  "infantil",
+  "crianca",
+  "criancas",
+  "menino",
+  "menina",
+  "meninos",
+  "meninas",
+  "pajem",
+  "kids",
+  "bebe",
+  "baby",
+]);
+
+const ADULT_AGE_TOKENS = new Set([
+  "adulto",
+  "adulta",
+  "adultos",
+  "adultas",
+]);
+
+export function extractAge(tokens: string[]): string | null {
+  if (tokens.some((token) => CHILD_AGE_TOKENS.has(token))) {
+    return "infantil";
+  }
+
+  if (tokens.some((token) => ADULT_AGE_TOKENS.has(token))) {
+    return "adulto";
+  }
+
+  return null;
+}
+
+export type YearCoverage = {
+  explicit: boolean;
+  contains: (year: number) => boolean;
+  summary: string;
+};
+
+export function extractYearCoverage(text: string): YearCoverage {
+  const normalized = normalizeMultistoreText(text);
+  const ranges: Array<[number, number]> = [];
+  const spanned = new Set<number>();
+  const rangePattern = /\b((?:19|20)\d{2})\s*(?:a|ate|-|\/)\s*((?:19|20)\d{2})\b/g;
+
+  for (const match of normalized.matchAll(rangePattern)) {
+    const from = Number(match[1]);
+    const to = Number(match[2]);
+    const start = Math.min(from, to);
+    const end = Math.max(from, to);
+    ranges.push([start, end]);
+    spanned.add(from);
+    spanned.add(to);
+  }
+
+  const years: number[] = [];
+  for (const match of normalized.matchAll(/\b((?:19|20)\d{2})\b/g)) {
+    const year = Number(match[1]);
+    if (!spanned.has(year)) {
+      years.push(year);
+    }
+  }
+
+  const explicit = ranges.length > 0 || years.length > 0;
+  return {
+    explicit,
+    contains: (year) =>
+      ranges.some(([start, end]) => year >= start && year <= end) ||
+      years.includes(year),
+    summary: [
+      ...ranges.map(([start, end]) => `${start}-${end}`),
+      ...years.map(String),
+    ].join(","),
+  };
+}
+
+export function extractQueryYear(text: string): string | null {
+  const coverage = extractYearCoverage(text);
+  const match = normalizeMultistoreText(text).match(/\b((?:19|20)\d{2})\b/);
+  if (!coverage.explicit || !match) {
+    return null;
+  }
+
+  return match[1] ?? null;
 }
 
 export function extractMaterial(tokens: string[]): string | null {

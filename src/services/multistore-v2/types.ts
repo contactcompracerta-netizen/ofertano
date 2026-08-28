@@ -11,7 +11,8 @@ export type AcquisitionStatus =
   | "BLOCKED"
   | "ERROR"
   | "UNUSABLE"
-  | "TIMEOUT";
+  | "TIMEOUT"
+  | "NOT_RUN";
 
 export type IdentityAnchorKind =
   | "MODEL"
@@ -66,6 +67,7 @@ export type QueryIntent = {
   importantAttributes: Record<string, string>;
   normalizedTokens: string[];
   distinctiveTokens: string[];
+  distinctiveContext: string[];
   identityNumbers: string[];
   identityAnchors: IdentityAnchor[];
   hasStrongIdentity: boolean;
@@ -208,6 +210,8 @@ export type CanonicalProduct = {
   marketplaces: string[];
   confidence: number;
   rankTier: RankTier;
+  coverageStatus?: "COMPLETE" | "INCOMPLETE";
+  publishable?: boolean;
 };
 
 export type CanonicalOffer = {

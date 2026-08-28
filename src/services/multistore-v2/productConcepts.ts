@@ -33,8 +33,15 @@ export type ProductConceptId =
   | "blender"
   | "nightstand"
   | "suit"
+  | "costume"
   | "swimwear"
   | "jewelry"
+  | "laser_level"
+  | "laser_measure"
+  | "jump_rope"
+  | "photography_backdrop"
+  | "trousers"
+  | "sportswear"
   | "furniture"
   | "furniture_part"
   | "lapis"
@@ -196,8 +203,8 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
   },
   {
     id: "toy",
-    phrases: ["brinquedo infantil", "jogo infantil"],
-    tokens: ["brinquedo", "brinquedos"],
+    phrases: ["brinquedo infantil", "jogo infantil", "roupa de boneca"],
+    tokens: ["brinquedo", "brinquedos", "boneco", "boneca", "funko"],
     coreMode: "token",
   },
   {
@@ -222,6 +229,68 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
       ["terno", "ternos", "suit", "suits"],
       ["conjunto social", "paleto e calca", "paleto calca"],
     ],
+  },
+  {
+    id: "costume",
+    phrases: [
+      "traje de personagem",
+      "fantasia de halloween",
+      "vestido de danca",
+      "uniforme de coro",
+    ],
+    tokens: ["cosplay", "fantasia", "halloween", "cheerleading"],
+    coreMode: "token",
+  },
+  {
+    id: "photography_backdrop",
+    phrases: ["cenario fotografico", "fundo fotografico"],
+    tokens: [],
+    coreMode: "phrase",
+  },
+  {
+    id: "trousers",
+    phrases: ["calca de terno", "calcas de terno"],
+    tokens: [],
+    coreMode: "phrase",
+  },
+  {
+    id: "sportswear",
+    phrases: ["secagem rapida"],
+    tokens: ["ciclismo", "compressao"],
+    coreMode: "token",
+  },
+  {
+    id: "jump_rope",
+    phrases: ["pular corda", "corda de pular", "jump rope"],
+    tokens: [],
+    coreMode: "phrase",
+  },
+  {
+    id: "laser_level",
+    phrases: [
+      "nivel laser",
+      "nivel a laser",
+      "nivel de laser",
+      "laser de linha",
+      "line laser",
+      "laser autonivelador",
+    ],
+    tokens: [],
+    coreMode: "phrase",
+    allOf: [["nivel", "laser"]],
+  },
+  {
+    id: "laser_measure",
+    phrases: [
+      "trena laser",
+      "trena a laser",
+      "trena de laser",
+      "medidor a laser",
+      "medidor laser",
+    ],
+    tokens: [],
+    coreMode: "phrase",
+    allOf: [["trena", "laser"]],
   },
   {
     id: "swimwear",
@@ -542,7 +611,10 @@ const AUTOMOTIVE_CONCEPTS = new Set<ProductConceptId>([
 const CONCEPT_PARENTS: Partial<Record<ProductConceptId, ProductConceptId>> = {
   nightstand: "furniture",
   suit: "apparel",
+  costume: "apparel",
   swimwear: "apparel",
+  trousers: "apparel",
+  sportswear: "apparel",
   clay_water_filter: "water_filter",
   pressure_cooker: "cookware",
   rice_cooker: "cookware",
@@ -778,6 +850,64 @@ export function isWeakModifier(token: string): boolean {
   return token.length <= 2 && !/\d/.test(token);
 }
 
+const GENERIC_DESCRIPTORS = new Set([
+  "gamer",
+  "gaming",
+  "slim",
+  "fit",
+  "profissional",
+  "digital",
+  "completo",
+  "masculino",
+  "masculina",
+  "feminino",
+  "feminina",
+  "recarregavel",
+  "automatico",
+  "autonivelante",
+  "impermeavel",
+  "tatico",
+  "universal",
+  "mini",
+  "indoor",
+  "outdoor",
+  "intel",
+  "core",
+  "amd",
+  "ryzen",
+  "nvidia",
+  "geforce",
+  "windows",
+  "linux",
+  "ssd",
+  "hdd",
+  "ddr",
+  "wifi",
+  "bluetooth",
+  "wireless",
+  "geracao",
+  "tela",
+  "full",
+  "led",
+  "ips",
+  "home",
+  "movel",
+  "moveis",
+  "quarto",
+  "casa",
+  "loja",
+  "conjunto",
+  "modelo",
+  "compacto",
+  "compacta",
+  "corredicas",
+  "corredica",
+]);
+
+export function isGenericDescriptor(token: string): boolean {
+  return GENERIC_DESCRIPTORS.has(token) || isWeakModifier(token);
+}
+
 export function isVehicleBrandToken(token: string): boolean {
   return VEHICLE_BRANDS.has(token);
 }
@@ -856,9 +986,11 @@ function familyScore(family: ConceptFamily, normalized: string): {
   if (family.id === "apparel" && /\bterno\b|\bsuits?\b/.test(normalized)) {
     const swimwear = familyById("swimwear");
     const jewelry = familyById("jewelry");
+    const costume = familyById("costume");
     if (
       (!swimwear || !familyHasHit(swimwear, normalized)) &&
-      (!jewelry || !familyHasHit(jewelry, normalized))
+      (!jewelry || !familyHasHit(jewelry, normalized)) &&
+      (!costume || !familyHasHit(costume, normalized))
     ) {
       score = 0;
     }
@@ -867,7 +999,22 @@ function familyScore(family: ConceptFamily, normalized: string): {
   if (family.id === "suit") {
     const swimwear = familyById("swimwear");
     const jewelry = familyById("jewelry");
+    const costume = familyById("costume");
+    const jumpRope = familyById("jump_rope");
+    const sportswear = familyById("sportswear");
+    const trousers = familyById("trousers");
+    const backdrop = familyById("photography_backdrop");
     if (swimwear && familyHasHit(swimwear, normalized)) {
+      score = 0;
+    } else if (costume && familyHasHit(costume, normalized)) {
+      score = 0;
+    } else if (jumpRope && familyHasHit(jumpRope, normalized)) {
+      score = 0;
+    } else if (sportswear && familyHasHit(sportswear, normalized)) {
+      score = 0;
+    } else if (trousers && familyHasHit(trousers, normalized)) {
+      score = 0;
+    } else if (backdrop && familyHasHit(backdrop, normalized)) {
       score = 0;
     } else if (jewelry && familyHasHit(jewelry, normalized)) {
       const jewelryIndex = firstHitTokenIndex(jewelry, normalized);
@@ -1140,6 +1287,34 @@ export function canonicalClassToken(id: ProductConceptId): string {
 
   if (id === "suit") {
     return "terno";
+  }
+
+  if (id === "costume") {
+    return "fantasia";
+  }
+
+  if (id === "laser_level") {
+    return "nivel laser";
+  }
+
+  if (id === "laser_measure") {
+    return "trena laser";
+  }
+
+  if (id === "jump_rope") {
+    return "pular corda";
+  }
+
+  if (id === "photography_backdrop") {
+    return "cenario fotografico";
+  }
+
+  if (id === "trousers") {
+    return "calca de terno";
+  }
+
+  if (id === "sportswear") {
+    return "roupa esportiva";
   }
 
   if (id === "clay_water_filter") {

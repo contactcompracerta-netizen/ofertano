@@ -941,9 +941,20 @@ async function runAcquisitionContract() {
     persist: false,
     adapters,
   });
-  assert.ok(mixed.views.length >= 1, "Candidato relevante de uma loja nao vira zero.");
+  assert.ok(
+    mixed.relevantCandidates.length >= 1,
+    "Candidato relevante de uma loja nao vira zero.",
+  );
+  assert.equal(
+    mixed.views.length,
+    0,
+    "1 oferta + BLOCKED/ERROR nao publica conclusao single-store",
+  );
   assert.equal(mixed.singleStoreClusters, mixed.products.length);
-  assert.ok(mixed.views[0]?.id.startsWith("v2-"), "Persistencia desligada nao apaga o cluster vivo.");
+  assert.ok(
+    mixed.relevantCandidates.some((item) => item.status === "RELEVANT"),
+    "Persistencia desligada nao apaga o candidato vivo interno.",
+  );
   assert.deepEqual(mixed.marketplacesAttempted, [
     "MERCADO_LIVRE",
     "AMAZON",
@@ -1042,7 +1053,15 @@ async function runAcquisitionContract() {
   });
   const timeoutElapsed = Date.now() - timeoutStarted;
   assert.ok(timeoutElapsed < 2_000, `CASO timeout: terminou em ${timeoutElapsed}ms, dentro do orcamento`);
-  assert.ok(timeoutResult.views.length >= 1, "CASO timeout: resultado valido da loja rapida permanece");
+  assert.ok(
+    timeoutResult.relevantCandidates.length >= 1,
+    "CASO timeout: candidato valido da loja rapida permanece internamente",
+  );
+  assert.equal(
+    timeoutResult.views.length,
+    0,
+    "CASO timeout: 1 oferta + cobertura INCOMPLETE nao publica",
+  );
   assert.equal(
     timeoutResult.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status,
     "TIMEOUT",

@@ -10,6 +10,8 @@ import type {
 import { buildFingerprint } from "./fingerprint";
 import {
   detectHostSplit,
+  extractAge,
+  extractYearCoverage,
   normalizeMultistoreText,
   tokenize,
 } from "./normalizeCandidate";
@@ -60,6 +62,69 @@ function tokenWeight(token: string, intent: QueryIntent): number {
   return 2;
 }
 
+function conservativeTypoMatch(token: string, candidateTokens: Set<string>): boolean {
+  if (!/^[a-z]+$/.test(token) || token.length < 5) {
+    return false;
+  }
+
+  for (const candidate of candidateTokens) {
+    if (!/^[a-z]+$/.test(candidate) || candidate.length < 5) {
+      continue;
+    }
+
+    if (token[0] !== candidate[0]) {
+      continue;
+    }
+
+    if (Math.abs(candidate.length - token.length) !== 1) {
+      continue;
+    }
+
+    if (levenshteinAtMostOne(token, candidate)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function levenshteinAtMostOne(first: string, second: string): boolean {
+  if (first === second) {
+    return true;
+  }
+
+  if (Math.abs(first.length - second.length) > 1) {
+    return false;
+  }
+
+  let seen = false;
+  let left = 0;
+  let right = 0;
+  while (left < first.length && right < second.length) {
+    if (first[left] === second[right]) {
+      left += 1;
+      right += 1;
+      continue;
+    }
+
+    if (seen) {
+      return false;
+    }
+
+    seen = true;
+    if (first.length > second.length) {
+      left += 1;
+    } else if (second.length > first.length) {
+      right += 1;
+    } else {
+      left += 1;
+      right += 1;
+    }
+  }
+
+  return true;
+}
+
 function candidateHasToken(token: string, tokens: Set<string>, text: string): boolean {
   if (!token) {
     return false;
@@ -70,6 +135,18 @@ function candidateHasToken(token: string, tokens: Set<string>, text: string): bo
   }
 
   if (lexicalTokenAppears(text, token)) {
+    return true;
+  }
+
+  if (
+    token.endsWith("s") &&
+    token.length >= 5 &&
+    candidateHasToken(token.slice(0, -1), tokens, text)
+  ) {
+    return true;
+  }
+
+  if (conservativeTypoMatch(token, tokens)) {
     return true;
   }
 
@@ -463,6 +540,29 @@ export function scoreQueryRelevance(
     attributeMissing.push("size");
   }
 
+  const queryAge = intent.importantAttributes.age;
+  const candidateAge = extractAge(candidate.tokens);
+  if (queryAge && candidateAge && queryAge !== candidateAge) {
+    attributeConflicts.push(`age:${queryAge}!=${candidateAge}`);
+    hardConflicts.push(`age:${queryAge}!=${candidateAge}`);
+  } else if (queryAge && candidateAge) {
+    attributeMatches.push("age");
+  } else if (queryAge) {
+    attributeMissing.push("age");
+  }
+
+  const queryYear = intent.importantAttributes.year;
+  if (queryYear) {
+    const year = Number(queryYear);
+    const coverage = extractYearCoverage(candidateText);
+    if (coverage.explicit && Number.isFinite(year) && !coverage.contains(year)) {
+      attributeConflicts.push(`year:${queryYear}!=${coverage.summary}`);
+      hardConflicts.push(`year:${queryYear}!=${coverage.summary}`);
+    } else if (coverage.explicit) {
+      attributeMatches.push("year");
+    }
+  }
+
   if (intent.brand) {
     const brandTokens = intent.brand.split(" ").filter((token) => token.length >= 3);
     const missingBrand = brandTokens.filter(
@@ -569,10 +669,18 @@ export function scoreQueryRelevance(
 
   const modelPresentEnough =
     modelPresent && (!queryClassUnknown || binding.length === 0 || bindingPresent);
+  const missingContext = (intent.distinctiveContext ?? []).filter(
+    (token) => !candidateHasToken(token, candidateTokens, candidateText),
+  );
+  if (missingContext.length > 0 && !modelPresentEnough) {
+    hardConflicts.push(`distinctiveContext:${missingContext.join(",")}!=ausente`);
+  }
   const discriminativeMissing =
     attributeMissing.includes("capacity") ||
     attributeMissing.includes("quantity") ||
-    attributeMissing.includes("size");
+    attributeMissing.includes("size") ||
+    attributeMissing.includes("color") ||
+    attributeMissing.includes("age");
   let queryRelevance = Math.min(1, twoSided);
   let status: ScoredCandidate["status"] = "RELEVANT";
   let reason = "Candidato representa o produto pedido.";
