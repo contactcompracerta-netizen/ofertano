@@ -612,21 +612,30 @@ function criarDescricaoCompartilhamento(
   return `Compare o preço de ${nome} no Ofertano e compre diretamente na loja parceira.`;
 }
 
+function criterioProdutoNavegavel(id: string) {
+  return {
+    id,
+    OR: [
+      { active: true },
+      { publicationStatus: "DRAFT" as const },
+    ],
+  };
+}
+
 export async function generateMetadata({
   params,
 }: ProdutoPageProps): Promise<Metadata> {
   const { id } = await params;
 
   const produto = await prisma.product.findFirst({
-    where: {
-      id,
-      active: true,
-    },
+    where: criterioProdutoNavegavel(id),
     select: {
       name: true,
       description: true,
       image: true,
       images: true,
+      active: true,
+      publicationStatus: true,
     },
   });
 
@@ -650,10 +659,18 @@ export async function generateMetadata({
     produto.name,
     produto.description,
   );
+  const indexavel =
+    produto.active && produto.publicationStatus !== "DRAFT";
 
   return {
     title: `${produto.name} | Ofertano`,
     description: descricao,
+    robots: indexavel
+      ? undefined
+      : {
+          index: false,
+          follow: false,
+        },
     alternates: {
       canonical: urlProduto,
     },
@@ -681,10 +698,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const { id } = await params;
 
   const produto = await prisma.product.findFirst({
-    where: {
-      id,
-      active: true,
-    },
+    where: criterioProdutoNavegavel(id),
     include: {
       offers: {
         where: {
@@ -1295,7 +1309,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   </div>
 
                   <p className="max-w-xl text-[10px] leading-4 text-slate-500 sm:text-xs">
-                    O mesmo produto em lojas diferentes. O menor preço encontrado ganha destaque.
+                    {produto.publicationStatus === "DRAFT"
+                      ? "Menor preço entre as lojas encontradas nesta pesquisa. A cobertura ainda não está completa."
+                      : "O mesmo produto em lojas diferentes. O menor preço encontrado ganha destaque."}
                   </p>
                 </div>
 

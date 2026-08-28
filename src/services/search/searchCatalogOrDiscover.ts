@@ -20,9 +20,11 @@ import {
   normalizeCandidate,
   scheduleSelectedClusterPersist,
   persistCanonicalProducts,
-  isClusterPublishable,
+  isSearchVisible,
+  type PersistCanonicalOptions,
   type PersistProductFn,
 } from "@/services/multistore-v2";
+import type { SearchBudget } from "@/services/multistore-v2/timeBudget";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
 
 function normalizeQuery(value: string): string {
@@ -390,6 +392,8 @@ export type PublicSearchOptions = {
   schedulePersist?: (task: () => Promise<void>) => void;
   persistProduct?: PersistProductFn;
   adapters?: DiscoveryAdapter[];
+  findExistingProductId?: PersistCanonicalOptions["findExistingProductId"];
+  budget?: SearchBudget;
 };
 
 export async function searchCatalogOrDiscover(
@@ -417,25 +421,30 @@ export async function searchCatalogOrDiscover(
         hunt: true,
         limit,
         adapters: options.adapters,
+        budget: options.budget,
       });
 
-      const publishableProducts = v2.products.filter(isClusterPublishable);
-      if (publishableProducts.length > 0 && (options.schedulePersist || options.persistProduct)) {
-        const headIds = await persistCanonicalProducts(search, publishableProducts, {
+      const visibleProducts = v2.products.filter(isSearchVisible);
+      if (visibleProducts.length > 0 && (options.schedulePersist || options.persistProduct)) {
+        const headIds = await persistCanonicalProducts(search, visibleProducts, {
           limit,
           headsOnly: true,
+          persistTransientHeads: true,
           persistProduct: options.persistProduct,
+          findExistingProductId: options.findExistingProductId,
         });
 
         if (options.schedulePersist) {
           scheduleSelectedClusterPersist(
             options.schedulePersist,
             search,
-            publishableProducts,
+            visibleProducts,
             {
               limit,
               persistProduct: options.persistProduct,
+              persistTransientHeads: true,
               existingIds: headIds,
+              findExistingProductId: options.findExistingProductId,
             },
           );
         }

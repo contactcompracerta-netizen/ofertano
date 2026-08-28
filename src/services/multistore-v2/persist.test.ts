@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 
 import type { DiscoveryAdapter, DiscoveryCandidate } from "../discovery/core/types";
-import { persistCanonicalProducts, persistSelectedSearchClusters, scheduleSelectedClusterPersist, isClusterPublishable } from "./persist";
+import { persistCanonicalProducts, persistSelectedSearchClusters, scheduleSelectedClusterPersist, isClusterPublishable, isSearchVisible } from "./persist";
+import type { PersistProductFn } from "./persist";
 import { coverageStatusOf, searchMultistoreV2 } from "./search";
 import { searchCatalogOrDiscover } from "../search/searchCatalogOrDiscover";
 import type { CanonicalProduct, MarketplaceAcquisition, MarketplaceCode } from "./types";
@@ -24,6 +25,7 @@ function canonicalProduct(
     confidence: extras.confidence ?? 1,
     rankTier: extras.rankTier ?? 0,
     coverageStatus: extras.coverageStatus ?? "COMPLETE",
+    searchVisible: extras.searchVisible,
     publishable: extras.publishable,
     offers: extras.offers ?? [
       {
@@ -301,6 +303,11 @@ async function runCoveragePublicationCases() {
     "UNUSABLE impede COMPLETE",
   );
 
+  assert.equal(isSearchVisible(completeOne), true, "1 valid => searchVisible");
+  assert.equal(isSearchVisible(incompleteOne), true, "1 valid + INCOMPLETE => searchVisible");
+  assert.equal(isSearchVisible(twoIncomplete), true, "2 valid + INCOMPLETE => searchVisible");
+  assert.equal(isSearchVisible(zeroComplete), false, "0 ofertas => nao visivel");
+  assert.equal(isSearchVisible(tier3Complete), false, "TIER 3 ambiguo nao entra na busca");
   assert.equal(isClusterPublishable(completeOne), true, "1 valid + COMPLETE => publishable");
   assert.equal(isClusterPublishable(incompleteOne), false, "1 valid + TIMEOUT/INCOMPLETE => false");
   assert.equal(isClusterPublishable(blockedOne), false, "1 valid + BLOCKED => false");
@@ -357,6 +364,56 @@ async function runCoveragePublicationCases() {
   assert.equal(twoIncompleteWrites, 0, "2 ofertas + INCOMPLETE nao persiste head");
   assert.equal(twoIncompleteIds[0], "");
 
+  let transientWrites = 0;
+  let transientDefer: boolean | undefined;
+  const transientIds = await persistCanonicalProducts(
+    "Headphone MarcaX ZX100",
+    [twoIncomplete],
+    {
+      headsOnly: true,
+      persistTransientHeads: true,
+      persistProduct: async (_product, _affiliate, options) => {
+        transientWrites += 1;
+        transientDefer = options?.deferPublication;
+        return { id: "draft-head-uuid" };
+      },
+    },
+  );
+  assert.equal(transientWrites, 1, "INCOMPLETE visivel persiste HEAD transitorio");
+  assert.equal(transientDefer, true, "HEAD transitorio usa deferPublication DRAFT");
+  assert.equal(transientIds[0], "draft-head-uuid");
+
+  let recentOfferWrites = 0;
+  await persistCanonicalProducts(
+    "Headphone MarcaX ZX100",
+    [twoIncomplete],
+    {
+      persistProduct: async () => {
+        recentOfferWrites += 1;
+        return { id: "should-not-enter-recent" };
+      },
+    },
+  );
+  assert.equal(
+    recentOfferWrites,
+    0,
+    "INCOMPLETE sem persistTransientHeads nao entra em Ofertas recentes",
+  );
+
+  let tier3TransientWrites = 0;
+  await persistCanonicalProducts(
+    "Terno De Reis",
+    [tier3Complete],
+    {
+      persistTransientHeads: true,
+      persistProduct: async () => {
+        tier3TransientWrites += 1;
+        return { id: "should-not-save-tier3" };
+      },
+    },
+  );
+  assert.equal(tier3TransientWrites, 0, "CASO 5: TIER 3 nao vira HEAD nem na busca");
+
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, 30_000);
@@ -405,6 +462,7 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(completeSingle.acquisitions), "COMPLETE");
   assert.ok(completeSingle.products.length >= 1, "A) 1 loja + EMPTY nas demais e PUBLICAVEL");
+  assert.equal(completeSingle.products[0]?.searchVisible, true);
   assert.equal(completeSingle.products[0]?.publishable, true);
   assert.equal(completeSingle.products[0]?.coverageStatus, "COMPLETE");
   assert.equal(completeSingle.products[0]?.offers.length, 1);
@@ -436,6 +494,7 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(completeMulti.acquisitions), "COMPLETE");
   assert.ok(completeMulti.products.length >= 1, "B) 2 lojas + EMPTY nas demais e PUBLICAVEL Multi Loja");
+  assert.equal(completeMulti.products[0]?.searchVisible, true);
   assert.equal(completeMulti.products[0]?.publishable, true);
   assert.equal(completeMulti.products[0]?.coverageStatus, "COMPLETE");
   assert.ok((completeMulti.products[0]?.offers.length ?? 0) >= 2);
@@ -470,8 +529,10 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(timeoutSingle.acquisitions), "INCOMPLETE");
   assert.equal(timeoutSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.ok(timeoutSingle.relevantCandidates.length >= 1);
-  assert.equal(timeoutSingle.products.length, 0, "B) 1 loja + TIMEOUT = INCOMPLETE / NAO PUBLICAVEL");
-  assert.equal(timeoutSingle.views.length, 0);
+  assert.equal(timeoutSingle.products[0]?.searchVisible, true, "B) 1 loja + TIMEOUT continua visivel na busca");
+  assert.equal(timeoutSingle.products[0]?.publishable, false, "B) 1 loja + TIMEOUT = INCOMPLETE / NAO PUBLICAVEL");
+  assert.equal(timeoutSingle.products[0]?.coverageStatus, "INCOMPLETE");
+  assert.ok(timeoutSingle.views.length >= 1);
 
   const blockedSingle = await searchMultistoreV2(query, {
     persist: false,
@@ -487,7 +548,9 @@ async function runCoveragePublicationCases() {
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
     ],
   });
-  assert.equal(blockedSingle.products.length, 0, "1 valid + BLOCKED => nao publicavel");
+  assert.equal(blockedSingle.products[0]?.searchVisible, true);
+  assert.equal(blockedSingle.products[0]?.publishable, false, "1 valid + BLOCKED => nao publicavel");
+  assert.ok(blockedSingle.views.length >= 1);
 
   const errorSingle = await searchMultistoreV2(query, {
     persist: false,
@@ -505,7 +568,9 @@ async function runCoveragePublicationCases() {
       }),
     ],
   });
-  assert.equal(errorSingle.products.length, 0, "1 valid + ERROR => nao publicavel");
+  assert.equal(errorSingle.products[0]?.searchVisible, true);
+  assert.equal(errorSingle.products[0]?.publishable, false, "1 valid + ERROR => nao publicavel");
+  assert.ok(errorSingle.views.length >= 1);
 
   let multiTimeoutWrites = 0;
   const twoValidTimeout = await searchMultistoreV2(query, {
@@ -548,10 +613,18 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(twoValidTimeout.acquisitions), "INCOMPLETE");
   assert.equal(twoValidTimeout.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status, "TIMEOUT");
   assert.ok(twoValidTimeout.relevantCandidates.length >= 2, "2 equivalentes permanecem internos para retry");
-  assert.equal(twoValidTimeout.products.length, 0, "C) 2 lojas + TIMEOUT = INCOMPLETE / NAO PUBLICAVEL");
-  assert.equal(twoValidTimeout.views.length, 0);
-  assert.equal(twoValidTimeout.multiStoreClusters, 0);
-  assert.equal(multiTimeoutWrites, 0, "2 equivalentes + TIMEOUT nao persiste head");
+  assert.equal(twoValidTimeout.products[0]?.searchVisible, true, "CASO 1: 2 FOUND + TIMEOUT visivel na busca");
+  assert.equal(twoValidTimeout.products[0]?.publishable, false, "CASO 1: 2 lojas + TIMEOUT = INCOMPLETE / NAO PUBLICAVEL");
+  assert.equal(twoValidTimeout.products[0]?.coverageStatus, "INCOMPLETE");
+  assert.ok((twoValidTimeout.products[0]?.offers.length ?? 0) >= 2, "CASO 1: Compare 2 lojas");
+  assert.equal(
+    Math.min(...(twoValidTimeout.products[0]?.offers.map((offer) => offer.price) ?? [Infinity])),
+    twoValidTimeout.products[0]?.price,
+    "CASO 1: menor preco das lojas encontradas",
+  );
+  assert.ok(twoValidTimeout.views.length >= 1);
+  assert.equal(twoValidTimeout.multiStoreClusters, 1);
+  assert.equal(multiTimeoutWrites, 0, "2 equivalentes + TIMEOUT nao persiste head publico");
 
   const threeBlocked = await searchMultistoreV2(query, {
     persist: true,
@@ -588,8 +661,9 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(threeBlocked.acquisitions), "INCOMPLETE");
   assert.equal(threeBlocked.acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.status, "BLOCKED");
-  assert.equal(threeBlocked.products.length, 0, "3 FOUND + BLOCKED = INCOMPLETE / nao publicavel");
-  assert.equal(threeBlocked.views.length, 0);
+  assert.equal(threeBlocked.products[0]?.searchVisible, true);
+  assert.equal(threeBlocked.products[0]?.publishable, false, "3 FOUND + BLOCKED = INCOMPLETE / nao publicavel");
+  assert.ok(threeBlocked.views.length >= 1);
 
   const fourError = await searchMultistoreV2(query, {
     persist: true,
@@ -636,8 +710,9 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(fourError.acquisitions), "INCOMPLETE");
   assert.equal(fourError.acquisitions.find((item) => item.marketplace === "ALIEXPRESS")?.status, "ERROR");
-  assert.equal(fourError.products.length, 0, "4 FOUND + ERROR = INCOMPLETE / nao publicavel");
-  assert.equal(fourError.views.length, 0);
+  assert.equal(fourError.products[0]?.searchVisible, true);
+  assert.equal(fourError.products[0]?.publishable, false, "4 FOUND + ERROR = INCOMPLETE / nao publicavel");
+  assert.ok(fourError.views.length >= 1);
 
   const notRunSingle = await searchMultistoreV2(query, {
     persist: true,
@@ -658,8 +733,9 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(notRunSingle.acquisitions), "INCOMPLETE");
   assert.equal(notRunSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "NOT_RUN");
-  assert.equal(notRunSingle.products.length, 0, "1 FOUND + NOT_RUN = INCOMPLETE / nao publicavel");
-  assert.equal(notRunSingle.views.length, 0);
+  assert.equal(notRunSingle.products[0]?.searchVisible, true);
+  assert.equal(notRunSingle.products[0]?.publishable, false, "1 FOUND + NOT_RUN = INCOMPLETE / nao publicavel");
+  assert.ok(notRunSingle.views.length >= 1);
 
   const allEmpty = await searchMultistoreV2(query, {
     persist: false,
@@ -675,8 +751,41 @@ async function runCoveragePublicationCases() {
   assert.equal(allEmpty.products.length, 0, "0 ofertas => nao publicavel");
   assert.equal(allEmpty.views.length, 0);
 
+  const zeroFoundTimeout = await searchMultistoreV2(query, {
+    persist: false,
+    budget: tightBudget,
+    adapters: [
+      fakeAdapter("AMAZON", "Amazon", async (request) => {
+        await hangUntilAbort(request.signal);
+        return {
+          marketplace: "AMAZON",
+          query: request.query,
+          success: false,
+          scanned: 0,
+          candidates: [],
+          error: "ainda rodando",
+        };
+      }),
+      fakeAdapter("SHOPEE", "Shopee", async (request) => {
+        await hangUntilAbort(request.signal);
+        return {
+          marketplace: "SHOPEE",
+          query: request.query,
+          success: false,
+          scanned: 0,
+          candidates: [],
+          error: "ainda rodando",
+        };
+      }),
+    ],
+  });
+  assert.equal(coverageStatusOf(zeroFoundTimeout.acquisitions), "INCOMPLETE", "CASO 4: 0 FOUND + TIMEOUT => INCOMPLETE");
+  assert.equal(zeroFoundTimeout.products.length, 0, "CASO 4: nenhum resultado visivel");
+  assert.equal(zeroFoundTimeout.views.length, 0, "CASO 4: nao inventa produto");
+
   let cheapestWrites = 0;
   let cheapestPersistedPrice: number | null = null;
+  let cheapestDefer: boolean | undefined;
   const cheapestComplete = await searchMultistoreV2(query, {
     persist: true,
     adapters: [
@@ -707,8 +816,9 @@ async function runCoveragePublicationCases() {
       fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => emptySearch("MAGAZINE_LUIZA", query)),
       fakeAdapter("ALIEXPRESS", "AliExpress", async () => emptySearch("ALIEXPRESS", query)),
     ],
-    persistProduct: async (product) => {
+    persistProduct: async (product, _affiliate, options) => {
       cheapestWrites += 1;
+      cheapestDefer = options?.deferPublication;
       if (cheapestPersistedPrice === null) {
         cheapestPersistedPrice = product.price;
       }
@@ -716,11 +826,13 @@ async function runCoveragePublicationCases() {
     },
   });
   assert.equal(coverageStatusOf(cheapestComplete.acquisitions), "COMPLETE");
+  assert.equal(cheapestComplete.products[0]?.searchVisible, true);
   assert.equal(cheapestComplete.products[0]?.publishable, true);
   assert.equal(cheapestComplete.products[0]?.price, 99, "canonical = menor preco apos COMPLETE");
   assert.equal(cheapestComplete.products[0]?.offers.length, 3);
   assert.equal(cheapestComplete.multiStoreClusters, 1);
   assert.ok(cheapestWrites >= 1, "COMPLETE + equivalentes persiste o head canonico");
+  assert.equal(cheapestDefer, false, "COMPLETE publica de verdade, nao DRAFT");
   assert.equal(cheapestPersistedPrice, 99, "head persistido e a menor oferta");
   assert.ok(cheapestComplete.views.some((view) => view.id.startsWith("saved-")));
 
@@ -773,11 +885,14 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(cheapestTimeout.acquisitions), "INCOMPLETE");
   assert.equal(cheapestTimeout.acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.status, "TIMEOUT");
   assert.ok(cheapestTimeout.relevantCandidates.length >= 3, "equivalentes 150/99/120 ficam internos");
-  assert.equal(cheapestTimeout.products.length, 0, "menor preco 99 nao publica enquanto houver TIMEOUT");
-  assert.equal(cheapestTimeout.views.length, 0);
+  assert.equal(cheapestTimeout.products[0]?.searchVisible, true);
+  assert.equal(cheapestTimeout.products[0]?.publishable, false, "menor preco 99 nao publica enquanto houver TIMEOUT");
+  assert.equal(cheapestTimeout.products[0]?.price, 99, "busca INCOMPLETE mostra o menor preco encontrado ate agora");
+  assert.ok(cheapestTimeout.views.length >= 1);
   assert.equal(cheapestTimeoutWrites, 0);
 
   let publicIncompleteWrites = 0;
+  let publicIncompleteDefer: boolean | undefined;
   const publicIncomplete = await searchCatalogOrDiscover(query, 5, {
     adapters: [
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
@@ -791,22 +906,25 @@ async function runCoveragePublicationCases() {
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
       fakeAdapter("SHOPEE", "Shopee", async () => emptySearch("SHOPEE", query)),
     ],
-    persistProduct: async () => {
+    persistProduct: async (_product, _affiliate, options) => {
       publicIncompleteWrites += 1;
-      return { id: "should-not-save-head" };
+      publicIncompleteDefer = options?.deferPublication;
+      return { id: "draft-search-head" };
     },
     schedulePersist: () => undefined,
   });
-  assert.equal(publicIncomplete.products.length, 0);
-  assert.equal(publicIncomplete.source, "NOT_FOUND");
-  assert.equal(publicIncompleteWrites, 0, "cluster nao publicavel por INCOMPLETE => nenhuma persistencia head publica");
-  assert.equal(
-    publicIncomplete.products.filter((product) => product.id).length,
-    0,
-    "INCOMPLETE nao cria rota /produto",
+  assert.ok(publicIncomplete.products.length >= 1, "INCOMPLETE visivel na pagina da pesquisa");
+  assert.equal(publicIncomplete.source, "DISCOVERY");
+  assert.equal(publicIncomplete.products[0]?.id, "draft-search-head", "Ver precos usa UUID real");
+  assert.equal(publicIncompleteWrites, 1, "INCOMPLETE persiste HEAD transitorio DRAFT");
+  assert.equal(publicIncompleteDefer, true, "HEAD transitorio nao publica");
+  assert.ok(
+    publicIncomplete.products.every((product) => Boolean(product.id) && !product.id.startsWith("v2-")),
+    "INCOMPLETE cria rota /produto navegavel",
   );
 
   let publicMultiIncompleteWrites = 0;
+  let publicMultiDefer: boolean | undefined;
   const publicMultiIncomplete = await searchCatalogOrDiscover(query, 5, {
     adapters: [
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
@@ -827,19 +945,271 @@ async function runCoveragePublicationCases() {
       })),
       fakeAdapter("SHOPEE", "Shopee", async () => blockedSearch("SHOPEE", query)),
     ],
-    persistProduct: async () => {
+    persistProduct: async (product, _affiliate, options) => {
       publicMultiIncompleteWrites += 1;
-      return { id: "should-not-save-multi-head" };
+      publicMultiDefer = options?.deferPublication;
+      return { id: `draft-multi-${product.externalId}` };
     },
     schedulePersist: () => undefined,
   });
-  assert.equal(publicMultiIncomplete.products.length, 0, "2 FOUND + BLOCKED nao entra em Ofertas recentes");
-  assert.equal(publicMultiIncomplete.source, "NOT_FOUND");
-  assert.equal(publicMultiIncompleteWrites, 0, "INCOMPLETE multi nao persiste head");
+  assert.ok(publicMultiIncomplete.products.length >= 1, "CASO 1: busca mostra o cluster");
+  assert.equal(publicMultiIncomplete.source, "DISCOVERY");
+  assert.ok((publicMultiIncomplete.products[0]?.offers.length ?? 0) >= 2, "CASO 1: Compare 2 lojas");
+  assert.equal(publicMultiIncomplete.products[0]?.price, 189, "CASO 1: menor preco das 2 lojas encontradas");
+  assert.equal(publicMultiDefer, true, "CASO 1: HEAD DRAFT nao entra em Ofertas recentes");
+  assert.ok(publicMultiIncompleteWrites >= 1, "CASO 1: persiste HEAD transitorio para UUID");
+  assert.ok(
+    Boolean(publicMultiIncomplete.products[0]?.id) &&
+      !publicMultiIncomplete.products[0]!.id.startsWith("v2-"),
+    "CASO 1: Ver precos navegavel com UUID real",
+  );
+
+  const navigableOnProductPage = (row: {
+    active: boolean;
+    publicationStatus: "DRAFT" | "LIVE_PARTIAL" | "LIVE_COMPLETE" | "ARCHIVED";
+  }) => row.active || row.publicationStatus === "DRAFT";
+  const listedInRecentOffers = (row: { active: boolean }) => row.active === true;
   assert.equal(
-    publicMultiIncomplete.products.filter((product) => product.id).length,
-    0,
-    "INCOMPLETE multi nao cria rota /produto",
+    navigableOnProductPage({ active: false, publicationStatus: "DRAFT" }),
+    true,
+    "HEAD DRAFT: /produto/[id] nao 404",
+  );
+  assert.equal(
+    listedInRecentOffers({ active: false }),
+    false,
+    "HEAD DRAFT/active:false nao entra em Ofertas recentes",
+  );
+
+  function marketplaceCodeFromImport(name: string): string {
+    switch (name) {
+      case "Mercado Livre":
+        return "MERCADO_LIVRE";
+      case "Amazon":
+        return "AMAZON";
+      case "Shopee":
+        return "SHOPEE";
+      case "Magazine Luiza":
+        return "MAGAZINE_LUIZA";
+      case "AliExpress":
+        return "ALIEXPRESS";
+      default:
+        return name;
+    }
+  }
+
+  function createMemoryCatalog() {
+    type CatalogProduct = {
+      id: string;
+      active: boolean;
+      publicationStatus: "DRAFT" | "LIVE_COMPLETE";
+      price: number;
+      offers: Map<string, { marketplace: string; externalId: string; price: number }>;
+    };
+    const products = new Map<string, CatalogProduct>();
+    const offerToProduct = new Map<string, string>();
+    let seq = 0;
+
+    const skuOf = (marketplace: string, externalId: string) =>
+      `${marketplace}:${externalId}`;
+
+    const persistProduct: PersistProductFn = async (product, _affiliate, options) => {
+      const marketplace = marketplaceCodeFromImport(product.marketplace);
+      const sku = skuOf(marketplace, product.externalId);
+      const targetId = options?.targetProductId?.trim() || "";
+      const existingSkuProductId = offerToProduct.get(sku) || "";
+      let productId = targetId || existingSkuProductId;
+
+      if (targetId && existingSkuProductId && existingSkuProductId !== targetId) {
+        const orphan = products.get(existingSkuProductId);
+        orphan?.offers.delete(sku);
+        offerToProduct.delete(sku);
+      }
+
+      if (!productId) {
+        seq += 1;
+        productId = `prod-${seq}`;
+        products.set(productId, {
+          id: productId,
+          active: false,
+          publicationStatus: "DRAFT",
+          price: product.price,
+          offers: new Map(),
+        });
+      }
+
+      const row = products.get(productId);
+      if (!row) {
+        throw new Error(`Product ${productId} nao encontrado`);
+      }
+
+      row.offers.set(sku, {
+        marketplace,
+        externalId: product.externalId,
+        price: product.price,
+      });
+      offerToProduct.set(sku, productId);
+
+      if (options?.deferPublication) {
+        row.publicationStatus = "DRAFT";
+        row.active = false;
+      } else {
+        row.publicationStatus = "LIVE_COMPLETE";
+        row.active = true;
+        row.price = Math.min(...[...row.offers.values()].map((offer) => offer.price));
+      }
+
+      return { id: productId };
+    };
+
+    const findExistingProductId = async (product: CanonicalProduct) => {
+      for (const offer of product.offers) {
+        const id = offerToProduct.get(skuOf(offer.marketplace, offer.externalId));
+        if (id) {
+          return id;
+        }
+      }
+      return "";
+    };
+
+    return { products, persistProduct, findExistingProductId };
+  }
+
+  const catalog = createMemoryCatalog();
+  const foundOffer = (
+    marketplace: DiscoveryAdapter["marketplace"],
+    marketplaceName: string,
+    externalId: string,
+    price: number,
+  ) =>
+    foundCandidate({
+      marketplace,
+      marketplaceName,
+      externalId,
+      title: "Headphone MarcaX ZX100 Bluetooth",
+      brand: "MarcaX",
+      price,
+    });
+
+  let firstScheduled: (() => Promise<void>) | null = null;
+  const firstSearch = await searchCatalogOrDiscover(query, 5, {
+    budget: tightBudget,
+    adapters: [
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
+        marketplace: "MERCADO_LIVRE",
+        query,
+        success: true,
+        scanned: 1,
+        candidates: [foundOffer("MERCADO_LIVRE", "Mercado Livre", "ml-zx100", 199)],
+        error: null,
+      })),
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query,
+        success: true,
+        scanned: 1,
+        candidates: [foundOffer("AMAZON", "Amazon", "amz-zx100", 189)],
+        error: null,
+      })),
+      fakeAdapter("SHOPEE", "Shopee", async (request) => {
+        await hangUntilAbort(request.signal);
+        return {
+          marketplace: "SHOPEE",
+          query: request.query,
+          success: false,
+          scanned: 0,
+          candidates: [],
+          error: "ainda rodando",
+        };
+      }),
+    ],
+    persistProduct: catalog.persistProduct,
+    findExistingProductId: catalog.findExistingProductId,
+    schedulePersist: (task) => {
+      firstScheduled = task;
+    },
+  });
+
+  assert.equal(firstSearch.source, "DISCOVERY");
+  assert.ok(firstSearch.products.length >= 1, "INCOMPLETE searchVisible");
+  const draftId = firstSearch.products[0]!.id;
+  assert.equal(draftId.startsWith("v2-"), false, "UUID real, nao v2-clusterId");
+  assert.equal(draftId, "prod-1", "HEAD DRAFT criado na primeira busca");
+  assert.equal(firstSearch.products[0]?.price, 189, "menor preco das lojas FOUND");
+  assert.ok((firstSearch.products[0]?.offers.length ?? 0) >= 2, "tails ML+Amazon associadas");
+  assert.ok(firstScheduled, "after() anexa tails do HEAD DRAFT");
+  await firstScheduled!();
+  const draftRow = catalog.products.get(draftId);
+  assert.ok(draftRow, "Product DRAFT existe");
+  assert.equal(draftRow!.publicationStatus, "DRAFT");
+  assert.equal(draftRow!.active, false, "active=false: noindex / fora de Ofertas recentes");
+  assert.equal(draftRow!.offers.size, 2, "Amazon+ML no mesmo Product; Shopee TIMEOUT nao duplica");
+  assert.equal(catalog.products.size, 1, "um unico Product apos INCOMPLETE");
+  assert.equal(
+    listedInRecentOffers({ active: draftRow!.active }),
+    false,
+    "DRAFT nao entra em Ofertas recentes",
+  );
+  assert.equal(
+    navigableOnProductPage({
+      active: draftRow!.active,
+      publicationStatus: draftRow!.publicationStatus,
+    }),
+    true,
+    "/produto/[uuid] navegavel em DRAFT",
+  );
+
+  let secondScheduled: (() => Promise<void>) | null = null;
+  const secondSearch = await searchCatalogOrDiscover(query, 5, {
+    adapters: [
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
+        marketplace: "MERCADO_LIVRE",
+        query,
+        success: true,
+        scanned: 1,
+        candidates: [foundOffer("MERCADO_LIVRE", "Mercado Livre", "ml-zx100", 199)],
+        error: null,
+      })),
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query,
+        success: true,
+        scanned: 1,
+        candidates: [foundOffer("AMAZON", "Amazon", "amz-zx100", 189)],
+        error: null,
+      })),
+      fakeAdapter("SHOPEE", "Shopee", async () => ({
+        marketplace: "SHOPEE",
+        query,
+        success: true,
+        scanned: 1,
+        candidates: [foundOffer("SHOPEE", "Shopee", "shp-zx100", 79)],
+        error: null,
+      })),
+      fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => emptySearch("MAGAZINE_LUIZA", query)),
+      fakeAdapter("ALIEXPRESS", "AliExpress", async () => emptySearch("ALIEXPRESS", query)),
+    ],
+    persistProduct: catalog.persistProduct,
+    findExistingProductId: catalog.findExistingProductId,
+    schedulePersist: (task) => {
+      secondScheduled = task;
+    },
+  });
+
+  assert.equal(secondSearch.products[0]?.id, draftId, "reutiliza o Product DRAFT; nao cria duplicata");
+  assert.equal(secondSearch.products[0]?.id.startsWith("v2-"), false);
+  assert.equal(secondSearch.products[0]?.price, 79, "menor preco recalculado com Shopee");
+  await secondScheduled!();
+  const liveRow = catalog.products.get(draftId);
+  assert.ok(liveRow);
+  assert.equal(catalog.products.size, 1, "ainda um unico Product apos COMPLETE");
+  assert.equal(liveRow!.publicationStatus, "LIVE_COMPLETE", "promove publicationStatus");
+  assert.equal(liveRow!.active, true, "active=true so depois da promocao");
+  assert.equal(liveRow!.offers.size, 3, "Shopee anexada; Amazon/ML nao duplicadas");
+  assert.equal(liveRow!.price, 79, "menor preco entre TODAS as ofertas equivalentes");
+  assert.equal(
+    listedInRecentOffers({ active: liveRow!.active }),
+    true,
+    "aparece em Ofertas recentes somente depois da promocao",
   );
 }
 
@@ -1018,10 +1388,11 @@ async function runPersistContract() {
     "timeout parcial preserva o candidato relevante internamente",
   );
   assert.equal(
-    partialTimeout.views.length,
-    0,
-    "1 oferta + TIMEOUT nao publica single-store",
+    partialTimeout.views.length >= 1,
+    true,
+    "1 oferta + TIMEOUT permanece visivel na busca",
   );
+  assert.equal(partialTimeout.products[0]?.publishable, false);
   assert.equal(
     timeoutTitles.length,
     0,

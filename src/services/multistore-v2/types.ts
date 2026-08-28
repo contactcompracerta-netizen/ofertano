@@ -211,6 +211,7 @@ export type CanonicalProduct = {
   confidence: number;
   rankTier: RankTier;
   coverageStatus?: "COMPLETE" | "INCOMPLETE";
+  searchVisible?: boolean;
   publishable?: boolean;
 };
 

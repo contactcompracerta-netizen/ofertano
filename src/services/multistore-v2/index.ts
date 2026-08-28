@@ -16,6 +16,7 @@ export {
 } from "./search";
 export {
   isClusterPublishable,
+  isSearchVisible,
   persistCanonicalProducts,
   persistSelectedSearchClusters,
   scheduleSelectedClusterPersist,

@@ -27,7 +27,24 @@ export type PersistCanonicalOptions = {
   persistProduct?: PersistProductFn;
   headsOnly?: boolean;
   existingIds?: string[];
+  persistTransientHeads?: boolean;
+  findExistingProductId?: (
+    product: CanonicalProduct,
+  ) => Promise<string | null | undefined>;
 };
+
+/*
+ * Busca visivel != publicacao final.
+ * TIER 0/1 PRIMARY e TIER 2 ACCESSORY separado podem aparecer na pesquisa
+ * mesmo com coverage INCOMPLETE. TIER 3 ambiguo nao entra.
+ */
+export function isSearchVisible(product: CanonicalProduct): boolean {
+  if (product.rankTier === 3) {
+    return false;
+  }
+
+  return product.offers.length > 0;
+}
 
 /*
  * Publicacao != relevancia.
@@ -38,11 +55,7 @@ export type PersistCanonicalOptions = {
  * mesmo com 2+ ofertas: a menor oferta so e final apos cobertura completa.
  */
 export function isClusterPublishable(product: CanonicalProduct): boolean {
-  if (product.rankTier === 3) {
-    return false;
-  }
-
-  if (product.offers.length <= 0) {
+  if (!isSearchVisible(product)) {
     return false;
   }
 
@@ -86,6 +99,54 @@ function toProductImport(
   };
 }
 
+async function findExistingProductIdFromOffers(
+  offers: CanonicalOffer[],
+): Promise<string> {
+  try {
+    const prisma = (await import("@/lib/prisma")).default;
+    for (const offer of offers) {
+      const existing = await prisma.marketplaceOffer.findUnique({
+        where: {
+          marketplace_externalId: {
+            marketplace: offer.marketplace,
+            externalId: offer.externalId,
+          },
+        },
+        select: {
+          productId: true,
+        },
+      });
+      if (existing?.productId) {
+        return existing.productId;
+      }
+    }
+  } catch (error) {
+    console.error("[MULTISTORE-V2] lookup de Product existente falhou", error);
+  }
+
+  return "";
+}
+
+async function resolveExistingProductId(
+  product: CanonicalProduct,
+  options: PersistCanonicalOptions,
+): Promise<string> {
+  if (options.findExistingProductId) {
+    return (await options.findExistingProductId(product))?.trim() || "";
+  }
+
+  /*
+   * persistProduct injetado (testes) nao deve abrir Prisma.
+   * Em producao o default e saveProduct: a chave e marketplace+externalId
+   * de qualquer oferta do cluster, inclusive HEAD DRAFT/active=false.
+   */
+  if (options.persistProduct) {
+    return "";
+  }
+
+  return findExistingProductIdFromOffers(product.offers);
+}
+
 function canStartPersistWrite(deadline?: PersistDeadline): boolean {
   if (!deadline) {
     return true;
@@ -121,7 +182,9 @@ export async function persistCanonicalProducts(
   const headsOnly = options.headsOnly === true;
 
   for (const product of selected) {
-    if (!isClusterPublishable(product)) {
+    const publishable = isClusterPublishable(product);
+    const searchVisible = isSearchVisible(product);
+    if (!searchVisible || (!publishable && !options.persistTransientHeads)) {
       ids.push("");
       continue;
     }
@@ -140,11 +203,12 @@ export async function persistCanonicalProducts(
       continue;
     }
 
-    const existingId = existingIds[ids.length]?.trim() || "";
-    if (existingId && headsOnly) {
-      ids.push(existingId);
-      continue;
-    }
+    const persistOptions = {
+      discoverySource: "ON_DEMAND_SEARCH" as const,
+      autoCreated: true,
+      sourceQuery: query,
+      deferPublication: !publishable,
+    };
 
     let recorded = false;
     try {
@@ -155,7 +219,12 @@ export async function persistCanonicalProducts(
         continue;
       }
 
-      let savedId = existingId;
+      let savedId = existingIds[ids.length]?.trim() || "";
+      const fromThisRequest = Boolean(savedId);
+      if (!savedId) {
+        savedId = await resolveExistingProductId(product, options);
+      }
+
       if (!savedId) {
         if (!canStartPersistWrite(options.deadline)) {
           ids.push("");
@@ -163,12 +232,22 @@ export async function persistCanonicalProducts(
           continue;
         }
 
-        const saved = await persistProduct(first, first.affiliateLink, {
-          discoverySource: "ON_DEMAND_SEARCH",
-          autoCreated: true,
-          sourceQuery: query,
-        });
+        const saved = await persistProduct(first, first.affiliateLink, persistOptions);
         savedId = saved.id;
+      } else if (!fromThisRequest && (!headsOnly || publishable)) {
+        /*
+         * Product de busca anterior (inclusive DRAFT). A oferta mais barata
+         * desta cobertura precisa ir para o mesmo UUID; senao Shopee cria
+         * outro Product e o DRAFT fica orfao.
+         * existingIds desta resposta ja persistiu a cabeca: after() so anexa tails.
+         */
+        if (canStartPersistWrite(options.deadline)) {
+          await persistProduct(first, first.affiliateLink, {
+            ...persistOptions,
+            targetProductId: savedId,
+            verifiedExactMatch: true,
+          });
+        }
       }
 
       ids.push(savedId);
@@ -184,11 +263,9 @@ export async function persistCanonicalProducts(
         }
 
         await persistProduct(offer, offer.affiliateLink, {
+          ...persistOptions,
           targetProductId: savedId,
           verifiedExactMatch: true,
-          discoverySource: "ON_DEMAND_SEARCH",
-          autoCreated: true,
-          sourceQuery: query,
         });
       }
     } catch (error) {

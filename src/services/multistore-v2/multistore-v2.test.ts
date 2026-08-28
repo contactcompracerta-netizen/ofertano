@@ -945,9 +945,14 @@ async function runAcquisitionContract() {
     mixed.relevantCandidates.length >= 1,
     "Candidato relevante de uma loja nao vira zero.",
   );
+  assert.ok(
+    mixed.views.length >= 1,
+    "1 oferta + BLOCKED/ERROR permanece visivel na busca",
+  );
+  assert.equal(mixed.products[0]?.searchVisible, true);
   assert.equal(
-    mixed.views.length,
-    0,
+    mixed.products[0]?.publishable,
+    false,
     "1 oferta + BLOCKED/ERROR nao publica conclusao single-store",
   );
   assert.equal(mixed.singleStoreClusters, mixed.products.length);
@@ -1057,9 +1062,14 @@ async function runAcquisitionContract() {
     timeoutResult.relevantCandidates.length >= 1,
     "CASO timeout: candidato valido da loja rapida permanece internamente",
   );
+  assert.ok(
+    timeoutResult.views.length >= 1,
+    "CASO timeout: 1 oferta + cobertura INCOMPLETE permanece visivel na busca",
+  );
+  assert.equal(timeoutResult.products[0]?.searchVisible, true);
   assert.equal(
-    timeoutResult.views.length,
-    0,
+    timeoutResult.products[0]?.publishable,
+    false,
     "CASO timeout: 1 oferta + cobertura INCOMPLETE nao publica",
   );
   assert.equal(

@@ -26,6 +26,7 @@ import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
 import {
   isClusterPublishable,
+  isSearchVisible,
   persistCanonicalProducts,
   type PersistProductFn,
 } from "./persist";
@@ -654,16 +655,18 @@ export async function searchMultistoreV2(
     const knownKeys = new Set(
       rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
     );
-    const huntedClusters =
-      options.hunt === true
-        ? await huntMissingStoreOffers(
-            processed.clusters,
-            knownKeys,
-            limit,
-            deadline,
-            options.adapters ?? listarDiscoveryAdaptersAtivos(),
-          )
-        : processed.clusters;
+    const shouldHunt =
+      options.hunt === true &&
+      !processed.products.some((product) => isSearchVisible(product));
+    const huntedClusters = shouldHunt
+      ? await huntMissingStoreOffers(
+          processed.clusters,
+          knownKeys,
+          limit,
+          deadline,
+          options.adapters ?? listarDiscoveryAdaptersAtivos(),
+        )
+      : processed.clusters;
     const coverageStatus = coverageStatusOf(acquisitions);
     const products = rankCanonicalProducts(
       huntedClusters
@@ -673,11 +676,12 @@ export async function searchMultistoreV2(
       const withCoverage = { ...product, coverageStatus };
       return {
         ...withCoverage,
+        searchVisible: isSearchVisible(withCoverage),
         publishable: isClusterPublishable(withCoverage),
       };
     });
     const selectedProducts = products
-      .filter((product) => product.publishable)
+      .filter((product) => product.searchVisible)
       .slice(0, limit);
     const selectedClusters = selectedProducts
       .map((product) =>
