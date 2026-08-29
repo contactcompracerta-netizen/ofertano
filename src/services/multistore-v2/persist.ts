@@ -268,6 +268,14 @@ export async function persistCanonicalProducts(
           verifiedExactMatch: true,
         });
       }
+
+      if (!headsOnly && savedId && !options.persistProduct && publishable) {
+        const { ensureMercadoLivreLowestPriceAffiliateOpportunitySafe } =
+          await import(
+            "@/services/opportunities/lowestPriceAffiliateOpportunity"
+          );
+        await ensureMercadoLivreLowestPriceAffiliateOpportunitySafe(savedId);
+      }
     } catch (error) {
       console.error("[MULTISTORE-V2] persistencia falhou para cluster", product.clusterId, error);
       if (!recorded) {

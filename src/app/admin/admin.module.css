@@ -61,10 +61,10 @@
 .navLinkActive {
   display: inline-flex;
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 44px;
   align-items: center;
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -88,7 +88,7 @@
 
 .siteLink {
   display: inline-flex;
-  height: 36px;
+  min-height: 44px;
   align-items: center;
   border: 1px solid #e2e8f0;
   border-radius: 8px;

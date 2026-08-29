@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { processImportQueue } from "@/services/importQueue/processQueue";
+import {
+  applyConfirmedAffiliateLinkToOwnedOffer,
+  createPrismaApplyAffiliateLinkStore,
+} from "@/services/opportunities/applyAffiliateLink";
+import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -826,6 +831,43 @@ export async function POST(
                   queueId: null,
                   status: "PUBLISHED",
                 };
+              }
+
+              if (
+                item.marketplace === "MERCADO_LIVRE" &&
+                opportunity.productId &&
+                opportunity.sourceType === "SEARCH_RESULT"
+              ) {
+                const applied =
+                  await applyConfirmedAffiliateLinkToOwnedOffer(
+                    {
+                      opportunityId: opportunity.id,
+                      affiliateLink: item.affiliateLink,
+                    },
+                    createPrismaApplyAffiliateLinkStore(tx),
+                  );
+
+                if (applied.ok) {
+                  await sincronizarMelhorOfertaDoProduto(
+                    tx,
+                    applied.productId,
+                  );
+
+                  return {
+                    queueId: null,
+                    status: "PUBLISHED",
+                  };
+                }
+
+                if (
+                  applied.code === "PRODUCT_MISMATCH" ||
+                  applied.code === "EXTERNAL_ID_MISMATCH"
+                ) {
+                  throw new BatchPublishError(
+                    applied.error,
+                    409,
+                  );
+                }
               }
 
               const updatedOpportunity =

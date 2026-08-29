@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { validateOfficialMercadoLivreAffiliateLink } from "@/lib/affiliates/validateAdminAffiliateLink";
+import {
+  applyConfirmedAffiliateLinkToOwnedOffer,
+  createPrismaApplyAffiliateLinkStore,
+} from "@/services/opportunities/applyAffiliateLink";
 import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
 
 export const runtime = "nodejs";
@@ -9,61 +14,6 @@ export const maxDuration = 60;
 
 const TRANSACTION_MAX_WAIT_MS = 10_000;
 const TRANSACTION_TIMEOUT_MS = 45_000;
-
-function validateMercadoLivreAffiliateLink(       
-  value: string,
-): string | null {
-  const text = value.trim();
-
-  if (!text) {
-    return null;
-  }
-
-  try {
-    const url = new URL(text);
-
-    if (url.protocol !== "https:") {
-      return null;
-    }
-
-    const hostname =
-      url.hostname.toLowerCase();
-
-    const isMercadoLivre =
-      hostname === "mercadolivre.com.br" ||       
-      hostname.endsWith(
-        ".mercadolivre.com.br",
-      );
-
-    if (!isMercadoLivre) {
-      return null;
-    }
-
-    if (
-      !url.pathname
-        .toLowerCase()
-        .startsWith("/social/")
-    ) {
-      return null;
-    }
-
-    const etiqueta =
-      url.searchParams.get("matt_word");
-
-    if (
-      etiqueta?.toLowerCase() !==
-      "ofertano"
-    ) {
-      return null;
-    }
-
-    url.hash = "";
-
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
 
 export async function GET() {
   try {
@@ -320,7 +270,7 @@ export async function POST(
         typeof rawItem
           ?.affiliateLink ===
         "string"
-          ? validateMercadoLivreAffiliateLink(    
+          ? validateOfficialMercadoLivreAffiliateLink(
               rawItem.affiliateLink,
             )
           : null;
@@ -412,6 +362,7 @@ export async function POST(
             id: true,
             productId: true,
             marketplace: true,
+            externalId: true,
             status: true,
             matchStatus: true,
             affiliateLink: true,
@@ -479,11 +430,10 @@ export async function POST(
         ]),
       );
 
-    const validatedAt =
-      new Date();
-
     await prisma.$transaction(
       async (tx) => {
+        const store = createPrismaApplyAffiliateLinkStore(tx);
+
         for (const offer of offers) {
           const item =
             itemByOfferId.get(
@@ -496,86 +446,22 @@ export async function POST(
             );
           }
 
-          const updated =
-            await tx.marketplaceOffer.updateMany( 
+          const applied =
+            await applyConfirmedAffiliateLinkToOwnedOffer(
               {
-                where: {
-                  id: offer.id,
-
-                  marketplace:
-                    "MERCADO_LIVRE",
-
-                  status:
-                    "PENDING_AFFILIATE",
-
-                  OR: [
-                    {
-                      affiliateLink:
-                        null,
-                    },
-                    {
-                      affiliateLink:
-                        "",
-                    },
-                  ],
-                },
-
-                data: {
-                  affiliateLink:
-                    item.affiliateLink,
-
-                  status:
-                    "ACTIVE",
-
-                  active: true,
-                  available: true,
-
-                  reviewReason:
-                    null,
-
-                  errorMessage:
-                    null,
-
-                  affiliateValidatedAt:
-                    validatedAt,
-
-                  reviewedAt:
-                    validatedAt,
-                },
+                offerId: offer.id,
+                affiliateLink: item.affiliateLink,
               },
+              store,
             );
 
-          if (
-            updated.count !== 1
-          ) {
-            throw new Error(
-              "Uma oferta foi alterada durante a operação. Nenhum link foi salvo.",
-            );
+          if (!applied.ok) {
+            throw new Error(applied.error);
           }
 
-          await sincronizarMelhorOfertaDoProduto( 
+          await sincronizarMelhorOfertaDoProduto(
             tx,
-            offer.productId,
-          );
-
-          await tx.productOpportunity.updateMany( 
-            {
-              where: {
-                productId:
-                  offer.productId,
-
-                marketplace:
-                  "MERCADO_LIVRE",
-
-                status:
-                  "PUBLISHED",
-              },
-
-              data: {
-                affiliateLink:
-                  item.affiliateLink,
-              },
-            },
+            applied.productId,
           );
         }
       },

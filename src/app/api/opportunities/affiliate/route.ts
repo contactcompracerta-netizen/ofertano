@@ -1,48 +1,10 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { validateOfficialMercadoLivreAffiliateLink } from "@/lib/affiliates/validateAdminAffiliateLink";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function validateAffiliateLink(value: string): string | null {
-  const text = value.trim();
-
-  if (!text) {
-    return null;
-  }
-
-  try {
-    const url = new URL(text);
-
-    if (
-      url.protocol !== "http:" &&
-      url.protocol !== "https:"
-    ) {
-      return null;
-    }
-
-    const hostname = url.hostname.toLowerCase();
-
-    const isMercadoLivre =
-      hostname === "mercadolivre.com.br" ||
-      hostname.endsWith(".mercadolivre.com.br") ||
-      hostname === "mercadolibre.com" ||
-      hostname.endsWith(".mercadolibre.com") ||
-      hostname === "meli.la" ||
-      hostname.endsWith(".meli.la");
-
-    if (!isMercadoLivre) {
-      return null;
-    }
-
-    url.hash = "";
-
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
 
 export async function POST(request: Request) {
   try {
@@ -57,7 +19,7 @@ export async function POST(request: Request) {
 
     const affiliateLink =
       typeof body?.affiliateLink === "string"
-        ? validateAffiliateLink(body.affiliateLink)
+        ? validateOfficialMercadoLivreAffiliateLink(body.affiliateLink)
         : null;
 
     if (!id) {
@@ -93,6 +55,9 @@ export async function POST(request: Request) {
         select: {
           id: true,
           status: true,
+          productId: true,
+          marketplace: true,
+          externalId: true,
         },
       });
 
@@ -125,6 +90,42 @@ export async function POST(request: Request) {
           status: 409,
         }
       );
+    }
+
+    if (
+      opportunity.marketplace === "MERCADO_LIVRE" &&
+      opportunity.productId
+    ) {
+      const { applyConfirmedAffiliateLinkWithProductSync } = await import(
+        "@/services/opportunities/applyAffiliateLink"
+      );
+      const applied = await applyConfirmedAffiliateLinkWithProductSync({
+        opportunityId: opportunity.id,
+        affiliateLink,
+      });
+
+      if (applied.ok) {
+        return NextResponse.json({
+          success: true,
+          message:
+            "Link de afiliado salvo. A oferta do Mercado Livre já está disponível.",
+        });
+      }
+
+      if (
+        applied.code === "PRODUCT_MISMATCH" ||
+        applied.code === "EXTERNAL_ID_MISMATCH"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: applied.error,
+          },
+          {
+            status: 409,
+          },
+        );
+      }
     }
 
     const result =

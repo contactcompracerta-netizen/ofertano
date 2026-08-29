@@ -846,6 +846,10 @@ export async function persistPublicSearchCluster(
     await sincronizarMelhorOfertaDoProduto(tx, productId!);
   });
 
+  const { ensureMercadoLivreLowestPriceAffiliateOpportunitySafe } =
+    await import("@/services/opportunities/lowestPriceAffiliateOpportunity");
+  await ensureMercadoLivreLowestPriceAffiliateOpportunitySafe(productId);
+
   const canonicalIdentity = representative
     ? identityOf(representative)
     : null;

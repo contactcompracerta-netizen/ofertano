@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import {
+  enrichOpportunityComparison,
+  loadOpportunityInbox,
+} from "@/services/admin-push/inbox";
+import type { ComparableOffer } from "@/services/admin-push/eligibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,6 +91,51 @@ export async function GET() {
       }),
     ]);
 
+    const productIds = Array.from(
+      new Set(
+        items
+          .map((item) => item.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    const siblingOffers =
+      productIds.length > 0
+        ? await prisma.marketplaceOffer.findMany({
+            where: {
+              productId: {
+                in: productIds,
+              },
+            },
+            select: {
+              id: true,
+              productId: true,
+              marketplace: true,
+              price: true,
+              status: true,
+              matchStatus: true,
+              available: true,
+              active: true,
+              affiliateLink: true,
+            },
+          })
+        : [];
+
+    const siblingsByProduct = new Map<string, ComparableOffer[]>();
+
+    for (const offer of siblingOffers) {
+      const current = siblingsByProduct.get(offer.productId) ?? [];
+      current.push(offer);
+      siblingsByProduct.set(offer.productId, current);
+    }
+
+    const itemsWithComparison = items.map((item) => ({
+      ...item,
+      ...enrichOpportunityComparison(item, siblingsByProduct),
+    }));
+
+    const inbox = await loadOpportunityInbox();
+
     return NextResponse.json({
       success: true,
       summary: {
@@ -96,8 +146,10 @@ export async function GET() {
         published,
         dismissed,
         error,
+        inbox: inbox.length,
       },
-      items,
+      inbox,
+      items: itemsWithComparison,
     });
   } catch (error) {
     console.error(

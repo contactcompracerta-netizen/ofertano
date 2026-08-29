@@ -7,6 +7,8 @@ import {
   useState,
 } from "react";
 
+import AdminPushButton from "./AdminPushButton";
+
 type OpportunityStatus =
   | "WAITING_AFFILIATE"
   | "READY_TO_QUEUE"
@@ -41,6 +43,28 @@ type Opportunity = {
   updatedAt: string;
   queuedAt: string | null;
   publishedAt: string | null;
+  secondPrice?: number | null;
+  secondMarketplace?: string | null;
+  savings?: number | null;
+};
+
+type OpportunityInboxItem = {
+  id: string;
+  focusId: string;
+  source: "opportunity" | "offer";
+  opportunityId: string | null;
+  offerId: string | null;
+  productId: string | null;
+  title: string;
+  image: string | null;
+  sourceUrl: string;
+  mlPrice: number | null;
+  secondPrice: number | null;
+  secondMarketplace: string | null;
+  savings: number | null;
+  discoveredAt: string;
+  status: string;
+  affiliateLink: string | null;
 };
 
 type OpportunitySummary = {
@@ -51,12 +75,14 @@ type OpportunitySummary = {
   published: number;
   dismissed: number;
   error: number;
+  inbox?: number;
 };
 
 type OpportunitiesResponse = {
   success: boolean;
   summary?: OpportunitySummary;
   items?: Opportunity[];
+  inbox?: OpportunityInboxItem[];
   error?: string;
 };
 
@@ -121,6 +147,7 @@ const initialSummary: OpportunitySummary = {
   published: 0,
   dismissed: 0,
   error: 0,
+  inbox: 0,
 };
 
 const statusLabels: Record<
@@ -216,12 +243,19 @@ export default function OpportunitiesPage() {
     Opportunity[]
   >([]);
 
+  const [inbox, setInbox] = useState<
+    OpportunityInboxItem[]
+  >([]);
+
   const [summary, setSummary] =
     useState<OpportunitySummary>(
       initialSummary
     );
 
   const [affiliateLinks, setAffiliateLinks] =
+    useState<Record<string, string>>({});
+
+  const [inboxLinks, setInboxLinks] =
     useState<Record<string, string>>({});
 
   const [batchLinks, setBatchLinks] =
@@ -262,6 +296,15 @@ export default function OpportunitiesPage() {
     useState(false);
 
   const [dismissingId, setDismissingId] =
+    useState<string | null>(null);
+
+  const [savingId, setSavingId] =
+    useState<string | null>(null);
+
+  const [resolvedIds, setResolvedIds] =
+    useState<Record<string, string>>({});
+
+  const [focusedId, setFocusedId] =
     useState<string | null>(null);
 
   const [clearingOpportunities, setClearingOpportunities] =
@@ -421,6 +464,19 @@ export default function OpportunitiesPage() {
           data.items ?? [];
 
         setItems(loadedItems);
+        setInbox(data.inbox ?? []);
+
+        setInboxLinks((current) => {
+          const next = { ...current };
+
+          for (const item of data.inbox ?? []) {
+            if (next[item.id] === undefined) {
+              next[item.id] = item.affiliateLink ?? "";
+            }
+          }
+
+          return next;
+        });
 
         setSummary(
           data.summary ?? initialSummary
@@ -449,6 +505,80 @@ export default function OpportunitiesPage() {
     void loadCategories();
     void loadOpportunities();
   }, [loadCategories, loadOpportunities]);
+
+  useEffect(() => {
+    function applyFocus(rawId: string | null) {
+      const id = rawId?.trim();
+
+      if (!id) {
+        return;
+      }
+
+      setFocusedId(id);
+
+      window.setTimeout(() => {
+        const element = document.getElementById(
+          `opportunity-${id}`,
+        );
+
+        element?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 120);
+    }
+
+    const params = new URLSearchParams(
+      window.location.search,
+    );
+    applyFocus(params.get("focus"));
+
+    function onMessage(event: MessageEvent) {
+      if (
+        event.data?.type !==
+        "OFERTANO_FOCUS_OPPORTUNITY"
+      ) {
+        return;
+      }
+
+      const url = String(event.data.url ?? "");
+
+      try {
+        const parsed = new URL(
+          url,
+          window.location.origin,
+        );
+
+        if (
+          parsed.origin !== window.location.origin ||
+          parsed.pathname !== "/admin/oportunidades"
+        ) {
+          return;
+        }
+
+        applyFocus(parsed.searchParams.get("focus"));
+        window.history.replaceState(
+          null,
+          "",
+          `${parsed.pathname}${parsed.search}`,
+        );
+      } catch {
+        applyFocus(null);
+      }
+    }
+
+    navigator.serviceWorker?.addEventListener(
+      "message",
+      onMessage,
+    );
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener(
+        "message",
+        onMessage,
+      );
+    };
+  }, [inbox, items]);
 
   async function discoverOpportunities() {
     const normalizedCategoryId =
@@ -885,6 +1015,10 @@ export default function OpportunitiesPage() {
 
   const summaryCards = [
     {
+      label: "Pendentes agora",
+      value: inbox.length,
+    },
+    {
       label: "Total",
       value: summary.total,
     },
@@ -904,16 +1038,88 @@ export default function OpportunitiesPage() {
       label: "Publicados",
       value: summary.published,
     },
-    {
-      label: "Erros",
-      value: summary.error,
-    },
   ];
 
   const actionsLocked =
     publishingBatch ||
     dismissingId !== null ||
-    clearingOpportunities;
+    clearingOpportunities ||
+    savingId !== null;
+
+  async function saveAndRelease(input: {
+    id: string;
+    opportunityId?: string | null;
+    offerId?: string | null;
+    affiliateLink: string;
+  }) {
+    const affiliateLink = input.affiliateLink.trim();
+
+    if (!affiliateLink) {
+      setError(
+        "Cole o link de afiliado do Mercado Livre antes de salvar.",
+      );
+      return;
+    }
+
+    try {
+      setSavingId(input.id);
+      setError("");
+      setMessage("");
+
+      const response = await fetch(
+        "/api/opportunities/release",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            opportunityId:
+              input.opportunityId || undefined,
+            offerId: input.offerId || undefined,
+            affiliateLink,
+          }),
+        },
+      );
+
+      const data = (await response.json()) as {
+        success?: boolean;
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Não foi possível salvar o link de afiliado.",
+        );
+      }
+
+      setResolvedIds((current) => ({
+        ...current,
+        [input.id]:
+          data.message ||
+          "Link salvo. Oferta liberada.",
+      }));
+
+      setMessage(
+        data.message ||
+          "Link salvo. Oferta liberada.",
+      );
+
+      await loadOpportunities();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Erro ao salvar e liberar a oferta.",
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   return (
     <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -929,14 +1135,13 @@ export default function OpportunitiesPage() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Descubra produtos, publique na fila e
-              acompanhe o status. Na Amazon, o link
-              afiliado é gerado automaticamente quando
-              o ASIN é identificado.
+              Central operacional: quando o Mercado Livre
+              tem o menor preço válido, cole o link
+              afiliado e libere a oferta pelo celular.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             <button
               type="button"
               onClick={() =>
@@ -945,7 +1150,7 @@ export default function OpportunitiesPage() {
               disabled={
                 loading || actionsLocked
               }
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading
                 ? "Atualizando..."
@@ -960,7 +1165,7 @@ export default function OpportunitiesPage() {
               disabled={
                 loading || actionsLocked
               }
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {clearingOpportunities
                 ? "Limpando..."
@@ -969,22 +1174,204 @@ export default function OpportunitiesPage() {
           </div>
         </div>
 
-        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          <div className="mb-5">
+        <div className="mb-4">
+          <AdminPushButton />
+        </div>
+
+        <section className="mb-4">
+          <div className="mb-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+              Aguardando você
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">
+              Oportunidades pendentes
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Mercado Livre com o menor preço válido e
+              sem link afiliado. Toque, cole o link e
+              libere a oferta.
+            </p>
+          </div>
+
+          {loading && inbox.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-600">
+              Carregando pendências...
+            </div>
+          ) : null}
+
+          {!loading && inbox.length === 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-white p-6 text-center">
+              <p className="font-semibold text-emerald-800">
+                Nenhuma oferta aguardando link agora
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Quando o Mercado Livre for o menor preço,
+                a pendência aparece aqui e a notificação
+                chega neste dispositivo.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-4">
+            {inbox.map((item) => {
+              const resolved = Boolean(resolvedIds[item.id]);
+              const focused = focusedId === item.id;
+
+              return (
+                <article
+                  key={item.id}
+                  id={`opportunity-${item.id}`}
+                  className={`scroll-mt-24 overflow-hidden rounded-2xl border bg-white p-4 shadow-sm ${
+                    focused
+                      ? "border-emerald-500 ring-4 ring-emerald-100"
+                      : resolved
+                        ? "border-emerald-200"
+                        : "border-amber-200"
+                  }`}
+                >
+                  <div className="flex gap-3">
+                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="h-full w-full object-contain p-2"
+                        />
+                      ) : (
+                        <span className="px-2 text-center text-xs text-slate-500">
+                          Sem imagem
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                        {resolved
+                          ? "Resolvido"
+                          : "Link afiliado necessário"}
+                      </p>
+                      <h3 className="mt-1 text-base font-semibold leading-snug text-slate-950">
+                        {item.title}
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {formatDate(item.discoveredAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-emerald-800">
+                        Mercado Livre
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-emerald-700">
+                        {formatCurrency(item.mlPrice)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-slate-500">
+                        {item.secondMarketplace
+                          ? `2º menor · ${item.secondMarketplace}`
+                          : "2º menor preço"}
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-slate-800">
+                        {item.secondPrice === null
+                          ? "—"
+                          : formatCurrency(item.secondPrice)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {item.savings !== null ? (
+                    <p className="mt-2 text-sm font-semibold text-emerald-700">
+                      Economia de {formatCurrency(item.savings)}
+                    </p>
+                  ) : null}
+
+                  {resolved ? (
+                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-800">
+                      {resolvedIds[item.id]}
+                    </div>
+                  ) : (
+                    <>
+                      <a
+                        href={item.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800"
+                      >
+                        Abrir anúncio original
+                      </a>
+
+                      <label
+                        htmlFor={`inbox-affiliate-${item.id}`}
+                        className="mt-4 mb-2 block text-sm font-bold text-slate-800"
+                      >
+                        Colar link afiliado
+                      </label>
+                      <textarea
+                        id={`inbox-affiliate-${item.id}`}
+                        value={inboxLinks[item.id] ?? ""}
+                        onChange={(event) => {
+                          setInboxLinks((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }));
+                        }}
+                        rows={3}
+                        disabled={actionsLocked}
+                        placeholder="https://www.mercadolivre.com.br/social/..."
+                        className="min-h-24 w-full rounded-xl border border-slate-300 px-3 py-3 text-base text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:bg-slate-100"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void saveAndRelease({
+                            id: item.id,
+                            opportunityId:
+                              item.source ===
+                              "opportunity"
+                                ? item.opportunityId
+                                : undefined,
+                            offerId:
+                              item.source === "offer"
+                                ? item.offerId
+                                : undefined,
+                            affiliateLink:
+                              inboxLinks[item.id] ?? "",
+                          })
+                        }
+                        disabled={actionsLocked}
+                        className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingId === item.id
+                          ? "Salvando..."
+                          : "Salvar e liberar oferta"}
+                      </button>
+                    </>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <details className="mb-4 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <summary className="cursor-pointer list-none">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               Etapa 1
             </p>
-
             <h2 className="mt-2 text-lg font-semibold text-slate-950">
               Descobrir oportunidades
             </h2>
-
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Escolha o marketplace, informe o
-              produto e defina quantas
-              oportunidades deseja buscar.
+              Busca em lote no Mercado Livre ou Amazon.
+              Toque para expandir.
             </p>
-          </div>
+          </summary>
+
+          <div className="mb-5 mt-4">
 
           <div className="grid gap-4 lg:grid-cols-[220px_1fr_160px_auto] lg:items-end">
             <div>
@@ -1163,7 +1550,7 @@ export default function OpportunitiesPage() {
                     !categoryId
                   : amazonQuery.trim().length < 3)
               }
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {discovering
                 ? "Descobrindo..."
@@ -1173,7 +1560,8 @@ export default function OpportunitiesPage() {
                   : "Descobrir produtos"}
             </button>
           </div>
-        </section>
+          </div>
+        </details>
 
         <section className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           {summaryCards.map((card) => (
@@ -1383,7 +1771,8 @@ export default function OpportunitiesPage() {
         ) : null}
 
         {!loading &&
-        visibleItems.length === 0 ? (
+        visibleItems.length === 0 &&
+        inbox.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <h2 className="text-xl font-bold text-slate-900">
               Lista de oportunidades limpa
@@ -1408,13 +1797,27 @@ export default function OpportunitiesPage() {
               opportunity.status ===
                 "ERROR";
 
+            const resolved = Boolean(
+              resolvedIds[opportunity.id],
+            );
+
+            const focused =
+              focusedId === opportunity.id;
+
             return (
               <article
                 key={opportunity.id}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                id={`opportunity-${opportunity.id}`}
+                className={`scroll-mt-24 overflow-hidden rounded-2xl border bg-white shadow-sm ${
+                  focused
+                    ? "border-emerald-500 ring-4 ring-emerald-100"
+                    : resolved
+                      ? "border-emerald-200"
+                      : "border-slate-200"
+                }`}
               >
-                <div className="grid gap-6 p-5 md:grid-cols-[180px_1fr]">
-                  <div className="flex min-h-44 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
+                <div className="grid gap-5 p-4 sm:p-5 md:grid-cols-[140px_1fr]">
+                  <div className="flex min-h-36 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
                     {opportunity.image ? (
                       <img
                         src={
@@ -1423,7 +1826,7 @@ export default function OpportunitiesPage() {
                         alt={
                           opportunity.title
                         }
-                        className="h-44 w-full object-contain p-3"
+                        className="h-36 w-full object-contain p-3"
                       />
                     ) : (
                       <span className="px-4 text-center text-sm text-slate-500">
@@ -1455,11 +1858,11 @@ export default function OpportunitiesPage() {
                           ]
                         }`}
                       >
-                        {
-                          statusLabels[
-                            opportunity.status
-                          ]
-                        }
+                        {resolved
+                          ? "Resolvido"
+                          : statusLabels[
+                              opportunity.status
+                            ]}
                       </span>
 
                       {opportunity.discount !==
@@ -1470,14 +1873,13 @@ export default function OpportunitiesPage() {
                       ) : null}
 
                       <span className="text-xs text-slate-500">
-                        Descoberto em{" "}
                         {formatDate(
                           opportunity.discoveredAt
                         )}
                       </span>
                     </div>
 
-                    <h2 className="text-xl font-bold leading-snug text-slate-900">
+                    <h2 className="text-lg font-bold leading-snug text-slate-900 sm:text-xl">
                       {opportunity.title}
                     </h2>
 
@@ -1490,48 +1892,69 @@ export default function OpportunitiesPage() {
                           "Categoria não informada"}
                     </p>
 
-                    <div className="mt-4 flex flex-wrap items-end gap-4">
-                      <div>
-                        <p className="text-sm text-slate-500">
-                          Preço atual
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                        <p className="text-[11px] font-semibold text-emerald-800">
+                          {opportunity.marketplace ===
+                          "MERCADO_LIVRE"
+                            ? "Mercado Livre"
+                            : "Preço atual"}
                         </p>
-
-                        <p className="text-2xl font-bold text-emerald-600">
+                        <p className="mt-1 text-lg font-bold text-emerald-700">
                           {opportunity.price ===
                             null &&
                           opportunity.marketplace ===
                             "AMAZON"
-                            ? "Carregado ao publicar"
+                            ? "Ao publicar"
                             : formatCurrency(
                                 opportunity.price
                               )}
                         </p>
                       </div>
-
-                      {opportunity.oldPrice !==
-                      null ? (
-                        <div>
-                          <p className="text-sm text-slate-500">
-                            Preço anterior
-                          </p>
-
-                          <p className="text-base text-slate-500 line-through">
-                            {formatCurrency(
-                              opportunity.oldPrice
-                            )}
-                          </p>
-                        </div>
-                      ) : null}
+                      <div className="rounded-xl bg-slate-50 px-3 py-2">
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {opportunity.secondMarketplace
+                            ? `2º menor · ${opportunity.secondMarketplace}`
+                            : opportunity.oldPrice !==
+                                null
+                              ? "Preço anterior"
+                              : "2º menor preço"}
+                        </p>
+                        <p className="mt-1 text-lg font-bold text-slate-800">
+                          {opportunity.secondPrice !==
+                            null &&
+                          opportunity.secondPrice !==
+                            undefined
+                            ? formatCurrency(
+                                opportunity.secondPrice
+                              )
+                            : opportunity.oldPrice !==
+                                null
+                              ? formatCurrency(
+                                  opportunity.oldPrice
+                                )
+                              : "—"}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="mt-5 flex flex-wrap gap-3">
+                    {opportunity.savings ? (
+                      <p className="mt-2 text-sm font-semibold text-emerald-700">
+                        Economia de{" "}
+                        {formatCurrency(
+                          opportunity.savings
+                        )}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <a
                         href={
                           opportunity.sourceUrl
                         }
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                        className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
                         {
                           marketplaceOpenLabels[
@@ -1551,7 +1974,7 @@ export default function OpportunitiesPage() {
                           disabled={
                             actionsLocked
                           }
-                          className="inline-flex rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex min-h-11 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {dismissingId ===
                           opportunity.id
@@ -1565,7 +1988,7 @@ export default function OpportunitiesPage() {
                           href={`/produto/${opportunity.productId}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                          className="inline-flex min-h-11 items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
                         >
                           Abrir produto no Ofertano
                         </a>
@@ -1573,57 +1996,86 @@ export default function OpportunitiesPage() {
                     </div>
 
                     <div className="mt-5 border-t border-slate-200 pt-5">
-                      <label
-                        htmlFor={`affiliate-${opportunity.id}`}
-                        className="mb-2 block text-sm font-bold text-slate-800"
-                      >
-                        Link oficial de afiliado
-                      </label>
+                      {resolved ? (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-800">
+                          {resolvedIds[opportunity.id]}
+                        </div>
+                      ) : (
+                        <>
+                          <label
+                            htmlFor={`affiliate-${opportunity.id}`}
+                            className="mb-2 block text-sm font-bold text-slate-800"
+                          >
+                            Colar link afiliado
+                          </label>
 
-                      <input
-                        id={`affiliate-${opportunity.id}`}
-                        type="url"
-                        value={
-                          affiliateLinks[
-                            opportunity.id
-                          ] ?? ""
-                        }
-                        onChange={(event) => {
-                          setAffiliateLinks(
-                            (current) => ({
-                              ...current,
-                              [opportunity.id]:
-                                event.target.value,
-                            })
-                          );
-                        }}
-                        disabled={
-                          !canEdit ||
-                          actionsLocked
-                        }
-                        placeholder={
+                          <textarea
+                            id={`affiliate-${opportunity.id}`}
+                            value={
+                              affiliateLinks[
+                                opportunity.id
+                              ] ?? ""
+                            }
+                            onChange={(event) => {
+                              setAffiliateLinks(
+                                (current) => ({
+                                  ...current,
+                                  [opportunity.id]:
+                                    event.target.value,
+                                })
+                              );
+                            }}
+                            disabled={
+                              !canEdit ||
+                              actionsLocked
+                            }
+                            rows={3}
+                            placeholder={
+                              opportunity.marketplace ===
+                              "AMAZON"
+                                ? "Cole o link afiliado somente se o ASIN não foi identificado"
+                                : "https://www.mercadolivre.com.br/social/..."
+                            }
+                            className="min-h-24 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          />
+
+                          {canEdit &&
                           opportunity.marketplace ===
-                          "AMAZON"
-                            ? "Emergência: cole o link afiliado apenas se o ASIN não foi identificado"
-                            : "Preenchido automaticamente pelos links colados acima"
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      />
+                            "MERCADO_LIVRE" ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void saveAndRelease({
+                                  id: opportunity.id,
+                                  opportunityId:
+                                    opportunity.id,
+                                  affiliateLink:
+                                    affiliateLinks[
+                                      opportunity.id
+                                    ] ?? "",
+                                })
+                              }
+                              disabled={
+                                actionsLocked
+                              }
+                              className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {savingId ===
+                              opportunity.id
+                                ? "Salvando..."
+                                : "Salvar e liberar oferta"}
+                            </button>
+                          ) : null}
 
-                      <p className="mt-2 text-xs text-slate-500">
-                        {opportunity.marketplace ===
-                        "AMAZON"
-                          ? "Produtos Amazon com ASIN recebem o link afiliado automaticamente (tag ofertano-20) e já ficam prontos para a fila. Este campo é só para correção manual."
-                          : "Use este campo apenas para corrigir manualmente um link. Não é necessário salvar separadamente."}
-                      </p>
-
-                      {opportunity.errorMessage ? (
-                        <p className="mt-3 text-sm font-medium text-red-700">
-                          {
-                            opportunity.errorMessage
-                          }
-                        </p>
-                      ) : null}
+                          {opportunity.errorMessage ? (
+                            <p className="mt-3 text-sm font-medium text-red-700">
+                              {
+                                opportunity.errorMessage
+                              }
+                            </p>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

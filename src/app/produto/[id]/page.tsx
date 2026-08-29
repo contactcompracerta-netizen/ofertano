@@ -8,17 +8,21 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ProductGallery from "@/components/ProductGallery";
 import ShareProductButton from "@/components/ShareProductButton";
-import MarketplaceClickAnchor from "@/components/analytics/MarketplaceClickAnchor";
 import AnalyticsListingScope from "@/components/analytics/AnalyticsListingScope";
 import ProductImpression from "@/components/analytics/ProductImpression";
 import ProductViewTracker from "@/components/analytics/ProductViewTracker";
 import {
-  ehMarketplaceMercadoLivre,
   escolherOfertaPrincipalCompravel,
-  resolverHrefCompraPublica,
-  resolverHrefProprioOfertaPublica,
-  resolverLinkLegadoPrincipal,
 } from "@/lib/affiliates/publicPurchase";
+import { sanitizarOfertaCompraPublica } from "@/lib/affiliates/liveOffers";
+import {
+  LiveComparatorOffers,
+  LiveMarketplaceBadge,
+  LiveMobileBuyBar,
+  LivePrimaryBuyButton,
+  LivePrimaryPrice,
+  ProductLivePurchase,
+} from "@/components/product/ProductLivePurchase";
 import prisma from "@/lib/prisma";
 
 type ProdutoPageProps = {
@@ -77,18 +81,6 @@ function limparMarca(marca: string | null | undefined) {
   );
 }
 
-function obterTextoOfertaPendente(status: string, available: boolean) {
-  if (!available || status === "UNAVAILABLE") {
-    return "Oferta indisponível";
-  }
-
-  if (status === "ERROR") {
-    return "Oferta em verificação";
-  }
-
-  return "Link em revisão";
-}
-
 function formatarValorEspecificacao(valor: unknown) {
   if (valor === null || valor === undefined) {
     return "Não informado";
@@ -141,27 +133,6 @@ function StarIcon({ className }: IconProps) {
       className={className}
     >
       <path d="m12 2.75 2.78 5.63 6.22.91-4.5 4.38 1.06 6.19L12 16.94l-5.56 2.92 1.06-6.19L3 9.29l6.22-.91L12 2.75Z" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon({ className }: IconProps) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className={className}
-    >
-      <path d="M14 5h5v5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="m19 5-8 8" strokeLinecap="round" strokeLinejoin="round" />
-      <path
-        d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }
@@ -236,26 +207,6 @@ function TruckIcon({ className }: IconProps) {
     </svg>
   );
 }
-
-function CheckIcon({ className }: IconProps) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className={className}
-    >
-      <path
-        d="m5 12 4 4L19 6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 
 type HistoricoPrecoEntrada = {
   offerId: string | null;
@@ -962,34 +913,12 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const ofertaPrincipalComLink =
     escolherOfertaPrincipalCompravel(ofertasComparador);
 
-  const linkOfertaPrincipal = ofertaPrincipalComLink
-    ? resolverHrefCompraPublica(
-        ofertaPrincipalComLink,
-        ofertasComparador,
-      ) ?? ""
-    : "";
-
-  const linkLegadoPrincipal = resolverLinkLegadoPrincipal(
-    produto.store,
-    produto.affiliateLink,
-  );
-
-  const linkPrincipal =
-    linkOfertaPrincipal ||
-    linkLegadoPrincipal;
-
   const marketplacePrincipal =
     ofertaPrincipalComLink
       ? formatarMarketplace(
           ofertaPrincipalComLink.marketplace,
         )
       : produto.store?.trim() || "Loja parceira";
-
-  const marketplacePrincipalKey = (
-    ofertaPrincipalComLink?.marketplace ??
-    produto.store?.trim() ??
-    "OUTROS"
-  ).slice(0, 40);
 
   const precoPrincipal =
     ofertaPrincipalComLink?.price ??
@@ -1036,22 +965,6 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const possuiEstoque =
     produto.stock !== null && produto.stock > 0;
 
-  const possuiComparacaoEntreLojas =
-    new Set(
-      ofertasComparador.map(
-        (oferta) => oferta.marketplace,
-      ),
-    ).size > 1;
-
-  const possuiLinkPrincipal =
-    linkPrincipal.length > 0;
-
-  const usarBarraMobileEmDuasLinhas =
-    marketplacePrincipal
-      .toLowerCase()
-      .includes("amazon") ||
-    formatarPreco(precoPrincipal).length >= 11;
-
   const marcaExibicao = limparMarca(produto.brand);
 
   const especificacoes =
@@ -1063,7 +976,31 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         )
       : [];
 
+  const ofertasAoVivo = ofertasComparador.map((oferta) =>
+    sanitizarOfertaCompraPublica({
+      id: oferta.id,
+      productId: oferta.productId,
+      marketplace: oferta.marketplace,
+      affiliateLink: oferta.affiliateLink,
+      sourceUrl: oferta.sourceUrl,
+      matchStatus: oferta.matchStatus,
+      status: oferta.status,
+      available: oferta.available,
+      price: oferta.price,
+      oldPrice: oferta.oldPrice,
+      installments: oferta.installments,
+    }),
+  );
+
   return (
+    <ProductLivePurchase
+      productId={produto.id}
+      store={produto.store}
+      productAffiliateLink={produto.affiliateLink}
+      initialOffers={ofertasAoVivo}
+      fallbackPrice={precoPrincipal}
+      fallbackOldPrice={precoAnteriorPrincipal}
+    >
     <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
       <Header />
       <ProductViewTracker
@@ -1120,10 +1057,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-inset ring-emerald-200 sm:text-[11px]">
-                      <CheckIcon className="h-3.5 w-3.5" />
-                      Oferta em {marketplacePrincipal}
-                    </span>
+                    <LiveMarketplaceBadge />
 
                     {marcaExibicao && (
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600 sm:text-[11px]">
@@ -1198,63 +1132,11 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
                 <div className="my-2.5 h-px bg-slate-200" />
 
-                <div>
-                  {possuiPrecoAnterior &&
-                    precoAnteriorPrincipal !== null && (
-                      <p className="text-xs font-semibold text-slate-400 line-through sm:text-[13px]">
-                        {formatarPreco(precoAnteriorPrincipal)}
-                      </p>
-                    )}
+                <LivePrimaryPrice
+                  parcelamentoInicial={parcelamentoPrincipal}
+                />
 
-                  <div className="mt-0.5 flex flex-wrap items-end gap-2">
-                    <p className="text-[27px] font-black leading-none tracking-tight text-emerald-700 sm:text-[29px] lg:text-[30px]">
-                      {formatarPreco(precoPrincipal)}
-                    </p>
-
-                    {possuiDesconto && (
-                      <span className="mb-0.5 rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-800 sm:text-[11px]">
-                        Economize {percentualDesconto}%
-                      </span>
-                    )}
-                  </div>
-
-                  {parcelamentoPrincipal && (
-                    <p className="mt-1.5 text-xs font-semibold text-slate-700 sm:text-[13px]">
-                      {parcelamentoPrincipal}
-                    </p>
-                  )}
-
-                  <p className="mt-1.5 text-[11px] leading-4 text-slate-500 sm:text-xs">
-                    {marketplacePrincipal === "AliExpress"
-                      ? "Preço público consultado no AliExpress. Promoções personalizadas, de novo usuário ou exclusivas do app podem apresentar outro valor."
-                      : "Preço e condições podem mudar na loja parceira."}
-                  </p>
-                </div>
-
-                {possuiLinkPrincipal ? (
-                  <MarketplaceClickAnchor
-                    href={linkPrincipal}
-                    target="_blank"
-                    rel="noopener noreferrer sponsored"
-                    productId={produto.id}
-                    marketplace={marketplacePrincipalKey}
-                    position={1}
-                    price={precoPrincipal}
-                    className="mt-2.5 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-center text-[12px] font-black text-white shadow-md shadow-emerald-600/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200"
-                  >
-                    Ver oferta em {marketplacePrincipal}
-                    <ExternalLinkIcon className="h-4 w-4" />
-                  </MarketplaceClickAnchor>
-                ) : (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-center">
-                    <p className="text-sm font-black text-amber-950">
-                      Link em revisão
-                    </p>
-                    <p className="mt-1 text-xs leading-4 text-amber-800">
-                      A oferta já foi encontrada, mas o link individual ainda está sendo validado.
-                    </p>
-                  </div>
-                )}
+                <LivePrimaryBuyButton className="mt-2.5 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-center text-[12px] font-black text-white shadow-md shadow-emerald-600/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200" />
 
                 <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
                   <div className="flex items-start gap-2">
@@ -1294,173 +1176,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             </aside>
           </div>
 
-          {possuiComparacaoEntreLojas && (
-            <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:mt-3 sm:p-4">
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
-                      Comparador Ofertano
-                    </p>
-
-                    <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl">
-                      Compare preços em outras lojas
-                    </h2>
-                  </div>
-
-                  <p className="max-w-xl text-[10px] leading-4 text-slate-500 sm:text-xs">
-                    {produto.publicationStatus === "DRAFT"
-                      ? "Menor preço entre as lojas encontradas nesta pesquisa. A cobertura ainda não está completa."
-                      : "O mesmo produto em lojas diferentes. O menor preço encontrado ganha destaque."}
-                  </p>
-                </div>
-
-                <div
-                  className={`grid min-w-0 gap-2 ${
-                    ofertasComparador.length === 1
-                      ? "grid-cols-1"
-                      : "md:grid-cols-2 2xl:grid-cols-3"
-                  }`}
-                >
-                  {ofertasComparador.map((oferta) => {
-                    const ofertaMercadoLivre =
-                      ehMarketplaceMercadoLivre(oferta.marketplace);
-
-                    const ofertaDisponivel =
-                      oferta.available &&
-                      oferta.status !== "UNAVAILABLE" &&
-                      oferta.status !== "ERROR";
-
-                    const linkMonetizado = resolverHrefProprioOfertaPublica(
-                      oferta,
-                    );
-
-                    const linkDestino = ofertaMercadoLivre
-                      ? ofertaDisponivel
-                        ? linkMonetizado
-                        : null
-                      : linkMonetizado &&
-                          oferta.status === "ACTIVE" &&
-                          oferta.available
-                        ? linkMonetizado
-                        : null;
-
-                    const linkAtivo = Boolean(linkDestino);
-
-                    const marketplace = formatarMarketplace(
-                      oferta.marketplace,
-                    );
-
-                    const menorPrecoEncontrado =
-                      menorPrecoComparador !== null &&
-                      oferta.available &&
-                      oferta.status !== "UNAVAILABLE" &&
-                      oferta.status !== "ERROR" &&
-                      Math.abs(
-                        oferta.price - menorPrecoComparador,
-                      ) < 0.01;
-
-                    const conteudoOferta = (
-                      <div className="flex h-full flex-col">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            {menorPrecoEncontrado && (
-                              <span className="inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm sm:text-[10px]">
-                                Melhor preço
-                              </span>
-                            )}
-
-                            <p
-                              className={`${
-                                menorPrecoEncontrado
-                                  ? "mt-1 text-xl text-emerald-700 sm:text-2xl"
-                                  : "text-lg text-slate-950 sm:text-xl"
-                              } font-black leading-none tracking-tight`}
-                            >
-                              {formatarPreco(oferta.price)}
-                            </p>
-
-                            {oferta.installments && (
-                              <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-500 sm:text-[11px]">
-                                {oferta.installments}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="min-w-0 shrink-0 text-right">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">
-                              Disponível em
-                            </p>
-
-                            <p className="mt-0.5 max-w-32 truncate text-[12px] font-black text-slate-800 sm:text-sm">
-                              {marketplace}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 flex min-h-7 items-end justify-between gap-2 border-t border-slate-200/80 pt-2">
-                          {!linkAtivo ? (
-                            <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800 sm:text-[10px]">
-                              {obterTextoOfertaPendente(
-                                oferta.status,
-                                oferta.available,
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-500">
-                              Comprar na loja
-                            </span>
-                          )}
-
-                          {linkAtivo && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 sm:text-xs">
-                              Ver oferta
-                              <ExternalLinkIcon className="h-3.5 w-3.5" />
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-
-                    if (linkAtivo && linkDestino) {
-                      return (
-                        <MarketplaceClickAnchor
-                          key={oferta.id}
-                          href={linkDestino}
-                          target="_blank"
-                          rel="noopener noreferrer sponsored"
-                          productId={produto.id}
-                          marketplace={oferta.marketplace}
-                          position={ofertasComparador.indexOf(oferta) + 1}
-                          price={oferta.price}
-                          className={`rounded-xl p-3 transition hover:-translate-y-0.5 hover:shadow-md ${
-                            menorPrecoEncontrado
-                              ? "border-2 border-emerald-300 bg-emerald-50/60 shadow-sm hover:border-emerald-400"
-                              : "border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/40"
-                          }`}
-                        >
-                          {conteudoOferta}
-                        </MarketplaceClickAnchor>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={oferta.id}
-                        className={`rounded-xl p-3 ${
-                          menorPrecoEncontrado
-                            ? "border-2 border-emerald-300 bg-emerald-50/50"
-                            : "border border-amber-200 bg-amber-50/60"
-                        }`}
-                      >
-                        {conteudoOferta}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          )}
+          <LiveComparatorOffers />
           {pontosHistorico.length > 0 && (
             <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
@@ -1757,22 +1473,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-[100] border-t border-slate-200 bg-white/95 px-2.5 py-2 shadow-[0_-6px_22px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden [padding-bottom:calc(0.5rem+env(safe-area-inset-bottom))]">
-        {usarBarraMobileEmDuasLinhas ? (
-          <div className="mx-auto max-w-2xl">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="min-w-0 flex-1">
-                {possuiPrecoAnterior &&
-                  precoAnteriorPrincipal !== null && (
-                    <p className="truncate text-[9px] font-semibold text-slate-400 line-through">
-                      {formatarPreco(precoAnteriorPrincipal)}
-                    </p>
-                  )}
-
-                <p className="truncate text-[16px] font-black leading-none text-emerald-700">
-                  {formatarPreco(precoPrincipal)}
-                </p>
-              </div>
-
+        <LiveMobileBuyBar
+          trailing={
+            <>
               <div className="[&_button]:h-9 [&_button]:w-9">
                 <ShareProductButton
                   title={produto.name}
@@ -1781,7 +1484,6 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   variant="icon"
                 />
               </div>
-
               <div className="[&_button]:h-9 [&_button]:w-9">
                 <ShareProductButton
                   title={produto.name}
@@ -1789,86 +1491,13 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   variant="icon"
                 />
               </div>
-            </div>
-
-            <div className="mt-1.5">
-              {possuiLinkPrincipal ? (
-                <MarketplaceClickAnchor
-                  href={linkPrincipal}
-                  target="_blank"
-                  rel="noopener noreferrer sponsored"
-                  productId={produto.id}
-                  marketplace={marketplacePrincipalKey}
-                  position={1}
-                  price={precoPrincipal}
-                  className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-center text-[13px] font-black text-white shadow-md shadow-emerald-600/15 active:scale-[0.99]"
-                >
-                  Ver oferta em {marketplacePrincipal}
-                  <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
-                </MarketplaceClickAnchor>
-              ) : (
-                <div className="flex min-h-10 w-full items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-center text-[12px] font-black text-amber-800">
-                  Link em revisão
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto grid max-w-2xl grid-cols-[minmax(68px,auto)_36px_36px_minmax(92px,1fr)] items-center gap-1.5">
-            <div className="min-w-0">
-              {possuiPrecoAnterior &&
-                precoAnteriorPrincipal !== null && (
-                  <p className="truncate text-[9px] font-semibold text-slate-400 line-through">
-                    {formatarPreco(precoAnteriorPrincipal)}
-                  </p>
-                )}
-
-              <p className="truncate text-[15px] font-black leading-none text-emerald-700">
-                {formatarPreco(precoPrincipal)}
-              </p>
-            </div>
-
-            <div className="[&_button]:h-9 [&_button]:w-9">
-              <ShareProductButton
-                title={produto.name}
-                text={`Confira esta oferta no Ofertano: ${produto.name}`}
-                platform="whatsapp"
-                variant="icon"
-              />
-            </div>
-
-            <div className="[&_button]:h-9 [&_button]:w-9">
-              <ShareProductButton
-                title={produto.name}
-                text={`Confira esta oferta no Ofertano: ${produto.name}`}
-                variant="icon"
-              />
-            </div>
-
-            {possuiLinkPrincipal ? (
-              <MarketplaceClickAnchor
-                href={linkPrincipal}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                productId={produto.id}
-                marketplace={marketplacePrincipalKey}
-                position={1}
-                price={precoPrincipal}
-                className="flex min-h-10 min-w-0 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 text-center text-[12px] font-black text-white shadow-md shadow-emerald-600/15 active:scale-[0.99]"
-              >
-                <span className="truncate">Ver oferta</span>
-                <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-              </MarketplaceClickAnchor>
-            ) : (
-              <div className="flex min-h-10 min-w-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-2 text-center text-[11px] font-black text-amber-800">
-                Link em revisão
-              </div>
-            )}
-          </div>
-        )}
+            </>
+          }
+        />
       </div>
 
       <Footer />
     </div>
+    </ProductLivePurchase>
   );
 }

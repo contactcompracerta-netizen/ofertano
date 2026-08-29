@@ -470,3 +470,27 @@ model AnalyticsSessionDay {
   @@index([deviceType, day])
   @@index([utmSource, utmMedium, utmCampaign, day])
 }
+
+// Subscriptions Web Push do Admin. A chave VAPID privada nunca entra aqui.
+model AdminPushSubscription {
+  id        String @id @default(cuid())
+  endpoint  String @unique @db.Text
+  p256dh    String
+  auth      String
+  userAgent String? @db.Text
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+
+  @@index([lastSeenAt])
+}
+
+// Evita reenviar a mesma notificação para a mesma oportunidade.
+model AdminPushDispatch {
+  id             String   @id @default(cuid())
+  opportunityKey String   @unique
+  sentAt         DateTime @default(now())
+
+  @@index([sentAt])
+}

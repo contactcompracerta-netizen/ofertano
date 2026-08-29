@@ -7,6 +7,12 @@ import styles from "./admin.module.css";
 
 export const metadata: Metadata = {
   title: "Painel",
+  manifest: "/admin-manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Ofertano Admin",
+    statusBarStyle: "default",
+  },
 };
 
 export default function AdminLayout({

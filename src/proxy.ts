@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname === "/admin/sw.js") {
+    return NextResponse.next();
+  }
+
   const authorization =
     request.headers.get("authorization");
 

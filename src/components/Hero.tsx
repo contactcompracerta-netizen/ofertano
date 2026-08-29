@@ -1,3 +1,5 @@
+import ImageSearchButton from "@/components/ImageSearchButton";
+
 export default function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-slate-200 bg-[#F7FAF9]">
@@ -61,6 +63,8 @@ export default function Hero() {
                   className="h-10 w-full rounded-xl bg-slate-50 pl-9 pr-2 text-[12px] font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 sm:h-12 sm:pl-12 sm:pr-4 sm:text-sm lg:h-14 lg:text-base"
                 />
               </div>
+
+              <ImageSearchButton />
 
               <button
                 type="submit"
