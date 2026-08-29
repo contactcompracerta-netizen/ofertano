@@ -5,6 +5,9 @@ import {
   buildSearchPlan,
   clusterCandidates,
   compareFingerprints,
+  classifyProductConcept,
+  extractSoldItemNucleus,
+  inferRole,
   normalizeCandidate,
   processRawCandidates,
   scoreQueryRelevance,
@@ -1657,5 +1660,254 @@ const cheapestThree = processRawCandidates("JBL Tune 520BT", [
 assert.equal(cheapestThree.products[0]?.price, 99, "canonical = menor preco entre equivalentes");
 assert.equal(cheapestThree.products[0]?.primaryMarketplace, "Mercado Livre");
 assert.equal(cheapestThree.products[0]?.offers.length, 3, "compareCount >= 2");
+
+const novoTernoNucleus = extractSoldItemNucleus("Novo Terno Social Azul Adulto");
+assert.equal(novoTernoNucleus.headToken, "terno");
+assert.equal(classifyProductConcept("Novo Terno Social Azul Adulto").id, "suit");
+assert.equal(
+  extractSoldItemNucleus("Primavera Verão Terno Slim Azul").headToken,
+  "terno",
+);
+assert.equal(classifyProductConcept("Primavera Verão Terno Slim Azul").id, "suit");
+assert.equal(
+  extractSoldItemNucleus("Premium Notebook Gamer X").headToken,
+  "notebook",
+);
+assert.equal(
+  extractSoldItemNucleus("Saia de dança terno de prática").headToken,
+  "saia",
+);
+assert.notEqual(
+  classifyProductConcept("Saia de dança profissional terno de prática azul").id,
+  "suit",
+  "menção posterior de classe nao classifica o sold item",
+);
+assert.notEqual(
+  classifyProductConcept("Máscara respiratória terno industrial azul").id,
+  "suit",
+);
+assert.notEqual(
+  classifyProductConcept("Livro Panela de Pressão Moderna").id,
+  "cookware",
+);
+assert.equal(classifyProductConcept("Livro Panela de Pressão Moderna").id, "book");
+assert.notEqual(classifyProductConcept("Capa Notebook Gamer X").id, "notebook");
+assert.notEqual(classifyProductConcept("Estojo Fone Bluetooth X").id, "headphone");
+assert.equal(inferRole("Capa Notebook Gamer X"), "ACCESSORY");
+assert.equal(inferRole("Estojo Fone Bluetooth X"), "ACCESSORY");
+assert.equal(inferRole("Suporte Notebook X"), "ACCESSORY");
+
+assert.equal(
+  relevance("Terno azul adulto", "Novo Terno Social Azul Adulto").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance("Terno azul adulto", "Novo Terno Social Azul Adulto").fingerprint.role.value,
+  "MAIN",
+);
+assert.equal(
+  relevance("Terno azul adulto", "Primavera Verão Terno Slim Azul").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance("Terno azul adulto", "Terno Adulto Azul Paletó e Calça").status,
+  "RELEVANT",
+);
+assert.equal(
+  relevance("Terno azul adulto", "Terno Adulto Azul Paletó e Calça").rankTier <= 1,
+  true,
+);
+assert.notEqual(
+  relevance(
+    "Terno azul adulto",
+    "Saia de dança profissional terno de prática azul adulto",
+  ).fingerprint.productClass.value,
+  "suit",
+);
+assert.notEqual(
+  relevance(
+    "Terno azul adulto",
+    "Saia de dança profissional terno de prática azul adulto",
+  ).status,
+  "RELEVANT",
+);
+assert.notEqual(
+  relevance(
+    "Terno azul adulto",
+    "Máscara respiratória terno industrial azul adulto",
+  ).status,
+  "RELEVANT",
+);
+assert.notEqual(
+  relevance(
+    "Terno azul adulto",
+    "Toalha pet estilo terno azul adulto",
+  ).fingerprint.role.value === "MAIN" &&
+    relevance("Terno azul adulto", "Toalha pet estilo terno azul adulto").fingerprint
+      .productClass.value === "suit",
+  true,
+  "sold head que nao e terno nao vira suit MAIN",
+);
+assert.notEqual(
+  relevance(
+    "Terno azul adulto",
+    "Toalha pet estilo terno azul adulto",
+  ).status === "RELEVANT" &&
+    relevance("Terno azul adulto", "Toalha pet estilo terno azul adulto").fingerprint
+      .role.value === "MAIN",
+  true,
+);
+assert.notEqual(
+  relevance(
+    "Terno azul adulto",
+    "Blusa de dança feminina terno de prática azul adulto",
+  ).status,
+  "RELEVANT",
+);
+const lencoBolso = relevance(
+  "Terno azul adulto",
+  "Lenço de bolso para terno azul",
+);
+assert.equal(lencoBolso.status, "RELEVANT");
+assert.equal(lencoBolso.fingerprint.role.value, "ACCESSORY");
+assert.equal(lencoBolso.rankTier, 2);
+
+assert.equal(relevance("notebook", "Notebook Gamer X").status, "RELEVANT");
+assert.equal(relevance("notebook", "Notebook Gamer X").fingerprint.role.value, "MAIN");
+assert.notEqual(
+  relevance("notebook", "Capa Notebook X").fingerprint.role.value,
+  "MAIN",
+);
+assert.notEqual(relevance("notebook", "Capa Notebook X").rankTier, 0);
+assert.equal(relevance("notebook", "Estojo Notebook X").fingerprint.role.value, "ACCESSORY");
+assert.equal(relevance("notebook", "Suporte Notebook X").fingerprint.role.value, "ACCESSORY");
+assert.equal(relevance("fone", "Fone Bluetooth X").fingerprint.role.value, "MAIN");
+assert.notEqual(relevance("fone", "Estojo Fone Bluetooth X").fingerprint.role.value, "MAIN");
+assert.notEqual(relevance("fone", "Almofada Fone X").fingerprint.role.value, "MAIN");
+
+assert.equal(
+  relevance("panela", "Panela de Pressão 5L").fingerprint.productClass.value,
+  "pressure_cooker",
+);
+assert.notEqual(
+  relevance("panela", "Livro Panela de Pressão Moderna").fingerprint.productClass.value,
+  "pressure_cooker",
+);
+assert.notEqual(
+  relevance("panela", "Livro Panela de Pressão Moderna").fingerprint.productClass.value,
+  "cookware",
+);
+assert.ok(
+  relevance("panela", "Forro Panela de Pressão 5L").fingerprint.role.value ===
+    "REPLACEMENT_PART" ||
+    relevance("panela", "Forro Panela de Pressão 5L").fingerprint.role.value ===
+      "ACCESSORY",
+);
+assert.ok(
+  relevance("panela", "Válvula Panela de Pressão").fingerprint.role.value ===
+    "REPLACEMENT_PART" ||
+    relevance("panela", "Válvula Panela de Pressão").fingerprint.role.value ===
+      "ACCESSORY",
+);
+
+assert.notEqual(inferRole("vestido de uma peça azul"), "REPLACEMENT_PART");
+assert.notEqual(inferRole("maiô uma peça adulto"), "REPLACEMENT_PART");
+assert.notEqual(inferRole("conjunto uma peça slim"), "REPLACEMENT_PART");
+assert.equal(
+  inferRole("peça de reposição para liquidificador"),
+  "REPLACEMENT_PART",
+);
+assert.notEqual(
+  relevance("Terno azul adulto", "Vestido de uma peça terno de prática azul adulto")
+    .fingerprint.role.value,
+  "REPLACEMENT_PART",
+);
+assert.notEqual(
+  relevance("Terno azul adulto", "Maiô uma peça azul adulto").fingerprint.role.value,
+  "REPLACEMENT_PART",
+);
+
+assert.equal(classifyProductConcept("Terno Social Azul Adulto").id, "suit");
+assert.equal(inferRole("Terno Social Azul Adulto"), "MAIN");
+assert.equal(classifyProductConcept("Novo Terno de Lã Azul").id, "suit");
+assert.equal(inferRole("Novo Terno de Lã Azul"), "MAIN");
+assert.equal(classifyProductConcept("Terno de Linho Azul Masculino").id, "suit");
+assert.equal(inferRole("Terno de Linho Azul Masculino"), "MAIN");
+assert.equal(classifyProductConcept("Terno de Noivo Azul").id, "suit");
+assert.equal(inferRole("Terno de Noivo Azul"), "MAIN");
+assert.equal(classifyProductConcept("Terno de corte slim").id, "suit");
+assert.notEqual(
+  classifyProductConcept("Terno de Balé Adulto traje de dança").id,
+  "suit",
+  "nucleo composto de danca vence a familia generica da cabeca terno",
+);
+assert.notEqual(
+  inferRole("Terno de Balé Adulto traje de dança") === "MAIN" &&
+    classifyProductConcept("Terno de Balé Adulto traje de dança").id === "suit",
+  true,
+);
+assert.notEqual(
+  relevance("Terno azul adulto", "Terno de Balé Adulto traje de dança")
+    .fingerprint.productClass.value,
+  "suit",
+);
+assert.notEqual(
+  relevance("Terno azul adulto", "Terno de Balé Adulto traje de dança").status,
+  "RELEVANT",
+);
+
+assert.equal(classifyProductConcept("Filtro de Barro").id, "clay_water_filter");
+assert.notEqual(classifyProductConcept("Filtro de Torneira").id, "clay_water_filter");
+assert.equal(classifyProductConcept("Filtro de Torneira").id, "water_filter");
+assert.equal(classifyProductConcept("Panela de Pressão").id, "pressure_cooker");
+assert.equal(classifyProductConcept("Panela de Arroz").id, "rice_cooker");
+assert.equal(
+  classifyProductConcept("Máscara Respiratória").id,
+  "respiratory_protection",
+);
+assert.notEqual(
+  classifyProductConcept("Máscara de Dormir").id,
+  "respiratory_protection",
+);
+assert.equal(classifyProductConcept("Máscara de Dormir").id, "sleep_mask");
+assert.equal(
+  classifyProductConcept("Livro de Receitas para Panela de Pressão").id,
+  "book",
+);
+assert.notEqual(
+  classifyProductConcept("Livro de Receitas para Panela de Pressão").id,
+  "pressure_cooker",
+);
+assert.notEqual(
+  classifyProductConcept("Livro de Receitas para Panela de Pressão").id,
+  "cookware",
+);
+assert.equal(classifyProductConcept("Capa de Notebook").id, "case_accessory");
+assert.notEqual(classifyProductConcept("Capa de Notebook").id, "notebook");
+assert.equal(inferRole("Capa de Notebook"), "ACCESSORY");
+assert.notEqual(classifyProductConcept("Suporte de Celular").id, "smartphone");
+assert.equal(classifyProductConcept("Suporte de Celular").id, "case_accessory");
+assert.equal(inferRole("Suporte de Celular"), "ACCESSORY");
+
+const starlinkKit = relevance("Starlink mini", "Kit Starlink Mini 2535008BR");
+const starlinkCabo = relevance(
+  "Starlink mini",
+  "Cabo 3 em 1 USB-C Starlink Mini 2m",
+);
+const starlinkSuporte = relevance(
+  "Starlink mini",
+  "Suporte ventosa Starlink Mini",
+);
+assert.equal(starlinkKit.fingerprint.role.value, "MAIN");
+assert.equal(starlinkCabo.fingerprint.role.value, "ACCESSORY");
+assert.equal(starlinkSuporte.fingerprint.role.value, "ACCESSORY");
+assert.notEqual(
+  compareFingerprints(starlinkKit.fingerprint, starlinkCabo.fingerprint).relation,
+  "SAME",
+);
+assert.notEqual(
+  compareFingerprints(starlinkCabo.fingerprint, starlinkSuporte.fingerprint).relation,
+  "SAME",
+);
 
 console.log("query relevance regression: todos os casos estruturais passaram");

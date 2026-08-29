@@ -28,6 +28,10 @@ export { rankCanonicalProducts, assignRankTier } from "./rank";
 export { interpretMarketplaceCategory } from "./marketplaceCategory";
 export { inferRole, detectHostSplit } from "./normalizeCandidate";
 export {
+  classifyProductConcept,
+  extractSoldItemNucleus,
+} from "./productConcepts";
+export {
   classifyListingAffiliate,
   isConfirmedAffiliateLink,
 } from "./affiliateEligibility";

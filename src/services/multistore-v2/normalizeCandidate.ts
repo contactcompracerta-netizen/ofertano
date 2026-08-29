@@ -70,8 +70,6 @@ const ACCESSORY_HEADS = new Set([
   "protetor",
   "almofada",
   "almofadas",
-  "peca",
-  "pecas",
   "reposicao",
   "substituicao",
   "filtro",
@@ -103,7 +101,6 @@ const ACCESSORY_HEADS = new Set([
 const REPLACEMENT_HEADS = new Set([
   "reposicao",
   "substituicao",
-  "peca",
   "refill",
   "filtro",
   "filtros",
@@ -141,6 +138,12 @@ const REPLACEMENT_PHRASES = [
   "forro interno",
   "forros internos",
   "revestimento interno",
+  "peca de reposicao",
+  "pecas de reposicao",
+  "peca de substituicao",
+  "pecas de substituicao",
+  "peca de replacement",
+  "replacement part",
 ];
 
 const REPLACEMENT_SEMANTICS = new Set([
@@ -463,6 +466,20 @@ function phraseStartsAt(words: string[], index: number, phrase: string): boolean
   return phraseTokens.every((token, offset) => words[index + offset] === token);
 }
 
+function isBarePieceToken(token: string): boolean {
+  return token === "peca" || token === "pecas";
+}
+
+function barePieceHasReplacementStructure(words: string[], index: number): boolean {
+  const nearby = words.slice(Math.max(0, index - 3), Math.min(words.length, index + 6));
+  if (nearby.some((item) => REPLACEMENT_SEMANTICS.has(item))) {
+    return true;
+  }
+
+  const next = words[index + 1];
+  return next === "para" || next === "for" || next === "p";
+}
+
 function partHeadAt(
   words: string[],
   index: number,
@@ -488,6 +505,14 @@ function partHeadAt(
   }
 
   const token = words[index]!;
+  if (isBarePieceToken(token)) {
+    if (barePieceHasReplacementStructure(words, index)) {
+      return { token, span: 1, role: "REPLACEMENT_PART" };
+    }
+
+    return null;
+  }
+
   if (isReplacementHead(token)) {
     return { token, span: 1, role: "REPLACEMENT_PART" };
   }
@@ -586,7 +611,10 @@ function firstUnabsorbedPartHead(
   for (let index = 0; index < words.length; index += 1) {
     const token = words[index]!;
     if (STOP_WORDS.has(token) || isCapacityOrQuantityUnit(token)) {
-      continue;
+      const phraseHead = partHeadAt(words, index);
+      if (!phraseHead || phraseHead.span <= 1) {
+        continue;
+      }
     }
 
     const head = partHeadAt(words, index);
@@ -786,7 +814,16 @@ export function inferRole(text: string): ProductRole {
   const split = detectHostSplit(normalized);
   const soldWords = wordsOf(split.sold);
   const soldClass = classifyProductClass(split.sold);
-  const head = firstUnabsorbedPartHead(soldWords);
+  const titleHead = firstUnabsorbedPartHead(wordsOf(normalized));
+  const soldHead = firstUnabsorbedPartHead(soldWords);
+  const head = titleHead ?? soldHead;
+
+  if (
+    split.relation &&
+    /\b(?:reposicao|substituicao|replacement)\b/.test(split.relation)
+  ) {
+    return "REPLACEMENT_PART";
+  }
 
   if (head) {
     return head.role;

@@ -1595,8 +1595,14 @@ async function runAfterResponseCases() {
   const hang = deferred<{ id: string }>();
   let persistCalls = 0;
   let scheduled: (() => Promise<void>) | null = null;
-  const searchStarted = Date.now();
-  const publicResult = await searchCatalogOrDiscover("Headphone MarcaX ZX100", 5, {
+  let headFinished = false;
+  let tailPersistStarted = false;
+  let tailResolved = false;
+  let responseResolved = false;
+  void hang.promise.then(() => {
+    tailResolved = true;
+  });
+  const publicResultPromise = searchCatalogOrDiscover("Headphone MarcaX ZX100", 5, {
     adapters: [
       fakeAdapter("AMAZON", "Amazon", async () => ({
         marketplace: "AMAZON",
@@ -1646,15 +1652,50 @@ async function runAfterResponseCases() {
         "after() nao recebe cluster REJECTED",
       );
       if (options?.targetProductId) {
+        tailPersistStarted = true;
         return hang.promise;
       }
-      return { id: "head-navigable-id" };
+      const saved = { id: "head-navigable-id" };
+      headFinished = true;
+      return saved;
     },
     schedulePersist: (task) => {
       scheduled = task;
     },
   });
-  const availableMs = Date.now() - searchStarted;
+  void publicResultPromise.then(() => {
+    responseResolved = true;
+  });
+  while (!headFinished) {
+    await wait(5);
+  }
+  assert.equal(
+    tailPersistStarted,
+    false,
+    "HEAD sincrono nao inicia o write extra",
+  );
+  assert.equal(
+    tailResolved,
+    false,
+    "write extra segue pendente depois do HEAD",
+  );
+
+  const publicResult = await publicResultPromise;
+  assert.equal(
+    responseResolved,
+    true,
+    "resposta publica resolveu sem esperar o write extra",
+  );
+  assert.equal(
+    tailResolved,
+    false,
+    "after-response nao espera o write extra",
+  );
+  assert.equal(
+    tailPersistStarted,
+    false,
+    "tail continua fora do caminho sincrono apos a resposta",
+  );
   assert.ok(publicResult.products.length >= 1, "busca publica devolve resultados");
   assert.equal(
     publicResult.products[0]?.id,
@@ -1662,7 +1703,6 @@ async function runAfterResponseCases() {
     "card publico usa o id persistido da oferta canonica, navegavel imediatamente",
   );
   assert.equal(persistCalls, 1, "somente a oferta canonica persiste no caminho sincrono");
-  assert.ok(availableMs < 500, `resultados disponiveis em ${availableMs}ms sem esperar o write das demais ofertas`);
   assert.ok(scheduled, "after() recebeu o trabalho de persistencia das demais ofertas");
 
   let afterSettled = false;

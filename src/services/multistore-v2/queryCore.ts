@@ -3,6 +3,7 @@ import {
   canonicalClassToken,
   candidateCoversConcept,
   classifyProductConcept,
+  extractSoldItemNucleus,
   compareProductConcepts,
   conceptLexicalTokens,
   isAutomotiveConcept,
@@ -74,6 +75,8 @@ export type QueryCore = {
   rawQuery: string;
   normalizedQuery: string;
   soldText: string;
+  soldNucleus: string;
+  soldHeadToken: string | null;
   hostText: string | null;
   hostRelation: string | null;
   productClass: ProductConceptId;
@@ -126,7 +129,9 @@ function extractKnownBrand(text: string, productClass: ProductConceptId): string
 export function buildQueryCore(query: string): QueryCore {
   const rawQuery = query.replace(/\s+/g, " ").trim();
   const split = splitSoldAndHost(rawQuery);
-  const classified = classifyProductConcept(split.sold || rawQuery);
+  const soldSource = split.sold || rawQuery;
+  const nucleus = extractSoldItemNucleus(soldSource);
+  const classified = classifyProductConcept(soldSource);
   const soldTokens = tokenize(split.sold);
   const allTokens = tokenize(rawQuery);
   const brand = extractKnownBrand(rawQuery, classified.id);
@@ -223,6 +228,8 @@ export function buildQueryCore(query: string): QueryCore {
     rawQuery,
     normalizedQuery: allTokens.join(" "),
     soldText: split.sold,
+    soldNucleus: nucleus.normalizedText,
+    soldHeadToken: nucleus.headToken,
     hostText: split.host,
     hostRelation: split.relation,
     productClass: classified.id,

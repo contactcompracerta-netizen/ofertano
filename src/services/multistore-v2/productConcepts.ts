@@ -34,6 +34,9 @@ export type ProductConceptId =
   | "nightstand"
   | "suit"
   | "costume"
+  | "dancewear"
+  | "sleep_mask"
+  | "respiratory_protection"
   | "swimwear"
   | "jewelry"
   | "laser_level"
@@ -70,8 +73,9 @@ type ConceptFamily = {
 
 /*
  * Familias reutilizaveis de classe comercial.
- * Frases longas vencem tokens soltos. Sinonimos vivem nesta camada,
- * nao nos adapters.
+ * Frases longas vencem tokens soltos. O nucleo composto na cabeca
+ * (X de Y) vence a familia generica da cabeca quando Y registra outro
+ * conceito. Sinonimos vivem nesta camada, nao nos adapters.
  */
 const CONCEPT_FAMILIES: ConceptFamily[] = [
   {
@@ -240,6 +244,53 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
     ],
     tokens: ["cosplay", "fantasia", "halloween", "cheerleading"],
     coreMode: "token",
+  },
+  {
+    id: "dancewear",
+    phrases: [
+      "terno de bale",
+      "terno de ballet",
+      "terno ballet",
+      "terno de danca",
+      "traje de danca",
+      "roupa de danca",
+      "figurino de danca",
+      "collant de danca",
+      "sapatilha de bale",
+      "sapatilha de ballet",
+      "sapatilha de danca",
+      "macacao de bale",
+      "macacao de ballet",
+      "macacao ballet",
+      "macacao de danca",
+    ],
+    tokens: ["collant", "leotard"],
+    coreMode: "phrase",
+  },
+  {
+    id: "respiratory_protection",
+    phrases: [
+      "mascara respiratoria",
+      "mascara de protecao respiratoria",
+      "mascara pff2",
+      "mascara n95",
+      "respirador pff2",
+      "respirador n95",
+    ],
+    tokens: ["respirador"],
+    coreMode: "phrase",
+  },
+  {
+    id: "sleep_mask",
+    phrases: [
+      "mascara de dormir",
+      "mascara para dormir",
+      "sleep mask",
+      "tapa olho",
+      "tapa olhos",
+    ],
+    tokens: [],
+    coreMode: "phrase",
   },
   {
     id: "photography_backdrop",
@@ -547,7 +598,19 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
   },
   {
     id: "case_accessory",
-    phrases: ["estojo de armazenamento", "bolsa de transporte"],
+    phrases: [
+      "estojo de armazenamento",
+      "bolsa de transporte",
+      "capa de notebook",
+      "capa para notebook",
+      "capa de laptop",
+      "capa de celular",
+      "capa para celular",
+      "capa de tablet",
+      "suporte de celular",
+      "suporte para celular",
+      "suporte de notebook",
+    ],
     tokens: ["estojo", "estojos"],
     coreMode: "token",
   },
@@ -612,6 +675,7 @@ const CONCEPT_PARENTS: Partial<Record<ProductConceptId, ProductConceptId>> = {
   nightstand: "furniture",
   suit: "apparel",
   costume: "apparel",
+  dancewear: "apparel",
   swimwear: "apparel",
   trousers: "apparel",
   sportswear: "apparel",
@@ -908,6 +972,170 @@ export function isGenericDescriptor(token: string): boolean {
   return GENERIC_DESCRIPTORS.has(token) || isWeakModifier(token);
 }
 
+const LEADING_SURFACE = new Set([
+  "preto",
+  "preta",
+  "branco",
+  "branca",
+  "cinza",
+  "prata",
+  "azul",
+  "verde",
+  "vermelho",
+  "vermelha",
+  "rosa",
+  "roxo",
+  "dourado",
+  "bege",
+  "marrom",
+  "amarelo",
+  "laranja",
+  "black",
+  "white",
+  "red",
+  "blue",
+  "green",
+  "retro",
+  "primavera",
+  "verao",
+  "inverno",
+  "outono",
+  "spring",
+  "summer",
+  "winter",
+  "autumn",
+  "fall",
+  "adulto",
+  "adulta",
+  "adultos",
+  "adultas",
+  "infantil",
+  "crianca",
+  "criancas",
+  "menino",
+  "menina",
+  "meninos",
+  "meninas",
+  "kids",
+  "bebe",
+  "baby",
+  "pcs",
+  "pc",
+  "pares",
+  "par",
+]);
+
+const LEADING_BRANDS = new Set([
+  "ihome",
+  "jbl",
+  "samsung",
+  "xiaomi",
+  "motorola",
+  "philips",
+  "logitech",
+  "sony",
+  "lg",
+  "dell",
+  "lenovo",
+  "acer",
+  "positivo",
+  "multilaser",
+  "electrolux",
+  "brastemp",
+  "consul",
+  "mondial",
+  "arno",
+  "oster",
+  "bosch",
+  "midea",
+  "gree",
+  "tramontina",
+  "cadence",
+  "britania",
+  "novatech",
+  "marcax",
+]);
+
+export type SoldItemNucleus = {
+  normalizedText: string;
+  headToken: string | null;
+  startTokenIndex: number;
+};
+
+function isSoldHeadPrefixToken(token: string): boolean {
+  if (!token) {
+    return true;
+  }
+
+  if (FUNCTION_WORDS.has(token) || COMMERCIAL_FLUFF.has(token)) {
+    return true;
+  }
+
+  if (GENERIC_DESCRIPTORS.has(token) || LEADING_SURFACE.has(token)) {
+    return true;
+  }
+
+  if (LEADING_BRANDS.has(token) || VEHICLE_BRANDS.has(token)) {
+    return true;
+  }
+
+  if (/^\d/.test(token)) {
+    return true;
+  }
+
+  return token.length <= 2 && !/\d/.test(token);
+}
+
+function familyHitAtContentStart(normalized: string): boolean {
+  return CONCEPT_FAMILIES.some(
+    (family) => firstHitTokenIndex(family, normalized) === 0,
+  );
+}
+
+/*
+ * Primeira cabeça semântica do item vendido: ignora modificadores
+ * iniciais (grau, gênero, estação, cor, kit, marca, quantidade) e
+ * aceita a classe mesmo quando ela não é o token 0 do título.
+ * Não atravessa um substantivo desconhecido para alcançar uma classe
+ * mencionada depois — isso seria host/contexto, não o sold item.
+ */
+export function extractSoldItemNucleus(text: string): SoldItemNucleus {
+  const tokens = normalizeConceptText(text)
+    .split(" ")
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) {
+    return { normalizedText: "", headToken: null, startTokenIndex: 0 };
+  }
+
+  let start = 0;
+  let found = false;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (FUNCTION_WORDS.has(token)) {
+      continue;
+    }
+
+    const fromHere = tokens.slice(index).join(" ");
+    if (familyHitAtContentStart(fromHere) || !isSoldHeadPrefixToken(token)) {
+      start = index;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    const firstContent = tokens.findIndex((token) => !FUNCTION_WORDS.has(token));
+    start = firstContent >= 0 ? firstContent : 0;
+  }
+
+  const sliced = tokens.slice(start);
+  return {
+    normalizedText: sliced.join(" "),
+    headToken: sliced.find((token) => !FUNCTION_WORDS.has(token)) ?? null,
+    startTokenIndex: start,
+  };
+}
+
 export function isVehicleBrandToken(token: string): boolean {
   return VEHICLE_BRANDS.has(token);
 }
@@ -916,7 +1144,11 @@ export function isAutomotiveConcept(id: ProductConceptId): boolean {
   return AUTOMOTIVE_CONCEPTS.has(id);
 }
 
-function familyScore(family: ConceptFamily, normalized: string): {
+function familyScore(
+  family: ConceptFamily,
+  normalized: string,
+  headWidths?: Map<string, number>,
+): {
   score: number;
   index: number;
 } {
@@ -952,7 +1184,15 @@ function familyScore(family: ConceptFamily, normalized: string): {
     index = Math.min(index, first.length > 0 ? Math.min(...first) : 0);
   }
 
+  if (firstHitTokenIndex(family, normalized) !== 0) {
+    return { score: 0, index: Number.POSITIVE_INFINITY };
+  }
+
   if (hasMoreSpecificChildHit(family, normalized)) {
+    score = 0;
+  }
+
+  if (hasLongerHeadPhraseHit(family, normalized, headWidths)) {
     score = 0;
   }
 
@@ -984,10 +1224,13 @@ function familyScore(family: ConceptFamily, normalized: string): {
   }
 
   if (family.id === "apparel" && /\bterno\b|\bsuits?\b/.test(normalized)) {
+    const suit = familyById("suit");
     const swimwear = familyById("swimwear");
     const jewelry = familyById("jewelry");
     const costume = familyById("costume");
     if (
+      suit &&
+      firstHitTokenIndex(suit, normalized) === 0 &&
       (!swimwear || !familyHasHit(swimwear, normalized)) &&
       (!jewelry || !familyHasHit(jewelry, normalized)) &&
       (!costume || !familyHasHit(costume, normalized))
@@ -1044,7 +1287,7 @@ export function classifyProductConcept(text: string): {
   confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE";
   matchedPhrase: string | null;
 } {
-  const normalized = normalizeConceptText(text);
+  const normalized = extractSoldItemNucleus(text).normalizedText;
   if (!normalized) {
     return { id: "UNKNOWN", confidence: "NONE", matchedPhrase: null };
   }
@@ -1055,8 +1298,13 @@ export function classifyProductConcept(text: string): {
     index: number;
   } | null = null;
 
+  const headWidths = new Map<string, number>();
   for (const family of CONCEPT_FAMILIES) {
-    const ranked = familyScore(family, normalized);
+    headWidths.set(family.id, headEvidenceWidth(family, normalized));
+  }
+
+  for (const family of CONCEPT_FAMILIES) {
+    const ranked = familyScore(family, normalized, headWidths);
     if (ranked.score === 0) {
       continue;
     }
@@ -1113,7 +1361,64 @@ function familyHasHit(family: ConceptFamily, normalized: string): boolean {
 function hasMoreSpecificChildHit(family: ConceptFamily, normalized: string): boolean {
   return CONCEPT_FAMILIES.some(
     (candidate) =>
-      CONCEPT_PARENTS[candidate.id] === family.id && familyHasHit(candidate, normalized),
+      CONCEPT_PARENTS[candidate.id] === family.id &&
+      familyHasHit(candidate, normalized) &&
+      firstHitTokenIndex(candidate, normalized) === 0,
+  );
+}
+
+function headEvidenceWidth(family: ConceptFamily, normalized: string): number {
+  const textTokens = contentTokens(normalized);
+  if (textTokens.length === 0) {
+    return 0;
+  }
+
+  let width = 0;
+  for (const phrase of family.phrases) {
+    const phraseTokens = contentTokens(phrase);
+    if (
+      phraseTokens.length === 0 ||
+      phraseTokens.length > textTokens.length ||
+      !phraseTokens.every((token, offset) => textTokens[offset] === token)
+    ) {
+      continue;
+    }
+
+    width = Math.max(width, phraseTokens.length);
+  }
+
+  for (const token of family.tokens) {
+    if (textTokens[0] === normalizeConceptText(token)) {
+      width = Math.max(width, 1);
+    }
+  }
+
+  return width;
+}
+
+function hasLongerHeadPhraseHit(
+  family: ConceptFamily,
+  normalized: string,
+  headWidths?: Map<string, number>,
+): boolean {
+  const width = headWidths?.get(family.id) ?? headEvidenceWidth(family, normalized);
+  if (width === 0) {
+    return false;
+  }
+
+  if (headWidths) {
+    for (const [id, otherWidth] of headWidths) {
+      if (id !== family.id && otherWidth > width) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  return CONCEPT_FAMILIES.some(
+    (candidate) =>
+      candidate.id !== family.id && headEvidenceWidth(candidate, normalized) > width,
   );
 }
 
@@ -1197,41 +1502,11 @@ export function candidateCoversConcept(
   }
 
   /*
-   * Menção textual do conceito pedido nao cobre o nucleo quando o item
-   * vendido ja foi classificado como outra coisa — isso e HOST/homonimo,
-   * nao o produto pedido.
+   * Cobertura segue a classe do sold nucleus. Menção posterior, ou
+   * token da classe zerado por uma família rival no mesmo texto,
+   * nao recria a evidência da query.
    */
-  if (classified.id !== "UNKNOWN") {
-    return false;
-  }
-
-  const family = familyById(conceptId);
-  if (!family) {
-    return false;
-  }
-
-  const normalized = normalizeConceptText(candidateText);
-  if (family.phrases.some((phrase) => phraseAppears(normalized, phrase))) {
-    return true;
-  }
-
-  if (
-    family.synonyms?.some((group) =>
-      group.some((item) => phraseAppears(normalized, item)),
-    )
-  ) {
-    return true;
-  }
-
-  if ((family.allOf ?? []).some((group) => allOfGroupHits(normalized, group))) {
-    return true;
-  }
-
-  if (family.coreMode === "phrase") {
-    return false;
-  }
-
-  return family.tokens.some((token) => tokenBoundaryMatch(normalized, token));
+  return false;
 }
 
 export function compareProductConcepts(
@@ -1291,6 +1566,18 @@ export function canonicalClassToken(id: ProductConceptId): string {
 
   if (id === "costume") {
     return "fantasia";
+  }
+
+  if (id === "dancewear") {
+    return "roupa de danca";
+  }
+
+  if (id === "respiratory_protection") {
+    return "mascara respiratoria";
+  }
+
+  if (id === "sleep_mask") {
+    return "mascara de dormir";
   }
 
   if (id === "laser_level") {
