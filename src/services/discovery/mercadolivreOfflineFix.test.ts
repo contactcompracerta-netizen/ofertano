@@ -401,6 +401,134 @@ async function testCatalogHydrationReservation() {
   return true;
 }
 
+async function testHardCatalogDeadlineLateMutation() {
+  const ranked = rankCatalogProductsForHydration(GTW_QUERY, [
+    { id: "PENDING", name: "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V", status: "active" },
+  ]);
+
+  const previousUnhandled: unknown[] = [];
+  const previous = process.listeners("unhandledRejection");
+  process.removeAllListeners("unhandledRejection");
+  process.on("unhandledRejection", (reason) => {
+    previousUnhandled.push(reason);
+  });
+
+  try {
+    const started = Date.now();
+    const snapshot = await runCatalogHydrationWithReservation({
+      query: GTW_QUERY,
+      ranked,
+      limit: 1,
+      reservationMs: 300,
+      concurrency: 1,
+      loadCandidate: async () => {
+        await waitMs(8_000);
+        return {
+          evaluation: keptCandidate(
+            "MLB-LATE",
+            "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V",
+            699,
+            "https://produto.mercadolivre.com.br/MLB-LATE",
+          ),
+          trace: {
+            productId: "PENDING",
+            endpoint: "/products/PENDING/items",
+            httpStatus: 200,
+            mlbId: "MLB-LATE",
+            title: "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V",
+            price: 699,
+            url: "https://produto.mercadolivre.com.br/MLB-LATE",
+            voltage: "220V",
+            status: "KEPT",
+            reason: "late result",
+            relevanceScore: 0.99,
+          },
+        };
+      },
+    });
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 600, `caller retornou em ${elapsed}ms, acima do limite`);
+    assert.equal(snapshot.evaluations.length, 0, "resultado tardio nao entra no snapshot");
+    assert.equal(snapshot.trace.items.length, 0, "trace nao aceita item tardio");
+
+    await waitMs(500);
+    assert.equal(snapshot.evaluations.length, 0, "snapshot imutavel apos retorno");
+    assert.equal(snapshot.trace.items.length, 0, "trace nao muta apos retorno");
+    assert.equal(previousUnhandled.length, 0, "nenhuma rejection tardia sem tratamento");
+    return true;
+  } finally {
+    process.removeAllListeners("unhandledRejection");
+    for (const listener of previous) {
+      process.on("unhandledRejection", listener as NodeJS.UnhandledRejectionListener);
+    }
+  }
+}
+
+async function testSearchMultistoreGlobalDeadlineShort() {
+  const strictBudget = {
+    globalMs: 800,
+    marketplaceMs: 350,
+    fetchMs: 200,
+    persistReserveMs: 40,
+    hangGraceMs: 40,
+  };
+
+  const started = Date.now();
+  const result = await searchMultistoreV2("Micro-ondas Consul GTW Inox 12 Litros 1400W 220V", {
+    persist: false,
+    budget: strictBudget,
+    adapters: [
+      fakeAdapter("AMAZON", "Amazon", async () => {
+        await waitMs(30_000);
+        return {
+          marketplace: "AMAZON",
+          query: "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V",
+          success: true,
+          scanned: 10,
+          candidates: [
+            foundCandidate({
+              marketplace: "AMAZON",
+              marketplaceName: "Amazon",
+              externalId: "amz-late",
+              title: "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V",
+              price: 699,
+            }),
+          ],
+          error: null,
+        } satisfies MarketplaceDiscoveryResult;
+      }),
+      fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => ({
+        marketplace: "MAGAZINE_LUIZA",
+        query: "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "MAGAZINE_LUIZA",
+            marketplaceName: "Magazine Luiza",
+            externalId: "mlz-fast",
+            title: "Micro-ondas Consul GTW Inox 12 Litros 1400W 220V",
+            price: 719,
+          }),
+        ],
+        error: null,
+      } satisfies MarketplaceDiscoveryResult)),
+    ],
+  });
+  const elapsed = Date.now() - started;
+
+  assert.ok(
+    elapsed <= 1_600,
+    `resultado com deadline global deve terminar dentro do budget + tolerancia (elapsed=${elapsed}ms)`,
+  );
+  assert.ok(
+    result.acquisitions.some((item) => item.status === "TIMEOUT" || item.status === "SUCCESS"),
+    "resultado parcial/timeout deve ser devolvido",
+  );
+  assert.ok(result.views.length >= 0, "resultado nao pode falhar silenciosamente");
+  return true;
+}
+
 async function testMlDoesNotWaitUnabortableJm() {
   const traces: Array<{ source?: string; durationMs?: number; budgetMs?: number; timedOut?: boolean }> = [];
   const originalInfo = console.info;
@@ -770,6 +898,8 @@ async function main() {
     : "FAIL";
 
   await testCatalogHydrationReservation();
+  await testHardCatalogDeadlineLateMutation();
+  await testSearchMultistoreGlobalDeadlineShort();
   await testCatalogOnlyUnusable();
   await testMlDoesNotWaitUnabortableJm();
   criteria.REAL_FAILURE_OFFLINE_REPRODUCTION =

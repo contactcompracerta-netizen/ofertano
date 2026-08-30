@@ -147,13 +147,22 @@ export function rankCatalogProductsForHydration(
   );
 }
 
-function waitMs(ms: number): Promise<void> {
+function waitMs(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    if (ms <= 0) {
+    if (ms <= 0 || signal?.aborted) {
       resolve();
       return;
     }
-    setTimeout(resolve, ms);
+
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
   });
 }
 
@@ -223,22 +232,40 @@ export async function runCatalogHydrationWithReservation(input: {
   const inFlight = new Set<Promise<void>>();
   let cursor = 0;
   let batchIndex = 0;
+  let closed = false;
+
+  const deadlineExceeded = () => {
+    if (closed) {
+      return true;
+    }
+
+    if (input.stageClosed?.() || input.signal?.aborted || Date.now() >= reservationEndsAt) {
+      closed = true;
+      return true;
+    }
+
+    return false;
+  };
 
   const loadOne = async (hit: RankedCatalogHit) => {
+    if (deadlineExceeded()) {
+      return;
+    }
+
     try {
       const result = await input.loadCandidate(
         hit.productId,
         hit.title,
         hit.relevanceScore,
       );
-      if (input.stageClosed?.()) {
+      if (deadlineExceeded()) {
         return;
       }
       trace.items.push(result.trace);
       evaluations.push(result.evaluation);
       rastrearCatalogHydration("catalog-hydration-item", result.trace);
     } catch (error) {
-      if (input.stageClosed?.()) {
+      if (deadlineExceeded()) {
         return;
       }
       const reason =
@@ -273,7 +300,7 @@ export async function runCatalogHydrationWithReservation(input: {
 
   while (
     cursor < selected.length &&
-    Date.now() < reservationEndsAt &&
+    !deadlineExceeded() &&
     !input.stageClosed?.() &&
     !input.signal?.aborted
   ) {
@@ -283,7 +310,7 @@ export async function runCatalogHydrationWithReservation(input: {
     while (
       batchIds.length < input.concurrency &&
       cursor < selected.length &&
-      Date.now() < reservationEndsAt
+      !deadlineExceeded()
     ) {
       batchIds.push(selected[cursor]!.productId);
       cursor += 1;
@@ -324,17 +351,25 @@ export async function runCatalogHydrationWithReservation(input: {
     }
 
     const remaining = reservationEndsAt - Date.now();
-    await Promise.race([Promise.allSettled(inFlight), waitMs(Math.max(0, remaining))]);
+    if (remaining <= 0) {
+      break;
+    }
+
+    try {
+      await Promise.race([
+        Promise.allSettled(inFlight),
+        waitMs(Math.max(0, remaining), input.signal).then(() => {
+          if (deadlineExceeded()) {
+            throw new Error("catalog-hydration-deadline");
+          }
+        }),
+      ]);
+    } catch {
+      break;
+    }
   }
 
-  const tailRemaining = reservationEndsAt - Date.now();
-  if (tailRemaining > 0 && inFlight.size > 0) {
-    await Promise.race([
-      Promise.allSettled(inFlight),
-      waitMs(Math.max(0, tailRemaining)),
-    ]);
-  }
-
+  closed = true;
   void Promise.allSettled([...inFlight]).catch(() => undefined);
 
   trace.counts.afterHydration = evaluations.length;
@@ -349,5 +384,16 @@ export async function runCatalogHydrationWithReservation(input: {
     selectedIds,
   });
 
-  return { evaluations, trace };
+  const snapshot = {
+    evaluations: [...evaluations],
+    trace: {
+      ...trace,
+      batches: [...trace.batches],
+      items: [...trace.items],
+      rankedPreview: [...trace.rankedPreview],
+      selectedIds: [...trace.selectedIds],
+    },
+  };
+
+  return snapshot;
 }

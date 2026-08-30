@@ -508,39 +508,86 @@ export async function acquireMarketplaces(
 ): Promise<MarketplaceAcquisition[]> {
   const plan = buildSearchPlan(query);
   const intent = buildQueryIntent(query);
+  const partial = new Array<MarketplaceAcquisition | undefined>(adapters.length);
 
-  const settled = await Promise.allSettled(
-    adapters.map((adapter) =>
-      acquireOneMarketplace(adapter, query, plan, limit, intent, deadline),
-    ),
+  const tasks = adapters.map((adapter, index) =>
+    acquireOneMarketplace(adapter, query, plan, limit, intent, deadline)
+      .then((value) => {
+        partial[index] = value;
+        return value;
+      })
+      .catch((reason) => {
+        const error =
+          reason instanceof Error ? reason.message : String(reason);
+        const timedOut = isAbortError(reason) || deadline.expired();
+        const value = toAcquisition(
+          adapter,
+          timedOut ? "TIMEOUT" : mapAcquisitionStatus({
+            marketplace: adapter.marketplace,
+            query,
+            success: false,
+            candidates: [],
+            scanned: 0,
+            error,
+          }),
+          [],
+          0,
+          timedOut ? "TIMEOUT: orcamento de busca esgotado." : error,
+          0,
+        );
+        partial[index] = value;
+        return value;
+      }),
   );
+
+  const remainingMs = Math.max(0, deadline.remainingMs());
+  if (remainingMs <= 0) {
+    return adapters.map((adapter, index) => {
+      const value = partial[index] ?? toAcquisition(
+        adapter,
+        "TIMEOUT",
+        [],
+        0,
+        "TIMEOUT: orcamento de busca esgotado.",
+        0,
+      );
+      return value;
+    });
+  }
+
+  const race = await Promise.race([
+    Promise.allSettled(tasks),
+    waitMs(remainingMs, deadline.signal).then(() => ({ status: "timeout" as const })),
+  ]) as
+    | PromiseSettledResult<MarketplaceAcquisition>[]
+    | { status: "timeout" };
+
+  const settled = Array.from({ length: adapters.length }, (_, index) => {
+    if (partial[index]) {
+      return partial[index]!;
+    }
+
+    const adapter = adapters[index]!;
+    return toAcquisition(
+      adapter,
+      "TIMEOUT",
+      [],
+      0,
+      "TIMEOUT: orcamento de busca esgotado.",
+      0,
+    );
+  });
+
+  if (typeof race === "object" && race !== null && "status" in race && race.status === "timeout") {
+    return settled;
+  }
 
   return settled.map((result, index) => {
     const adapter = adapters[index]!;
-    if (result.status === "fulfilled") {
-      return result.value;
+    if (result.status === "TIMEOUT" && partial[index]) {
+      return partial[index]!;
     }
-
-    const error =
-      result.reason instanceof Error
-        ? result.reason.message
-        : String(result.reason);
-    const timedOut = isAbortError(result.reason) || deadline.expired();
-    return toAcquisition(
-      adapter,
-      timedOut ? "TIMEOUT" : mapAcquisitionStatus({
-        marketplace: adapter.marketplace,
-        query,
-        success: false,
-        candidates: [],
-        scanned: 0,
-        error,
-      }),
-      [],
-      0,
-      timedOut ? "TIMEOUT: orcamento de busca esgotado." : error,
-      0,
-    );
+    return result;
   });
 }
 
