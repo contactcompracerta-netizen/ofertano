@@ -59,6 +59,10 @@ export default async function HomePage({
             },
             select: {
               marketplace: true,
+              price: true,
+              status: true,
+              available: true,
+              affiliateLink: true,
             },
           },
         },
@@ -68,11 +72,62 @@ export default async function HomePage({
         },
       });
 
+    const produtosComparador = produtos
+      .filter(
+        (produto) =>
+          produto.publicationStatus === "LIVE_PARTIAL" ||
+          produto.publicationStatus === "LIVE_COMPLETE",
+      )
+      .map((produto) => {
+        const ofertasValidas = produto.offers
+          .filter(
+            (oferta) =>
+              oferta.available &&
+              oferta.status !== "UNAVAILABLE" &&
+              oferta.status !== "ERROR" &&
+              Number.isFinite(oferta.price) &&
+              oferta.price > 0,
+          )
+          .sort((a, b) => a.price - b.price)
+          .map((oferta) => ({
+            marketplace: oferta.marketplace,
+            price: oferta.price,
+            href:
+              oferta.status === "ACTIVE"
+                ? oferta.affiliateLink?.trim() || null
+                : null,
+          }));
+
+        return {
+          id: produto.id,
+          name: produto.name,
+          image: produto.image,
+          rating: produto.rating,
+          offers: ofertasValidas,
+        };
+      })
+      .filter(
+        (produto) =>
+          produto.image.trim().length > 0 &&
+          produto.offers.length > 0,
+      )
+      .sort((a, b) => {
+        const multiA = a.offers.length >= 2 ? 1 : 0;
+        const multiB = b.offers.length >= 2 ? 1 : 0;
+
+        if (multiA !== multiB) {
+          return multiB - multiA;
+        }
+
+        return b.offers.length - a.offers.length;
+      })
+      .slice(0, 10);
+
     return (
       <main className="min-h-screen bg-slate-50">
         <Header />
 
-        <Hero />
+        <Hero produtos={produtosComparador} />
 
         <OffersSection
           produtos={produtos}
