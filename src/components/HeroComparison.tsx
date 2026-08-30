@@ -1,7 +1,5 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export type HeroComparisonOffer = {
   marketplace: string;
@@ -28,8 +26,7 @@ type DestinationProps = {
   children: ReactNode;
 };
 
-const ROTATION_MS = 5000;
-const TRANSITION_MS = 180;
+const SECONDS_PER_PRODUCT = 5;
 
 const MARKETPLACE_NAMES: Record<string, string> = {
   MERCADO_LIVRE: "Mercado Livre",
@@ -71,7 +68,7 @@ function ArrowIcon() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="h-4 w-4"
+      className="h-3.5 w-3.5 sm:h-4 sm:w-4"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -119,23 +116,15 @@ function Destination({
 
 function EmptyComparison() {
   return (
-    <div className="relative hidden lg:block">
-      <div className="absolute -inset-4 rounded-[34px] bg-gradient-to-br from-emerald-300/45 via-teal-200/25 to-transparent blur-2xl" />
-
-      <div className="relative overflow-hidden rounded-[28px] border border-white/80 bg-white/85 p-5 shadow-[0_28px_80px_rgba(15,23,42,0.14)] backdrop-blur-xl xl:p-6">
-        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
+    <div className="relative w-full min-w-0">
+      <div className="relative overflow-hidden rounded-[20px] border border-white/80 bg-white/90 p-3 shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">
           Comparador Ofertano
         </p>
 
-        <p className="mt-1 text-xs font-semibold text-slate-500">
+        <p className="mt-1 text-[11px] font-semibold text-slate-500">
           Comparações com ofertas reais
         </p>
-
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-          <p className="text-sm font-bold text-slate-700">
-            Nenhuma comparação disponível agora.
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -144,223 +133,289 @@ function EmptyComparison() {
 export default function HeroComparison({
   produtos,
 }: HeroComparisonProps) {
-  const [index, setIndex] = useState(0);
-  const [changing, setChanging] = useState(false);
-
-  useEffect(() => {
-    if (produtos.length <= 1) {
-      return;
-    }
-
-    let timeoutId:
-      | ReturnType<typeof setTimeout>
-      | undefined;
-
-    const intervalId = setInterval(() => {
-      setChanging(true);
-
-      timeoutId = setTimeout(() => {
-        setIndex(
-          (current) =>
-            (current + 1) % produtos.length,
-        );
-
-        setChanging(false);
-      }, TRANSITION_MS);
-    }, ROTATION_MS);
-
-    return () => {
-      clearInterval(intervalId);
-
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [produtos.length]);
-
   if (produtos.length === 0) {
     return <EmptyComparison />;
   }
 
-  const produto =
-    produtos[index % produtos.length];
-
-  const melhorOferta = produto.offers[0];
-
-  if (!melhorOferta) {
-    return <EmptyComparison />;
-  }
-
-  const secundarias =
-    produto.offers.slice(1, 3);
-
-  const restantes = Math.max(
-    produto.offers.length - 3,
+  const count = produtos.length;
+  const duration = count * SECONDS_PER_PRODUCT;
+  const visiblePercent = 100 / count;
+  const fadeStart = Math.max(
     0,
+    visiblePercent - Math.min(0.8, visiblePercent / 5),
   );
 
-  return (
-    <div className="relative hidden lg:block">
-      <div className="absolute -inset-4 rounded-[34px] bg-gradient-to-br from-emerald-300/45 via-teal-200/25 to-transparent blur-2xl" />
+  const animationCss =
+    count > 1
+      ? `
+@keyframes ofertanoHeroSlide {
+  0% {
+    opacity: 1;
+    visibility: visible;
+  }
 
-      <div className="relative overflow-hidden rounded-[28px] border border-white/80 bg-white/85 p-5 shadow-[0_28px_80px_rgba(15,23,42,0.14)] backdrop-blur-xl xl:p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
+  ${fadeStart}% {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  ${visiblePercent}% {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes ofertanoHeroDot {
+  0% {
+    width: 20px;
+    background: rgb(5 150 105);
+  }
+
+  ${fadeStart}% {
+    width: 20px;
+    background: rgb(5 150 105);
+  }
+
+  ${visiblePercent}% {
+    width: 6px;
+    background: rgb(203 213 225);
+  }
+
+  100% {
+    width: 6px;
+    background: rgb(203 213 225);
+  }
+}
+`
+      : "";
+
+  return (
+    <div className="relative w-full min-w-0 lg:mt-0">
+      {count > 1 ? (
+        <style>{animationCss}</style>
+      ) : null}
+
+      <div className="absolute -inset-1 rounded-[24px] bg-gradient-to-br from-emerald-300/25 via-teal-200/15 to-transparent blur-lg lg:-inset-4 lg:rounded-[34px] lg:blur-2xl" />
+
+      <div className="relative w-full min-w-0 overflow-hidden rounded-[20px] border border-white/80 bg-white/90 p-2.5 shadow-[0_12px_32px_rgba(15,23,42,0.09)] backdrop-blur-xl sm:rounded-[24px] sm:p-4 lg:rounded-[28px] lg:bg-white/85 lg:p-5 xl:p-6">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700 sm:text-[11px]">
               Comparador Ofertano
             </p>
 
-            <p className="mt-1 text-xs font-semibold text-slate-500">
+            <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500 sm:mt-1 sm:text-xs">
               Comparações com ofertas reais
             </p>
           </div>
 
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black text-emerald-700">
+          <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black text-emerald-700 sm:px-3 sm:py-1.5 sm:text-[10px]">
             Dados reais
           </span>
         </div>
 
-        <div
-          className={`mt-4 transition-all duration-200 motion-reduce:transition-none ${
-            changing
-              ? "translate-y-1 opacity-0"
-              : "translate-y-0 opacity-100"
-          }`}
-        >
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <Link
-              href={`/produto/${produto.id}`}
-              className="flex items-center gap-3"
-            >
-              <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 p-1.5">
-                <img
-                  src={produto.image}
-                  alt={produto.name}
-                  decoding="async"
-                  className="h-full w-full object-contain"
-                />
-              </div>
+        <div className="mt-2 grid min-w-0">
+          {produtos.map((produto, productIndex) => {
+            const melhorOferta = produto.offers[0];
 
-              <div className="min-w-0 flex-1">
-                <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-slate-600">
-                  Produto real
-                </span>
+            if (!melhorOferta) {
+              return null;
+            }
 
-                <h2 className="mt-1.5 line-clamp-2 text-sm font-black leading-5 text-slate-950 xl:text-base">
-                  {produto.name}
-                </h2>
+            const secundarias =
+              produto.offers.slice(1, 4);
 
-                <div className="mt-1 flex items-center gap-2 text-[11px] font-bold text-slate-500">
-                  {produto.rating !== null &&
-                  produto.rating > 0 ? (
-                    <span className="text-amber-600">
-                      Nota {produto.rating.toFixed(1)}
-                    </span>
+            const restantes = Math.max(
+              produto.offers.length - 4,
+              0,
+            );
+
+            const gridClass =
+              secundarias.length >= 3
+                ? "grid-cols-3"
+                : secundarias.length === 2
+                  ? "grid-cols-2"
+                  : "grid-cols-1";
+
+            const animationStyle: CSSProperties =
+              count > 1
+                ? {
+                    animationName:
+                      "ofertanoHeroSlide",
+                    animationDuration:
+                      `${duration}s`,
+                    animationTimingFunction:
+                      "linear",
+                    animationIterationCount:
+                      "infinite",
+                    animationDelay:
+                      `-${(count - productIndex) * SECONDS_PER_PRODUCT}s`,
+                  }
+                : {};
+
+            return (
+              <div
+                key={produto.id}
+                className="ofertano-hero-slide col-start-1 row-start-1 min-w-0"
+                style={animationStyle}
+              >
+                <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-2 shadow-sm sm:rounded-2xl sm:p-4">
+                  <Link
+                    href={`/produto/${produto.id}`}
+                    className="flex min-w-0 items-center gap-2"
+                  >
+                    <div className="flex h-11 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 p-1 sm:h-16 sm:w-20 sm:rounded-xl sm:p-1.5">
+                      <img
+                        src={produto.image}
+                        alt={produto.name}
+                        decoding="async"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h2 className="line-clamp-2 text-[11px] font-black leading-[1.3] text-slate-950 sm:text-sm sm:leading-5 xl:text-base">
+                        {produto.name}
+                      </h2>
+
+                      <div className="mt-0.5 flex items-center gap-2 text-[10px] font-bold text-slate-500 sm:mt-1 sm:text-[11px]">
+                        {produto.rating !== null &&
+                        produto.rating > 0 ? (
+                          <span className="text-amber-600">
+                            {produto.rating.toFixed(1)}
+                          </span>
+                        ) : null}
+
+                        <span>
+                          {produto.offers.length}{" "}
+                          {produto.offers.length === 1
+                            ? "loja"
+                            : "lojas"}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+
+                  <Destination
+                    href={melhorOferta.href}
+                    productId={produto.id}
+                    className="mt-2 block min-w-0 rounded-lg border-2 border-emerald-500 bg-emerald-50/70 px-2 py-1.5 transition hover:border-emerald-600 hover:bg-emerald-50 sm:mt-4 sm:rounded-xl sm:p-3.5"
+                  >
+                    <div className="flex min-w-0 items-center gap-1.5 sm:items-end sm:justify-between sm:gap-4">
+                      <p className="min-w-0 flex-1 truncate text-[9px] font-bold text-slate-500 sm:text-[11px]">
+                        {formatMarketplace(
+                          melhorOferta.marketplace,
+                        )}
+                      </p>
+
+                      <p className="shrink-0 text-[14px] font-black tracking-tight text-slate-950 sm:text-xl xl:text-2xl">
+                        {formatPrice(
+                          melhorOferta.price,
+                        )}
+                      </p>
+
+                      <p className="min-w-0 flex-1 truncate text-right text-[8px] font-semibold text-emerald-700 sm:mt-1 sm:text-left sm:text-[11px]">
+                        <span className="sm:hidden">
+                          Melhor preço
+                        </span>
+
+                        <span className="hidden sm:inline">
+                          Melhor preço encontrado
+                        </span>
+                      </p>
+
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white sm:h-9 sm:w-9 sm:rounded-lg">
+                        <ArrowIcon />
+                      </span>
+                    </div>
+                  </Destination>
+
+                  {secundarias.length > 0 ? (
+                    <div
+                      className={`mt-1.5 grid min-w-0 ${gridClass} gap-1.5 sm:mt-2.5 sm:gap-2.5`}
+                    >
+                      {secundarias.map(
+                        (oferta) => (
+                          <Destination
+                            key={
+                              oferta.marketplace
+                            }
+                            href={oferta.href}
+                            productId={produto.id}
+                            className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1.5 transition hover:border-emerald-300 hover:bg-emerald-50/50 sm:rounded-xl sm:p-3"
+                          >
+                            <p className="truncate text-[9px] font-black leading-3 text-slate-700 sm:text-xs">
+                              {formatMarketplace(
+                                oferta.marketplace,
+                              )}
+                            </p>
+
+                            <p className="mt-0.5 truncate text-[11px] font-black leading-4 text-slate-950 sm:mt-1 sm:text-sm">
+                              {formatPrice(
+                                oferta.price,
+                              )}
+                            </p>
+                          </Destination>
+                        ),
+                      )}
+                    </div>
                   ) : null}
 
-                  <span>
-                    {produto.offers.length}{" "}
-                    {produto.offers.length === 1
-                      ? "loja"
-                      : "lojas"}
-                  </span>
+                  {restantes > 0 ? (
+                    <Link
+                      href={`/produto/${produto.id}`}
+                      className="mt-1.5 block text-center text-[9px] font-bold text-emerald-700 hover:text-emerald-900 sm:mt-2.5 sm:text-[10px]"
+                    >
+                      +{restantes}{" "}
+                      {restantes === 1
+                        ? "outra oferta"
+                        : "outras ofertas"}
+                    </Link>
+                  ) : null}
                 </div>
               </div>
-            </Link>
-
-            <Destination
-              href={melhorOferta.href}
-              productId={produto.id}
-              className="mt-4 block rounded-xl border-2 border-emerald-500 bg-emerald-50/70 p-3.5 transition hover:border-emerald-600 hover:bg-emerald-50"
-            >
-              <div className="flex items-end justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-bold text-slate-500">
-                    {formatMarketplace(
-                      melhorOferta.marketplace,
-                    )}
-                  </p>
-
-                  <p className="mt-1 text-xl font-black tracking-tight text-slate-950 xl:text-2xl">
-                    {formatPrice(
-                      melhorOferta.price,
-                    )}
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-semibold text-emerald-700">
-                    Melhor preço encontrado
-                  </p>
-                </div>
-
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
-                  <ArrowIcon />
-                </div>
-              </div>
-            </Destination>
-
-            {secundarias.length > 0 ? (
-              <div
-                className={`mt-2.5 grid gap-2.5 ${
-                  secundarias.length === 1
-                    ? "grid-cols-1"
-                    : "grid-cols-2"
-                }`}
-              >
-                {secundarias.map((oferta) => (
-                  <Destination
-                    key={oferta.marketplace}
-                    href={oferta.href}
-                    productId={produto.id}
-                    className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/50"
-                  >
-                    <p className="truncate text-xs font-black text-slate-700">
-                      {formatMarketplace(
-                        oferta.marketplace,
-                      )}
-                    </p>
-
-                    <p className="mt-1 truncate text-sm font-black text-slate-950">
-                      {formatPrice(
-                        oferta.price,
-                      )}
-                    </p>
-                  </Destination>
-                ))}
-              </div>
-            ) : null}
-
-            {restantes > 0 ? (
-              <Link
-                href={`/produto/${produto.id}`}
-                className="mt-2.5 block text-center text-[10px] font-bold text-emerald-700 hover:text-emerald-900"
-              >
-                +{restantes}{" "}
-                {restantes === 1
-                  ? "outra oferta"
-                  : "outras ofertas"}
-              </Link>
-            ) : null}
-          </div>
-
-          {produtos.length > 1 ? (
-            <div className="mt-3 flex items-center justify-center gap-1.5">
-              {produtos.map(
-                (item, itemIndex) => (
-                  <span
-                    key={item.id}
-                    aria-hidden="true"
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      itemIndex ===
-                      index % produtos.length
-                        ? "w-5 bg-emerald-600"
-                        : "w-1.5 bg-slate-300"
-                    }`}
-                  />
-                ),
-              )}
-            </div>
-          ) : null}
+            );
+          })}
         </div>
+
+        {count > 1 ? (
+          <div className="mt-1.5 flex h-2 items-center justify-center gap-1">
+            {produtos.map(
+              (produto, productIndex) => {
+                const dotStyle: CSSProperties = {
+                  width: 6,
+                  height: 6,
+                  borderRadius: 9999,
+                  background:
+                    "rgb(203 213 225)",
+                  animationName:
+                    "ofertanoHeroDot",
+                  animationDuration:
+                    `${duration}s`,
+                  animationTimingFunction:
+                    "linear",
+                  animationIterationCount:
+                    "infinite",
+                  animationDelay:
+                    `-${(count - productIndex) * SECONDS_PER_PRODUCT}s`,
+                };
+
+                return (
+                  <span
+                    key={produto.id}
+                    aria-hidden="true"
+                    style={dotStyle}
+                  />
+                );
+              },
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
