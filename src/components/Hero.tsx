@@ -13,7 +13,7 @@ export default function Hero({
       <div className="pointer-events-none absolute -left-20 top-0 h-56 w-56 rounded-full bg-emerald-200/35 blur-3xl" />
       <div className="pointer-events-none absolute -right-20 top-0 h-64 w-64 rounded-full bg-teal-200/35 blur-3xl" />
 
-      <div className="relative mx-auto grid w-full max-w-[1440px] items-center gap-8 px-3 py-5 sm:px-5 sm:py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)] lg:gap-12 lg:px-8 lg:py-12 xl:gap-16">
+      <div className="relative mx-auto grid w-full max-w-[1440px] items-center gap-2 px-3 py-4 sm:px-5 sm:py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)] lg:gap-12 lg:px-8 lg:py-12 xl:gap-16">
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1.5 shadow-sm backdrop-blur">
             <span className="relative flex h-2.5 w-2.5">
@@ -40,7 +40,7 @@ export default function Hero({
           <form
             action="/"
             method="GET"
-            className="mt-4 max-w-2xl rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_16px_45px_rgba(15,23,42,0.11)] sm:mt-6"
+            className="mt-3 w-full min-w-0 max-w-2xl rounded-xl border border-slate-200 bg-white p-0.5 shadow-[0_10px_30px_rgba(15,23,42,0.09)] sm:mt-6 sm:rounded-2xl sm:p-1.5"
           >
             <label htmlFor="busca-hero" className="sr-only">
               Pesquisar produtos
@@ -67,13 +67,13 @@ export default function Hero({
                   type="search"
                   autoComplete="off"
                   placeholder="Produto, marca ou categoria"
-                  className="h-10 w-full rounded-xl bg-slate-50 pl-9 pr-2 text-[12px] font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 sm:h-12 sm:pl-12 sm:pr-4 sm:text-sm lg:h-14 lg:text-base"
+                  className="h-8 w-full min-w-0 rounded-lg bg-slate-50 pl-8 pr-1 text-[10px] font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/10 sm:h-12 sm:rounded-xl sm:pl-12 sm:pr-4 sm:text-sm lg:h-14 lg:text-base"
                 />
               </div>
 
               <button
                 type="submit"
-                className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#087A55] px-3 text-[11px] font-black text-white shadow-md shadow-emerald-800/20 transition hover:-translate-y-0.5 hover:bg-[#066747] sm:h-12 sm:px-6 sm:text-sm lg:h-14 lg:px-7 lg:text-base"
+                className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#087A55] px-2 text-[9px] font-black text-white shadow-md shadow-emerald-800/20 transition hover:bg-[#066747] sm:h-12 sm:gap-1.5 sm:rounded-xl sm:px-6 sm:text-sm lg:h-14 lg:px-7 lg:text-base"
               >
                 <svg
                   viewBox="0 0 24 24"
