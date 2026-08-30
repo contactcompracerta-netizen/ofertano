@@ -58,6 +58,9 @@ export function rastrearFonteMercadoLivre(input: {
   rawCount: number;
   usableCount: number;
   reason?: string;
+  budgetMs?: number;
+  durationMs?: number;
+  timedOut?: boolean;
 }): void {
   traceMultiloja("marketplace-raw", {
     marketplace: "MERCADO_LIVRE",
@@ -75,6 +78,19 @@ export function rastrearFonteMercadoLivre(input: {
     rawCount: input.rawCount,
     usableCount: input.usableCount,
     reason: input.reason,
+    budgetMs: input.budgetMs,
+    durationMs: input.durationMs,
+    timedOut: input.timedOut,
+  });
+}
+
+export function rastrearCatalogHydration(
+  event: string,
+  fields: Record<string, unknown>,
+): void {
+  traceMultiloja(event, {
+    marketplace: "MERCADO_LIVRE",
+    ...fields,
   });
 }
 

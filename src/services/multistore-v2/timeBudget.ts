@@ -7,8 +7,8 @@ export type SearchBudget = {
 };
 
 export const DEFAULT_SEARCH_BUDGET: SearchBudget = {
-  globalMs: 20_000,
-  marketplaceMs: 10_000,
+  globalMs: 20_500,
+  marketplaceMs: 16_000,
   fetchMs: 6_000,
   persistReserveMs: 2_000,
   hangGraceMs: 300,

@@ -32,6 +32,15 @@ import {
   buscarPaginaPublicaDoAnuncio,
 } from "./mercadolivrePublicHydration";
 import {
+  rankCatalogProductsForHydration,
+  runCatalogHydrationWithReservation,
+  type CatalogHydrationLoaderResult,
+} from "./mercadolivreCatalogHydration";
+import {
+  createMlStageBudget,
+  runSourceWithBudget,
+} from "./mercadolivreStageBudget";
+import {
   extractMercadoLivreIdentitiesFromUrl,
   isUserProductId,
   normalizeListingId,
@@ -627,6 +636,51 @@ function capacidadeCompativel(
 
   return true;
 }
+function extrairVoltagemTexto(valor: string): number | null {
+  const match = normalizarTexto(valor).match(/\b(110|127|220|240)\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function voltagemCompativel(
+  titulo: string,
+  consulta: string,
+  produto?: CatalogProduct,
+): boolean {
+  const voltagemConsulta = extrairVoltagemTexto(consulta);
+  if (!voltagemConsulta) {
+    return true;
+  }
+
+  const atributoVoltagem =
+    produto?.attributes?.find(
+      (item) => item.id === "VOLTAGE" || item.id === "VOLTAGEM",
+    )?.value_name ?? "";
+
+  const voltagemTitulo =
+    extrairVoltagemTexto(atributoVoltagem) ?? extrairVoltagemTexto(titulo);
+
+  if (!voltagemTitulo) {
+    return true;
+  }
+
+  return voltagemConsulta === voltagemTitulo;
+}
+
+function extrairVoltagemParaTrace(
+  titulo: string,
+  produto?: CatalogProduct,
+): string {
+  const atributoVoltagem =
+    produto?.attributes?.find(
+      (item) => item.id === "VOLTAGE" || item.id === "VOLTAGEM",
+    )?.value_name ?? "";
+
+  const valor =
+    extrairVoltagemTexto(atributoVoltagem) ?? extrairVoltagemTexto(titulo);
+
+  return valor ? `${valor}V` : "";
+}
+
 function obterMarca(
   produto: CatalogProduct,
 ): string | null {
@@ -1410,6 +1464,16 @@ async function carregarCandidato(
       }
     }
 
+    if (!voltagemCompativel(titulo, query, produto)) {
+      return recusarCandidato(
+        titulo,
+        productId,
+        "voltage",
+        "Voltagem do anuncio incompativel com a consulta.",
+        lexical.score,
+      );
+    }
+
     const listingFromPermalink = extractMercadoLivreIdentitiesFromUrl(
       produto.permalink ?? "",
     );
@@ -1451,39 +1515,6 @@ async function carregarCandidato(
             ? error.message
             : error,
         );
-      }
-    }
-
-    if (!oferta && listingIdFromCatalog && mode === "MULTILOJA") {
-      const listingUrl = criarUrlPublicaItem(listingIdFromCatalog);
-      if (listingUrl) {
-        return {
-          title: titulo,
-          externalId: listingIdFromCatalog,
-          stage: "candidate",
-          status: "KEPT",
-          reason: "Listing extraido do catalogo/user-product sem winner da API.",
-          lexicalScore: lexical.score,
-          kept: {
-            relevance: lexical.score,
-            candidate: {
-              marketplace: "MERCADO_LIVRE",
-              marketplaceName: "Mercado Livre",
-              externalId: listingIdFromCatalog,
-              sourceUrl: listingUrl,
-              affiliateLink: null,
-              title: titulo,
-              image: obterImagem(produto),
-              price: produto.buy_box_winner?.price ?? null,
-              oldPrice: null,
-              category: null,
-              brand: obterMarca(produto),
-              seller: null,
-              status: "FOUND",
-              error: null,
-            },
-          },
-        };
       }
     }
 
@@ -1623,6 +1654,11 @@ function registrarFonte(
   blockedSources: string[],
   unusableSources: string[],
   rawTotal: { value: number },
+  timing?: {
+    budgetMs?: number;
+    durationMs?: number;
+    timedOut?: boolean;
+  },
 ): void {
   sourcesTried.push(source);
   rawTotal.value += fetch.data.length;
@@ -1643,6 +1679,9 @@ function registrarFonte(
     rawCount: fetch.data.length,
     usableCount,
     reason: fetch.reason,
+    budgetMs: timing?.budgetMs,
+    durationMs: timing?.durationMs,
+    timedOut: timing?.timedOut,
   });
 }
 
@@ -1673,119 +1712,154 @@ export async function buscarMercadoLivreComFontes(
 
   try {
     const searchLimit = Math.min(Math.max(limit * 6, 20), 50);
+    const stageBudget = createMlStageBudget();
+
     const executarFonte = async <T,>(
+      source: string,
       run: () => Promise<MercadoLivreSourceFetch<T[]>>,
-    ): Promise<MercadoLivreSourceFetch<T[]>> => {
-      if (isSearchAborted() || request.signal?.aborted) {
-        return {
-          status: "ERROR",
-          httpStatus: null,
-          data: [],
-          reason: "TIMEOUT: orcamento de busca esgotado.",
-        };
-      }
-      try {
-        return await run();
-      } catch (error) {
-        return {
-          ...classificarErroFonteMercadoLivre(error),
-          data: [],
-        };
-      }
+    ) => {
+      const budgetMs = stageBudget.allocateSourceBudget(source);
+      return runSourceWithBudget(
+        source,
+        query,
+        budgetMs,
+        async () => {
+          if (isSearchAborted() || request.signal?.aborted || stageBudget.isClosed()) {
+            return {
+              status: "ERROR" as const,
+              httpStatus: null,
+              data: [],
+              reason: "TIMEOUT: orcamento de busca esgotado.",
+            };
+          }
+          try {
+            return await run();
+          } catch (error) {
+            return {
+              ...classificarErroFonteMercadoLivre(error),
+              data: [],
+            };
+          }
+        },
+        {
+          signal: request.signal,
+          stageClosed: () => stageBudget.isClosed(),
+        },
+      );
     };
 
     let domainId: string | null = null;
-    try {
-      domainId = await sources.discoverDomain(query);
-    } catch {
-      domainId = null;
+    const domainBudget = stageBudget.allocateSourceBudget("discover-domain");
+    if (domainBudget > 0 && !request.signal?.aborted) {
+      const domainWork = sources.discoverDomain(query);
+      void domainWork.catch(() => undefined);
+      const domainRaced = await Promise.race([
+        domainWork.then((value) => ({ kind: "result" as const, value })),
+        new Promise<{ kind: "timeout" }>((resolve) => {
+          setTimeout(() => resolve({ kind: "timeout" }), domainBudget);
+        }),
+      ]);
+      if (domainRaced.kind === "result") {
+        domainId = domainRaced.value;
+      }
     }
 
-    const catalogWithDomain = await executarFonte(() =>
+    const catalogSourceName = domainId ? "catalog" : "catalog-no-domain";
+    const catalogOutcome = await executarFonte("catalog", () =>
       sources.searchCatalog(query, searchLimit, domainId),
     );
-    let catalogResults = catalogWithDomain.data;
+    let catalogResults = catalogOutcome.fetch.data;
     registrarFonte(
       query,
-      domainId ? "catalog" : "catalog-no-domain",
-      catalogWithDomain,
+      catalogSourceName,
+      catalogOutcome.fetch,
       0,
       sourcesTried,
       blockedSources,
       unusableSources,
       rawTotal,
+      {
+        budgetMs: catalogOutcome.budgetMs,
+        durationMs: catalogOutcome.durationMs,
+        timedOut: catalogOutcome.timedOut,
+      },
     );
 
     if (catalogResults.length === 0 && domainId) {
-      const catalogNoDomain = await executarFonte(() =>
+      const catalogNoDomainOutcome = await executarFonte("catalog-no-domain", () =>
         sources.searchCatalog(query, searchLimit, null),
       );
-      catalogResults = catalogNoDomain.data;
+      catalogResults = catalogNoDomainOutcome.fetch.data;
       registrarFonte(
         query,
         "catalog-no-domain",
-        catalogNoDomain,
+        catalogNoDomainOutcome.fetch,
         0,
         sourcesTried,
         blockedSources,
         unusableSources,
         rawTotal,
+        {
+          budgetMs: catalogNoDomainOutcome.budgetMs,
+          durationMs: catalogNoDomainOutcome.durationMs,
+          timedOut: catalogNoDomainOutcome.timedOut,
+        },
       );
     }
 
+    const rankedCatalog = rankCatalogProductsForHydration(query, catalogResults);
     const catalogHydrationLimit = Math.min(
       Math.max(limit * 2, 8),
       16,
     );
-    const productIds = Array.from(
-      new Set(
-        catalogResults
-          .map((produto) => produto.id?.trim())
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ).slice(0, catalogHydrationLimit);
+    const productIds = rankedCatalog.map((item) => item.productId);
 
-    for (let index = 0; index < productIds.length; index += 4) {
-      if (isSearchAborted() || request.signal?.aborted) {
-        break;
-      }
-      const lote = productIds.slice(index, index + 4);
-      scanned += lote.length;
-      evaluations.push(
-        ...(await Promise.all(
-          lote.map(async (productId) => {
-            try {
-              return await sources.loadCatalogCandidate(
-                productId,
-                query,
-                request.mode,
-              );
-            } catch (error) {
-              return recusarCandidato(
-                productId,
-                productId,
-                "error",
-                error instanceof Error
-                  ? error.message.slice(0, 180)
-                  : "Falha ao carregar produto de catalogo.",
-                0,
-              );
-            }
-          }),
-        )),
-      );
-
-      if (evaluations.filter((item) => item.status === "KEPT").length >= limit) {
-        break;
-      }
-    }
+    const hydration = await runCatalogHydrationWithReservation({
+      query,
+      ranked: rankedCatalog,
+      limit: catalogHydrationLimit,
+      reservationMs: stageBudget.hydrationBudgetMs(),
+      concurrency: 4,
+      signal: request.signal,
+      stageClosed: () => stageBudget.isClosed(),
+      loadCandidate: async (
+        productId,
+        previewTitle,
+        relevanceScore,
+      ): Promise<CatalogHydrationLoaderResult> => {
+        scanned += 1;
+        const evaluation = await sources.loadCatalogCandidate(
+          productId,
+          query,
+          request.mode,
+        );
+        const kept = evaluation.kept?.candidate;
+        return {
+          evaluation,
+          trace: {
+            productId,
+            endpoint: `/products/${productId}/items`,
+            httpStatus: evaluation.status === "KEPT" ? 200 : 404,
+            mlbId: kept?.externalId ?? evaluation.externalId,
+            title: kept?.title ?? previewTitle,
+            price: kept?.price ?? null,
+            url: kept?.sourceUrl ?? "",
+            voltage: extrairVoltagemParaTrace(kept?.title ?? previewTitle),
+            status: evaluation.status,
+            reason: evaluation.reason,
+            relevanceScore,
+          },
+        };
+      },
+    });
+    evaluations.push(...hydration.evaluations);
 
     const usableFromCatalog = evaluations.filter((item) => item.kept).length;
-    const catalogSourceName = sourcesTried.includes("catalog")
+    const catalogTraceSource = sourcesTried.includes("catalog")
       ? "catalog"
       : "catalog-no-domain";
     rastrearFonteMercadoLivre({
-      source: `${catalogSourceName}-usable`,
+      source: `${catalogTraceSource}-usable`,
       query,
       status: usableFromCatalog > 0 ? "SUCCESS" : "EMPTY",
       httpStatus: 200,
@@ -1806,19 +1880,34 @@ export async function buscarMercadoLivreComFontes(
         | "public-search-lista"
         | "public-search-jm",
       fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
+      timing?: {
+        budgetMs?: number;
+        durationMs?: number;
+        timedOut?: boolean;
+      },
     ) => {
-      if (isSearchAborted() || request.signal?.aborted) {
+      if (
+        stageBudget.isClosed() ||
+        isSearchAborted() ||
+        request.signal?.aborted
+      ) {
         return;
       }
       const before = evaluations.filter((item) => item.kept).length;
       let items = fetch.data ?? [];
 
-      if (items.length > 0 && sources.hydratePublicItem) {
+      if (items.length > 0 && sources.hydratePublicItem && !stageBudget.isClosed()) {
         const hydrated = await hidratarItensComPaginaPublica(
           items,
           sources.hydratePublicItem,
         );
-        items = hydrated.items;
+        if (!stageBudget.isClosed()) {
+          items = hydrated.items;
+        }
+      }
+
+      if (stageBudget.isClosed()) {
+        return;
       }
 
       const seen = new Set(
@@ -1852,6 +1941,7 @@ export async function buscarMercadoLivreComFontes(
         blockedSources,
         unusableSources,
         rawTotal,
+        timing,
       );
       rastrearAquisicaoMercadoLivre({
         query,
@@ -1870,33 +1960,52 @@ export async function buscarMercadoLivreComFontes(
         usableCandidates: Math.max(0, after - before),
         status: fetch.status,
         reason: fetch.reason ?? "",
+        budgetMs: timing?.budgetMs,
+        durationMs: timing?.durationMs,
+        timedOut: timing?.timedOut,
       });
     };
 
-    await coletarItens(
-      "items-api",
-      await executarFonte(() => sources.searchItemsApi(query, searchLimit)),
+    const itemsApiOutcome = await executarFonte("items-api", () =>
+      sources.searchItemsApi(query, searchLimit),
     );
+    await coletarItens("items-api", itemsApiOutcome.fetch, {
+      budgetMs: itemsApiOutcome.budgetMs,
+      durationMs: itemsApiOutcome.durationMs,
+      timedOut: itemsApiOutcome.timedOut,
+    });
 
     if (sources.searchPublicLista || sources.searchPublicJm) {
       if (sources.searchPublicLista) {
-        await coletarItens(
-          "public-search-lista",
-          await executarFonte(() => sources.searchPublicLista!(query, searchLimit)),
+        const listaOutcome = await executarFonte("public-search-lista", () =>
+          sources.searchPublicLista!(query, searchLimit),
         );
+        await coletarItens("public-search-lista", listaOutcome.fetch, {
+          budgetMs: listaOutcome.budgetMs,
+          durationMs: listaOutcome.durationMs,
+          timedOut: listaOutcome.timedOut,
+        });
       }
 
       if (sources.searchPublicJm) {
-        await coletarItens(
-          "public-search-jm",
-          await executarFonte(() => sources.searchPublicJm!(query, searchLimit)),
+        const jmOutcome = await executarFonte("public-search-jm", () =>
+          sources.searchPublicJm!(query, searchLimit),
         );
+        await coletarItens("public-search-jm", jmOutcome.fetch, {
+          budgetMs: jmOutcome.budgetMs,
+          durationMs: jmOutcome.durationMs,
+          timedOut: jmOutcome.timedOut,
+        });
       }
     } else {
-      await coletarItens(
-        "public-search",
-        await executarFonte(() => sources.searchPublicListings(query, searchLimit)),
+      const publicOutcome = await executarFonte("public-search", () =>
+        sources.searchPublicListings(query, searchLimit),
       );
+      await coletarItens("public-search", publicOutcome.fetch, {
+        budgetMs: publicOutcome.budgetMs,
+        durationMs: publicOutcome.durationMs,
+        timedOut: publicOutcome.timedOut,
+      });
     }
 
     if (evaluations.filter((item) => item.kept).length === 0) {
@@ -1909,26 +2018,34 @@ export async function buscarMercadoLivreComFontes(
           (variant) => variant.toLowerCase() !== query.toLowerCase(),
         );
         for (const variant of variants.slice(0, 2)) {
-          if (isSearchAborted() || request.signal?.aborted) {
+          if (
+            stageBudget.isClosed() ||
+            isSearchAborted() ||
+            request.signal?.aborted
+          ) {
             break;
           }
           if (evaluations.filter((item) => item.kept).length > 0) {
             break;
           }
           if (sources.searchPublicLista) {
-            await coletarItens(
-              "public-search-lista",
-              await executarFonte(() =>
-                sources.searchPublicLista!(variant, searchLimit),
-              ),
+            const variantOutcome = await executarFonte("public-search-lista", () =>
+              sources.searchPublicLista!(variant, searchLimit),
             );
+            await coletarItens("public-search-lista", variantOutcome.fetch, {
+              budgetMs: variantOutcome.budgetMs,
+              durationMs: variantOutcome.durationMs,
+              timedOut: variantOutcome.timedOut,
+            });
           } else {
-            await coletarItens(
-              "public-search",
-              await executarFonte(() =>
-                sources.searchPublicListings(variant, searchLimit),
-              ),
+            const variantOutcome = await executarFonte("public-search", () =>
+              sources.searchPublicListings(variant, searchLimit),
             );
+            await coletarItens("public-search", variantOutcome.fetch, {
+              budgetMs: variantOutcome.budgetMs,
+              durationMs: variantOutcome.durationMs,
+              timedOut: variantOutcome.timedOut,
+            });
           }
         }
       }
@@ -1938,7 +2055,11 @@ export async function buscarMercadoLivreComFontes(
       evaluations.map((item) => item.externalId.trim()).filter(Boolean),
     );
     for (const catalogId of Array.from(new Set(catalogIds))) {
-      if (isSearchAborted() || request.signal?.aborted) {
+      if (
+        stageBudget.isClosed() ||
+        isSearchAborted() ||
+        request.signal?.aborted
+      ) {
         break;
       }
       if (seenCatalog.has(catalogId)) {
@@ -1946,24 +2067,26 @@ export async function buscarMercadoLivreComFontes(
       }
       seenCatalog.add(catalogId);
       scanned += 1;
-        try {
-          evaluations.push(
-            await sources.loadCatalogCandidate(catalogId, query, request.mode),
-          );
-        } catch (error) {
-          evaluations.push(
-            recusarCandidato(
-              catalogId,
-              catalogId,
-              "error",
-              error instanceof Error
-                ? error.message.slice(0, 180)
-                : "Falha ao carregar produto de catalogo.",
-              0,
-            ),
-          );
-        }
+      try {
+        evaluations.push(
+          await sources.loadCatalogCandidate(catalogId, query, request.mode),
+        );
+      } catch (error) {
+        evaluations.push(
+          recusarCandidato(
+            catalogId,
+            catalogId,
+            "error",
+            error instanceof Error
+              ? error.message.slice(0, 180)
+              : "Falha ao carregar produto de catalogo.",
+            0,
+          ),
+        );
+      }
     }
+
+    stageBudget.close();
 
     const consolidated = consolidateEvaluations(evaluations);
     rastrearFiltrosMarketplace({
