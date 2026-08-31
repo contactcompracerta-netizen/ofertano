@@ -303,19 +303,19 @@ async function runCoveragePublicationCases() {
     "UNUSABLE impede COMPLETE",
   );
 
-  assert.equal(isSearchVisible(completeOne), true, "1 valid => searchVisible");
-  assert.equal(isSearchVisible(incompleteOne), true, "1 valid + INCOMPLETE => searchVisible");
+  assert.equal(isSearchVisible(completeOne), true, "1 valid + COMPLETE => searchVisible");
+  assert.equal(isSearchVisible(incompleteOne), false, "1 valid + INCOMPLETE => nao visivel");
   assert.equal(isSearchVisible(twoIncomplete), true, "2 valid + INCOMPLETE => searchVisible");
   assert.equal(isSearchVisible(zeroComplete), false, "0 ofertas => nao visivel");
   assert.equal(isSearchVisible(tier3Complete), false, "TIER 3 ambiguo nao entra na busca");
   assert.equal(isClusterPublishable(completeOne), true, "1 valid + COMPLETE => publishable");
-  assert.equal(isClusterPublishable(incompleteOne), false, "1 valid + TIMEOUT/INCOMPLETE => false");
+  assert.equal(isClusterPublishable(incompleteOne), false, "1 valid + INCOMPLETE => false");
   assert.equal(isClusterPublishable(blockedOne), false, "1 valid + BLOCKED => false");
   assert.equal(isClusterPublishable(errorOne), false, "1 valid + ERROR => false");
   assert.equal(
     isClusterPublishable(twoIncomplete),
-    false,
-    "2 valid + TIMEOUT/INCOMPLETE => nao publicavel",
+    true,
+    "2 valid + cobertura parcial => publicavel",
   );
   assert.equal(
     isClusterPublishable(twoComplete),
@@ -354,65 +354,27 @@ async function runCoveragePublicationCases() {
     "Headphone MarcaX ZX100",
     [twoIncomplete],
     {
-      headsOnly: true,
       persistProduct: async () => {
         twoIncompleteWrites += 1;
         return { id: "should-not-save-multi" };
       },
     },
   );
-  assert.equal(twoIncompleteWrites, 0, "2 ofertas + INCOMPLETE nao persiste head");
-  assert.equal(twoIncompleteIds[0], "");
+  assert.equal(twoIncompleteWrites, 3, "2 ofertas + parcial persiste atomicamente");
+  assert.equal(twoIncompleteIds[0], "should-not-save-multi");
 
-  let transientWrites = 0;
-  let transientDefer: boolean | undefined;
-  const transientIds = await persistCanonicalProducts(
-    "Headphone MarcaX ZX100",
-    [twoIncomplete],
-    {
-      headsOnly: true,
-      persistTransientHeads: true,
-      persistProduct: async (_product, _affiliate, options) => {
-        transientWrites += 1;
-        transientDefer = options?.deferPublication;
-        return { id: "draft-head-uuid" };
-      },
-    },
-  );
-  assert.equal(transientWrites, 1, "INCOMPLETE visivel persiste HEAD transitorio");
-  assert.equal(transientDefer, true, "HEAD transitorio usa deferPublication DRAFT");
-  assert.equal(transientIds[0], "draft-head-uuid");
-
-  let recentOfferWrites = 0;
+  let incompleteRecentWrites = 0;
   await persistCanonicalProducts(
     "Headphone MarcaX ZX100",
-    [twoIncomplete],
+    [incompleteOne],
     {
       persistProduct: async () => {
-        recentOfferWrites += 1;
-        return { id: "should-not-enter-recent" };
+        incompleteRecentWrites += 1;
+        return { id: "should-not-save" };
       },
     },
   );
-  assert.equal(
-    recentOfferWrites,
-    0,
-    "INCOMPLETE sem persistTransientHeads nao entra em Ofertas recentes",
-  );
-
-  let tier3TransientWrites = 0;
-  await persistCanonicalProducts(
-    "Terno De Reis",
-    [tier3Complete],
-    {
-      persistTransientHeads: true,
-      persistProduct: async () => {
-        tier3TransientWrites += 1;
-        return { id: "should-not-save-tier3" };
-      },
-    },
-  );
-  assert.equal(tier3TransientWrites, 0, "CASO 5: TIER 3 nao vira HEAD nem na busca");
+  assert.equal(incompleteRecentWrites, 0, "singleton incompleto nao chama saveProduct");
 
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
@@ -529,10 +491,8 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(timeoutSingle.acquisitions), "INCOMPLETE");
   assert.equal(timeoutSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.ok(timeoutSingle.relevantCandidates.length >= 1);
-  assert.equal(timeoutSingle.products[0]?.searchVisible, true, "B) 1 loja + TIMEOUT continua visivel na busca");
-  assert.equal(timeoutSingle.products[0]?.publishable, false, "B) 1 loja + TIMEOUT = INCOMPLETE / NAO PUBLICAVEL");
-  assert.equal(timeoutSingle.products[0]?.coverageStatus, "INCOMPLETE");
-  assert.ok(timeoutSingle.views.length >= 1);
+  assert.equal(timeoutSingle.products.length, 0, "B) 1 loja + TIMEOUT nao e visivel");
+  assert.equal(timeoutSingle.views.length, 0);
 
   const blockedSingle = await searchMultistoreV2(query, {
     persist: false,
@@ -548,9 +508,8 @@ async function runCoveragePublicationCases() {
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
     ],
   });
-  assert.equal(blockedSingle.products[0]?.searchVisible, true);
-  assert.equal(blockedSingle.products[0]?.publishable, false, "1 valid + BLOCKED => nao publicavel");
-  assert.ok(blockedSingle.views.length >= 1);
+  assert.equal(blockedSingle.products.length, 0);
+  assert.equal(blockedSingle.views.length, 0);
 
   const errorSingle = await searchMultistoreV2(query, {
     persist: false,
@@ -568,9 +527,8 @@ async function runCoveragePublicationCases() {
       }),
     ],
   });
-  assert.equal(errorSingle.products[0]?.searchVisible, true);
-  assert.equal(errorSingle.products[0]?.publishable, false, "1 valid + ERROR => nao publicavel");
-  assert.ok(errorSingle.views.length >= 1);
+  assert.equal(errorSingle.products.length, 0);
+  assert.equal(errorSingle.views.length, 0);
 
   let multiTimeoutWrites = 0;
   const twoValidTimeout = await searchMultistoreV2(query, {
@@ -614,7 +572,7 @@ async function runCoveragePublicationCases() {
   assert.equal(twoValidTimeout.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status, "TIMEOUT");
   assert.ok(twoValidTimeout.relevantCandidates.length >= 2, "2 equivalentes permanecem internos para retry");
   assert.equal(twoValidTimeout.products[0]?.searchVisible, true, "CASO 1: 2 FOUND + TIMEOUT visivel na busca");
-  assert.equal(twoValidTimeout.products[0]?.publishable, false, "CASO 1: 2 lojas + TIMEOUT = INCOMPLETE / NAO PUBLICAVEL");
+  assert.equal(twoValidTimeout.products[0]?.publishable, true, "CASO 1: 2 lojas + TIMEOUT = parcial / PUBLICAVEL");
   assert.equal(twoValidTimeout.products[0]?.coverageStatus, "INCOMPLETE");
   assert.ok((twoValidTimeout.products[0]?.offers.length ?? 0) >= 2, "CASO 1: Compare 2 lojas");
   assert.equal(
@@ -624,8 +582,9 @@ async function runCoveragePublicationCases() {
   );
   assert.ok(twoValidTimeout.views.length >= 1);
   assert.equal(twoValidTimeout.multiStoreClusters, 1);
-  assert.equal(multiTimeoutWrites, 0, "2 equivalentes + TIMEOUT nao persiste head publico");
+  assert.equal(multiTimeoutWrites, 3, "2 equivalentes + TIMEOUT persiste cluster parcial");
 
+  let threeBlockedWrites = 0;
   const threeBlocked = await searchMultistoreV2(query, {
     persist: true,
     adapters: [
@@ -656,14 +615,16 @@ async function runCoveragePublicationCases() {
       fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async () => blockedSearch("MAGAZINE_LUIZA", query)),
     ],
     persistProduct: async () => {
-      throw new Error("3 FOUND + BLOCKED nao deveria persistir");
+      threeBlockedWrites += 1;
+      return { id: "saved-3-blocked" };
     },
   });
   assert.equal(coverageStatusOf(threeBlocked.acquisitions), "INCOMPLETE");
   assert.equal(threeBlocked.acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.status, "BLOCKED");
   assert.equal(threeBlocked.products[0]?.searchVisible, true);
-  assert.equal(threeBlocked.products[0]?.publishable, false, "3 FOUND + BLOCKED = INCOMPLETE / nao publicavel");
+  assert.equal(threeBlocked.products[0]?.publishable, true, "3 FOUND + BLOCKED = parcial / publicavel");
   assert.ok(threeBlocked.views.length >= 1);
+  assert.ok(threeBlockedWrites >= 3, "cluster parcial persiste ofertas");
 
   const fourError = await searchMultistoreV2(query, {
     persist: true,
@@ -705,13 +666,13 @@ async function runCoveragePublicationCases() {
       }),
     ],
     persistProduct: async () => {
-      throw new Error("4 FOUND + ERROR nao deveria persistir");
+      return { id: "saved-4-error" };
     },
   });
   assert.equal(coverageStatusOf(fourError.acquisitions), "INCOMPLETE");
   assert.equal(fourError.acquisitions.find((item) => item.marketplace === "ALIEXPRESS")?.status, "ERROR");
   assert.equal(fourError.products[0]?.searchVisible, true);
-  assert.equal(fourError.products[0]?.publishable, false, "4 FOUND + ERROR = INCOMPLETE / nao publicavel");
+  assert.equal(fourError.products[0]?.publishable, true, "4 FOUND + ERROR = parcial / publicavel");
   assert.ok(fourError.views.length >= 1);
 
   const notRunSingle = await searchMultistoreV2(query, {
@@ -733,9 +694,8 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(notRunSingle.acquisitions), "INCOMPLETE");
   assert.equal(notRunSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "NOT_RUN");
-  assert.equal(notRunSingle.products[0]?.searchVisible, true);
-  assert.equal(notRunSingle.products[0]?.publishable, false, "1 FOUND + NOT_RUN = INCOMPLETE / nao publicavel");
-  assert.ok(notRunSingle.views.length >= 1);
+  assert.equal(notRunSingle.products.length, 0);
+  assert.equal(notRunSingle.views.length, 0);
 
   const allEmpty = await searchMultistoreV2(query, {
     persist: false,
@@ -886,13 +846,12 @@ async function runCoveragePublicationCases() {
   assert.equal(cheapestTimeout.acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.status, "TIMEOUT");
   assert.ok(cheapestTimeout.relevantCandidates.length >= 3, "equivalentes 150/99/120 ficam internos");
   assert.equal(cheapestTimeout.products[0]?.searchVisible, true);
-  assert.equal(cheapestTimeout.products[0]?.publishable, false, "menor preco 99 nao publica enquanto houver TIMEOUT");
-  assert.equal(cheapestTimeout.products[0]?.price, 99, "busca INCOMPLETE mostra o menor preco encontrado ate agora");
+  assert.equal(cheapestTimeout.products[0]?.publishable, true, "3 lojas + TIMEOUT publica parcialmente");
+  assert.equal(cheapestTimeout.products[0]?.price, 99, "busca parcial mostra o menor preco encontrado ate agora");
   assert.ok(cheapestTimeout.views.length >= 1);
-  assert.equal(cheapestTimeoutWrites, 0);
+  assert.ok(cheapestTimeoutWrites >= 3, "3 lojas equivalentes persistem mesmo com TIMEOUT");
 
   let publicIncompleteWrites = 0;
-  let publicIncompleteDefer: boolean | undefined;
   const publicIncomplete = await searchCatalogOrDiscover(query, 5, {
     adapters: [
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
@@ -906,25 +865,17 @@ async function runCoveragePublicationCases() {
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
       fakeAdapter("SHOPEE", "Shopee", async () => emptySearch("SHOPEE", query)),
     ],
-    persistProduct: async (_product, _affiliate, options) => {
+    persistProduct: async () => {
       publicIncompleteWrites += 1;
-      publicIncompleteDefer = options?.deferPublication;
       return { id: "draft-search-head" };
     },
     schedulePersist: () => undefined,
   });
-  assert.ok(publicIncomplete.products.length >= 1, "INCOMPLETE visivel na pagina da pesquisa");
-  assert.equal(publicIncomplete.source, "DISCOVERY");
-  assert.equal(publicIncomplete.products[0]?.id, "draft-search-head", "Ver precos usa UUID real");
-  assert.equal(publicIncompleteWrites, 1, "INCOMPLETE persiste HEAD transitorio DRAFT");
-  assert.equal(publicIncompleteDefer, true, "HEAD transitorio nao publica");
-  assert.ok(
-    publicIncomplete.products.every((product) => Boolean(product.id) && !product.id.startsWith("v2-")),
-    "INCOMPLETE cria rota /produto navegavel",
-  );
+  assert.equal(publicIncomplete.products.length, 0, "singleton incompleto nao aparece na pesquisa");
+  assert.equal(publicIncomplete.source, "NOT_FOUND");
+  assert.equal(publicIncompleteWrites, 0, "singleton incompleto nao persiste HEAD");
 
   let publicMultiIncompleteWrites = 0;
-  let publicMultiDefer: boolean | undefined;
   const publicMultiIncomplete = await searchCatalogOrDiscover(query, 5, {
     adapters: [
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
@@ -945,9 +896,8 @@ async function runCoveragePublicationCases() {
       })),
       fakeAdapter("SHOPEE", "Shopee", async () => blockedSearch("SHOPEE", query)),
     ],
-    persistProduct: async (product, _affiliate, options) => {
+    persistProduct: async (product) => {
       publicMultiIncompleteWrites += 1;
-      publicMultiDefer = options?.deferPublication;
       return { id: `draft-multi-${product.externalId}` };
     },
     schedulePersist: () => undefined,
@@ -956,8 +906,7 @@ async function runCoveragePublicationCases() {
   assert.equal(publicMultiIncomplete.source, "DISCOVERY");
   assert.ok((publicMultiIncomplete.products[0]?.offers.length ?? 0) >= 2, "CASO 1: Compare 2 lojas");
   assert.equal(publicMultiIncomplete.products[0]?.price, 189, "CASO 1: menor preco das 2 lojas encontradas");
-  assert.equal(publicMultiDefer, true, "CASO 1: HEAD DRAFT nao entra em Ofertas recentes");
-  assert.ok(publicMultiIncompleteWrites >= 1, "CASO 1: persiste HEAD transitorio para UUID");
+  assert.ok(publicMultiIncompleteWrites >= 1, "CASO 1: persiste HEAD do cluster parcial com UUID");
   assert.ok(
     Boolean(publicMultiIncomplete.products[0]?.id) &&
       !publicMultiIncomplete.products[0]!.id.startsWith("v2-"),
@@ -1130,32 +1079,24 @@ async function runCoveragePublicationCases() {
   });
 
   assert.equal(firstSearch.source, "DISCOVERY");
-  assert.ok(firstSearch.products.length >= 1, "INCOMPLETE searchVisible");
-  const draftId = firstSearch.products[0]!.id;
-  assert.equal(draftId.startsWith("v2-"), false, "UUID real, nao v2-clusterId");
-  assert.equal(draftId, "prod-1", "HEAD DRAFT criado na primeira busca");
+  assert.ok(firstSearch.products.length >= 1, "cluster parcial visivel na busca");
+  const productId = firstSearch.products[0]!.id;
+  assert.equal(productId.startsWith("v2-"), false, "UUID real, nao v2-clusterId");
+  assert.equal(productId, "prod-1", "HEAD criado na primeira busca");
   assert.equal(firstSearch.products[0]?.price, 189, "menor preco das lojas FOUND");
   assert.ok((firstSearch.products[0]?.offers.length ?? 0) >= 2, "tails ML+Amazon associadas");
-  assert.ok(firstScheduled, "after() anexa tails do HEAD DRAFT");
+  assert.ok(firstScheduled, "after() promove o cluster parcial");
   await firstScheduled!();
-  const draftRow = catalog.products.get(draftId);
-  assert.ok(draftRow, "Product DRAFT existe");
-  assert.equal(draftRow!.publicationStatus, "DRAFT");
-  assert.equal(draftRow!.active, false, "active=false: noindex / fora de Ofertas recentes");
-  assert.equal(draftRow!.offers.size, 2, "Amazon+ML no mesmo Product; Shopee TIMEOUT nao duplica");
-  assert.equal(catalog.products.size, 1, "um unico Product apos INCOMPLETE");
+  const publishedRow = catalog.products.get(productId);
+  assert.ok(publishedRow, "Product publicado existe");
+  assert.equal(publishedRow!.publicationStatus, "LIVE_COMPLETE");
+  assert.equal(publishedRow!.active, true, "cluster parcial promovido apos persistencia atomica");
+  assert.equal(publishedRow!.offers.size, 2, "Amazon+ML no mesmo Product; Shopee TIMEOUT nao duplica");
+  assert.equal(catalog.products.size, 1, "um unico Product apos cobertura parcial");
   assert.equal(
-    listedInRecentOffers({ active: draftRow!.active }),
-    false,
-    "DRAFT nao entra em Ofertas recentes",
-  );
-  assert.equal(
-    navigableOnProductPage({
-      active: draftRow!.active,
-      publicationStatus: draftRow!.publicationStatus,
-    }),
+    listedInRecentOffers({ active: publishedRow!.active }),
     true,
-    "/produto/[uuid] navegavel em DRAFT",
+    "cluster parcial entra em Ofertas recentes",
   );
 
   let secondScheduled: (() => Promise<void>) | null = null;
@@ -1195,11 +1136,13 @@ async function runCoveragePublicationCases() {
     },
   });
 
-  assert.equal(secondSearch.products[0]?.id, draftId, "reutiliza o Product DRAFT; nao cria duplicata");
+  assert.equal(secondSearch.products[0]?.id, productId, "reutiliza o Product existente; nao cria duplicata");
   assert.equal(secondSearch.products[0]?.id.startsWith("v2-"), false);
   assert.equal(secondSearch.products[0]?.price, 79, "menor preco recalculado com Shopee");
-  await secondScheduled!();
-  const liveRow = catalog.products.get(draftId);
+  if (secondScheduled) {
+    await secondScheduled();
+  }
+  const liveRow = catalog.products.get(productId);
   assert.ok(liveRow);
   assert.equal(catalog.products.size, 1, "ainda um unico Product apos COMPLETE");
   assert.equal(liveRow!.publicationStatus, "LIVE_COMPLETE", "promove publicationStatus");
@@ -1387,12 +1330,8 @@ async function runPersistContract() {
     partialTimeout.relevantCandidates.length >= 1,
     "timeout parcial preserva o candidato relevante internamente",
   );
-  assert.equal(
-    partialTimeout.views.length >= 1,
-    true,
-    "1 oferta + TIMEOUT permanece visivel na busca",
-  );
-  assert.equal(partialTimeout.products[0]?.publishable, false);
+  assert.equal(partialTimeout.products.length, 0);
+  assert.equal(partialTimeout.views.length, 0);
   assert.equal(
     timeoutTitles.length,
     0,
@@ -1722,7 +1661,11 @@ async function runAfterResponseCases() {
   hang.resolve({ id: "after-saved" });
   await afterWork;
   assert.equal(afterSettled, true);
-  assert.equal(persistCalls, 2);
+  assert.equal(
+    persistCalls,
+    3,
+    "after() anexa tail e promove cluster multi-loja (head sync + tail + promote)",
+  );
 
   let scheduledCount = 0;
   const limitedPublic = await searchCatalogOrDiscover("Headphone MarcaX", 5, {
@@ -1808,8 +1751,82 @@ async function runAfterResponseCases() {
   );
 }
 
+async function runMlUnknownAffiliateCase() {
+  const saves: Array<{
+    marketplace: string;
+    affiliateLink: string | null | undefined;
+  }> = [];
+  const cabide = canonicalProduct("Kit Cabides Veludo De Roupa Antideslizante Slim Adulto 50 Un", {
+    coverageStatus: "INCOMPLETE",
+    marketplaces: ["SHOPEE", "MERCADO_LIVRE"],
+    offers: [
+      {
+        marketplace: "SHOPEE",
+        marketplaceName: "Shopee",
+        externalId: "shopee-cabide",
+        title: "Kit Cabides Veludo De Roupa Antideslizante Slim Adulto 50 Un",
+        url: "https://shopee.example/cabide",
+        image: "https://loja.example/img.jpg",
+        price: 39,
+        oldPrice: null,
+        brand: null,
+        affiliateLink: "https://aff.shopee/cabide",
+        attributes: {},
+        seller: null,
+      },
+      {
+        marketplace: "MERCADO_LIVRE",
+        marketplaceName: "Mercado Livre",
+        externalId: "MLB-cabide",
+        title: "Kit Cabides Veludo De Roupa Antideslizante Slim Adulto 50 Un",
+        url: "https://produto.mercadolivre.com.br/MLB-cabide",
+        image: "https://loja.example/img.jpg",
+        price: 42,
+        oldPrice: null,
+        brand: null,
+        affiliateLink: null,
+        affiliateStatus: "UNKNOWN",
+        attributes: {},
+        seller: null,
+      },
+    ],
+  });
+
+  assert.equal(isSearchVisible(cabide), true, "ML UNKNOWN + Shopee permanece visivel");
+  assert.equal(isClusterPublishable(cabide), true, "2 lojas equivalentes publicaveis");
+
+  const ids = await persistCanonicalProducts("cabides", [cabide], {
+    persistProduct: async (product, affiliateLink) => {
+      saves.push({
+        marketplace: product.marketplace,
+        affiliateLink: affiliateLink ?? null,
+      });
+      return { id: "prod-cabide-ml-unknown" };
+    },
+  });
+
+  assert.equal(ids[0], "prod-cabide-ml-unknown");
+  assert.equal(saves.length, 3, "head + tail ML + promote");
+  assert.ok(
+    saves.some(
+      (item) =>
+        item.marketplace === "Mercado Livre" && item.affiliateLink == null,
+    ),
+    "ML persiste sem link de afiliado inventado",
+  );
+  assert.ok(
+    saves.some(
+      (item) =>
+        item.marketplace === "Shopee" &&
+        item.affiliateLink === "https://aff.shopee/cabide",
+    ),
+    "Shopee mantem afiliado confirmado",
+  );
+}
+
 void runPersistContract()
-  .then(() => {
+  .then(async () => {
+    await runMlUnknownAffiliateCase();
     console.log("multistore-v2 persist: invariantes estruturais passaram");
   })
   .catch((error) => {

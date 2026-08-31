@@ -15,8 +15,14 @@ export {
   usarMotorMultistoreV2,
 } from "./search";
 export {
+  countDistinctMarketplaces,
   isClusterPublishable,
+  isPublicationAllowed,
   isSearchVisible,
+  publicationStatusForProduct,
+  usableEquivalentOffers,
+} from "./publicationBarrier";
+export {
   persistCanonicalProducts,
   persistSelectedSearchClusters,
   scheduleSelectedClusterPersist,

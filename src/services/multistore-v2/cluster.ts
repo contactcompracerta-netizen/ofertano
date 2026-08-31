@@ -21,6 +21,7 @@ function stableClusterId(identity: ProductFingerprint): string {
 
 export function clusterCandidates(
   candidates: ScoredCandidate[],
+  options: { shouldContinue?: () => boolean } = {},
 ): ProductCluster[] {
   const sorted = [...candidates].sort(
     (first, second) => second.queryRelevance - first.queryRelevance,
@@ -28,9 +29,15 @@ export function clusterCandidates(
   const clusters: ProductCluster[] = [];
 
   for (const candidate of sorted) {
+    if (options.shouldContinue && !options.shouldContinue()) {
+      break;
+    }
     let assigned: ProductCluster | null = null;
 
     for (const cluster of clusters) {
+      if (options.shouldContinue && !options.shouldContinue()) {
+        return clusters;
+      }
       const versusCluster = compareFingerprints(
         candidate.fingerprint,
         cluster.identity,

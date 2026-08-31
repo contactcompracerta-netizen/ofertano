@@ -11,6 +11,7 @@ import { buildFingerprint } from "./fingerprint";
 import {
   detectHostSplit,
   extractAge,
+  extractVoltage,
   extractYearCoverage,
   normalizeMultistoreText,
   tokenize,
@@ -267,11 +268,12 @@ function emptyEvidence(
 export function scoreQueryRelevance(
   intent: QueryIntent,
   candidate: NormalizedCandidate,
+  queryCore?: QueryCore,
 ): ScoredCandidate {
   const fingerprint = buildFingerprint(candidate);
   const candidateTokens = new Set(candidate.tokens);
   const candidateText = candidate.rawText;
-  const core = buildQueryCore(intent.rawQuery);
+  const core = queryCore ?? buildQueryCore(intent.rawQuery);
   const soldText =
     detectHostSplit(candidate.normalizedText).sold || candidate.rawText;
   const candidateAccessory = isAccessoryLikeRole(fingerprint.role.value);
@@ -538,6 +540,23 @@ export function scoreQueryRelevance(
     attributeMatches.push("size");
   } else if (intent.importantAttributes.size) {
     attributeMissing.push("size");
+  }
+
+  const queryVoltage = intent.importantAttributes.voltage;
+  const candidateVoltage =
+    fingerprint.importantAttributes.voltage ??
+    extractVoltage(candidateText);
+  if (queryVoltage && candidateVoltage && queryVoltage !== candidateVoltage) {
+    if (queryVoltage !== "bivolt" && candidateVoltage !== "bivolt") {
+      attributeConflicts.push(
+        `voltage:${queryVoltage}!=${candidateVoltage}`,
+      );
+      hardConflicts.push(`voltage:${queryVoltage}!=${candidateVoltage}`);
+    }
+  } else if (queryVoltage && candidateVoltage) {
+    attributeMatches.push("voltage");
+  } else if (queryVoltage) {
+    attributeMissing.push("voltage");
   }
 
   const queryAge = intent.importantAttributes.age;

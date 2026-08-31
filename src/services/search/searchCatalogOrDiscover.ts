@@ -426,13 +426,18 @@ export async function searchCatalogOrDiscover(
 
       const visibleProducts = v2.products.filter(isSearchVisible);
       if (visibleProducts.length > 0 && (options.schedulePersist || options.persistProduct)) {
-        const headIds = await persistCanonicalProducts(search, visibleProducts, {
-          limit,
-          headsOnly: true,
-          persistTransientHeads: true,
-          persistProduct: options.persistProduct,
-          findExistingProductId: options.findExistingProductId,
-        });
+        const persistedIds = options.schedulePersist
+          ? await persistCanonicalProducts(search, visibleProducts, {
+              limit,
+              headsOnly: true,
+              persistProduct: options.persistProduct,
+              findExistingProductId: options.findExistingProductId,
+            })
+          : await persistCanonicalProducts(search, visibleProducts, {
+              limit,
+              persistProduct: options.persistProduct,
+              findExistingProductId: options.findExistingProductId,
+            });
 
         if (options.schedulePersist) {
           scheduleSelectedClusterPersist(
@@ -442,16 +447,22 @@ export async function searchCatalogOrDiscover(
             {
               limit,
               persistProduct: options.persistProduct,
-              persistTransientHeads: true,
-              existingIds: headIds,
+              existingIds: persistedIds,
               findExistingProductId: options.findExistingProductId,
             },
           );
         }
 
-        const views = v2.views.flatMap((view, index) => {
-          const id = headIds[index]?.trim();
+        const views = visibleProducts.flatMap((product, index) => {
+          const id = persistedIds[index]?.trim();
           if (!id) {
+            return [];
+          }
+
+          const view =
+            v2.views.find((item, viewIndex) => v2.products[viewIndex]?.clusterId === product.clusterId) ??
+            v2.views[index];
+          if (!view) {
             return [];
           }
 
@@ -465,11 +476,13 @@ export async function searchCatalogOrDiscover(
             products: views as Awaited<ReturnType<typeof searchCatalog>>,
           };
         }
-      } else if (v2.views.length > 0) {
+      } else if (v2.views.length > 0 && visibleProducts.length > 0) {
         return {
           query: search,
           source: "DISCOVERY",
-          products: v2.views as Awaited<ReturnType<typeof searchCatalog>>,
+          products: v2.views.filter((_, index) =>
+            Boolean(v2.products[index]?.searchVisible),
+          ) as Awaited<ReturnType<typeof searchCatalog>>,
         };
       }
 

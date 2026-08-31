@@ -72,6 +72,14 @@ export type MercadoLivreSourceFetch<T> = {
 
 export type PublicSearchStrategyId = "public-search-lista" | "public-search-jm";
 
+type ParsedPublicSearchPage = {
+  items: MercadoLivreListingItem[];
+  parserStrategy: string;
+  catalogIds: string[];
+};
+
+const MAX_PUBLIC_SEARCH_HTML_CHARS = 500_000;
+
 const ITEM_ID_PATTERN = /\bMLB(?!U)-?(\d{8,})\b/gi;
 const PRODUCT_URL_PATTERN =
   /https?:\/\/(?:www\.)?produto\.mercadolivre\.com\.br\/MLB-(\d+)/gi;
@@ -504,6 +512,18 @@ function extractFromHtmlSelectors(
   html: string,
   items: Map<string, MercadoLivreListingItem>,
 ): boolean {
+  /*
+   * cheerio.load() e a etapa mais cara do parser. Paginas de desafio e shells
+   * sem cards nao precisam construir uma arvore DOM inteira.
+   */
+  if (
+    !/ui-search-layout__item|ui-search-result|poly-card|data-item-id|produto\.mercadolivre\.com\.br\/MLB|\/MLB-\d/i.test(
+      html,
+    )
+  ) {
+    return false;
+  }
+
   const $ = cheerio.load(html);
   let used = false;
 
@@ -568,11 +588,9 @@ export function extrairItensDaPaginaDeBuscaPublica(
   return analisarPaginaDeBuscaPublica(html).items;
 }
 
-export function analisarPaginaDeBuscaPublica(html: string): {
-  items: MercadoLivreListingItem[];
-  parserStrategy: string;
-  catalogIds: string[];
-} {
+export function analisarPaginaDeBuscaPublica(
+  html: string,
+): ParsedPublicSearchPage {
   const items = new Map<string, MercadoLivreListingItem>();
   const strategies: string[] = [];
   const catalogIds = new Set<string>();
@@ -632,6 +650,22 @@ function normalizeProbe(html: string): string {
     .toLowerCase();
 }
 
+function shouldSkipDeepPublicParse(
+  html: string,
+  httpStatus: number,
+  finalUrl: string,
+): boolean {
+  if (httpStatus >= 400) {
+    return true;
+  }
+
+  const probe = normalizeProbe(`${finalUrl} ${html.slice(0, 80_000)}`);
+  return (
+    CHALLENGE_MARKERS.some((marker) => probe.includes(marker)) ||
+    LOGIN_MARKERS.some((marker) => probe.includes(marker))
+  );
+}
+
 function extractPageTitle(html: string): string {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return match?.[1]?.replace(/\s+/g, " ").trim().slice(0, 180) ?? "";
@@ -645,9 +679,10 @@ export function diagnosticarPaginaDeBuscaPublica(
     httpStatus: number | null;
     contentType: string;
   },
+  parsedPage?: ParsedPublicSearchPage,
 ): PublicSearchPageDiagnostics {
   const probe = normalizeProbe(`${extra.finalUrl} ${html.slice(0, 80_000)}`);
-  const parsed = analisarPaginaDeBuscaPublica(html);
+  const parsed = parsedPage ?? analisarPaginaDeBuscaPublica(html);
 
   return {
     requestedUrl: extra.requestedUrl,
@@ -794,9 +829,17 @@ async function fetchHtml(url: string): Promise<{
     redirect: "follow",
   });
 
+  const fullHtml = await response.text();
+
   return {
     status: response.status,
-    html: await response.text(),
+    /*
+     * O parser faz varias passagens e uma carga integral sem limite consegue
+     * bloquear o event loop, impedindo ate o timer do deadline de disparar.
+     * Meio milhao de caracteres cobre a pagina publica observada e impede que
+     * HTML de desafio muito grande monopolize o event loop.
+     */
+    html: fullHtml.slice(0, MAX_PUBLIC_SEARCH_HTML_CHARS),
     finalUrl: response.url || url,
     contentType: response.headers.get("content-type") ?? "",
   };
@@ -850,13 +893,27 @@ export async function buscarEstrategiaPublicaMercadoLivre(
 
   try {
     const fetched = await fetchHtml(requestedUrl);
-    const parsed = analisarPaginaDeBuscaPublica(fetched.html);
-    const diagnostics = diagnosticarPaginaDeBuscaPublica(fetched.html, {
-      requestedUrl,
-      finalUrl: fetched.finalUrl,
-      httpStatus: fetched.status,
-      contentType: fetched.contentType,
-    });
+    const parsed = shouldSkipDeepPublicParse(
+      fetched.html,
+      fetched.status,
+      fetched.finalUrl,
+    )
+      ? {
+          items: [],
+          parserStrategy: "fast-block-check",
+          catalogIds: [],
+        }
+      : analisarPaginaDeBuscaPublica(fetched.html);
+    const diagnostics = diagnosticarPaginaDeBuscaPublica(
+      fetched.html,
+      {
+        requestedUrl,
+        finalUrl: fetched.finalUrl,
+        httpStatus: fetched.status,
+        contentType: fetched.contentType,
+      },
+      parsed,
+    );
     diagnostics.parserStrategy = parsed.parserStrategy;
     diagnostics.extractedIdsCount = parsed.items.length;
 

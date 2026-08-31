@@ -116,6 +116,7 @@ export type NormalizedCandidate = {
   structuredBrand: string | null;
   structuredModel: string | null;
   structuredSku: string | null;
+  structuredVoltage: string | null;
   attributes: Record<string, string>;
 };
 

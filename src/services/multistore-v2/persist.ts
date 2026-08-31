@@ -7,6 +7,12 @@ import {
 import type { CanonicalOffer, CanonicalProduct, MarketplaceCode } from "./types";
 import { marketplaceLabel } from "./canonicalize";
 import type { SearchDeadline } from "./timeBudget";
+import {
+  countDistinctMarketplaces,
+  isClusterPublishable,
+  isSearchVisible,
+  usableEquivalentOffers,
+} from "./publicationBarrier";
 
 export type PersistProductFn = (
   product: ProductImport,
@@ -27,40 +33,17 @@ export type PersistCanonicalOptions = {
   persistProduct?: PersistProductFn;
   headsOnly?: boolean;
   existingIds?: string[];
-  persistTransientHeads?: boolean;
   findExistingProductId?: (
     product: CanonicalProduct,
   ) => Promise<string | null | undefined>;
 };
 
-/*
- * Busca visivel != publicacao final.
- * TIER 0/1 PRIMARY e TIER 2 ACCESSORY separado podem aparecer na pesquisa
- * mesmo com coverage INCOMPLETE. TIER 3 ambiguo nao entra.
- */
-export function isSearchVisible(product: CanonicalProduct): boolean {
-  if (product.rankTier === 3) {
-    return false;
-  }
-
-  return product.offers.length > 0;
-}
-
-/*
- * Publicacao != relevancia.
- * TIER 0/1 PRIMARY e TIER 2 ACCESSORY separado podem publicar.
- * TIER 3 ambiguo nao vira oferta confirmada.
- * Publicacao exige coverageStatus COMPLETE e pelo menos 1 oferta valida.
- * INCOMPLETE (TIMEOUT/BLOCKED/ERROR/UNUSABLE/NOT_RUN) nunca publica,
- * mesmo com 2+ ofertas: a menor oferta so e final apos cobertura completa.
- */
-export function isClusterPublishable(product: CanonicalProduct): boolean {
-  if (!isSearchVisible(product)) {
-    return false;
-  }
-
-  return product.coverageStatus === "COMPLETE";
-}
+export {
+  countDistinctMarketplaces,
+  isClusterPublishable,
+  isSearchVisible,
+  usableEquivalentOffers,
+} from "./publicationBarrier";
 
 function toMarketplaceName(code: MarketplaceCode): ProductImport["marketplace"] {
   return marketplaceLabel(code) as ProductImport["marketplace"];
@@ -135,11 +118,6 @@ async function resolveExistingProductId(
     return (await options.findExistingProductId(product))?.trim() || "";
   }
 
-  /*
-   * persistProduct injetado (testes) nao deve abrir Prisma.
-   * Em producao o default e saveProduct: a chave e marketplace+externalId
-   * de qualquer oferta do cluster, inclusive HEAD DRAFT/active=false.
-   */
   if (options.persistProduct) {
     return "";
   }
@@ -158,6 +136,44 @@ function canStartPersistWrite(deadline?: PersistDeadline): boolean {
 
   const floor = deadline.budget?.hangGraceMs ?? 0;
   return deadline.remainingMs() > floor;
+}
+
+function buildPersistOptions(query: string, publishable: boolean) {
+  return {
+    discoverySource: "ON_DEMAND_SEARCH" as const,
+    autoCreated: true,
+    sourceQuery: query,
+    deferPublication: !publishable,
+  };
+}
+
+async function promoteClusterProduct(
+  persistProduct: PersistProductFn,
+  query: string,
+  product: CanonicalProduct,
+  savedId: string,
+  head: ProductImport,
+  affiliateLink: string | null | undefined,
+  allowAffiliateOpportunity: boolean,
+): Promise<void> {
+  await persistProduct(head, affiliateLink, {
+    ...buildPersistOptions(query, true),
+    targetProductId: savedId,
+    verifiedExactMatch: true,
+    deferPublication: false,
+  });
+
+  if (
+    !allowAffiliateOpportunity ||
+    !product.offers.some((offer) => offer.marketplace === "MERCADO_LIVRE")
+  ) {
+    return;
+  }
+
+  const { ensureMercadoLivreLowestPriceAffiliateOpportunitySafe } = await import(
+    "@/services/opportunities/lowestPriceAffiliateOpportunity"
+  );
+  await ensureMercadoLivreLowestPriceAffiliateOpportunitySafe(savedId);
 }
 
 /*
@@ -184,7 +200,7 @@ export async function persistCanonicalProducts(
   for (const product of selected) {
     const publishable = isClusterPublishable(product);
     const searchVisible = isSearchVisible(product);
-    if (!searchVisible || (!publishable && !options.persistTransientHeads)) {
+    if (!searchVisible) {
       ids.push("");
       continue;
     }
@@ -194,7 +210,8 @@ export async function persistCanonicalProducts(
       continue;
     }
 
-    const imports = product.offers
+    const equivalentOffers = usableEquivalentOffers(product);
+    const imports = equivalentOffers
       .map((offer) => toProductImport(offer, product.image))
       .filter((item): item is ProductImport => item !== null);
 
@@ -203,12 +220,8 @@ export async function persistCanonicalProducts(
       continue;
     }
 
-    const persistOptions = {
-      discoverySource: "ON_DEMAND_SEARCH" as const,
-      autoCreated: true,
-      sourceQuery: query,
-      deferPublication: !publishable,
-    };
+    const distinctStores = countDistinctMarketplaces(equivalentOffers);
+    const persistOptions = buildPersistOptions(query, publishable);
 
     let recorded = false;
     try {
@@ -225,6 +238,9 @@ export async function persistCanonicalProducts(
         savedId = await resolveExistingProductId(product, options);
       }
 
+      const multiStore = distinctStores >= 2;
+      const attachOnly = multiStore || headsOnly;
+
       if (!savedId) {
         if (!canStartPersistWrite(options.deadline)) {
           ids.push("");
@@ -232,28 +248,26 @@ export async function persistCanonicalProducts(
           continue;
         }
 
-        const saved = await persistProduct(first, first.affiliateLink, persistOptions);
+        const saved = await persistProduct(first, first.affiliateLink, {
+          ...persistOptions,
+          deferPublication: multiStore ? true : !publishable,
+        });
         savedId = saved.id;
       } else if (!fromThisRequest && (!headsOnly || publishable)) {
-        /*
-         * Product de busca anterior (inclusive DRAFT). A oferta mais barata
-         * desta cobertura precisa ir para o mesmo UUID; senao Shopee cria
-         * outro Product e o DRAFT fica orfao.
-         * existingIds desta resposta ja persistiu a cabeca: after() so anexa tails.
-         */
         if (canStartPersistWrite(options.deadline)) {
           await persistProduct(first, first.affiliateLink, {
             ...persistOptions,
             targetProductId: savedId,
             verifiedExactMatch: true,
+            suppressPublicationSync: attachOnly,
+            deferPublication: multiStore ? true : !publishable,
           });
         }
       }
 
-      ids.push(savedId);
-      recorded = true;
-
       if (headsOnly) {
+        ids.push(publishable ? savedId : "");
+        recorded = true;
         continue;
       }
 
@@ -266,16 +280,35 @@ export async function persistCanonicalProducts(
           ...persistOptions,
           targetProductId: savedId,
           verifiedExactMatch: true,
+          suppressPublicationSync: true,
+          deferPublication: true,
         });
       }
 
-      if (!headsOnly && savedId && !options.persistProduct && publishable) {
-        const { ensureMercadoLivreLowestPriceAffiliateOpportunitySafe } =
-          await import(
-            "@/services/opportunities/lowestPriceAffiliateOpportunity"
+      const attachedStores = countDistinctMarketplaces(equivalentOffers.slice(0, 1 + rest.length));
+      const promotionAllowed =
+        publishable &&
+        attachedStores >= distinctStores &&
+        (distinctStores >= 2 || product.coverageStatus === "COMPLETE");
+
+      if (promotionAllowed && canStartPersistWrite(options.deadline)) {
+        if (multiStore) {
+          await promoteClusterProduct(
+            persistProduct,
+            query,
+            product,
+            savedId,
+            first,
+            first.affiliateLink,
+            !options.persistProduct,
           );
-        await ensureMercadoLivreLowestPriceAffiliateOpportunitySafe(savedId);
+        }
+        ids.push(savedId);
+      } else {
+        ids.push("");
       }
+
+      recorded = true;
     } catch (error) {
       console.error("[MULTISTORE-V2] persistencia falhou para cluster", product.clusterId, error);
       if (!recorded) {
@@ -319,7 +352,7 @@ export function scheduleSelectedClusterPersist(
     options.limit === undefined
       ? products.length
       : Math.max(0, Math.min(options.limit, products.length));
-  const selected = products.slice(0, limit);
+  const selected = products.slice(0, limit).filter(isSearchVisible);
   if (selected.length === 0) {
     return 0;
   }

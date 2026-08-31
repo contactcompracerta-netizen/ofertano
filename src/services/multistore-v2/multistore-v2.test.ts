@@ -945,17 +945,13 @@ async function runAcquisitionContract() {
     mixed.relevantCandidates.length >= 1,
     "Candidato relevante de uma loja nao vira zero.",
   );
-  assert.ok(
-    mixed.views.length >= 1,
-    "1 oferta + BLOCKED/ERROR permanece visivel na busca",
-  );
-  assert.equal(mixed.products[0]?.searchVisible, true);
   assert.equal(
-    mixed.products[0]?.publishable,
-    false,
-    "1 oferta + BLOCKED/ERROR nao publica conclusao single-store",
+    mixed.views.length,
+    0,
+    "1 oferta + BLOCKED/ERROR nao permanece visivel na busca",
   );
-  assert.equal(mixed.singleStoreClusters, mixed.products.length);
+  assert.equal(mixed.products.length, 0);
+  assert.equal(mixed.singleStoreClusters, 0);
   assert.ok(
     mixed.relevantCandidates.some((item) => item.status === "RELEVANT"),
     "Persistencia desligada nao apaga o candidato vivo interno.",
@@ -1062,16 +1058,12 @@ async function runAcquisitionContract() {
     timeoutResult.relevantCandidates.length >= 1,
     "CASO timeout: candidato valido da loja rapida permanece internamente",
   );
-  assert.ok(
-    timeoutResult.views.length >= 1,
-    "CASO timeout: 1 oferta + cobertura INCOMPLETE permanece visivel na busca",
-  );
-  assert.equal(timeoutResult.products[0]?.searchVisible, true);
   assert.equal(
-    timeoutResult.products[0]?.publishable,
-    false,
-    "CASO timeout: 1 oferta + cobertura INCOMPLETE nao publica",
+    timeoutResult.views.length,
+    0,
+    "CASO timeout: singleton incompleto nao permanece visivel na busca",
   );
+  assert.equal(timeoutResult.products.length, 0);
   assert.equal(
     timeoutResult.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status,
     "TIMEOUT",
@@ -1085,6 +1077,98 @@ async function runAcquisitionContract() {
     "BLOCKED",
   );
   assert.ok(hangCalls >= 1, "adapter pendurado foi consultado e cancelado");
+
+  let slowIgnoresAbort = false;
+  const isolationBudget = {
+    globalMs: 900,
+    marketplaceMs: 700,
+    fetchMs: 300,
+    persistReserveMs: 80,
+    hangGraceMs: 0,
+  };
+  const isolationStarted = Date.now();
+  const isolation = await searchMultistoreV2(
+    "Headphone JBL Tune 520BT",
+    {
+      persist: false,
+      budget: isolationBudget,
+      adapters: [
+        fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async (request) => {
+          slowIgnoresAbort = true;
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, 30_000);
+            request.signal?.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+                resolve();
+              },
+              { once: true },
+            );
+          });
+          return {
+            marketplace: "MERCADO_LIVRE",
+            query: request.query,
+            success: false,
+            scanned: 0,
+            candidates: [],
+            error: "lento",
+          };
+        }),
+        fakeAdapter("SHOPEE", "Shopee", async (request) => ({
+          marketplace: "SHOPEE",
+          query: request.query,
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "SHOPEE",
+              marketplaceName: "Shopee",
+              externalId: "shopee-fast-isolation",
+              title: "Headphone JBL Tune 520BT",
+              price: 179,
+            }),
+          ],
+          error: null,
+        })),
+        fakeAdapter("MAGAZINE_LUIZA", "Magazine Luiza", async (request) => ({
+          marketplace: "MAGAZINE_LUIZA",
+          query: request.query,
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "MAGAZINE_LUIZA",
+              marketplaceName: "Magazine Luiza",
+              externalId: "magalu-fast-isolation",
+              title: "Headphone JBL Tune 520BT",
+              price: 189,
+            }),
+          ],
+          error: null,
+        })),
+      ],
+    },
+  );
+  const isolationElapsed = Date.now() - isolationStarted;
+  assert.ok(
+    isolationElapsed < isolationBudget.globalMs + 350,
+    `isolamento: busca global terminou em ${isolationElapsed}ms (< ${isolationBudget.globalMs + 350}ms)`,
+  );
+  assert.ok(slowIgnoresAbort, "adapter lento foi iniciado em paralelo");
+  assert.ok(
+    (isolation.acquisitions.find((item) => item.marketplace === "SHOPEE")?.usable ?? 0) >= 1,
+    "Shopee retorna candidatos mesmo com ML lento",
+  );
+  assert.ok(
+    (isolation.acquisitions.find((item) => item.marketplace === "MAGAZINE_LUIZA")?.usable ??
+      0) >= 1,
+    "Magalu retorna candidatos mesmo com ML lento",
+  );
+  assert.equal(
+    isolation.acquisitions.find((item) => item.marketplace === "MERCADO_LIVRE")?.status,
+    "TIMEOUT",
+  );
 
   let panelaCalls = 0;
   const partialTimeout = await searchMultistoreV2("panela de pressao 4,5L", {

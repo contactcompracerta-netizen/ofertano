@@ -252,10 +252,18 @@ const QUANTITY_UNITS = new Set([
   "gaveta",
   "cores",
   "pecas",
+  "peca",
   "unidades",
-  "litros",
+  "unidade",
+  "un",
+  "und",
+  "unid",
+  "pc",
   "pcs",
+  "litros",
 ]);
+
+const VOLTAGE_VALUES = new Set(["110", "127", "220", "240"]);
 
 const SIZE_HINTS = new Set([
   "tamanho",
@@ -845,6 +853,26 @@ export function inferRole(text: string): ProductRole {
   return soldWords.some((token) => !STOP_WORDS.has(token)) ? "MAIN" : "UNKNOWN";
 }
 
+function isVoltageReading(value: string, unit: string): boolean {
+  if (unit !== "v") {
+    return false;
+  }
+
+  const amount = value.replace(/\./g, "");
+  return VOLTAGE_VALUES.has(amount);
+}
+
+export function extractVoltage(text: string): string | null {
+  const normalized = normalizeMultistoreText(text);
+
+  if (/\bbivolt\b/.test(normalized)) {
+    return "bivolt";
+  }
+
+  const match = normalized.match(/\b(110|127|220|240)\s*v\b/);
+  return match?.[1] ? `${match[1]}v` : null;
+}
+
 export function extractCapacity(tokens: string[]): string | null {
   const found: string[] = [];
 
@@ -855,6 +883,10 @@ export function extractCapacity(tokens: string[]): string | null {
       /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm|gb|tb|mb|mah)$/,
     );
     if (unitMatch) {
+      if (isVoltageReading(unitMatch[1]!, unitMatch[2]!)) {
+        continue;
+      }
+
       const unit = CAPACITY_UNIT_CANON[unitMatch[2]] ?? unitMatch[2];
       found.push(`${unitMatch[1]}${unit}`);
       continue;
@@ -863,11 +895,19 @@ export function extractCapacity(tokens: string[]): string | null {
     const next = tokens[index + 1];
     const nextCanon = next ? CAPACITY_UNIT_CANON[next] : undefined;
     if (/^\d+(?:\.\d+)?$/.test(token) && nextCanon) {
+      if (isVoltageReading(token, nextCanon)) {
+        continue;
+      }
+
       found.push(`${token}${nextCanon}`);
       continue;
     }
 
     if (/^\d+$/.test(compact) && nextCanon) {
+      if (isVoltageReading(compact, nextCanon)) {
+        continue;
+      }
+
       found.push(`${compact}${nextCanon}`);
     }
   }
@@ -1033,7 +1073,12 @@ export function extractModelTokens(tokens: string[]): string[] {
       continue;
     }
 
-    if (/^(?=.*[a-z])(?=.*\d)[a-z0-9]{3,}$/.test(token) && token.length >= 3) {
+    if (
+      /^(?=.*[a-z])(?=.*\d)[a-z0-9]{3,}$/.test(token) &&
+      token.length >= 3 &&
+      !ADULT_AGE_TOKENS.has(token) &&
+      !CHILD_AGE_TOKENS.has(token)
+    ) {
       models.push(token);
     }
   }
@@ -1042,6 +1087,18 @@ export function extractModelTokens(tokens: string[]): string[] {
     const current = tokens[index]!;
     const next = tokens[index + 1]!;
     if (/^(19|20)\d{2}$/.test(next)) {
+      continue;
+    }
+
+    if (QUANTITY_UNITS.has(tokens[index + 2] ?? "")) {
+      continue;
+    }
+
+    if (ADULT_AGE_TOKENS.has(current) || CHILD_AGE_TOKENS.has(current)) {
+      continue;
+    }
+
+    if (QUANTITY_UNITS.has(next)) {
       continue;
     }
 
@@ -1108,9 +1165,13 @@ export function distinctiveTokensOf(tokens: string[]): string[] {
 }
 
 export function structuredAttribute(
-  attributes: Record<string, string>,
+  attributes: Record<string, string> | null | undefined,
   keys: string[],
 ): string | null {
+  if (!attributes) {
+    return null;
+  }
+
   const entries = Object.entries(attributes);
   for (const key of keys) {
     const found = entries.find(
@@ -1136,6 +1197,24 @@ function normalizeStructuredBrand(value: string | null): string | null {
   }
 
   return value.trim();
+}
+
+function normalizeStructuredVoltage(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeMultistoreText(value).replace(/\s+/g, "");
+  if (!normalized) {
+    return null;
+  }
+
+  if (/^bivolt$/i.test(normalized) || /^bivolt$/i.test(value.trim())) {
+    return "bivolt";
+  }
+
+  const match = normalized.match(/^(110|127|220|240)v?$/i);
+  return match ? `${match[1].toLowerCase()}v` : null;
 }
 
 export function emptyField<T>(): {
@@ -1183,6 +1262,16 @@ export function normalizeCandidate(raw: RawCandidate): NormalizedCandidate {
         "PARTNUMBER",
         "MANUFACTURER_PART_NUMBER",
       ]) || null,
-    attributes: raw.attributes,
+    structuredVoltage:
+      normalizeStructuredVoltage(
+        structuredAttribute(raw.attributes, [
+          "VOLTAGE",
+          "VOLTAGEM",
+          "INPUTVOLTAGE",
+          "INPUT_VOLTAGE",
+          "VOLTAGE_RANGE",
+        ]),
+      ) || null,
+    attributes: raw.attributes ?? {},
   };
 }

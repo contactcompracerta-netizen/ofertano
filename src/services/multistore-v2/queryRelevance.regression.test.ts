@@ -41,6 +41,18 @@ function relevance(query: string, title: string, extras: Partial<RawCandidate> =
 
 const suitQuery = "Terno azul";
 const suitCore = buildQueryCore(suitQuery);
+const reuseCoreSeed = normalizeCandidate(raw("Terno azul clássico", { brand: "None" }));
+const reusedCore = buildQueryCore(suitQuery);
+assert.equal(
+  scoreQueryRelevance(buildQueryIntent(suitQuery), reuseCoreSeed, reusedCore).status,
+  "RELEVANT",
+  "queryCore precomputado deve ser reutilizado sem refazer o build por candidato",
+);
+assert.equal(
+  scoreQueryRelevance(buildQueryIntent(suitQuery), reuseCoreSeed, reusedCore).fingerprint.productClass.value,
+  "suit",
+  "mesmo core compartilhado mantem a semantica do produto",
+);
 assert.equal(
   suitCore.productClass,
   "suit",

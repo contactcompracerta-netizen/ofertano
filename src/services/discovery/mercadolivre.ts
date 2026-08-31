@@ -1,5 +1,27 @@
 ﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
-import { isSearchAborted } from "@/lib/searchAbort";
+import {
+  activeSearchAbort,
+  composeAbortSignal,
+  isSearchAborted,
+  remainingBudgetMs,
+  withSearchAbort,
+} from "@/lib/searchAbort";
+import {
+  buildQueryCore,
+  type QueryCore,
+} from "@/services/multistore-v2/queryCore";
+import { buildSearchPlan } from "@/services/multistore-v2/queryPlan";
+import {
+  extractVoltage,
+  extractModelTokens,
+  normalizeMultistoreText,
+  tokenize,
+} from "@/services/multistore-v2/normalizeCandidate";
+import {
+  classifyProductConcept,
+  compareProductConcepts,
+  type ProductConceptId,
+} from "@/services/multistore-v2/productConcepts";
 
 import type {
   DiscoveryCandidate,
@@ -36,6 +58,19 @@ import {
   isUserProductId,
   normalizeListingId,
 } from "./mercadolivreIds";
+import {
+  traceMlAcquisition,
+  traceMlSourceEnd,
+  traceMlSourceStart,
+  type MlTraceTerminal,
+} from "./mlAcquisitionTrace";
+import {
+  createMlStageBudgetClock,
+  resolveMlTotalBudgetMs,
+  runMlStage,
+  type MlListingSource,
+  type MlStageKind,
+} from "./mlStageBudget";
 
 type DomainDiscoveryResult = {
   domain_id?: string;
@@ -181,6 +216,8 @@ export type MercadoLivreAcquisitionSources = {
     productId: string,
     query: string,
     mode?: DiscoveryQuery["mode"],
+    queryCore?: QueryCore,
+    signal?: AbortSignal,
   ) => Promise<CandidateEvaluation>;
   searchItemsApi: (
     query: string,
@@ -202,6 +239,40 @@ export type MercadoLivreAcquisitionSources = {
     item: SiteSearchItem,
   ) => Promise<SiteSearchItem | null>;
 };
+
+export type MlAcquisitionStagePlan = {
+  listingStages: MlListingSource[];
+  includesDomain: boolean;
+  includesCatalogHydration: boolean;
+  includesVariants: boolean;
+  includesCatalogIds: boolean;
+};
+
+export function buildMlAcquisitionStagePlan(
+  sources: Pick<
+    MercadoLivreAcquisitionSources,
+    "searchPublicLista" | "searchPublicJm" | "searchPublicListings"
+  >,
+): MlAcquisitionStagePlan {
+  const listingStages: MlListingSource[] = ["items-api"];
+  if (sources.searchPublicLista) {
+    listingStages.push("public-search-lista");
+  }
+  if (sources.searchPublicJm) {
+    listingStages.push("public-search-jm");
+  }
+  if (!sources.searchPublicLista && !sources.searchPublicJm) {
+    listingStages.push("public-search");
+  }
+
+  return {
+    listingStages,
+    includesDomain: true,
+    includesCatalogHydration: true,
+    includesVariants: true,
+    includesCatalogIds: true,
+  };
+}
 
 type CandidateEvaluation = MarketplaceFilterEvent & {
   kept?: {
@@ -859,12 +930,17 @@ async function descobrirDominio(
         )}`,
       )) as DomainDiscoveryResult[];
 
-    return (
-      resposta[0]
-        ?.domain_id
-        ?.trim() ||
-      null
-    );
+    const first = resposta[0];
+    const domainId = first?.domain_id?.trim();
+    if (!domainId) {
+      return null;
+    }
+
+    if (!domainDiscoveryMatchesQuery(first, query)) {
+      return null;
+    }
+
+    return domainId;
   } catch (error) {
     console.error(
       "Falha ao descobrir domínio do Mercado Livre:",
@@ -873,6 +949,234 @@ async function descobrirDominio(
 
     return null;
   }
+}
+
+type ProductCentralEvidence = {
+  hasCentralEvidence: boolean;
+  reason: string;
+  classMatch: boolean;
+  brandMatch: boolean;
+  modelMatch: boolean;
+  anchorMatch: boolean;
+};
+
+function createCandidateConceptClassifier(): (
+  candidateTitle: string,
+) => ProductConceptId {
+  const cache = new Map<string, ProductConceptId>();
+
+  return (candidateTitle: string): ProductConceptId => {
+    const normalizedTitle = normalizeMultistoreText(candidateTitle);
+    const cached = cache.get(normalizedTitle);
+    if (cached) {
+      return cached;
+    }
+
+    const productClass = classifyProductConcept(normalizedTitle).id;
+    cache.set(normalizedTitle, productClass);
+    return productClass;
+  };
+}
+
+function normalizedPhraseOccurs(text: string, phrase: string): boolean {
+  return ` ${text} `.includes(` ${phrase} `);
+}
+
+function createProductCentralEvidenceAssessor(
+  queryCore: QueryCore,
+  classifyCandidate: (candidateTitle: string) => ProductConceptId,
+): (candidateTitle: string) => ProductCentralEvidence {
+  const queryClass = queryCore.productClass;
+  const queryBrand = queryCore.brand
+    ? normalizeMultistoreText(queryCore.brand)
+    : null;
+  const queryModels = queryCore.modelTokens
+    .map((token) => normalizeMultistoreText(token))
+    .filter(Boolean);
+  const queryAnchors = queryCore.identityAnchors
+    .map((anchor) => normalizeMultistoreText(anchor.value))
+    .filter(Boolean);
+  const requiredAnchors = queryCore.identityAnchors
+    .filter((anchor) => anchor.required)
+    .map((anchor) => normalizeMultistoreText(anchor.value))
+    .filter(Boolean);
+  const cache = new Map<string, ProductCentralEvidence>();
+
+  return (candidateTitle: string): ProductCentralEvidence => {
+    const candidateText = normalizeMultistoreText(candidateTitle);
+    const cached = cache.get(candidateText);
+    if (cached) {
+      return cached;
+    }
+
+    const candidateClass = classifyCandidate(candidateText);
+    const classCompatibility =
+      queryClass === "UNKNOWN"
+        ? "UNKNOWN"
+        : compareProductConcepts(queryClass, candidateClass);
+    const classMatch =
+      queryClass !== "UNKNOWN" &&
+      classCompatibility === "MATCH";
+    const brandMatch =
+      queryBrand === null ||
+      normalizedPhraseOccurs(candidateText, queryBrand);
+    const candidateModelTokens = queryModels.length > 0
+      ? new Set(
+          extractModelTokens(tokenize(candidateText)).map((token) =>
+            normalizeMultistoreText(token),
+          ),
+        )
+      : null;
+    const modelMatch =
+      queryModels.length === 0 ||
+      queryModels.some((token) =>
+        candidateModelTokens?.has(token),
+      );
+    const compactCandidate = candidateText.replace(/\s+/g, "");
+    const matchesAnchor = (anchor: string): boolean =>
+      compactCandidate.includes(anchor.replace(/\s+/g, ""));
+    const anchorMatch =
+      queryAnchors.length === 0 ||
+      queryAnchors.every(matchesAnchor);
+    const result = (input: ProductCentralEvidence): ProductCentralEvidence => {
+      cache.set(candidateText, input);
+      return input;
+    };
+
+    if (queryClass !== "UNKNOWN" && classCompatibility === "CONFLICT") {
+      return result({
+        hasCentralEvidence: false,
+        reason: "classe em conflito com a consulta",
+        classMatch: false,
+        brandMatch,
+        modelMatch,
+        anchorMatch,
+      });
+    }
+
+    if (queryBrand && !brandMatch) {
+      return result({
+        hasCentralEvidence: false,
+        reason: "marca da consulta ausente no candidato",
+        classMatch,
+        brandMatch: false,
+        modelMatch,
+        anchorMatch,
+      });
+    }
+
+    if (queryModels.length > 0 && !modelMatch) {
+      return result({
+        hasCentralEvidence: false,
+        reason: "modelo da consulta ausente no candidato",
+        classMatch,
+        brandMatch,
+        modelMatch: false,
+        anchorMatch,
+      });
+    }
+
+    if (
+      requiredAnchors.length > 0 &&
+      !requiredAnchors.every(matchesAnchor)
+    ) {
+      return result({
+        hasCentralEvidence: false,
+        reason: "âncora obrigatória da consulta ausente no candidato",
+        classMatch,
+        brandMatch,
+        modelMatch,
+        anchorMatch: false,
+      });
+    }
+
+    const hasMatchedIdentity =
+      Boolean(queryBrand && brandMatch) ||
+      (queryModels.length > 0 && modelMatch) ||
+      (queryAnchors.length > 0 && anchorMatch);
+    const hasCentralEvidence = classMatch || hasMatchedIdentity;
+
+    return result({
+      hasCentralEvidence,
+      reason: hasCentralEvidence
+        ? classMatch
+          ? "classe compatível com a consulta"
+          : "identidade forte da consulta foi confirmada"
+        : "sem núcleo de produto nem identidade forte",
+      classMatch,
+      brandMatch,
+      modelMatch,
+      anchorMatch,
+    });
+  };
+}
+
+export function assessProductCentralEvidence(
+  query: string,
+  candidateTitle: string,
+): ProductCentralEvidence {
+  const queryCore = buildQueryCore(query);
+  return createProductCentralEvidenceAssessor(
+    queryCore,
+    createCandidateConceptClassifier(),
+  )(candidateTitle);
+}
+
+function domainDiscoveryMatchesQuery(
+  domain: DomainDiscoveryResult,
+  query: string,
+): boolean {
+  const core = buildQueryCore(query);
+  const domainText = normalizeMultistoreText(
+    [domain.domain_name, domain.category_name, domain.domain_id]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+  const domainClass = classifyProductConcept(domainText).id;
+  if (core.productClass !== "UNKNOWN") {
+    if (domainClass === "UNKNOWN") {
+      return false;
+    }
+
+    if (compareProductConcepts(core.productClass, domainClass) === "CONFLICT") {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function buildCatalogSearchQueries(query: string, queryCore: QueryCore): string[] {
+  const plan = buildSearchPlan(query, queryCore);
+  const productCore = plan.filter((variant) =>
+    variantHasProductCoreForCatalog(variant, queryCore),
+  );
+
+  return Array.from(
+    new Set([query, ...productCore, ...plan]),
+  ).slice(0, 6);
+}
+
+function variantHasProductCoreForCatalog(
+  variant: string,
+  queryCore: QueryCore,
+): boolean {
+  const normalizedVariant = normalizeMultistoreText(variant);
+  if (queryCore.productClass !== "UNKNOWN") {
+    const variantClass = classifyProductConcept(normalizedVariant).id;
+    if (variantClass === queryCore.productClass) {
+      return true;
+    }
+  }
+
+  if (queryCore.brand) {
+    return normalizedVariant.includes(queryCore.brand);
+  }
+
+  return queryCore.identityAnchors.some((anchor) =>
+    normalizedVariant.replace(/\s+/g, "").includes(anchor.value),
+  );
 }
 
 function evaluationCompleteness(item: CandidateEvaluation): number {
@@ -1348,11 +1652,18 @@ async function carregarCandidato(
   productId: string,
   query: string,
   mode?: DiscoveryQuery["mode"],
+  queryCore?: QueryCore,
+  signal?: AbortSignal,
 ): Promise<CandidateEvaluation> {
   try {
+    if (signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
+
     const produto =
       (await mercadoLivreFetch(
         `/products/${productId}`,
+        { signal },
       )) as CatalogProduct;
 
     if (
@@ -1385,7 +1696,31 @@ async function carregarCandidato(
     const lexical =
       pontuarCoberturaLexicalPonderada(query, titulo);
 
-    if (mode !== "MULTILOJA") {
+    if (mode === "MULTILOJA") {
+      const core = queryCore ?? buildQueryCore(query);
+      if (core.attributes.voltage) {
+        const titleVoltage = extractVoltage(titulo);
+        if (titleVoltage && titleVoltage !== core.attributes.voltage) {
+          return recusarCandidato(
+            titulo,
+            productId,
+            "variant",
+            "Voltagem incompativel com a consulta.",
+            lexical.score,
+          );
+        }
+      }
+
+      if (!capacidadeCompativel(produto, titulo, query)) {
+        return recusarCandidato(
+          titulo,
+          productId,
+          "capacity",
+          "Capacidade da consulta incompativel com o anuncio.",
+          lexical.score,
+        );
+      }
+    } else {
       const recusaTitulo =
         avaliarTituloParaDiscovery(query, titulo, productId);
 
@@ -1393,13 +1728,7 @@ async function carregarCandidato(
         return recusaTitulo;
       }
 
-      if (
-        !capacidadeCompativel(
-          produto,
-          titulo,
-          query,
-        )
-      ) {
+      if (!capacidadeCompativel(produto, titulo, query)) {
         return recusarCandidato(
           titulo,
           productId,
@@ -1646,11 +1975,197 @@ function registrarFonte(
   });
 }
 
+function mapFetchStatusToTerminal(
+  status: MercadoLivreSourceFetch<unknown[]>["status"],
+): MlTraceTerminal {
+  switch (status) {
+    case "SUCCESS":
+      return "SUCCESS";
+    case "EMPTY":
+      return "EMPTY_VALID";
+    case "BLOCKED":
+      return "BLOCKED";
+    case "UNUSABLE":
+      return "ERROR";
+    case "ERROR":
+    default:
+      return "ERROR";
+  }
+}
+
+function mapFetchStatusToOutcome(
+  status: MercadoLivreSourceFetch<unknown[]>["status"],
+): "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE" {
+  switch (status) {
+    case "SUCCESS":
+      return "SUCCESS";
+    case "EMPTY":
+      return "EMPTY_VALID";
+    case "BLOCKED":
+      return "BLOCKED";
+    case "UNUSABLE":
+      return "UNUSABLE";
+    case "ERROR":
+    default:
+      return "ERROR";
+  }
+}
+
+function inferMercadoLivreSearchOutcome(input: {
+  candidatoCount: number;
+  sourceOutcomes: Array<
+    "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE"
+  >;
+  listingSourcesTried: string[];
+}): MarketplaceDiscoveryResult["searchOutcome"] {
+  if (input.candidatoCount > 0) {
+    return "SEARCH_COMPLETED";
+  }
+
+  if (input.sourceOutcomes.some((item) => item === "BLOCKED")) {
+    return "BLOCKED";
+  }
+
+  if (input.sourceOutcomes.some((item) => item === "UNUSABLE")) {
+    return "UNUSABLE";
+  }
+
+  if (input.sourceOutcomes.some((item) => item === "ERROR")) {
+    return "ERROR";
+  }
+
+  if (
+    input.listingSourcesTried.length > 0 &&
+    input.sourceOutcomes.some(
+      (item) => item === "SUCCESS" || item === "EMPTY_VALID",
+    )
+  ) {
+    return "EMPTY_VALID";
+  }
+
+  if (
+    input.sourceOutcomes.length > 0 &&
+    input.sourceOutcomes.every((item) => item === "EMPTY_VALID")
+  ) {
+    return "EMPTY_VALID";
+  }
+
+  return "ERROR";
+}
+
+function keptEvaluationCount(evaluations: CandidateEvaluation[]): number {
+  return evaluations.filter((item) => item.kept).length;
+}
+
+function createCatalogProductScorer(
+  query: string,
+  core: QueryCore,
+  classifyCandidate: (candidateTitle: string) => ProductConceptId,
+): {
+  score: (product: ProductSearchResult) => number;
+  sort: (results: ProductSearchResult[]) => ProductSearchResult[];
+} {
+  const normalizedQuery = normalizeMultistoreText(query);
+  const scores = new WeakMap<ProductSearchResult, number>();
+
+  const score = (product: ProductSearchResult): number => {
+    const cached = scores.get(product);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const title = product.name ?? "";
+    const lexical = pontuarCoberturaLexicalPonderada(query, title).score;
+    const normalizedTitle = normalizeMultistoreText(title);
+    let value = lexical;
+
+    if (core.brand && normalizedTitle.includes(core.brand)) {
+      value += 20;
+    }
+
+    for (const model of core.modelTokens) {
+      if (model.length >= 2 && normalizedTitle.includes(model)) {
+        value += 12;
+      }
+    }
+
+    for (const anchor of core.identityNumbers) {
+      if (anchor.length >= 2 && normalizedTitle.includes(anchor)) {
+        value += 10;
+      }
+    }
+
+    const compactTitle = normalizedTitle.replace(/\s+/g, "");
+    for (const anchor of core.identityAnchors) {
+      if (compactTitle.includes(anchor.value)) {
+        value += 18;
+      } else if (anchor.required) {
+        value -= 35;
+      }
+    }
+
+    for (const token of core.distinctiveContext) {
+      if (normalizedTitle.includes(token)) {
+        value += 6;
+      }
+    }
+
+    if (
+      /\bkit\b|\bcombo\b|\+/.test(normalizedTitle) &&
+      !/\bkit\b|\bcombo\b|\+/.test(normalizedQuery)
+    ) {
+      value -= 40;
+    }
+
+    if (core.productClass !== "UNKNOWN") {
+      const titleClass = classifyCandidate(title);
+      if (titleClass === core.productClass) {
+        value += 25;
+      } else if (titleClass !== "UNKNOWN" && titleClass !== core.productClass) {
+        value -= 40;
+      }
+    }
+
+    const queryVoltage = core.attributes.voltage;
+    if (queryVoltage) {
+      const titleVoltage = extractVoltage(title);
+      if (titleVoltage === queryVoltage) {
+        value += 30;
+      } else if (titleVoltage && titleVoltage !== queryVoltage) {
+        value -= 100;
+      }
+    }
+
+    for (const [attribute, attributeValue] of Object.entries(core.attributes)) {
+      if (attribute === "voltage" || !attributeValue) {
+        continue;
+      }
+      const compactValue = normalizeMultistoreText(attributeValue).replace(
+        /\s+/g,
+        "",
+      );
+      if (compactValue.length >= 2 && compactTitle.includes(compactValue)) {
+        value += 8;
+      }
+    }
+
+    scores.set(product, value);
+    return value;
+  };
+
+  return {
+    score,
+    sort: (results) =>
+      [...results].sort((first, second) => score(second) - score(first)),
+  };
+}
+
 export async function buscarMercadoLivreComFontes(
   request: DiscoveryQuery,
   sources: MercadoLivreAcquisitionSources,
 ): Promise<MarketplaceDiscoveryResult> {
   const query = request.query.trim();
+  const relevanceQuery = request.normalizedQuery?.trim() || query;
   const limit = limitarQuantidade(request.limit);
 
   if (!query) {
@@ -1664,140 +2179,171 @@ export async function buscarMercadoLivreComFontes(
     };
   }
 
+  const queryCore = buildQueryCore(relevanceQuery);
+  const classifyCandidate = createCandidateConceptClassifier();
+  const catalogScorer = createCatalogProductScorer(
+    relevanceQuery,
+    queryCore,
+    classifyCandidate,
+  );
+  const assessCentralEvidence =
+    createProductCentralEvidenceAssessor(queryCore, classifyCandidate);
+  const queryHasCentralRequirements =
+    queryCore.productClass !== "UNKNOWN" ||
+    Boolean(queryCore.brand) ||
+    queryCore.modelTokens.length > 0 ||
+    queryCore.identityAnchors.length > 0;
+
   const sourcesTried: string[] = [];
   const blockedSources: string[] = [];
   const unusableSources: string[] = [];
   const rawTotal = { value: 0 };
   const evaluations: CandidateEvaluation[] = [];
+  const catalogEvidence = new WeakMap<
+    ProductSearchResult,
+    ProductCentralEvidence
+  >();
+  const centralEvidenceForCatalog = (
+    product: ProductSearchResult,
+  ): ProductCentralEvidence => {
+    const cached = catalogEvidence.get(product);
+    if (cached) {
+      return cached;
+    }
+
+    const evidence = assessCentralEvidence(product.name ?? "");
+    catalogEvidence.set(product, evidence);
+    return evidence;
+  };
+  const partitionCatalogResults = (
+    products: ProductSearchResult[],
+  ): {
+    central: ProductSearchResult[];
+    nonCentral: ProductSearchResult[];
+  } => {
+    const central: ProductSearchResult[] = [];
+    const nonCentral: ProductSearchResult[] = [];
+    for (const product of products) {
+      if (centralEvidenceForCatalog(product).hasCentralEvidence) {
+        central.push(product);
+      } else {
+        nonCentral.push(product);
+      }
+    }
+    return { central, nonCentral };
+  };
+  const minimalEvidenceCache = new WeakMap<CandidateEvaluation, boolean>();
+  const hasMinimalQueryEvidence = (
+    evaluation: CandidateEvaluation,
+  ): boolean => {
+    const cached = minimalEvidenceCache.get(evaluation);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    if (!evaluation.kept) {
+      minimalEvidenceCache.set(evaluation, false);
+      return false;
+    }
+
+    const candidateTitle = (
+      evaluation.title || evaluation.kept.candidate.title || ""
+    ).trim();
+    if (!candidateTitle) {
+      minimalEvidenceCache.set(evaluation, false);
+      return false;
+    }
+
+    const portao = candidatoPodeSeguirNoDiscovery(
+      relevanceQuery,
+      candidateTitle,
+    );
+    if (!portao.keep) {
+      minimalEvidenceCache.set(evaluation, false);
+      return false;
+    }
+
+    const centralEvidence = assessCentralEvidence(candidateTitle);
+    let supported = centralEvidence.hasCentralEvidence;
+    if (!supported && !queryHasCentralRequirements) {
+      const lexical = pontuarCoberturaLexicalPonderada(
+        relevanceQuery,
+        candidateTitle,
+      );
+      supported = lexical.score >= 0.18 || lexical.queryCoverage >= 0.2;
+    }
+
+    minimalEvidenceCache.set(evaluation, supported);
+    return supported;
+  };
+  const supportedEvaluationCount = (): number =>
+    evaluations.filter(hasMinimalQueryEvidence).length;
+  let resolveFirstSupportedCandidate: (() => void) | null = null;
+  const firstSupportedCandidate = new Promise<void>((resolve) => {
+    resolveFirstSupportedCandidate = resolve;
+  });
   let scanned = 0;
+  const sourceOutcomes: Array<
+    "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE"
+  > = [];
+  const listingSourcesTried: string[] = [];
+  const parentAbort = activeSearchAbort();
+  const contextualBudgetMs = remainingBudgetMs();
+  const requestedBudgetMs = resolveMlTotalBudgetMs(request.signal);
+  const effectiveBudgetMs = Number.isFinite(contextualBudgetMs)
+    ? Math.min(requestedBudgetMs, contextualBudgetMs)
+    : requestedBudgetMs;
+  const budgetClock = createMlStageBudgetClock(effectiveBudgetMs);
+  const acquisitionAbort = composeAbortSignal(
+    budgetClock.totalMs,
+    request.signal,
+    parentAbort?.signal,
+  );
+  let closed = false;
+
+  const shouldStop = () =>
+    closed ||
+    acquisitionAbort.signal.aborted ||
+    Date.now() >= budgetClock.deadlineAt ||
+    isSearchAborted() ||
+    request.signal?.aborted === true;
+
+  const closeAcquisition = () => {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    acquisitionAbort.abort();
+    acquisitionAbort.cleanup();
+  };
+
+  const runInStageContext = <T,>(
+    stageSignal: AbortSignal,
+    stageBudgetMs: number,
+    run: () => Promise<T>,
+  ): Promise<T> =>
+    withSearchAbort(
+      {
+        signal: stageSignal,
+        fetchMs: Math.max(
+          1,
+          Math.min(parentAbort?.fetchMs ?? stageBudgetMs, stageBudgetMs),
+        ),
+        deadlineAt: Math.min(
+          budgetClock.deadlineAt,
+          Date.now() + Math.max(0, stageBudgetMs),
+        ),
+      },
+      run,
+    );
 
   try {
     const searchLimit = Math.min(Math.max(limit * 6, 20), 50);
-    const executarFonte = async <T,>(
-      run: () => Promise<MercadoLivreSourceFetch<T[]>>,
-    ): Promise<MercadoLivreSourceFetch<T[]>> => {
-      if (isSearchAborted() || request.signal?.aborted) {
-        return {
-          status: "ERROR",
-          httpStatus: null,
-          data: [],
-          reason: "TIMEOUT: orcamento de busca esgotado.",
-        };
-      }
-      try {
-        return await run();
-      } catch (error) {
-        return {
-          ...classificarErroFonteMercadoLivre(error),
-          data: [],
-        };
-      }
-    };
-
-    let domainId: string | null = null;
-    try {
-      domainId = await sources.discoverDomain(query);
-    } catch {
-      domainId = null;
-    }
-
-    const catalogWithDomain = await executarFonte(() =>
-      sources.searchCatalog(query, searchLimit, domainId),
-    );
-    let catalogResults = catalogWithDomain.data;
-    registrarFonte(
-      query,
-      domainId ? "catalog" : "catalog-no-domain",
-      catalogWithDomain,
-      0,
-      sourcesTried,
-      blockedSources,
-      unusableSources,
-      rawTotal,
-    );
-
-    if (catalogResults.length === 0 && domainId) {
-      const catalogNoDomain = await executarFonte(() =>
-        sources.searchCatalog(query, searchLimit, null),
-      );
-      catalogResults = catalogNoDomain.data;
-      registrarFonte(
-        query,
-        "catalog-no-domain",
-        catalogNoDomain,
-        0,
-        sourcesTried,
-        blockedSources,
-        unusableSources,
-        rawTotal,
-      );
-    }
-
-    const catalogHydrationLimit = Math.min(
-      Math.max(limit * 2, 8),
-      16,
-    );
-    const productIds = Array.from(
-      new Set(
-        catalogResults
-          .map((produto) => produto.id?.trim())
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ).slice(0, catalogHydrationLimit);
-
-    for (let index = 0; index < productIds.length; index += 4) {
-      if (isSearchAborted() || request.signal?.aborted) {
-        break;
-      }
-      const lote = productIds.slice(index, index + 4);
-      scanned += lote.length;
-      evaluations.push(
-        ...(await Promise.all(
-          lote.map(async (productId) => {
-            try {
-              return await sources.loadCatalogCandidate(
-                productId,
-                query,
-                request.mode,
-              );
-            } catch (error) {
-              return recusarCandidato(
-                productId,
-                productId,
-                "error",
-                error instanceof Error
-                  ? error.message.slice(0, 180)
-                  : "Falha ao carregar produto de catalogo.",
-                0,
-              );
-            }
-          }),
-        )),
-      );
-
-      if (evaluations.filter((item) => item.status === "KEPT").length >= limit) {
-        break;
-      }
-    }
-
-    const usableFromCatalog = evaluations.filter((item) => item.kept).length;
-    const catalogSourceName = sourcesTried.includes("catalog")
-      ? "catalog"
-      : "catalog-no-domain";
-    rastrearFonteMercadoLivre({
-      source: `${catalogSourceName}-usable`,
-      query,
-      status: usableFromCatalog > 0 ? "SUCCESS" : "EMPTY",
-      httpStatus: 200,
-      rawCount: productIds.length,
-      usableCount: usableFromCatalog,
-      reason:
-        usableFromCatalog > 0
-          ? undefined
-          : "Catalogo sem publicacao compravel (No winners found ou oferta invalida).",
-    });
-
     const catalogIds: string[] = [];
+    const targetUsable =
+      queryCore.brand || queryCore.hasStrongIdentity
+        ? 1
+        : Math.min(4, limit);
 
     const coletarItens = async (
       source:
@@ -1807,18 +2353,53 @@ export async function buscarMercadoLivreComFontes(
         | "public-search-jm",
       fetch: MercadoLivreSourceFetch<SiteSearchItem[]>,
     ) => {
-      if (isSearchAborted() || request.signal?.aborted) {
+      if (shouldStop()) {
         return;
       }
-      const before = evaluations.filter((item) => item.kept).length;
+
+      if (source === "items-api" || source.startsWith("public-search")) {
+        listingSourcesTried.push(source);
+      }
+
+      sourceOutcomes.push(mapFetchStatusToOutcome(fetch.status));
+      const before = keptEvaluationCount(evaluations);
       let items = fetch.data ?? [];
 
       if (items.length > 0 && sources.hydratePublicItem) {
-        const hydrated = await hidratarItensComPaginaPublica(
-          items,
-          sources.hydratePublicItem,
+        const incomplete = items.filter(
+          (item) => !item.title?.trim() || item.price == null || !item.permalink,
         );
-        items = hydrated.items;
+        if (incomplete.length > 0) {
+          const hydrationBudget = budgetClock.stageBudgetMs("variant-public");
+          const hydrated = await runMlStage(
+            "variant-public",
+            budgetClock,
+            acquisitionAbort.signal,
+            (stageSignal) =>
+              runInStageContext(stageSignal, hydrationBudget, () =>
+                hidratarItensComPaginaPublica(
+                  incomplete,
+                  sources.hydratePublicItem!,
+                ),
+              ),
+          );
+          if (hydrated.status === "result") {
+            const byId = new Map(
+              hydrated.value.items
+                .filter((item) => item.id)
+                .map((item) => [item.id!, item]),
+            );
+            items = items.map((item) =>
+              item.id && byId.has(item.id)
+                ? { ...item, ...byId.get(item.id)! }
+                : item,
+            );
+          }
+        }
+      }
+
+      if (closed) {
+        return;
       }
 
       const seen = new Set(
@@ -1839,7 +2420,7 @@ export async function buscarMercadoLivreComFontes(
         evaluations.push(converterItemBusca(item, query, request.mode));
       }
 
-      const after = evaluations.filter((item) => item.kept).length;
+      const after = keptEvaluationCount(evaluations);
       if (fetch.catalogIds?.length) {
         catalogIds.push(...fetch.catalogIds);
       }
@@ -1873,59 +2454,664 @@ export async function buscarMercadoLivreComFontes(
       });
     };
 
-    await coletarItens(
-      "items-api",
-      await executarFonte(() => sources.searchItemsApi(query, searchLimit)),
-    );
+    const queryPlan = buildSearchPlan(relevanceQuery, queryCore);
+    const stagePlan = buildMlAcquisitionStagePlan(sources);
 
-    if (sources.searchPublicLista || sources.searchPublicJm) {
-      if (sources.searchPublicLista) {
-        await coletarItens(
-          "public-search-lista",
-          await executarFonte(() => sources.searchPublicLista!(query, searchLimit)),
-        );
-      }
+    traceMlAcquisition("ENTRY", {
+      query,
+      relevanceQuery,
+      limit,
+      mode: request.mode,
+      budgetMs: budgetClock.totalMs,
+    });
+    traceMlAcquisition("QUERY_PLAN", {
+      query,
+      plan: queryPlan,
+      acquisitionStages: stagePlan.listingStages,
+    });
 
-      if (sources.searchPublicJm) {
-        await coletarItens(
-          "public-search-jm",
-          await executarFonte(() => sources.searchPublicJm!(query, searchLimit)),
+    const executarFonteComOrcamento = async <T,>(
+      stage: MlStageKind,
+      run: () => Promise<MercadoLivreSourceFetch<T[]>>,
+    ): Promise<MercadoLivreSourceFetch<T[]>> => {
+      const stageStartedAt = Date.now();
+      const stageBudget = budgetClock.stageBudgetMs(stage);
+      traceMlSourceStart(stage, {
+        query,
+        budgetMs: stageBudget,
+        remainingMs: budgetClock.remainingMs(),
+      });
+      let terminal: MlTraceTerminal = "ERROR";
+      try {
+        if (shouldStop()) {
+          terminal = request.signal?.aborted ? "ABORTED" : "TIMEOUT";
+          return {
+            status: "ERROR",
+            httpStatus: null,
+            data: [],
+            reason: "TIMEOUT: orcamento de busca esgotado.",
+          };
+        }
+
+        const raced = await runMlStage(
+          stage,
+          budgetClock,
+          acquisitionAbort.signal,
+          (stageSignal) =>
+            runInStageContext(stageSignal, stageBudget, async () => {
+              try {
+                return await run();
+              } catch (error) {
+                return {
+                  ...classificarErroFonteMercadoLivre(error),
+                  data: [],
+                };
+              }
+            }),
         );
+
+        if (raced.status === "aborted") {
+          terminal = "ABORTED";
+          return {
+            status: "ERROR",
+            httpStatus: null,
+            data: [],
+            reason: "ABORTED.",
+          };
+        }
+
+        if (raced.status === "timeout") {
+          terminal = "TIMEOUT";
+          return {
+            status: "ERROR",
+            httpStatus: null,
+            data: [],
+            reason: "TIMEOUT: orcamento de busca esgotado.",
+          };
+        }
+
+        terminal = mapFetchStatusToTerminal(raced.value.status);
+        return raced.value;
+      } finally {
+        traceMlSourceEnd(stage, terminal, {
+          query,
+          elapsedMs: Date.now() - stageStartedAt,
+          remainingMs: budgetClock.remainingMs(),
+          candidates: keptEvaluationCount(evaluations),
+        });
       }
-    } else {
-      await coletarItens(
-        "public-search",
-        await executarFonte(() => sources.searchPublicListings(query, searchLimit)),
+    };
+
+    const runListingSource = async (
+      source: MlListingSource,
+      run: () => Promise<MercadoLivreSourceFetch<SiteSearchItem[]>>,
+    ): Promise<void> => {
+      traceMlAcquisition("CANDIDATES", {
+        query,
+        source,
+        phase: "before",
+        count: keptEvaluationCount(evaluations),
+      });
+      const fetch = await executarFonteComOrcamento(source, run);
+      await coletarItens(source, fetch);
+      traceMlAcquisition("CANDIDATES", {
+        query,
+        source,
+        phase: "after",
+        count: keptEvaluationCount(evaluations),
+      });
+    };
+
+    const resolveCatalogResults = async (): Promise<ProductSearchResult[]> => {
+      const rankCatalogResults = (
+        pass: "primary" | "fallback" | "final",
+        results: ProductSearchResult[],
+      ): ProductSearchResult[] => {
+        const startedAt = Date.now();
+        traceMlAcquisition("CATALOG_RANK_START", {
+          query,
+          pass,
+          candidates: results.length,
+          remainingMs: budgetClock.remainingMs(),
+        });
+        const ranked = catalogScorer.sort(results);
+        traceMlAcquisition("CATALOG_RANK_END", {
+          query,
+          pass,
+          candidates: results.length,
+          durationMs: Date.now() - startedAt,
+          remainingMs: budgetClock.remainingMs(),
+        });
+        return ranked;
+      };
+
+      const domainFetch = await executarFonteComOrcamento("domain", async () => {
+        try {
+          const domainId = await sources.discoverDomain(relevanceQuery);
+          return {
+            status: "SUCCESS" as const,
+            httpStatus: 200,
+            data: domainId ? [domainId] : [],
+          };
+        } catch (error) {
+          return {
+            ...classificarErroFonteMercadoLivre(error),
+            data: [] as string[],
+          };
+        }
+      });
+      if (closed) {
+        return [];
+      }
+      const domainId = domainFetch.data[0] ?? null;
+      sourceOutcomes.push(mapFetchStatusToOutcome(domainFetch.status));
+
+      const catalogQueries = buildCatalogSearchQueries(
+        relevanceQuery,
+        queryCore,
       );
+      const catalogResults: ProductSearchResult[] = [];
+
+      for (const catalogQuery of catalogQueries) {
+        if (shouldStop()) {
+          break;
+        }
+
+        const catalogWithDomain = await executarFonteComOrcamento("catalog", () =>
+          sources.searchCatalog(catalogQuery, searchLimit, domainId),
+        );
+        if (closed) {
+          break;
+        }
+        if (catalogResults.length === 0) {
+          sourceOutcomes.push(mapFetchStatusToOutcome(catalogWithDomain.status));
+          registrarFonte(
+            query,
+            domainId ? "catalog" : "catalog-no-domain",
+            catalogWithDomain,
+            0,
+            sourcesTried,
+            blockedSources,
+            unusableSources,
+            rawTotal,
+          );
+        }
+
+        catalogResults.push(...catalogWithDomain.data);
+
+        let rankedCatalogResults = rankCatalogResults("primary", catalogResults);
+        let partitionedCatalogResults = partitionCatalogResults(
+          rankedCatalogResults,
+        );
+        const hasCentralCatalogResult =
+          partitionedCatalogResults.central.length > 0;
+        let usedDomainFallback = false;
+
+        if (
+          domainId &&
+          catalogQuery === catalogQueries[0] &&
+          !hasCentralCatalogResult
+        ) {
+          const catalogNoDomain = await executarFonteComOrcamento("catalog", () =>
+            sources.searchCatalog(catalogQuery, searchLimit, null),
+          );
+          if (closed) {
+            break;
+          }
+          sourceOutcomes.push(mapFetchStatusToOutcome(catalogNoDomain.status));
+          catalogResults.push(...catalogNoDomain.data);
+          usedDomainFallback = true;
+          registrarFonte(
+            query,
+            "catalog-no-domain",
+            catalogNoDomain,
+            0,
+            sourcesTried,
+            blockedSources,
+            unusableSources,
+            rawTotal,
+          );
+        }
+
+        if (usedDomainFallback) {
+          rankedCatalogResults = rankCatalogResults("fallback", catalogResults);
+          partitionedCatalogResults = partitionCatalogResults(rankedCatalogResults);
+        }
+        const bestCentralProduct = partitionedCatalogResults.central[0];
+        if (
+          supportedEvaluationCount() >= targetUsable ||
+          bestCentralProduct
+        ) {
+          break;
+        }
+      }
+
+      const deduped = Array.from(
+        new Map(
+          catalogResults
+            .filter((produto) => produto.id?.trim())
+            .map((produto) => [produto.id!.trim(), produto]),
+        ).values(),
+      );
+
+      return rankCatalogResults("final", deduped);
+    };
+
+    const hydrateCatalogIfNeeded = async (): Promise<void> => {
+      if (shouldStop() || supportedEvaluationCount() >= limit) {
+        return;
+      }
+
+      const catalogResults = await resolveCatalogResults();
+      if (shouldStop() || supportedEvaluationCount() >= limit) {
+        return;
+      }
+
+      const catalogHydrationLimit = Math.min(Math.max(limit, 6), 8);
+      const selectedProducts = Array.from(
+        new Map(
+          catalogResults
+            .filter((product) => Boolean(product.id?.trim()))
+            .map((product) => [product.id!.trim(), product] as const),
+        ).values(),
+      );
+      const partitionedProducts = partitionCatalogResults(selectedProducts);
+      const prioritizedProducts = [
+        ...partitionedProducts.central,
+        ...partitionedProducts.nonCentral,
+      ].slice(0, catalogHydrationLimit);
+      const productIds = prioritizedProducts.map((product) => product.id!.trim());
+      const beforeHydration = keptEvaluationCount(evaluations);
+      const hydrationBudget = budgetClock.stageBudgetMs("catalog-hydration");
+
+      type HydrationAttempt = {
+        productId: string;
+        title: string;
+        rank: number;
+        score: number;
+        startedAt: number;
+        finishedAt: number | null;
+        terminal: "PENDING" | "KEPT" | "DROPPED" | "ERROR";
+        evaluation: CandidateEvaluation | null;
+      };
+      let attempts: HydrationAttempt[] = [];
+
+      traceMlAcquisition("HYDRATION_BATCH_START", {
+        query,
+        productIds: productIds.length,
+        budgetMs: hydrationBudget,
+        selected: prioritizedProducts.map((product, index) =>
+          `${index + 1}:${product.id}:${catalogScorer.score(product)}:${
+            product.name ?? "(sem titulo)"
+          }`,
+        ),
+      });
+
+      const hydrationRaced = await runMlStage(
+        "catalog-hydration",
+        budgetClock,
+        acquisitionAbort.signal,
+        async (stageSignal) => {
+          const batchAbort = composeAbortSignal(null, stageSignal);
+          let resolveFirstSupported: (() => void) | null = null;
+          const firstSupported = new Promise<void>((resolve) => {
+            resolveFirstSupported = resolve;
+          });
+          const registerSupportedEvaluation = (
+            evaluation: CandidateEvaluation,
+          ) => {
+            if (!evaluation.kept) {
+              return;
+            }
+
+            const hasUsableKept = hasMinimalQueryEvidence(evaluation);
+            if (!hasUsableKept) {
+              return;
+            }
+
+            resolveFirstSupported?.();
+            batchAbort.abort();
+          };
+
+          attempts = prioritizedProducts.map((product, index) => ({
+            productId: product.id!.trim(),
+            title: product.name?.trim() || product.id!.trim(),
+            rank: index + 1,
+            score: catalogScorer.score(product),
+            startedAt: Date.now(),
+            finishedAt: null,
+            terminal: "PENDING",
+            evaluation: null,
+          }));
+
+          try {
+            await runInStageContext(
+              batchAbort.signal,
+              hydrationBudget,
+              async () => {
+                const tasks = attempts.map(async (attempt) => {
+                  try {
+                    const evaluation = await sources.loadCatalogCandidate(
+                      attempt.productId,
+                      relevanceQuery,
+                      request.mode,
+                      queryCore,
+                      batchAbort.signal,
+                    );
+                    if (batchAbort.signal.aborted) {
+                      attempt.terminal = "DROPPED";
+                      return;
+                    }
+                    attempt.evaluation = evaluation;
+                    const hasUsableKept =
+                      evaluation.kept &&
+                      hasMinimalQueryEvidence(evaluation);
+                    attempt.terminal = hasUsableKept ? "KEPT" : "DROPPED";
+                    if (hasUsableKept) {
+                      registerSupportedEvaluation(evaluation);
+                    }
+                  } catch (error) {
+                    if (batchAbort.signal.aborted) {
+                      attempt.terminal = "DROPPED";
+                      return;
+                    }
+                    attempt.terminal = "ERROR";
+                    attempt.evaluation = recusarCandidato(
+                      attempt.title,
+                      attempt.productId,
+                      "error",
+                      error instanceof Error
+                        ? error.message.slice(0, 180)
+                        : "Falha ao carregar produto de catalogo.",
+                      0,
+                    );
+                  } finally {
+                    attempt.finishedAt = Date.now();
+                  }
+                });
+
+                const allSettled = Promise.allSettled(tasks).then(() => undefined);
+                await Promise.race([allSettled, firstSupported]);
+                const hasUsableKept = attempts.some(
+                  (attempt) =>
+                    attempt.terminal === "KEPT" &&
+                    attempt.evaluation &&
+                    hasMinimalQueryEvidence(attempt.evaluation),
+                );
+                if (hasUsableKept || supportedEvaluationCount() > 0) {
+                  batchAbort.abort();
+                  return;
+                }
+                if (batchAbort.signal.aborted) {
+                  return;
+                }
+              },
+            );
+          } finally {
+            batchAbort.cleanup();
+          }
+        },
+      );
+
+      const completedAttempts = attempts.filter(
+        (attempt) => attempt.evaluation !== null && attempt.terminal !== "PENDING",
+      );
+      if (!closed) {
+        scanned += attempts.length;
+        evaluations.push(
+          ...completedAttempts.map((attempt) => attempt.evaluation!),
+        );
+        if (supportedEvaluationCount() > 0) {
+          resolveFirstSupportedCandidate?.();
+        }
+      }
+
+      const stageTerminal =
+        hydrationRaced.status === "timeout"
+          ? "TIMEOUT"
+          : hydrationRaced.status === "aborted"
+            ? "ABORTED"
+            : attempts.every((attempt) => attempt.terminal !== "PENDING")
+              ? "SUCCESS"
+              : "ABORTED";
+
+      for (const attempt of attempts) {
+        traceMlAcquisition("HYDRATION_ITEM", {
+          query,
+          productId: attempt.productId,
+          title: attempt.title,
+          rank: attempt.rank,
+          score: attempt.score,
+          terminal: attempt.terminal,
+          elapsedMs:
+            (attempt.finishedAt ?? Date.now()) - attempt.startedAt,
+          reason: attempt.evaluation?.reason,
+          externalId: attempt.evaluation?.externalId,
+        });
+      }
+
+      traceMlAcquisition("HYDRATION_BATCH_END", {
+        query,
+        terminal: stageTerminal,
+        before: beforeHydration,
+        after: keptEvaluationCount(evaluations),
+        attempted: attempts.length,
+        completed: completedAttempts.length,
+      });
+
+      const usableFromCatalog = completedAttempts.filter(
+        (attempt) =>
+          attempt.evaluation && hasMinimalQueryEvidence(attempt.evaluation),
+      ).length;
+      const catalogSourceName = sourcesTried.includes("catalog")
+        ? "catalog"
+        : "catalog-no-domain";
+      rastrearFonteMercadoLivre({
+        source: `${catalogSourceName}-usable`,
+        query,
+        status: usableFromCatalog > 0 ? "SUCCESS" : "EMPTY",
+        httpStatus: 200,
+        rawCount: productIds.length,
+        usableCount: usableFromCatalog,
+        reason:
+          usableFromCatalog > 0
+            ? undefined
+            : `Catalogo sem publicacao compravel: ${completedAttempts.length}/${attempts.length} hidratacoes concluiram.`,
+      });
+    };
+
+    const finalizeDiscovery = (): MarketplaceDiscoveryResult => {
+      closeAcquisition();
+      const consolidated = consolidateEvaluations(evaluations);
+      rastrearFiltrosMarketplace({
+        marketplace: "MERCADO_LIVRE",
+        query,
+        events: consolidated,
+      });
+
+      const kept = consolidated.filter(hasMinimalQueryEvidence);
+      const candidatos = kept
+        .sort((first, second) => {
+          const firstRelevance = first.kept?.relevance ?? 0;
+          const secondRelevance = second.kept?.relevance ?? 0;
+
+          if (secondRelevance !== firstRelevance) {
+            return secondRelevance - firstRelevance;
+          }
+
+          return (
+            (first.kept?.candidate.price ?? Number.POSITIVE_INFINITY) -
+            (second.kept?.candidate.price ?? Number.POSITIVE_INFINITY)
+          );
+        })
+        .slice(0, limit)
+        .map((item) => item.kept!.candidate);
+
+      rastrearResumoMercadoLivre({
+        query,
+        sourcesTried,
+        blockedSources,
+        rawTotal: rawTotal.value,
+        normalized: evaluations.length,
+        accepted: candidatos.length,
+      });
+
+      const partialCandidates = evaluations.filter(
+        (item) => item.externalId && item.externalId !== "(sem id)",
+      ).length;
+      const searchOutcome = inferMercadoLivreSearchOutcome({
+        candidatoCount: candidatos.length,
+        sourceOutcomes,
+        listingSourcesTried,
+      });
+
+      rastrearResumoAquisicaoMercadoLivre({
+        query,
+        sourcesTried,
+        blockedSources,
+        partialCandidates,
+        usableCandidates: candidatos.length,
+        result: searchOutcome,
+      });
+
+      return {
+        marketplace: "MERCADO_LIVRE",
+        query,
+        success: searchOutcome !== "ERROR" && searchOutcome !== "BLOCKED",
+        candidates: candidatos,
+        scanned,
+        error: null,
+        degraded: blockedSources.length > 0,
+        blockedSources,
+        unusableSources,
+        sourcesTried,
+        searchOutcome,
+      };
+    };
+
+    const runPrimaryListingLane = async (): Promise<void> => {
+      if (
+        stagePlan.listingStages.includes("items-api") &&
+        !shouldStop() &&
+        supportedEvaluationCount() < targetUsable
+      ) {
+        await runListingSource("items-api", () =>
+          sources.searchItemsApi(query, searchLimit),
+        );
+      }
+    };
+
+    const runPublicListingFallbacks = async (): Promise<void> => {
+      for (const source of stagePlan.listingStages) {
+        if (source === "items-api") {
+          continue;
+        }
+        if (shouldStop() || supportedEvaluationCount() >= targetUsable) {
+          break;
+        }
+
+        if (source === "public-search-lista" && sources.searchPublicLista) {
+          await runListingSource("public-search-lista", () =>
+            sources.searchPublicLista!(query, searchLimit),
+          );
+          continue;
+        }
+
+        if (source === "public-search-jm" && sources.searchPublicJm) {
+          await runListingSource("public-search-jm", () =>
+            sources.searchPublicJm!(query, searchLimit),
+          );
+          continue;
+        }
+
+        if (source === "public-search") {
+          await runListingSource("public-search", () =>
+            sources.searchPublicListings(query, searchLimit),
+          );
+        }
+      }
+    };
+
+    const waitForParallelLanes = async (): Promise<void> => {
+      let listingDone = false;
+      let catalogDone = false;
+
+      /*
+       * items-api e catalogo continuam em paralelo. HTML publico e fallback:
+       * ele so comeca se essas fontes primarias terminarem sem candidato. Isso
+       * evita que um parser HTML pesado atrase catalogo, hidratacao e timers.
+       */
+      const listingLane = runPrimaryListingLane().finally(() => {
+        listingDone = true;
+      });
+      const catalogLane = hydrateCatalogIfNeeded().finally(() => {
+        catalogDone = true;
+      });
+
+      void listingLane.catch(() => undefined);
+      void catalogLane.catch(() => undefined);
+
+      await Promise.race([
+        Promise.allSettled([listingLane, catalogLane]),
+        firstSupportedCandidate,
+      ]);
+
+      if (supportedEvaluationCount() > 0) {
+        traceMlAcquisition("EXIT", {
+          query,
+          candidates: supportedEvaluationCount(),
+          elapsedMs: budgetClock.elapsedMs(),
+        });
+        return;
+      }
+
+      if (
+        !shouldStop() &&
+        listingDone &&
+        catalogDone &&
+        supportedEvaluationCount() < targetUsable
+      ) {
+        await runPublicListingFallbacks();
+      }
+    };
+
+    await waitForParallelLanes();
+
+    if (supportedEvaluationCount() > 0) {
+      return finalizeDiscovery();
     }
 
-    if (evaluations.filter((item) => item.kept).length === 0) {
+    if (shouldStop() && supportedEvaluationCount() > 0) {
+      return finalizeDiscovery();
+    }
+
+    if (supportedEvaluationCount() === 0) {
       const publicBlocked =
         blockedSources.includes("public-search") ||
         (blockedSources.includes("public-search-lista") &&
           blockedSources.includes("public-search-jm"));
-      if (!publicBlocked) {
+      if (!publicBlocked && !shouldStop()) {
         const variants = gerarVariantesDeConsultaPublica(query).filter(
           (variant) => variant.toLowerCase() !== query.toLowerCase(),
         );
         for (const variant of variants.slice(0, 2)) {
-          if (isSearchAborted() || request.signal?.aborted) {
+          if (shouldStop()) {
             break;
           }
-          if (evaluations.filter((item) => item.kept).length > 0) {
+          if (supportedEvaluationCount() > 0) {
             break;
           }
           if (sources.searchPublicLista) {
             await coletarItens(
               "public-search-lista",
-              await executarFonte(() =>
+              await executarFonteComOrcamento("variant-public", () =>
                 sources.searchPublicLista!(variant, searchLimit),
               ),
             );
           } else {
             await coletarItens(
               "public-search",
-              await executarFonte(() =>
+              await executarFonteComOrcamento("variant-public", () =>
                 sources.searchPublicListings(variant, searchLimit),
               ),
             );
@@ -1938,7 +3124,10 @@ export async function buscarMercadoLivreComFontes(
       evaluations.map((item) => item.externalId.trim()).filter(Boolean),
     );
     for (const catalogId of Array.from(new Set(catalogIds))) {
-      if (isSearchAborted() || request.signal?.aborted) {
+      if (shouldStop()) {
+        break;
+      }
+      if (supportedEvaluationCount() >= targetUsable) {
         break;
       }
       if (seenCatalog.has(catalogId)) {
@@ -1946,13 +3135,20 @@ export async function buscarMercadoLivreComFontes(
       }
       seenCatalog.add(catalogId);
       scanned += 1;
-        try {
-          evaluations.push(
-            await sources.loadCatalogCandidate(catalogId, query, request.mode),
-          );
-        } catch (error) {
-          evaluations.push(
-            recusarCandidato(
+      const catalogIdRaced = await runMlStage(
+        "catalog-ids",
+        budgetClock,
+        request.signal,
+        async () => {
+          try {
+            return await sources.loadCatalogCandidate(
+              catalogId,
+              query,
+              request.mode,
+              queryCore,
+            );
+          } catch (error) {
+            return recusarCandidato(
               catalogId,
               catalogId,
               "error",
@@ -1960,95 +3156,62 @@ export async function buscarMercadoLivreComFontes(
                 ? error.message.slice(0, 180)
                 : "Falha ao carregar produto de catalogo.",
               0,
-            ),
-          );
-        }
+            );
+          }
+        },
+      );
+      if (catalogIdRaced.status !== "result") {
+        continue;
+      }
+      evaluations.push(catalogIdRaced.value);
     }
 
-    const consolidated = consolidateEvaluations(evaluations);
-    rastrearFiltrosMarketplace({
-      marketplace: "MERCADO_LIVRE",
+    if (shouldStop() && supportedEvaluationCount() > 0) {
+      traceMlAcquisition("EXIT", {
+        query,
+        candidates: supportedEvaluationCount(),
+        elapsedMs: budgetClock.elapsedMs(),
+      });
+      return finalizeDiscovery();
+    }
+
+    traceMlAcquisition("EXIT", {
       query,
-      events: consolidated,
+      candidates: supportedEvaluationCount(),
+      elapsedMs: budgetClock.elapsedMs(),
     });
-
-    const kept = consolidated.filter((item) => item.kept);
-    const candidatos = kept
-      .sort((first, second) => {
-        const firstRelevance = first.kept?.relevance ?? 0;
-        const secondRelevance = second.kept?.relevance ?? 0;
-
-        if (secondRelevance !== firstRelevance) {
-          return secondRelevance - firstRelevance;
-        }
-
-        return (
-          (first.kept?.candidate.price ?? Number.POSITIVE_INFINITY) -
-          (second.kept?.candidate.price ?? Number.POSITIVE_INFINITY)
-        );
-      })
-      .slice(0, limit)
-      .map((item) => item.kept!.candidate);
-
-    rastrearResumoMercadoLivre({
-      query,
-      sourcesTried,
-      blockedSources,
-      rawTotal: rawTotal.value,
-      normalized: evaluations.length,
-      accepted: candidatos.length,
-    });
-
-    const partialCandidates = evaluations.filter(
-      (item) => item.externalId && item.externalId !== "(sem id)",
-    ).length;
-    const listingSources = sourcesTried.filter(
-      (source) =>
-        source === "items-api" || source.startsWith("public-search"),
-    );
-    const listingCompleted = listingSources.filter(
-      (source) =>
-        !blockedSources.includes(source) &&
-        !unusableSources.includes(source),
-    );
-    const catalogOnly =
-      productIds.length > 0 &&
-      candidatos.length === 0 &&
-      listingCompleted.length > 0;
-    const searchOutcome =
-      candidatos.length > 0
-        ? "SEARCH_COMPLETED"
-        : listingSources.length > 0 && listingCompleted.length === 0
-          ? "BLOCKED"
-          : catalogOnly
-            ? "UNUSABLE"
-            : "EMPTY_VALID";
-
-    rastrearResumoAquisicaoMercadoLivre({
-      query,
-      sourcesTried,
-      blockedSources,
-      partialCandidates,
-      usableCandidates: candidatos.length,
-      result: searchOutcome,
-    });
-
-    return {
-      marketplace: "MERCADO_LIVRE",
-      query,
-      success: true,
-      candidates: candidatos,
-      scanned,
-      error: null,
-      degraded: blockedSources.length > 0,
-      blockedSources,
-      unusableSources,
-      sourcesTried,
-      searchOutcome,
-    };
+    return finalizeDiscovery();
   } catch (error) {
+    closeAcquisition();
     const mensagem =
       error instanceof Error ? error.message : "Erro desconhecido.";
+
+    if (supportedEvaluationCount() > 0) {
+      const consolidated = consolidateEvaluations(evaluations);
+      const kept = consolidated.filter(hasMinimalQueryEvidence);
+      const candidatos = kept
+        .slice(0, limit)
+        .map((item) => item.kept!.candidate);
+      const searchOutcome = inferMercadoLivreSearchOutcome({
+        candidatoCount: candidatos.length,
+        sourceOutcomes,
+        listingSourcesTried,
+      });
+
+      return {
+        marketplace: "MERCADO_LIVRE",
+        query,
+        success: true,
+        candidates: candidatos,
+        scanned,
+        error: null,
+        degraded: blockedSources.length > 0,
+        blockedSources,
+        unusableSources,
+        sourcesTried,
+        searchOutcome,
+      };
+    }
 
     rastrearResumoMercadoLivre({
       query,

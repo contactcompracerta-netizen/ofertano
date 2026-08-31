@@ -60,7 +60,7 @@ export function canonicalizeCluster(
   for (const member of cluster.members) {
     const raw = member.candidate.normalized.raw;
     const price = raw.price;
-    const url = raw.url.trim();
+    const url = raw.url?.trim() ?? "";
     const image = raw.image?.trim() || "";
     const title = raw.title.trim();
 

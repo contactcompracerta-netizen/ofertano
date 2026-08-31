@@ -25,6 +25,7 @@ import {
   extractModelTokens,
   extractQuantity,
   extractSize,
+  extractVoltage,
   inferRole,
   isStopWord,
   isAttributeWord,
@@ -145,6 +146,7 @@ export function buildQueryCore(query: string): QueryCore {
   const year = extractQueryYear(rawQuery);
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
+  const voltage = extractVoltage(rawQuery);
   const modelTokens = extractModelTokens(soldTokens);
   const identityAnchors = extractIdentityAnchors(rawQuery).filter((anchor) => {
     if (!split.host) {
@@ -247,6 +249,7 @@ export function buildQueryCore(query: string): QueryCore {
       ...(size ? { size } : {}),
       ...(age ? { age } : {}),
       ...(year ? { year } : {}),
+      ...(voltage ? { voltage } : {}),
     },
     compatibilityTokens,
     weakModifiers,

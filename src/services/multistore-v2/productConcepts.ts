@@ -58,6 +58,7 @@ export type ProductConceptId =
   | "automotive_pulley"
   | "automotive_part"
   | "case_accessory"
+  | "clothes_hanger"
   | "consumable"
   | "shave"
   | "UNKNOWN";
@@ -613,6 +614,20 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
     ],
     tokens: ["estojo", "estojos"],
     coreMode: "token",
+  },
+  {
+    id: "clothes_hanger",
+    phrases: [
+      "cabide de roupa",
+      "cabides de roupa",
+      "cabide para roupa",
+      "cabides para roupa",
+      "cabide veludo",
+      "cabides veludo",
+    ],
+    tokens: ["cabide", "cabides"],
+    coreMode: "token",
+    synonyms: [["cabide", "cabides"]],
   },
   {
     id: "consumable",
@@ -1606,6 +1621,10 @@ export function canonicalClassToken(id: ProductConceptId): string {
 
   if (id === "clay_water_filter") {
     return "filtro de barro";
+  }
+
+  if (id === "clothes_hanger") {
+    return "cabide de roupa";
   }
 
   if (id === "water_filter") {

@@ -192,8 +192,8 @@ assert.equal(blockedButAttempted.allEnabledAttempted, true);
 assert.ok(blockedButAttempted.blockedMarketplaces.includes("AMAZON"));
 assert.equal(
   blockedButAttempted.publicationAllowed,
-  true,
-  "BLOCKED conta como tentativa; as demais lojas seguem e 1 EXACT pode persistir.",
+  false,
+  "Singleton bloqueado quando alguma loja termina em BLOCKED.",
 );
 assert.equal(blockedButAttempted.notRunMarketplaces.length, 0);
 

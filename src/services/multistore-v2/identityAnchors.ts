@@ -10,6 +10,27 @@ import {
   isSizeHint,
 } from "./normalizeCandidate";
 
+const ADULT_AGE_TOKENS = new Set([
+  "adulto",
+  "adulta",
+  "adultos",
+  "adultas",
+]);
+
+const CHILD_AGE_TOKENS = new Set([
+  "infantil",
+  "crianca",
+  "criancas",
+  "menino",
+  "menina",
+  "meninos",
+  "meninas",
+  "pajem",
+  "kids",
+  "bebe",
+  "baby",
+]);
+
 const QUANTITATIVE_COMPACT =
   /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm|pol|gb|tb|mb|mah|cores|gavetas?|pecas?|unidades?|gramas?|litros?)$/;
 
@@ -160,6 +181,14 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
     }
 
     if (/^(19|20)\d{2}$/.test(nextDigits)) {
+      continue;
+    }
+
+    if (ADULT_AGE_TOKENS.has(current) || CHILD_AGE_TOKENS.has(current)) {
+      continue;
+    }
+
+    if (isCapacityOrQuantityUnit(next)) {
       continue;
     }
 

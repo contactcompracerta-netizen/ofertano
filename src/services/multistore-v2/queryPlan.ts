@@ -112,13 +112,14 @@ function keepPlanVariant(variant: string, core: QueryCore, original: string): bo
   return false;
 }
 
-export function buildSearchPlan(query: string): string[] {
-  const core = buildQueryCore(query);
+export function buildSearchPlan(query: string, queryCore?: QueryCore): string[] {
+  const core = queryCore ?? buildQueryCore(query);
   const original = core.rawQuery;
   const classLabel = canonicalClassToken(core.productClass);
   const attributes = [
     core.attributes.quantity,
     core.attributes.capacity,
+    core.attributes.voltage,
     core.attributes.color,
     core.attributes.material,
     core.attributes.size,
@@ -144,7 +145,15 @@ export function buildSearchPlan(query: string): string[] {
       .filter((anchor) => anchor.value.length >= 5)
       .flatMap((anchor) => [humanizeAnchor(anchor.value), anchor.value]),
   ];
-  const strongModel = [core.brand, productCore, ...core.modelTokens]
+  const strongModel = [
+    core.brand,
+    productCore,
+    ...core.modelTokens,
+    core.attributes.voltage,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const brandModelVoltage = [core.brand, ...core.modelTokens, core.attributes.voltage]
     .filter(Boolean)
     .join(" ");
   const extraPhraseCores = uniqueQueries(
@@ -169,6 +178,7 @@ export function buildSearchPlan(query: string): string[] {
     coreWithAttributes,
     brandWithCore,
     strongModel,
+    brandModelVoltage,
     productCore,
     distinctiveQuery,
     ...phraseSynonyms,

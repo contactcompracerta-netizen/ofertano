@@ -321,19 +321,53 @@ export function avaliarSearchCompletionBarrier(
     };
   }
 
+  const singletonBlockers =
+    blockedMarketplaces.length +
+    erroredMarketplaces.length +
+    unusableMarketplaces.length +
+    notRunMarketplaces.length;
+
+  if (exactMarketplaceCount === 1) {
+    const singletonAllowed =
+      enabledMarketplaces.length > 0 &&
+      singletonBlockers === 0 &&
+      completedMarketplaces.length === enabledMarketplaces.length;
+
+    return {
+      ...base,
+      allEnabledAttempted,
+      publicationAllowed: singletonAllowed,
+      comparisonCoverage: singletonAllowed ? "FULL_ATTEMPT" : "PARTIAL",
+      result: singletonAllowed
+        ? "SINGLE_EXACT_AFTER_FULL_SEARCH"
+        : "EARLY_PUBLISH_BLOCKED",
+      reason: singletonAllowed
+        ? "Oferta unica encontrada apos comparacao ampla de todas as lojas."
+        : singletonBlockers > 0
+          ? "Singleton bloqueado: loja habilitada terminou em BLOCKED/ERROR/TIMEOUT/UNUSABLE/NOT_RUN."
+          : "Singleton bloqueado: nem todas as lojas habilitadas concluiram busca valida.",
+    };
+  }
+
+  const multiAllowed =
+    exactMarketplaceCount >= 2 &&
+    attemptedMarketplaces.length >= Math.min(2, enabledMarketplaces.length);
+
   return {
     ...base,
-    allEnabledAttempted: true,
-    publicationAllowed: true,
-    comparisonCoverage: "FULL_ATTEMPT",
-    result:
-      exactMarketplaceCount === 1
-        ? "SINGLE_EXACT_AFTER_FULL_SEARCH"
-        : "MULTI_EXACT_AFTER_FULL_SEARCH",
-    reason:
-      exactMarketplaceCount === 1
-        ? "Oferta unica encontrada apos comparacao ampla de todas as lojas."
-        : "Ofertas EXACT encontradas apos busca completa das lojas habilitadas.",
+    allEnabledAttempted,
+    publicationAllowed: multiAllowed,
+    comparisonCoverage:
+      notRunMarketplaces.length > 0 ||
+      blockedMarketplaces.length > 0 ||
+      erroredMarketplaces.length > 0 ||
+      unusableMarketplaces.length > 0
+        ? "PARTIAL"
+        : "FULL_ATTEMPT",
+    result: "MULTI_EXACT_AFTER_FULL_SEARCH",
+    reason: multiAllowed
+      ? "Ofertas EXACT encontradas em lojas distintas; cobertura parcial permitida."
+      : "Multi-loja insuficiente para publicar.",
   };
 }
 

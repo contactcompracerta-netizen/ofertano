@@ -134,11 +134,85 @@ export async function abortableFetch(
   );
 
   try {
-    return await fetch(input, {
+    const response = await fetch(input, {
       ...init,
       signal: composed.signal,
     });
-  } finally {
+
+    /*
+     * fetch() resolve assim que os headers chegam. Manter o AbortController
+     * apenas ate esse ponto deixa response.text()/json() sem prazo e foi o
+     * que permitiu uma pagina do ML ocupar mais de 40 s. O proxy prolonga o
+     * mesmo timeout ate o corpo terminar (ou falhar).
+     */
+    if (!response.body) {
+      composed.cleanup();
+      return response;
+    }
+
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) {
+        return;
+      }
+      cleaned = true;
+      composed.signal.removeEventListener("abort", cleanup);
+      composed.cleanup();
+    };
+    composed.signal.addEventListener("abort", cleanup, { once: true });
+
+    const bodyReaders = new Set<PropertyKey>([
+      "arrayBuffer",
+      "blob",
+      "bytes",
+      "formData",
+      "json",
+      "text",
+    ]);
+
+    return new Proxy(response, {
+      get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (typeof value !== "function") {
+          return value;
+        }
+
+        if (!bodyReaders.has(property)) {
+          return value.bind(target);
+        }
+
+        return async (...args: unknown[]) => {
+          try {
+            const reader = value as (...readerArgs: unknown[]) => Promise<unknown>;
+            return await reader.apply(target, args);
+          } finally {
+            cleanup();
+          }
+        };
+      },
+    });
+  } catch (error) {
     composed.cleanup();
+    throw error;
   }
+}
+
+export async function drainAbortableWork<T>(
+  work: Promise<T>,
+  maxDrainMs = 50,
+): Promise<T | undefined> {
+  if (maxDrainMs <= 0) {
+    return undefined;
+  }
+
+  const done = new Promise<T>((resolve, reject) => {
+    work.then(resolve, reject);
+  });
+
+  const timeout = new Promise<undefined>((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), maxDrainMs);
+    void done.finally(() => clearTimeout(timer));
+  });
+
+  return Promise.race([done, timeout]);
 }

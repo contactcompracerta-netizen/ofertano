@@ -177,7 +177,8 @@ export async function resolveListingAffiliate(
     Math.max(
       0,
       (options.deadline?.remainingMs() ?? 800) -
-        (options.deadline?.budget.persistReserveMs ?? 0),
+        (options.deadline?.responseReserveMs ?? 0) -
+        50,
     ),
   );
   if (resolverBudgetMs <= 0) {

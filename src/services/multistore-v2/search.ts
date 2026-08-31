@@ -6,6 +6,7 @@ import type {
 } from "@/services/discovery/core/types";
 import {
   inferSearchOutcome,
+  reduzirSearchOutcomes,
   withAcquisitionOutcome,
 } from "@/services/search/searchCompletionBarrier";
 
@@ -17,11 +18,13 @@ import type {
   MultistoreV2Result,
   ProductCluster,
   PublicProductView,
+  QueryIntent,
   RawCandidate,
   ScoredCandidate,
 } from "./types";
 import { buildQueryIntent } from "./queryIntent";
 import { scoreQueryRelevance } from "./queryRelevance";
+import { buildQueryCore, queryIntentFromCore } from "./queryCore";
 import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
 import {
@@ -39,8 +42,7 @@ import { rankCanonicalProducts } from "./rank";
 import {
   DEFAULT_SEARCH_BUDGET,
   createSearchDeadline,
-  marketplaceBudgetMs,
-  waitMs,
+  waitForAbsoluteTime,
   withTimeout,
   type SearchBudget,
   type SearchDeadline,
@@ -71,6 +73,55 @@ export function coverageStatusOf(
     : "COMPLETE";
 }
 
+function snapshotAcquisitions(
+  acquisitions: MarketplaceAcquisition[],
+): MarketplaceAcquisition[] {
+  return acquisitions.map((item) => ({
+    ...item,
+    candidates: item.candidates.map((candidate) => ({
+      ...candidate,
+      attributes: { ...candidate.attributes },
+    })),
+  }));
+}
+
+type V2Phase =
+  | "ACQUISITION"
+  | "NORMALIZATION"
+  | "RELEVANCE"
+  | "CLUSTERING"
+  | "RESPONSE";
+
+const MIN_POSTPROCESS_BUDGET_MS = 100;
+const CLUSTERING_RESERVE_MS = 1_500;
+
+function canRunPostprocess(deadline: SearchDeadline): boolean {
+  return (
+    !deadline.expired() &&
+    deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS
+  );
+}
+
+function traceV2Phase(
+  phase: V2Phase,
+  event: "start" | "end",
+  startedAt: number,
+  deadline: SearchDeadline,
+  fields: Record<string, unknown> = {},
+): void {
+  traceV2("phase", {
+    phase,
+    event,
+    ...(event === "end" ? { durationMs: Date.now() - startedAt } : {}),
+    remainingMs: deadline.remainingMs(),
+    ...fields,
+  });
+}
+
+export function elapsedV2Ms(deadline: SearchDeadline): number {
+  return Math.max(0, Date.now() - deadline.startedAt);
+}
+
 function titleHasBrand(title: string, brand: string | null): boolean {
   if (!brand) {
     return true;
@@ -78,6 +129,54 @@ function titleHasBrand(title: string, brand: string | null): boolean {
 
   const normalized = normalizeMultistoreText(title);
   return brand.split(" ").every((token) => normalized.includes(token));
+}
+
+/*
+ * A aquisicao so precisa decidir se vale tentar outra variante de consulta.
+ * A relevancia completa cria fingerprint/conceitos e pertence a fase protegida
+ * de RELEVANCE; repeti-la aqui bloqueava timers quando varias lojas retornavam
+ * lotes grandes ao mesmo tempo.
+ */
+function hasLightweightQueryEvidence(
+  title: string,
+  intent: QueryIntent,
+): boolean {
+  if (!titleHasBrand(title, intent.brand)) {
+    return false;
+  }
+
+  const normalized = normalizeMultistoreText(title);
+  const tokens = new Set(normalized.split(" ").filter(Boolean));
+  const compact = normalized.replace(/\s+/g, "");
+  const identityValues = [
+    ...intent.modelTokens,
+    ...intent.identityNumbers,
+    ...intent.identityAnchors.map((anchor) => anchor.value),
+  ]
+    .map((value) => normalizeMultistoreText(value))
+    .filter(Boolean);
+
+  if (
+    intent.hasStrongIdentity &&
+    identityValues.length > 0 &&
+    !identityValues.some((value) => {
+      const normalizedValue = value.replace(/\s+/g, "");
+      return tokens.has(value) || compact.includes(normalizedValue);
+    })
+  ) {
+    return false;
+  }
+
+  if (intent.distinctiveTokens.length >= 3) {
+    const distinctiveHits = intent.distinctiveTokens.filter((token) =>
+      tokens.has(normalizeMultistoreText(token)),
+    ).length;
+    if (distinctiveHits < 2) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function mapAcquisitionStatus(
@@ -193,6 +292,67 @@ function candidateKey(marketplace: string, externalId: string): string {
   return `${marketplace}:${externalId}`;
 }
 
+type MarketplaceRunTrace = {
+  closed: boolean;
+  scheduledAt: number;
+  startedAt: number | null;
+  firstCandidateAt: number | null;
+  finishedAt: number | null;
+  abortedAt: number | null;
+  budgetMs: number;
+  remainingMsAtStart: number;
+  partialCountAtAbort: number;
+  partialCandidates: RawCandidate[];
+};
+
+function traceMarketplaceTiming(
+  marketplace: MarketplaceCode,
+  trace: MarketplaceRunTrace,
+  status: AcquisitionStatus,
+  partialCount: number,
+): void {
+  if (trace.closed) {
+    return;
+  }
+  traceV2("marketplace-timing", {
+    marketplace,
+    status,
+    scheduledAt: trace.scheduledAt,
+    startedAt: trace.startedAt ?? "",
+    firstCandidateAt: trace.firstCandidateAt ?? "",
+    finishedAt: trace.finishedAt ?? "",
+    abortedAt: trace.abortedAt ?? "",
+    budgetMs: trace.budgetMs,
+    remainingMsAtStart: trace.remainingMsAtStart,
+    partialCountAtAbort: trace.partialCountAtAbort,
+    partialCount,
+  });
+}
+
+function mergeDiscoveryCandidates(
+  merged: Map<string, DiscoveryCandidate>,
+  candidates: DiscoveryCandidate[],
+  trace: MarketplaceRunTrace,
+): void {
+  for (const candidate of candidates) {
+    const key = candidateKey(candidate.marketplace, candidate.externalId);
+    if (!merged.has(key)) {
+      if (!trace.firstCandidateAt) {
+        trace.firstCandidateAt = Date.now();
+      }
+      merged.set(key, {
+        ...candidate,
+        attributes: candidate.attributes ? { ...candidate.attributes } : candidate.attributes,
+      });
+    }
+  }
+
+  trace.partialCountAtAbort = merged.size;
+  trace.partialCandidates = Array.from(merged.values())
+    .map(toRawCandidate)
+    .filter((item): item is RawCandidate => item !== null);
+}
+
 function toAcquisition(
   adapter: DiscoveryAdapter,
   status: AcquisitionStatus,
@@ -233,6 +393,7 @@ async function huntMissingStoreOffers(
   }
 
   const huntAbort = composeAbortSignal(huntMs, deadline.signal);
+  let acceptingHuntResults = true;
   const nextClusters = clusters.map((cluster) => ({
     ...cluster,
     members: [...cluster.members],
@@ -285,12 +446,23 @@ async function huntMissingStoreOffers(
             ),
           );
 
+          if (
+            !acceptingHuntResults ||
+            huntAbort.signal.aborted ||
+            deadline.expired()
+          ) {
+            return;
+          }
+
           for (const result of settled) {
             if (result.status !== "fulfilled") {
               continue;
             }
 
             for (const candidate of result.value.candidates) {
+              if (!acceptingHuntResults || huntAbort.signal.aborted) {
+                return;
+              }
               const key = candidateKey(candidate.marketplace, candidate.externalId);
               if (knownKeys.has(key)) {
                 continue;
@@ -338,9 +510,11 @@ async function huntMissingStoreOffers(
       huntAbort.signal,
     );
     if (raced.status === "timeout") {
+      acceptingHuntResults = false;
       huntAbort.abort();
     }
   } finally {
+    acceptingHuntResults = false;
     huntAbort.cleanup();
   }
 
@@ -353,87 +527,145 @@ async function acquireOneMarketplace(
   plan: string[],
   limit: number,
   intent: ReturnType<typeof buildQueryIntent>,
-  deadline: SearchDeadline,
+  budget: SearchBudget,
+  globalDeadline: SearchDeadline,
+  acquisitionPhase: AbortSignal,
+  trace: MarketplaceRunTrace,
+  persist: boolean,
 ): Promise<MarketplaceAcquisition> {
-  const started = Date.now();
-  const childTimeout = marketplaceBudgetMs(deadline);
-  const child = composeAbortSignal(childTimeout, deadline.signal);
+  trace.startedAt = Date.now();
+  const configuredAdapterBudgetMs =
+    adapter.marketplace === "MERCADO_LIVRE"
+      ? (budget.mercadoLivreMs ?? budget.marketplaceMs)
+      : budget.marketplaceMs;
+  const adapterBudgetMs = Math.min(
+    configuredAdapterBudgetMs,
+    globalDeadline.acquisitionUntilMs(persist),
+  );
+  const hardBudgetMs = Math.max(0, adapterBudgetMs);
+
+  trace.budgetMs = hardBudgetMs;
+  trace.remainingMsAtStart = globalDeadline.remainingMs();
+
+  const isolated = composeAbortSignal(
+    hardBudgetMs,
+    acquisitionPhase,
+    globalDeadline.signal,
+  );
   const merged = new Map<string, DiscoveryCandidate>();
-  let last: MarketplaceDiscoveryResult | null = null;
+  const outcomes: ReturnType<typeof inferSearchOutcome>[] = [];
   let scanned = 0;
   let timedOut = false;
+  let abortedByGlobal = false;
+  let acceptingResults = true;
 
   const work = withSearchAbort(
     {
-      signal: child.signal,
-      fetchMs: Math.min(deadline.budget.fetchMs, Math.max(childTimeout, 1)),
-      deadlineAt: started + childTimeout,
+      signal: isolated.signal,
+      fetchMs: Math.min(
+        budget.fetchMs,
+        Math.max(hardBudgetMs, 1),
+      ),
+      deadlineAt: trace.startedAt + hardBudgetMs,
     },
     async () => {
-      for (const searchQuery of plan) {
-        if (child.signal.aborted || deadline.expired()) {
+      const effectivePlan =
+        adapter.marketplace === "MERCADO_LIVRE" ? plan.slice(0, 1) : plan;
+      for (const searchQuery of effectivePlan) {
+        if (isolated.signal.aborted || globalDeadline.expired()) {
           timedOut = true;
+          abortedByGlobal = globalDeadline.expired();
           break;
         }
 
+        let result: MarketplaceDiscoveryResult;
         try {
-          last = withAcquisitionOutcome(
+          result = withAcquisitionOutcome(
             await adapter.searcher!({
               query: searchQuery,
-              normalizedQuery: searchQuery,
+              normalizedQuery: query,
               limit,
               mode: "MULTILOJA",
-              signal: child.signal,
+              signal: isolated.signal,
             }),
           );
         } catch (error) {
-          if (isAbortError(error) || child.signal.aborted || deadline.expired()) {
+          if (
+            isAbortError(error) ||
+            isolated.signal.aborted ||
+            globalDeadline.expired()
+          ) {
             timedOut = true;
+            abortedByGlobal = globalDeadline.expired();
             break;
           }
           throw error;
         }
 
-        scanned += last.scanned || last.candidates.length;
-        for (const candidate of last.candidates) {
-          const key = candidateKey(candidate.marketplace, candidate.externalId);
-          if (!merged.has(key)) {
-            merged.set(key, candidate);
-          }
+        if (
+          !acceptingResults ||
+          trace.closed ||
+          isolated.signal.aborted ||
+          globalDeadline.expired()
+        ) {
+          timedOut = true;
+          abortedByGlobal = globalDeadline.expired();
+          break;
         }
 
-        const relevantHits = Array.from(merged.values()).filter((candidate) => {
-          if (!titleHasBrand(candidate.title, intent.brand)) {
-            return false;
+        outcomes.push(inferSearchOutcome(result));
+        scanned += result.scanned || result.candidates.length;
+        mergeDiscoveryCandidates(merged, result.candidates, trace);
+
+        if (
+          adapter.marketplace === "MERCADO_LIVRE" &&
+          result.candidates.length > 0 &&
+          inferSearchOutcome(result) === "SEARCH_COMPLETED"
+        ) {
+          break;
+        }
+
+        const minRelevant =
+          intent.brand ||
+          intent.hasStrongIdentity ||
+          intent.distinctiveTokens.length >= 3
+            ? 1
+            : Math.min(4, limit);
+        const relevanceProbeLimit = Math.min(12, Math.max(4, limit));
+        let relevantHitCount = 0;
+        let probedCandidates = 0;
+        for (const candidate of merged.values()) {
+          if (
+            probedCandidates >= relevanceProbeLimit ||
+            relevantHitCount >= minRelevant ||
+            isolated.signal.aborted ||
+            globalDeadline.expired() ||
+            globalDeadline.remainingMs() <= MIN_POSTPROCESS_BUDGET_MS
+          ) {
+            break;
           }
-          const raw = toRawCandidate(candidate);
-          if (!raw) {
-            return false;
+          probedCandidates += 1;
+          if (hasLightweightQueryEvidence(candidate.title, intent)) {
+            relevantHitCount += 1;
           }
-          return (
-            scoreQueryRelevance(intent, normalizeCandidate(raw)).status ===
-            "RELEVANT"
-          );
-        });
-        const enoughHits = intent.brand
-          ? relevantHits.length >= 1
-          : relevantHits.length >= Math.min(4, limit);
+        }
+        const enoughHits = relevantHitCount >= minRelevant;
         if (enoughHits) {
           break;
         }
       }
     },
   );
+  void work.catch(() => undefined);
 
   try {
-    const raced = await withTimeout(work, childTimeout, child.signal);
+    const raced = await withTimeout(work, hardBudgetMs, isolated.signal);
     if (raced.status === "timeout") {
       timedOut = true;
-      child.abort();
-      await waitMs(deadline.budget.hangGraceMs);
     }
   } catch (error) {
     if (!isAbortError(error) && !timedOut) {
+      trace.finishedAt = Date.now();
       const message = error instanceof Error ? error.message : String(error);
       return toAcquisition(
         adapter,
@@ -448,53 +680,68 @@ async function acquireOneMarketplace(
         [],
         0,
         message,
-        Date.now() - started,
+        trace.finishedAt - trace.startedAt!,
       );
     }
     timedOut = true;
   } finally {
-    child.cleanup();
+    acceptingResults = false;
+    if (timedOut || globalDeadline.expired()) {
+      isolated.abort();
+    }
+    isolated.cleanup();
+  }
+
+  if (globalDeadline.expired() && !trace.finishedAt) {
+    abortedByGlobal = true;
+    trace.abortedAt = Date.now();
   }
 
   const rawCandidates = Array.from(merged.values())
     .map(toRawCandidate)
     .filter((item): item is RawCandidate => item !== null);
-  const elapsedMs = Date.now() - started;
+  trace.partialCountAtAbort = rawCandidates.length;
+  trace.finishedAt = Date.now();
+  const elapsedMs = trace.finishedAt - trace.startedAt!;
 
-  if (timedOut) {
+  if (timedOut || abortedByGlobal) {
+    const status: AcquisitionStatus = "TIMEOUT";
+    traceMarketplaceTiming(adapter.marketplace, trace, status, rawCandidates.length);
     return toAcquisition(
       adapter,
-      "TIMEOUT",
+      status,
       rawCandidates,
       scanned || rawCandidates.length,
-      "TIMEOUT: orcamento de busca esgotado.",
+      rawCandidates.length > 0
+        ? null
+        : "TIMEOUT: orcamento de busca esgotado.",
       elapsedMs,
     );
   }
 
-  const lastResult =
-    last ?? {
-      marketplace: adapter.marketplace,
-      query: plan[0] || query,
-      success: false,
-      candidates: [],
-      scanned: 0,
-      searchOutcome: "EMPTY_VALID" as const,
-      error: null,
-    };
+  const aggregatedOutcome =
+    merged.size > 0
+      ? ("SEARCH_COMPLETED" as const)
+      : reduzirSearchOutcomes(outcomes);
+
+  const status = mapAcquisitionStatus({
+    marketplace: adapter.marketplace,
+    query: plan[0] || query,
+    success: aggregatedOutcome !== "ERROR" && aggregatedOutcome !== "BLOCKED",
+    candidates: Array.from(merged.values()),
+    scanned,
+    searchOutcome: aggregatedOutcome,
+    error: null,
+  });
+
+  traceMarketplaceTiming(adapter.marketplace, trace, status, rawCandidates.length);
 
   return toAcquisition(
     adapter,
-    mapAcquisitionStatus({
-      ...lastResult,
-      candidates: Array.from(merged.values()),
-      scanned,
-      searchOutcome:
-        merged.size > 0 ? "SEARCH_COMPLETED" : lastResult.searchOutcome,
-    }),
+    status,
     rawCandidates,
     scanned || rawCandidates.length,
-    lastResult.error ?? null,
+    null,
     elapsedMs,
   );
 }
@@ -505,42 +752,136 @@ export async function acquireMarketplaces(
   adapters: DiscoveryAdapter[] = listarDiscoveryAdaptersAtivos(),
   budget: SearchBudget = DEFAULT_SEARCH_BUDGET,
   deadline: SearchDeadline = createSearchDeadline(budget),
+  persist = false,
 ): Promise<MarketplaceAcquisition[]> {
   const plan = buildSearchPlan(query);
   const intent = buildQueryIntent(query);
+  const scheduledAt = Date.now();
+  const acquisitionEndAt =
+    deadline.deadlineAt -
+    deadline.responseReserveMs -
+    (persist ? deadline.budget.persistReserveMs : 0);
+  const acquisitionPhase = composeAbortSignal(
+    Math.max(0, acquisitionEndAt - Date.now()),
+    deadline.signal,
+  );
+  const runs = adapters.map((adapter) => {
+    const trace: MarketplaceRunTrace = {
+      closed: false,
+      scheduledAt,
+      startedAt: null,
+      firstCandidateAt: null,
+      finishedAt: null,
+      abortedAt: null,
+      budgetMs: budget.marketplaceMs,
+      remainingMsAtStart: deadline.remainingMs(),
+      partialCountAtAbort: 0,
+      partialCandidates: [],
+    };
 
-  const settled = await Promise.allSettled(
-    adapters.map((adapter) =>
-      acquireOneMarketplace(adapter, query, plan, limit, intent, deadline),
-    ),
+    traceV2("marketplace-scheduled", {
+      marketplace: adapter.marketplace,
+      scheduledAt,
+      budgetMs:
+        adapter.marketplace === "MERCADO_LIVRE"
+          ? (budget.mercadoLivreMs ?? budget.marketplaceMs)
+          : budget.marketplaceMs,
+      globalRemainingMs: deadline.remainingMs(),
+      startDelayMs: 0,
+    });
+
+    const slot: {
+      adapter: DiscoveryAdapter;
+      trace: MarketplaceRunTrace;
+      result: MarketplaceAcquisition | null;
+      promise: Promise<MarketplaceAcquisition>;
+    } = {
+      adapter,
+      trace,
+      result: null,
+      promise: null!,
+    };
+
+    slot.promise = acquireOneMarketplace(
+      adapter,
+      query,
+      plan,
+      limit,
+      intent,
+      budget,
+      deadline,
+      acquisitionPhase.signal,
+      trace,
+      persist,
+    ).then((acquisition) => {
+      if (!trace.closed) {
+        slot.result = acquisition;
+      }
+      return acquisition;
+    });
+    void slot.promise.catch(() => undefined);
+
+    return slot;
+  });
+  const runByMarketplace = new Map(
+    runs.map((run) => [run.adapter.marketplace, run] as const),
   );
 
-  return settled.map((result, index) => {
-    const adapter = adapters[index]!;
-    if (result.status === "fulfilled") {
-      return result.value;
+  try {
+    await Promise.race([
+      Promise.allSettled(runs.map((run) => run.promise)),
+      waitForAbsoluteTime(acquisitionEndAt, deadline.signal),
+    ]);
+
+    for (const run of runs) {
+      if (!run.result) {
+        run.trace.abortedAt = Date.now();
+      }
+    }
+    acquisitionPhase.abort();
+  } finally {
+    acquisitionPhase.cleanup();
+  }
+
+  return adapters.map((adapter) => {
+    const run = runByMarketplace.get(adapter.marketplace);
+    if (!run) {
+      return toAcquisition(
+        adapter,
+        "ERROR",
+        [],
+        0,
+        "Adapter nao agendado.",
+        0,
+      );
     }
 
-    const error =
-      result.reason instanceof Error
-        ? result.reason.message
-        : String(result.reason);
-    const timedOut = isAbortError(result.reason) || deadline.expired();
-    return toAcquisition(
-      adapter,
-      timedOut ? "TIMEOUT" : mapAcquisitionStatus({
-        marketplace: adapter.marketplace,
-        query,
-        success: false,
-        candidates: [],
-        scanned: 0,
-        error,
-      }),
-      [],
-      0,
-      timedOut ? "TIMEOUT: orcamento de busca esgotado." : error,
-      0,
+    if (run.result) {
+      run.trace.closed = true;
+      return run.result;
+    }
+
+    const elapsedMs =
+      run.trace.startedAt != null
+        ? (run.trace.abortedAt ?? Date.now()) - run.trace.startedAt
+        : 0;
+
+    traceMarketplaceTiming(
+      run.adapter.marketplace,
+      run.trace,
+      "TIMEOUT",
+      run.trace.partialCandidates.length,
     );
+    const acquisition = toAcquisition(
+      run.adapter,
+      "TIMEOUT",
+      run.trace.partialCandidates,
+      run.trace.partialCountAtAbort,
+      "TIMEOUT: orcamento de busca esgotado.",
+      elapsedMs,
+    );
+    run.trace.closed = true;
+    return acquisition;
   });
 }
 
@@ -555,7 +896,7 @@ async function applyAffiliateLayer(
       if (raw.marketplace !== "MERCADO_LIVRE") {
         continue;
       }
-      if (deadline.expired() || deadline.remainingMs() < Math.max(400, deadline.budget.persistReserveMs)) {
+      if (deadline.expired() || deadline.remainingMs() < 400) {
         if (!raw.affiliateStatus) {
           raw.affiliateStatus = "UNKNOWN";
         }
@@ -603,34 +944,110 @@ export async function searchMultistoreV2(
   const budget = options.budget ?? DEFAULT_SEARCH_BUDGET;
   const limit = options.limit ?? 12;
   const deadline = createSearchDeadline(budget);
+  const persistEnabled = options.persist === true;
   traceV2("query", {
     query: search,
     budgetMs: budget.globalMs,
+    deadlineAt: deadline.deadlineAt,
     marketplaceBudgetMs: budget.marketplaceMs,
   });
 
   try {
+    const acquisitionStarted = Date.now();
+    traceV2Phase("ACQUISITION", "start", acquisitionStarted, deadline);
     const acquisitions = await acquireMarketplaces(
       search,
       limit,
       options.adapters,
       budget,
       deadline,
+      persistEnabled,
     );
-    const marketplacesAttempted = acquisitions.map((item) => item.marketplace);
-    const marketplacesSucceeded = acquisitions
+    const acquisitionsSnapshot = snapshotAcquisitions(acquisitions);
+    traceV2Phase("ACQUISITION", "end", acquisitionStarted, deadline, {
+      marketplaces: acquisitionsSnapshot.length,
+    });
+
+    const marketplacesAttempted = acquisitionsSnapshot.map(
+      (item) => item.marketplace,
+    );
+    const marketplacesSucceeded = acquisitionsSnapshot
       .filter((item) => item.status === "SUCCESS")
       .map((item) => item.marketplace);
 
-    const rawCandidates = acquisitions.flatMap((item) => item.candidates);
-    const processed = processRawCandidates(search, rawCandidates);
-    await applyAffiliateLayer(
-      processed.clusters,
-      deadline,
-      options.affiliateResolver,
-    );
+    const normalizationStarted = Date.now();
+    traceV2Phase("NORMALIZATION", "start", normalizationStarted, deadline);
+    const rawCandidates = acquisitionsSnapshot.flatMap((item) => item.candidates);
+    const queryCore = buildQueryCore(search);
+    const intent = buildQueryIntent(search);
+    const normalized: ReturnType<typeof normalizeCandidate>[] = [];
+    for (const raw of rawCandidates) {
+      if (!canRunPostprocess(deadline)) {
+        break;
+      }
+      normalized.push(normalizeCandidate(raw));
+    }
+    traceV2Phase("NORMALIZATION", "end", normalizationStarted, deadline, {
+      rawCandidates: rawCandidates.length,
+      processed: normalized.length,
+      skipped: normalized.length < rawCandidates.length,
+    });
+
+    const relevanceStarted = Date.now();
+    traceV2Phase("RELEVANCE", "start", relevanceStarted, deadline);
+    const scored: ScoredCandidate[] = [];
+    const relevanceStopMs = deadline.responseReserveMs + CLUSTERING_RESERVE_MS;
+    for (const item of normalized) {
+      if (deadline.remainingMs() <= relevanceStopMs) {
+        break;
+      }
+      scored.push(scoreQueryRelevance(intent, item, queryCore));
+    }
+    const relevant = scored.filter((item) => item.status === "RELEVANT");
+    traceV2Phase("RELEVANCE", "end", relevanceStarted, deadline, {
+      relevant: relevant.length,
+      processed: scored.length,
+      skipped: scored.length < normalized.length,
+    });
+
+    const clusteringStarted = Date.now();
+    traceV2Phase("CLUSTERING", "start", clusteringStarted, deadline);
+    let clusters: ProductCluster[] = [];
+    let processedProducts: CanonicalProduct[] = [];
+    if (canRunPostprocess(deadline)) {
+      clusters = clusterCandidates(relevant, {
+        shouldContinue: () => canRunPostprocess(deadline),
+      });
+      const canonicalProducts: CanonicalProduct[] = [];
+      for (const cluster of clusters) {
+        if (!canRunPostprocess(deadline)) {
+          break;
+        }
+        const canonical = canonicalizeCluster(cluster);
+        if (canonical) {
+          canonicalProducts.push(canonical);
+        }
+      }
+      processedProducts = rankCanonicalProducts(canonicalProducts);
+    }
+    traceV2Phase("CLUSTERING", "end", clusteringStarted, deadline, {
+      clusters: clusters.length,
+      products: processedProducts.length,
+      skipped: relevant.length > 0 && clusters.length === 0,
+    });
+
+    const responseStarted = Date.now();
+    traceV2Phase("RESPONSE", "start", responseStarted, deadline);
+
+    if (!deadline.expired() && deadline.remainingMs() > deadline.responseReserveMs) {
+      await applyAffiliateLayer(
+        clusters,
+        deadline,
+        options.affiliateResolver,
+      );
+    }
     const relevantByMarketplace = new Map<string, number>();
-    for (const candidate of processed.relevant) {
+    for (const candidate of relevant) {
       const code = candidate.normalized.raw.marketplace;
       relevantByMarketplace.set(
         code,
@@ -638,7 +1055,7 @@ export async function searchMultistoreV2(
       );
     }
 
-    for (const acquisition of acquisitions) {
+    for (const acquisition of acquisitionsSnapshot) {
       traceV2("marketplace", {
         query: search,
         marketplace: acquisition.marketplace,
@@ -657,22 +1074,33 @@ export async function searchMultistoreV2(
     );
     const shouldHunt =
       options.hunt === true &&
-      !processed.products.some((product) => isSearchVisible(product));
+      !deadline.expired() &&
+      deadline.remainingMs() > deadline.responseReserveMs &&
+      !processedProducts.some((product) => isSearchVisible(product));
     const huntedClusters = shouldHunt
       ? await huntMissingStoreOffers(
-          processed.clusters,
+          clusters,
           knownKeys,
           limit,
           deadline,
           options.adapters ?? listarDiscoveryAdaptersAtivos(),
         )
-      : processed.clusters;
-    const coverageStatus = coverageStatusOf(acquisitions);
-    const products = rankCanonicalProducts(
-      huntedClusters
-        .map(canonicalizeCluster)
-        .filter((item): item is CanonicalProduct => item !== null),
-    ).map((product) => {
+      : clusters;
+    const coverageStatus = coverageStatusOf(acquisitionsSnapshot);
+    const responseCanonicalProducts: CanonicalProduct[] = [];
+    for (const cluster of huntedClusters) {
+      if (!canRunPostprocess(deadline)) {
+        break;
+      }
+      const canonical = canonicalizeCluster(cluster);
+      if (canonical) {
+        responseCanonicalProducts.push(canonical);
+      }
+    }
+    const rankedResponseProducts = canRunPostprocess(deadline)
+      ? rankCanonicalProducts(responseCanonicalProducts)
+      : [];
+    const products = rankedResponseProducts.map((product) => {
       const withCoverage = { ...product, coverageStatus };
       return {
         ...withCoverage,
@@ -700,10 +1128,11 @@ export async function searchMultistoreV2(
       });
     }
 
-    const persistEnabled = options.persist === true && deadline.remainingMs() > 0;
+    const persistReady =
+      persistEnabled && deadline.remainingMs() > deadline.responseReserveMs;
     let persistedProductIds: string[] = [];
     const persistStartedAt = Date.now();
-    if (persistEnabled) {
+    if (persistReady) {
       try {
         persistedProductIds = await persistCanonicalProducts(
           search,
@@ -743,7 +1172,7 @@ export async function searchMultistoreV2(
     traceV2("persist", {
       query: search,
       selected: selectedProducts.length,
-      attempted: persistEnabled ? selectedProducts.length : 0,
+      attempted: persistReady ? selectedProducts.length : 0,
       persisted: persistedCount,
       elapsedMs: persistElapsedMs,
       remainingMs: deadline.remainingMs(),
@@ -751,13 +1180,13 @@ export async function searchMultistoreV2(
 
     traceV2("result", {
       query: search,
-      elapsedMs: Date.now() - deadline.startedAt,
+      elapsedMs: elapsedV2Ms(deadline),
       deadlineMs: budget.globalMs,
       timedOut: deadline.expired(),
       marketplacesAttempted,
       marketplacesSucceeded,
       rawCandidates: rawCandidates.length,
-      relevantCandidates: processed.relevant.length,
+      relevantCandidates: relevant.length,
       clusters: selectedClusters.length,
       singleStoreClusters,
       multiStoreClusters,
@@ -765,12 +1194,17 @@ export async function searchMultistoreV2(
       persisted: persistedCount,
     });
 
+    traceV2Phase("RESPONSE", "end", responseStarted, deadline, {
+      views: views.length,
+      products: selectedProducts.length,
+    });
+
     return {
       query: search,
-      intent: processed.intent,
-      acquisitions,
+      intent,
+      acquisitions: acquisitionsSnapshot,
       rawCandidates: rawCandidates.length,
-      relevantCandidates: processed.relevant,
+      relevantCandidates: relevant,
       clusters: selectedClusters,
       products: selectedProducts,
       views,
