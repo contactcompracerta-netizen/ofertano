@@ -691,9 +691,28 @@ export function scoreQueryRelevance(
   const missingContext = (intent.distinctiveContext ?? []).filter(
     (token) => !candidateHasToken(token, candidateTokens, candidateText),
   );
-  if (missingContext.length > 0 && !modelPresentEnough) {
-    hardConflicts.push(`distinctiveContext:${missingContext.join(",")}!=ausente`);
+  const competingCandidateContext = fingerprint.hostItem.value;
+  const missingContextIsMaterial =
+    missingContext.length * 2 >=
+    Math.max(1, (intent.distinctiveContext ?? []).length);
+  if (
+    missingContext.length > 0 &&
+    !modelPresentEnough &&
+    (competingCandidateContext || missingContextIsMaterial)
+  ) {
+    hardConflicts.push(
+      `distinctiveContext:${missingContext.join(",")}!=${
+        competingCandidateContext ?? "ausente"
+      }`,
+    );
   }
+  const contextPenalty =
+    missingContext.length > 0 &&
+    !modelPresentEnough &&
+    !competingCandidateContext &&
+    !missingContextIsMaterial
+      ? Math.min(0.18, missingContext.length * 0.05)
+      : 0;
   const discriminativeMissing =
     attributeMissing.includes("capacity") ||
     attributeMissing.includes("quantity") ||
@@ -701,6 +720,9 @@ export function scoreQueryRelevance(
     attributeMissing.includes("color") ||
     attributeMissing.includes("age");
   let queryRelevance = Math.min(1, twoSided);
+  if (contextPenalty > 0) {
+    queryRelevance = Math.max(0, queryRelevance - contextPenalty);
+  }
   let status: ScoredCandidate["status"] = "RELEVANT";
   let reason = "Candidato representa o produto pedido.";
 

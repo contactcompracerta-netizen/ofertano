@@ -2276,12 +2276,6 @@ export async function buscarMercadoLivreComFontes(
     minimalEvidenceCache.set(evaluation, supported);
     return supported;
   };
-  const supportedEvaluationCount = (): number =>
-    evaluations.filter(hasMinimalQueryEvidence).length;
-  let resolveFirstSupportedCandidate: (() => void) | null = null;
-  const firstSupportedCandidate = new Promise<void>((resolve) => {
-    resolveFirstSupportedCandidate = resolve;
-  });
   let scanned = 0;
   const sourceOutcomes: Array<
     "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE"
@@ -2336,14 +2330,29 @@ export async function buscarMercadoLivreComFontes(
       },
       run,
     );
+  const supportedEvaluationCount = (): number =>
+    evaluations.filter(
+      (item) => item.kept && hasMinimalQueryEvidence(item),
+    ).length;
+  const targetUsable =
+    queryCore.brand || queryCore.hasStrongIdentity
+      ? 1
+      : Math.min(4, limit);
+  const hasCoverageGoal = (): boolean =>
+    supportedEvaluationCount() >= targetUsable;
+  let resolveCoverageGoalReached: (() => void) | null = null;
+  const coverageGoalReached = new Promise<void>((resolve) => {
+    resolveCoverageGoalReached = resolve;
+  });
+  const resolveCoverageGoalIfReached = (): void => {
+    if (hasCoverageGoal()) {
+      resolveCoverageGoalReached?.();
+    }
+  };
 
   try {
     const searchLimit = Math.min(Math.max(limit * 6, 20), 50);
     const catalogIds: string[] = [];
-    const targetUsable =
-      queryCore.brand || queryCore.hasStrongIdentity
-        ? 1
-        : Math.min(4, limit);
 
     const coletarItens = async (
       source:
@@ -2679,7 +2688,7 @@ export async function buscarMercadoLivreComFontes(
         }
         const bestCentralProduct = partitionedCatalogResults.central[0];
         if (
-          supportedEvaluationCount() >= targetUsable ||
+          hasCoverageGoal() ||
           bestCentralProduct
         ) {
           break;
@@ -2698,12 +2707,12 @@ export async function buscarMercadoLivreComFontes(
     };
 
     const hydrateCatalogIfNeeded = async (): Promise<void> => {
-      if (shouldStop() || supportedEvaluationCount() >= limit) {
+      if (shouldStop() || hasCoverageGoal()) {
         return;
       }
 
       const catalogResults = await resolveCatalogResults();
-      if (shouldStop() || supportedEvaluationCount() >= limit) {
+      if (shouldStop() || hasCoverageGoal()) {
         return;
       }
 
@@ -2753,10 +2762,19 @@ export async function buscarMercadoLivreComFontes(
         acquisitionAbort.signal,
         async (stageSignal) => {
           const batchAbort = composeAbortSignal(null, stageSignal);
-          let resolveFirstSupported: (() => void) | null = null;
-          const firstSupported = new Promise<void>((resolve) => {
-            resolveFirstSupported = resolve;
+          let resolveBatchCoverageGoal: (() => void) | null = null;
+          const batchCoverageGoalReached = new Promise<void>((resolve) => {
+            resolveBatchCoverageGoal = resolve;
           });
+          const hasBatchCoverageGoal = (): boolean =>
+            supportedEvaluationCount() +
+              attempts.filter(
+                (attempt) =>
+                  attempt.terminal === "KEPT" &&
+                  attempt.evaluation &&
+                  hasMinimalQueryEvidence(attempt.evaluation),
+              ).length >=
+            targetUsable;
           const registerSupportedEvaluation = (
             evaluation: CandidateEvaluation,
           ) => {
@@ -2769,8 +2787,10 @@ export async function buscarMercadoLivreComFontes(
               return;
             }
 
-            resolveFirstSupported?.();
-            batchAbort.abort();
+            if (hasBatchCoverageGoal()) {
+              resolveBatchCoverageGoal?.();
+              batchAbort.abort();
+            }
           };
 
           attempts = prioritizedProducts.map((product, index) => ({
@@ -2831,14 +2851,8 @@ export async function buscarMercadoLivreComFontes(
                 });
 
                 const allSettled = Promise.allSettled(tasks).then(() => undefined);
-                await Promise.race([allSettled, firstSupported]);
-                const hasUsableKept = attempts.some(
-                  (attempt) =>
-                    attempt.terminal === "KEPT" &&
-                    attempt.evaluation &&
-                    hasMinimalQueryEvidence(attempt.evaluation),
-                );
-                if (hasUsableKept || supportedEvaluationCount() > 0) {
+                await Promise.race([allSettled, batchCoverageGoalReached]);
+                if (hasBatchCoverageGoal()) {
                   batchAbort.abort();
                   return;
                 }
@@ -2861,9 +2875,7 @@ export async function buscarMercadoLivreComFontes(
         evaluations.push(
           ...completedAttempts.map((attempt) => attempt.evaluation!),
         );
-        if (supportedEvaluationCount() > 0) {
-          resolveFirstSupportedCandidate?.();
-        }
+        resolveCoverageGoalIfReached();
       }
 
       const stageTerminal =
@@ -2993,7 +3005,7 @@ export async function buscarMercadoLivreComFontes(
       if (
         stagePlan.listingStages.includes("items-api") &&
         !shouldStop() &&
-        supportedEvaluationCount() < targetUsable
+        !hasCoverageGoal()
       ) {
         await runListingSource("items-api", () =>
           sources.searchItemsApi(query, searchLimit),
@@ -3006,7 +3018,7 @@ export async function buscarMercadoLivreComFontes(
         if (source === "items-api") {
           continue;
         }
-        if (shouldStop() || supportedEvaluationCount() >= targetUsable) {
+        if (shouldStop() || hasCoverageGoal()) {
           break;
         }
 
@@ -3033,30 +3045,21 @@ export async function buscarMercadoLivreComFontes(
     };
 
     const waitForParallelLanes = async (): Promise<void> => {
-      let listingDone = false;
-      let catalogDone = false;
-
       /*
        * items-api e catalogo continuam em paralelo. HTML publico e fallback:
-       * ele so comeca se essas fontes primarias terminarem sem candidato. Isso
+       * ele so comeca se essas fontes primarias terminarem sem cobertura. Isso
        * evita que um parser HTML pesado atrase catalogo, hidratacao e timers.
        */
-      const listingLane = runPrimaryListingLane().finally(() => {
-        listingDone = true;
-      });
-      const catalogLane = hydrateCatalogIfNeeded().finally(() => {
-        catalogDone = true;
-      });
+      const listingLane = runPrimaryListingLane();
+      const catalogLane = hydrateCatalogIfNeeded();
+      const primaryLanes = Promise.allSettled([listingLane, catalogLane]);
 
       void listingLane.catch(() => undefined);
       void catalogLane.catch(() => undefined);
 
-      await Promise.race([
-        Promise.allSettled([listingLane, catalogLane]),
-        firstSupportedCandidate,
-      ]);
+      await Promise.race([primaryLanes, coverageGoalReached]);
 
-      if (supportedEvaluationCount() > 0) {
+      if (hasCoverageGoal()) {
         traceMlAcquisition("EXIT", {
           query,
           candidates: supportedEvaluationCount(),
@@ -3065,19 +3068,18 @@ export async function buscarMercadoLivreComFontes(
         return;
       }
 
-      if (
-        !shouldStop() &&
-        listingDone &&
-        catalogDone &&
-        supportedEvaluationCount() < targetUsable
-      ) {
+      // A Promise.race pode ter acordado antes de as lanes terminarem; sem
+      // cobertura, aguardamos as duas para preservar o fallback publico.
+      await primaryLanes;
+
+      if (!shouldStop() && !hasCoverageGoal()) {
         await runPublicListingFallbacks();
       }
     };
 
     await waitForParallelLanes();
 
-    if (supportedEvaluationCount() > 0) {
+    if (hasCoverageGoal()) {
       return finalizeDiscovery();
     }
 
@@ -3085,7 +3087,7 @@ export async function buscarMercadoLivreComFontes(
       return finalizeDiscovery();
     }
 
-    if (supportedEvaluationCount() === 0) {
+    if (!hasCoverageGoal()) {
       const publicBlocked =
         blockedSources.includes("public-search") ||
         (blockedSources.includes("public-search-lista") &&
@@ -3098,7 +3100,7 @@ export async function buscarMercadoLivreComFontes(
           if (shouldStop()) {
             break;
           }
-          if (supportedEvaluationCount() > 0) {
+          if (hasCoverageGoal()) {
             break;
           }
           if (sources.searchPublicLista) {
@@ -3127,7 +3129,7 @@ export async function buscarMercadoLivreComFontes(
       if (shouldStop()) {
         break;
       }
-      if (supportedEvaluationCount() >= targetUsable) {
+      if (hasCoverageGoal()) {
         break;
       }
       if (seenCatalog.has(catalogId)) {
@@ -3164,6 +3166,7 @@ export async function buscarMercadoLivreComFontes(
         continue;
       }
       evaluations.push(catalogIdRaced.value);
+      resolveCoverageGoalIfReached();
     }
 
     if (shouldStop() && supportedEvaluationCount() > 0) {

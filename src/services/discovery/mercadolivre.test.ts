@@ -17,14 +17,15 @@ import {
   gerarVariantesDeConsultaPublica,
   hidratarItensComPaginaPublica,
 } from "./mercadolivrePublicHydration";
+import { buildQueryCore } from "../multistore-v2/queryCore";
 
 const QUERY = "Headphone MarcaX Wireless Rosa";
 
-function request(query = QUERY): DiscoveryQuery {
+function request(query = QUERY, limit = 5): DiscoveryQuery {
   return {
     query,
     normalizedQuery: query.toLowerCase(),
-    limit: 5,
+    limit,
     mode: "MULTILOJA",
   };
 }
@@ -81,6 +82,39 @@ function fontes(
       data: [],
     }),
     ...overrides,
+  };
+}
+
+function keptCatalogCandidate(
+  externalId: string,
+  title: string,
+): Awaited<ReturnType<MercadoLivreAcquisitionSources["loadCatalogCandidate"]>> {
+  return {
+    title,
+    externalId,
+    stage: "candidate",
+    status: "KEPT",
+    reason: "Catalogo com candidato utilizavel.",
+    lexicalScore: 0.8,
+    kept: {
+      relevance: 0.8,
+      candidate: {
+        marketplace: "MERCADO_LIVRE",
+        marketplaceName: "Mercado Livre",
+        externalId,
+        sourceUrl: `https://produto.mercadolivre.com.br/${externalId}`,
+        affiliateLink: null,
+        title,
+        image: "https://http2.mlstatic.com/item.jpg",
+        price: 149,
+        oldPrice: null,
+        category: null,
+        brand: null,
+        seller: null,
+        status: "FOUND",
+        error: null,
+      },
+    },
   };
 }
 
@@ -418,8 +452,9 @@ async function runAcquisitionCases() {
     "TESTE E: anuncio internacional compravel nao e rejeitado por tag/logistica.",
   );
 
+  const testFQuery = "Headphone Wireless Rosa";
   const testF = await buscarMercadoLivreComFontes(
-    request(),
+    request(testFQuery, 2),
     fontes({
       searchCatalog: async () => ({
         status: "SUCCESS",
@@ -427,42 +462,17 @@ async function runAcquisitionCases() {
         data: [
           {
             id: "MLB-CAT-KEEP",
-            name: "Fones de ouvido sem fio MarcaX",
+            name: testFQuery,
             status: "active",
           },
         ],
       }),
-      loadCatalogCandidate: async () => ({
-        title: "Fones de ouvido sem fio MarcaX",
-        externalId: "MLB-CAT-KEEP",
-        stage: "candidate",
-        status: "KEPT",
-        reason: "Oferta de catalogo compravel.",
-        lexicalScore: 0.8,
-        kept: {
-          relevance: 0.8,
-          candidate: {
-            marketplace: "MERCADO_LIVRE",
-            marketplaceName: "Mercado Livre",
-            externalId: "MLB-CAT-KEEP",
-            sourceUrl: "https://produto.mercadolivre.com.br/MLB-CAT-KEEP",
-            affiliateLink: null,
-            title: "Fones de ouvido sem fio MarcaX",
-            image: "https://http2.mlstatic.com/item.jpg",
-            price: 159,
-            oldPrice: null,
-            category: null,
-            brand: "MarcaX",
-            seller: null,
-            status: "FOUND",
-            error: null,
-          },
-        },
-      }),
+      loadCatalogCandidate: async () =>
+        keptCatalogCandidate("MLB-CAT-KEEP", testFQuery),
       searchItemsApi: async () => ({
         status: "SUCCESS",
         httpStatus: 200,
-        data: [listingItem],
+        data: [item({ id: "MLB555666777", title: testFQuery })],
       }),
     }),
   );
@@ -472,9 +482,9 @@ async function runAcquisitionCases() {
     "TESTE F: catalogo com oferta valida continua.",
   );
   assert.equal(
-    testF.candidates.some((entry) => entry.externalId === "MLB111222333"),
+    testF.candidates.some((entry) => entry.externalId === "MLB555666777"),
     true,
-    "TESTE F: API de anuncios nao pode ser pulada quando o catalogo ja devolveu oferta.",
+    "TESTE F: API de anuncios compoe a cobertura quando o catalogo ainda nao atingiu targetUsable.",
   );
 
   const catalogWithoutWinner = await buscarMercadoLivreComFontes(
@@ -513,6 +523,155 @@ async function runAcquisitionCases() {
     ),
     true,
     "Catalogo sem winner + busca publica entrega candidato.",
+  );
+
+  const coverageQuery = "Headphone Wireless Rosa";
+  let itemsApiFinished = false;
+  let catalogCandidateArrivedBeforeItemsApiFinished = false;
+  let publicFallbackCalls = 0;
+  const publicFallbackAfterPartialCatalog = await buscarMercadoLivreComFontes(
+    request(coverageQuery),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLB-CATALOG-RACE",
+            name: coverageQuery,
+            status: "active",
+          },
+        ],
+      }),
+      loadCatalogCandidate: async (productId) => {
+        catalogCandidateArrivedBeforeItemsApiFinished = !itemsApiFinished;
+        return keptCatalogCandidate(productId, coverageQuery);
+      },
+      searchItemsApi: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        itemsApiFinished = true;
+        return {
+          status: "BLOCKED",
+          httpStatus: 403,
+          data: [],
+          reason: "items-api bloqueada depois do catalogo.",
+        };
+      },
+      searchPublicListings: async () => {
+        publicFallbackCalls += 1;
+        return {
+          status: "SUCCESS",
+          httpStatus: 200,
+          data: [
+            item({
+              id: "MLB444555666",
+              title: coverageQuery,
+            }),
+          ],
+        };
+      },
+    }),
+  );
+  assert.equal(
+    catalogCandidateArrivedBeforeItemsApiFinished,
+    true,
+    "o candidato do catalogo precisa chegar antes de a lane items-api terminar",
+  );
+  assert.ok(
+    publicFallbackCalls > 0,
+    "catalogo parcial com targetUsable > 1 precisa chamar o fallback publico",
+  );
+  assert.equal(
+    publicFallbackAfterPartialCatalog.candidates.some(
+      (entry) => entry.externalId === "MLB444555666",
+    ),
+    true,
+    "o candidato publico precisa sobreviver quando o catalogo nao atinge a cobertura",
+  );
+
+  let publicCallsAfterCatalogCoverage = 0;
+  const catalogReachesTarget = await buscarMercadoLivreComFontes(
+    request(coverageQuery, 2),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          { id: "MLB-CATALOG-GOAL-1", name: coverageQuery, status: "active" },
+          { id: "MLB-CATALOG-GOAL-2", name: coverageQuery, status: "active" },
+        ],
+      }),
+      loadCatalogCandidate: async (productId) =>
+        keptCatalogCandidate(productId, coverageQuery),
+      searchPublicListings: async () => {
+        publicCallsAfterCatalogCoverage += 1;
+        return {
+          status: "SUCCESS",
+          httpStatus: 200,
+          data: [item({ id: "MLB-PUBLIC-UNNEEDED", title: coverageQuery })],
+        };
+      },
+    }),
+  );
+  assert.ok(
+    catalogReachesTarget.candidates.length >= 2,
+    "catalogo precisa hidratar candidatos suficientes para atingir targetUsable > 1",
+  );
+  assert.equal(
+    publicCallsAfterCatalogCoverage,
+    0,
+    "catalogo que atinge o target nao deve chamar fallback publico",
+  );
+
+  const strongIdentityQuery = "JBL Tune 520BT";
+  assert.equal(
+    buildQueryCore(strongIdentityQuery).hasStrongIdentity,
+    true,
+    "o cenario fast path usa identidade forte reconhecida pelo QueryCore",
+  );
+  let publicCallsForStrongIdentity = 0;
+  const strongIdentityStartedAt = Date.now();
+  const strongIdentityFastPath = await buscarMercadoLivreComFontes(
+    request(strongIdentityQuery),
+    fontes({
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          {
+            id: "MLB-JBL-520BT",
+            name: "Headphone JBL Tune 520BT Bluetooth",
+            status: "active",
+          },
+        ],
+      }),
+      loadCatalogCandidate: async (productId) =>
+        keptCatalogCandidate(productId, "Headphone JBL Tune 520BT Bluetooth"),
+      searchPublicListings: async () => {
+        publicCallsForStrongIdentity += 1;
+        return {
+          status: "SUCCESS",
+          httpStatus: 200,
+          data: [],
+        };
+      },
+    }),
+  );
+  assert.ok(
+    Date.now() - strongIdentityStartedAt < 500,
+    "identidade forte com targetUsable=1 precisa retornar pelo fast path",
+  );
+  assert.equal(
+    publicCallsForStrongIdentity,
+    0,
+    "identidade forte coberta pelo primeiro candidato nao deve chamar fallback publico",
+  );
+  assert.equal(
+    strongIdentityFastPath.candidates.some(
+      (entry) => entry.externalId === "MLB-JBL-520BT",
+    ),
+    true,
+    "fast path precisa retornar o primeiro candidato forte valido",
   );
 
   const idsSurviveHydrationFailure = await hidratarItensComPaginaPublica(

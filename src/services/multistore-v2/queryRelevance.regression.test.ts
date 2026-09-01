@@ -1922,4 +1922,71 @@ assert.notEqual(
   "SAME",
 );
 
+const dessensibilizanteQuery = "Gel Dessensibilizante Anestésico Anal Extra Forte Unissex";
+assert.equal(
+  relevance(dessensibilizanteQuery, "Gel Dessensibilizante Anal Analstesico Extra Forte - Cosmedbio 21g").status,
+  "RELEVANT",
+  "gel dessensibilizante de identidade forte continua relevante mesmo sem todos os modificadores da consulta",
+);
+assert.equal(
+  relevance(dessensibilizanteQuery, "Cliv Gel Dessensibilizante Anal Intt Gel Extra Forte 17g").status,
+  "RELEVANT",
+  "variante textual com sinônimo e sem um modificador isolado continua relevante",
+);
+assert.equal(
+  relevance(dessensibilizanteQuery, "Gel Dessensibilizante Anal Cliv Gold Intt 30g Extra Forte Anestesico Lubrificante Intimo Unissex").status,
+  "RELEVANT",
+  "consulta longa com termos equivalentes do produto continua relevante",
+);
+assert.equal(
+  relevance(dessensibilizanteQuery, "Suculenta Gel Deslizante com Aloe Vera e Pantenol 110g").status,
+  "REJECTED",
+  "produto de uso hidratante nao e o gel dessensibilizante requisitado",
+);
+assert.equal(
+  relevance(dessensibilizanteQuery, "Gel de Barbear Deslizante Pezinho Navalhado Bisnaga").status,
+  "REJECTED",
+  "gel de barbear nao substitui o produto anal de dessensibilizacao",
+);
+assert.equal(
+  relevance(dessensibilizanteQuery, "Gel Lubrificante Deslizante Deborah Secco 120ml").status,
+  "REJECTED",
+  "lubrificante deslizante sem contexto do produto desejado deve ser rejeitado",
+);
+assert.equal(
+  relevance(
+    "Gel Dessensibilizante Anestésico Anal Extra Forte Unissex",
+    "Gel Dessensibilizante Anestésico Anal Extra Forte 15g",
+  ).status,
+  "RELEVANT",
+  "termos centrais presentes sem conflito comprovado continuam relevantes quando falta um modificador contextual",
+);
+
+const bicycleQuery = "Bicicleta Aro 29 GTS Dexter 24 Marchas Quadro 21";
+assert.equal(
+  relevance(bicycleQuery, "Bicicleta GTS Dexter 24 Aro 29 Marchas Quadro 21").status,
+  "RELEVANT",
+  "equivalente estrutural da bicicleta entra sem regra específica",
+);
+assert.equal(
+  relevance(bicycleQuery, "Bicicleta Aro 29 GTS Dexter 24v Quadro 21").status,
+  "RELEVANT",
+  "variante com 24v permanece equivalente sem artefato de rejeição",
+);
+assert.equal(
+  relevance(bicycleQuery, "Pneu Aro 29 para Bicicleta").status,
+  "REJECTED",
+  "peça de pneu nao e a bicicleta inteira",
+);
+assert.equal(
+  relevance(bicycleQuery, "Bicicleta GTS Aro 26").status,
+  "REJECTED",
+  "aro incompatível deve ser rejeitado",
+);
+assert.equal(
+  relevance(bicycleQuery, "Quadro de Bicicleta GTS Aro 29").status,
+  "REJECTED",
+  "quadro isolado nao substitui a bicicleta completa",
+);
+
 console.log("query relevance regression: todos os casos estruturais passaram");
