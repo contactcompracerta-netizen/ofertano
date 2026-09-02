@@ -17,6 +17,7 @@ import {
   normalizeMultistoreText,
   tokenize,
 } from "@/services/multistore-v2/normalizeCandidate";
+import { inferConditionFromQuery } from "@/services/multistore-v2/querySanitizer";
 import {
   classifyProductConcept,
   compareProductConcepts,
@@ -1593,14 +1594,47 @@ function converterItemBusca(
     );
   }
 
+  const queryCondition = inferConditionFromQuery(query);
   if (item.condition && item.condition !== "new") {
-    return recusarCandidato(
-      titulo,
-      externalId,
-      "condition",
-      `Condicao ${item.condition} nao e oferta nova compravel.`,
-      lexical.score,
-    );
+    const normalizedItemCondition = String(item.condition).trim().toLowerCase();
+    const compatibleConditions = new Set<string>([
+      "new",
+      "used",
+      "refurbished",
+      "repackaged",
+      "open-box",
+      "open box",
+    ]);
+
+    if (!queryCondition) {
+      return recusarCandidato(
+        titulo,
+        externalId,
+        "condition",
+        `Condicao ${item.condition} nao e oferta nova compravel.`,
+        lexical.score,
+      );
+    }
+
+    const normalizedQueryCondition = queryCondition.toLowerCase();
+    const isCompatibleCondition =
+      normalizedQueryCondition === normalizedItemCondition ||
+      (normalizedQueryCondition === "used" &&
+        ["used", "refurbished"].includes(normalizedItemCondition)) ||
+      (normalizedQueryCondition === "refurbished" &&
+        ["used", "refurbished"].includes(normalizedItemCondition)) ||
+      (normalizedQueryCondition === "repackaged" &&
+        ["repackaged", "open-box", "open box"].includes(normalizedItemCondition));
+
+    if (!compatibleConditions.has(normalizedItemCondition) || !isCompatibleCondition) {
+      return recusarCandidato(
+        titulo,
+        externalId,
+        "condition",
+        `Condicao ${item.condition} nao e compatível com a consulta.`,
+        lexical.score,
+      );
+    }
   }
 
   const brand =
@@ -3040,6 +3074,7 @@ export async function buscarMercadoLivreComFontes(
           await runListingSource("public-search", () =>
             sources.searchPublicListings(query, searchLimit),
           );
+          continue;
         }
       }
     };
