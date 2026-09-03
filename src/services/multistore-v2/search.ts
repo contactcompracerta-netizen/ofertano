@@ -36,7 +36,9 @@ import {
 import { traceV2 } from "./trace";
 import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
-import { buildSearchPlan } from "./queryPlan";
+import { buildAliExpressCompactFallbackQuery, buildSearchPlan } from "./queryPlan";
+import { extractSanitizedIdentity } from "./sanitizedIdentity";
+import { detectDistinctiveConflict } from "./distinctiveAnchors";
 export { buildSearchPlan };
 import { rankCanonicalProducts } from "./rank";
 import {
@@ -92,14 +94,25 @@ type V2Phase =
   | "CLUSTERING"
   | "RESPONSE";
 
+type PreparedSearchQuery = {
+  identity: ReturnType<typeof extractSanitizedIdentity>;
+  core: ReturnType<typeof buildQueryCore>;
+  intent: QueryIntent;
+  plan: string[];
+};
+
 const MIN_POSTPROCESS_BUDGET_MS = 100;
 const CLUSTERING_RESERVE_MS = 1_500;
 
-function canRunPostprocess(deadline: SearchDeadline): boolean {
-  return (
-    !deadline.expired() &&
-    deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS
-  );
+function canRunPostprocess(
+  deadline: SearchDeadline,
+  candidateCount = 0,
+): boolean {
+  if (deadline.expired()) {
+    return false;
+  }
+
+  return deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS;
 }
 
 function traceV2Phase(
@@ -155,6 +168,33 @@ function hasLightweightQueryEvidence(
   ]
     .map((value) => normalizeMultistoreText(value))
     .filter(Boolean);
+
+  if (intent.importantAttributes.capacity) {
+    const queryCapacity = normalizeMultistoreText(intent.importantAttributes.capacity);
+    const capacityMatch = queryCapacity &&
+      (tokens.has(queryCapacity) || compact.includes(queryCapacity.replace(/\s+/g, "")));
+    if (!capacityMatch) {
+      return false;
+    }
+  }
+
+  if (intent.importantAttributes.voltage) {
+    const queryVoltage = normalizeMultistoreText(intent.importantAttributes.voltage);
+    const voltageMatch = queryVoltage &&
+      (tokens.has(queryVoltage) || compact.includes(queryVoltage.replace(/\s+/g, "")));
+    if (!voltageMatch) {
+      return false;
+    }
+  }
+
+  if (intent.importantAttributes.quantity) {
+    const queryQty = normalizeMultistoreText(intent.importantAttributes.quantity);
+    const quantityMatch = queryQty &&
+      (tokens.has(queryQty) || compact.includes(queryQty.replace(/\s+/g, "")));
+    if (!quantityMatch) {
+      return false;
+    }
+  }
 
   if (
     intent.hasStrongIdentity &&
@@ -532,6 +572,8 @@ async function acquireOneMarketplace(
   acquisitionPhase: AbortSignal,
   trace: MarketplaceRunTrace,
   persist: boolean,
+  queryCore: ReturnType<typeof buildQueryCore>,
+  identity: ReturnType<typeof extractSanitizedIdentity>,
 ): Promise<MarketplaceAcquisition> {
   trace.startedAt = Date.now();
   const configuredAdapterBudgetMs =
@@ -569,9 +611,23 @@ async function acquireOneMarketplace(
       deadlineAt: trace.startedAt + hardBudgetMs,
     },
     async () => {
-      const effectivePlan =
-        adapter.marketplace === "MERCADO_LIVRE" ? plan.slice(0, 1) : plan;
-      for (const searchQuery of effectivePlan) {
+      const basePlan =
+        adapter.marketplace === "MERCADO_LIVRE" && plan.length > 1
+          ? plan.slice(0, Math.min(plan.length, 3))
+          : plan;
+      const compactFallbackQuery =
+        adapter.marketplace === "ALIEXPRESS"
+          ? buildAliExpressCompactFallbackQuery(query, queryCore, identity)
+          : null;
+      const effectivePlan = compactFallbackQuery
+        ? Array.from(
+            new Set([
+              ...basePlan,
+              compactFallbackQuery,
+            ].map((item) => normalizeMultistoreText(item).trim()).filter(Boolean)),
+          )
+        : basePlan;
+      for (const [index, searchQuery] of effectivePlan.entries()) {
         if (isolated.signal.aborted || globalDeadline.expired()) {
           timedOut = true;
           abortedByGlobal = globalDeadline.expired();
@@ -579,11 +635,19 @@ async function acquireOneMarketplace(
         }
 
         let result: MarketplaceDiscoveryResult;
+        traceV2("query-variant", {
+          marketplace: adapter.marketplace,
+          variantIndex: index + 1,
+          variant: searchQuery,
+          sanitizedQuery: query,
+        });
+        const variantStartedAt = Date.now();
+
         try {
           result = withAcquisitionOutcome(
             await adapter.searcher!({
               query: searchQuery,
-              normalizedQuery: query,
+              normalizedQuery: searchQuery,
               limit,
               mode: "MULTILOJA",
               signal: isolated.signal,
@@ -602,6 +666,18 @@ async function acquireOneMarketplace(
           throw error;
         }
 
+        if (adapter.marketplace === "ALIEXPRESS") {
+          traceV2("aliexpress-variant-result", {
+            variantIndex: index + 1,
+            variant: searchQuery,
+            raw: result.candidates.length,
+            scanned: result.scanned,
+            status: result.searchOutcome ?? (result.success ? "SEARCH_COMPLETED" : "ERROR"),
+            durationMs: Date.now() - variantStartedAt,
+            error: result.error,
+          });
+        }
+
         if (
           !acceptingResults ||
           trace.closed ||
@@ -616,14 +692,6 @@ async function acquireOneMarketplace(
         outcomes.push(inferSearchOutcome(result));
         scanned += result.scanned || result.candidates.length;
         mergeDiscoveryCandidates(merged, result.candidates, trace);
-
-        if (
-          adapter.marketplace === "MERCADO_LIVRE" &&
-          result.candidates.length > 0 &&
-          inferSearchOutcome(result) === "SEARCH_COMPLETED"
-        ) {
-          break;
-        }
 
         const minRelevant =
           intent.brand ||
@@ -753,9 +821,12 @@ export async function acquireMarketplaces(
   budget: SearchBudget = DEFAULT_SEARCH_BUDGET,
   deadline: SearchDeadline = createSearchDeadline(budget),
   persist = false,
+  prepared?: PreparedSearchQuery,
 ): Promise<MarketplaceAcquisition[]> {
-  const plan = buildSearchPlan(query);
-  const intent = buildQueryIntent(query);
+  const identity = prepared?.identity ?? extractSanitizedIdentity(query);
+  const queryCore = prepared?.core ?? identity.queryCore;
+  const plan = prepared?.plan ?? buildSearchPlan(query, queryCore, identity);
+  const intent = prepared?.intent ?? queryIntentFromCore(queryCore);
   const scheduledAt = Date.now();
   const acquisitionEndAt =
     deadline.deadlineAt -
@@ -813,6 +884,8 @@ export async function acquireMarketplaces(
       acquisitionPhase.signal,
       trace,
       persist,
+      queryCore,
+      identity,
     ).then((acquisition) => {
       if (!trace.closed) {
         slot.result = acquisition;
@@ -940,11 +1013,26 @@ export async function searchMultistoreV2(
     persistProduct?: PersistProductFn;
   } = {},
 ): Promise<MultistoreV2Result> {
-  const search = query.replace(/\s+/g, " ").trim();
+  const rawQuery = query.replace(/\s+/g, " ").trim();
   const budget = options.budget ?? DEFAULT_SEARCH_BUDGET;
   const limit = options.limit ?? 12;
   const deadline = createSearchDeadline(budget);
   const persistEnabled = options.persist === true;
+  const identity = extractSanitizedIdentity(rawQuery);
+  const search = identity.sanitizedQuery || rawQuery;
+  const core = identity.queryCore;
+  const intent = queryIntentFromCore(core);
+  const prepared: PreparedSearchQuery = {
+    identity,
+    core,
+    intent,
+    plan: buildSearchPlan(search, core, identity),
+  };
+  traceV2("query-input", {
+    rawQuery,
+    sanitizedQuery: search,
+    removedNoise: identity.removedNoise,
+  });
   traceV2("query", {
     query: search,
     budgetMs: budget.globalMs,
@@ -962,6 +1050,7 @@ export async function searchMultistoreV2(
       budget,
       deadline,
       persistEnabled,
+      prepared,
     );
     const acquisitionsSnapshot = snapshotAcquisitions(acquisitions);
     traceV2Phase("ACQUISITION", "end", acquisitionStarted, deadline, {
@@ -978,14 +1067,27 @@ export async function searchMultistoreV2(
     const normalizationStarted = Date.now();
     traceV2Phase("NORMALIZATION", "start", normalizationStarted, deadline);
     const rawCandidates = acquisitionsSnapshot.flatMap((item) => item.candidates);
-    const queryCore = buildQueryCore(search);
-    const intent = buildQueryIntent(search);
+    const queryCore = prepared.core;
     const normalized: ReturnType<typeof normalizeCandidate>[] = [];
     for (const raw of rawCandidates) {
-      if (!canRunPostprocess(deadline)) {
+      if (!canRunPostprocess(deadline, rawCandidates.length)) {
         break;
       }
-      normalized.push(normalizeCandidate(raw));
+      const candidate = normalizeCandidate(raw);
+      const conflict = detectDistinctiveConflict(identity, candidate.raw.title);
+      if (conflict.conflict) {
+        traceV2("candidate-identity", {
+          marketplace: raw.marketplace,
+          externalId: raw.externalId,
+          title: candidate.raw.title,
+          compatible: false,
+          rejectionReason: conflict.reason,
+          rawQuery,
+          sanitizedQuery: search,
+        });
+        continue;
+      }
+      normalized.push(candidate);
     }
     traceV2Phase("NORMALIZATION", "end", normalizationStarted, deadline, {
       rawCandidates: rawCandidates.length,
@@ -997,8 +1099,12 @@ export async function searchMultistoreV2(
     traceV2Phase("RELEVANCE", "start", relevanceStarted, deadline);
     const scored: ScoredCandidate[] = [];
     const relevanceStopMs = deadline.responseReserveMs + CLUSTERING_RESERVE_MS;
+    const allowSmallSetScoring = normalized.length > 0 && normalized.length <= 4;
     for (const item of normalized) {
-      if (deadline.remainingMs() <= relevanceStopMs) {
+      if (
+        deadline.remainingMs() <= relevanceStopMs &&
+        !allowSmallSetScoring
+      ) {
         break;
       }
       scored.push(scoreQueryRelevance(intent, item, queryCore));
@@ -1201,6 +1307,7 @@ export async function searchMultistoreV2(
 
     return {
       query: search,
+      rawQuery,
       intent,
       acquisitions: acquisitionsSnapshot,
       rawCandidates: rawCandidates.length,

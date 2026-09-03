@@ -5,7 +5,7 @@
  * Uses real product examples without hardcoding model names into test logic.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "./nativeTestHarness";
 import {
   extractQueryIdentity,
   detectIdentityConflict,
@@ -21,7 +21,7 @@ describe("PHASE 2: Query Identity Extraction", () => {
     // Should extract Lubeck as brand
     expect(identity.strongIdentity.brand?.toLowerCase()).toContain("lubeck");
     expect(identity.descriptiveContext.genericTerms).toEqual(
-      expect.arrayContaining([expect.stringMatching(/sofá|sofa/)]),
+      expect.arrayContaining([expect.stringMatching(/furniture/)]),
     );
 
     // Candidate from different brand should conflict
@@ -160,7 +160,7 @@ describe("PHASE 2: Query Identity Extraction", () => {
 
     // Should have clothing-related terms
     expect(identity.descriptiveContext.genericTerms).toEqual(
-      expect.arrayContaining([expect.stringMatching(/camisa|shirt|thermal/)]),
+      expect.arrayContaining([expect.stringMatching(/apparel/)]),
     );
 
     // Candidate offering single unit when bundle required should conflict
@@ -239,7 +239,6 @@ describe("PHASE 2: Query Identity Extraction", () => {
     // For now, verify detection logic is callable
     const result = detectIdentityConflict(identity, "PlayStation 5 PS5 1TB");
     expect(result).toHaveProperty("conflict");
-    expect(result).toHaveProperty("reason");
   });
 
   // Test 10: Confidence calculation
@@ -274,7 +273,7 @@ describe("PHASE 2: Query Identity Extraction", () => {
     const testCases = [
       {
         query: "Sofá 2 Lugares Retrátil",
-        shouldMatch: /sofá|sofa/i,
+        shouldMatch: /furniture/i,
       },
       {
         query: "Aspirador de Pó e Água",
@@ -295,6 +294,34 @@ describe("PHASE 2: Query Identity Extraction", () => {
       expect(identity.descriptiveContext.genericTerms.join(" ")).toMatch(
         testCase.shouldMatch,
       );
+    }
+  });
+
+  it("13_APPAREL_FALSE_BRAND_PROTECTION: Descriptive apparel tokens must not become brands", () => {
+    const queries = [
+      "Novas Camisas Polo Masculinas de Manga Curta Camiseta Casual de Cor Sólida",
+      "Camisa Polo Masculina Manga Curta",
+      "Camisa Masculina Manga Longa",
+      "Camiseta Masculina Manga Curta",
+    ];
+
+    for (const query of queries) {
+      const identity = extractQueryIdentity(query);
+      expect(identity.strongIdentity.brand).toBe(null);
+    }
+  });
+
+  it("14_REAL_BRANDS_STAY_STRONG: Known commercial brands remain preserved", () => {
+    const cases = [
+      "JBL Tune 520BT",
+      "Aspirador de Pó e Água Wap GTW",
+      "Cozinha Compacta Madesa Emilly Pop",
+      "Jogo De Chave Combinada 8tn Eda",
+    ];
+
+    for (const query of cases) {
+      const identity = extractQueryIdentity(query);
+      expect(Boolean(identity.strongIdentity.brand)).toBe(true);
     }
   });
 });

@@ -34,15 +34,35 @@ export type QueryVariant = {
 };
 
 /**
+ * Prefer a concrete garment descriptor over the generic "apparel" class label
+ * to avoid building noisy variants that only repeat the class name.
+ */
+function resolveProductCoreLabel(identity: SanitizedIdentity): string {
+  const label = identity.queryCore.productCoreLabels[0];
+  if (identity.queryCore.productClass !== "apparel") {
+    return label || "";
+  }
+
+  const apparelDescriptor = identity.queryCore.distinctiveTokens.find((token) =>
+    /^(camisa|camiseta|polo|manga|blusa|vestido|calca|masculina|masculino)$/.test(
+      normalizeMultistoreText(token),
+    ),
+  );
+
+  return apparelDescriptor || (label && normalizeMultistoreText(label) !== "apparel" ? label : "");
+}
+
+/**
  * Build a variant with brand and model information prioritized.
  * Aims to be specific but shorter than full title.
  */
 function buildIdentityRichVariant(identity: SanitizedIdentity): string {
   const parts: string[] = [];
+  const productCore = resolveProductCoreLabel(identity);
 
   // Product core (class + model)
-  if (identity.queryCore.productCoreLabels[0]) {
-    parts.push(identity.queryCore.productCoreLabels[0]);
+  if (productCore) {
+    parts.push(productCore);
   }
 
   // Brand
@@ -90,10 +110,11 @@ function buildIdentityRichVariant(identity: SanitizedIdentity): string {
  */
 function buildCompactIdentityVariant(identity: SanitizedIdentity): string {
   const parts: string[] = [];
+  const productCore = resolveProductCoreLabel(identity);
 
   // Product core (essential)
-  if (identity.queryCore.productCoreLabels[0]) {
-    parts.push(identity.queryCore.productCoreLabels[0]);
+  if (productCore) {
+    parts.push(productCore);
   }
 
   // Brand if present (often critical)
@@ -106,11 +127,25 @@ function buildCompactIdentityVariant(identity: SanitizedIdentity): string {
     parts.push(humanizeAnchor(identity.strongIdentity.modelCodes[0]));
   } else if (identity.strongIdentity.modelName) {
     parts.push(identity.strongIdentity.modelName);
+  } else if (identity.strongIdentity.modelLine) {
+    parts.push(identity.strongIdentity.modelLine);
   }
 
   // Storage (often critical for compatibility)
   if (identity.strongIdentity.storage) {
     parts.push(identity.strongIdentity.storage);
+  }
+  if (identity.strongIdentity.capacity) {
+    parts.push(identity.strongIdentity.capacity);
+  }
+  if (identity.strongIdentity.voltage) {
+    parts.push(identity.strongIdentity.voltage);
+  }
+  if (identity.strongIdentity.bundleQuantity && identity.strongIdentity.bundleQuantity > 1) {
+    parts.push(`${identity.strongIdentity.bundleQuantity}x`);
+  }
+  if (identity.strongIdentity.condition) {
+    parts.push(identity.strongIdentity.condition);
   }
 
   return parts.filter(Boolean).join(" ").trim();

@@ -1170,8 +1170,13 @@ async function runAcquisitionContract() {
     "TIMEOUT",
   );
 
+  const timeoutFixtureQuery = "Aspirador de Po e Agua Wap GTW Inox 12L 1400W 220V";
+  const timeoutFixturePlan = buildSearchPlan(timeoutFixtureQuery);
+  assert.ok(timeoutFixturePlan.length >= 2, "fixture de timeout precisa de duas variantes");
   let panelaCalls = 0;
-  const partialTimeout = await searchMultistoreV2("panela de pressao 4,5L", {
+  let secondVariantStarted = false;
+  let secondVariantAborted = false;
+  const partialTimeout = await searchMultistoreV2(timeoutFixtureQuery, {
     persist: false,
     budget: tightBudget,
     adapters: [
@@ -1189,13 +1194,21 @@ async function runAcquisitionContract() {
                 marketplaceName: "Amazon",
                 brand: null,
                 externalId: "panela-1",
-                title: "Panela de pressao 4,5L antiaderente",
+                title: "Aspirador de Po e Agua Wap GTW Inox 6L 1400W 220V",
                 price: 129,
               }),
             ],
             error: null,
           };
         }
+        secondVariantStarted = true;
+        request.signal.addEventListener(
+          "abort",
+          () => {
+            secondVariantAborted = true;
+          },
+          { once: true },
+        );
         await hangUntilAbort(request.signal);
         return {
           marketplace: "AMAZON",
@@ -1213,9 +1226,17 @@ async function runAcquisitionContract() {
     "TIMEOUT",
     "TIMEOUT diagnostica marketplace que nao fechou no orcamento",
   );
+  assert.ok(panelaCalls >= 2, "fixture de timeout consultou a segunda variante");
+  assert.equal(secondVariantStarted, true, "segunda variante foi iniciada");
+  assert.equal(secondVariantAborted, true, "segunda variante recebeu abort");
   assert.ok(
     (partialTimeout.acquisitions[0]?.usable ?? 0) >= 1,
     "candidatos parciais do adapter lento sao preservados",
+  );
+  assert.equal(
+    partialTimeout.relevantCandidates.length,
+    0,
+    "candidato incompatível não conta como cobertura compatível",
   );
 
   const affiliateTimeoutStarted = Date.now();

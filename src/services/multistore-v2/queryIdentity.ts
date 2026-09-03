@@ -16,10 +16,19 @@ import {
 } from "./identityAnchors";
 import { 
   normalizeMultistoreText,
+  extractBundleQuantity,
   extractModelTokens,
+  classGroupOf,
+  isAccessoryHead,
+  isAttributeWord,
+  isCapacityOrQuantityUnit,
+  isReplacementHead,
+  isDimensionHint,
+  isStopWord,
   tokenize,
 } from "./normalizeCandidate";
 import { buildQueryCore, type QueryCore } from "./queryCore";
+import { isApparelDescriptiveToken, isGenericDescriptor } from "./productConcepts";
 
 /**
  * STRONG_IDENTITY: Must be preserved across all query variants.
@@ -79,7 +88,51 @@ function extractBrand(query: string, core: QueryCore): string | null {
   if (core.brand) {
     return core.brand;
   }
-  return null;
+
+  const anchorValues = new Set(core.identityAnchors.map((anchor) => anchor.value));
+  const rawTokens = query.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const normalizedTokens = rawTokens.map((token) => normalizeMultistoreText(token));
+  const compactTokens = rawTokens.map((token) => compactIdentity(token));
+  const isTitleCaseNominal = (token: string) =>
+    /^[A-ZÀ-ÖØ-Þ][\p{Ll}]+$/u.test(token);
+
+  const structuralCandidates = normalizedTokens.flatMap((token, index) => {
+    const previous = compactTokens[index - 1] ?? "";
+    const next = compactTokens[index + 1] ?? "";
+    const followsNumber = /^\d+$/.test(previous);
+    const precededByCode =
+      anchorValues.has(previous) && /^\d+[a-z]{1,4}$/.test(previous);
+    const followedByCode = anchorValues.has(next);
+    const properNameSequence = [0, 1, 2].every((offset) =>
+      isTitleCaseNominal(rawTokens[index + offset] ?? ""),
+    );
+    const excluded =
+      token.length < 3 ||
+      /\d/.test(token) ||
+      token === core.soldHeadToken ||
+      isStopWord(token) ||
+      isAttributeWord(token) ||
+      isAccessoryHead(token) ||
+      isReplacementHead(token) ||
+      isCapacityOrQuantityUnit(token) ||
+      isDimensionHint(token) ||
+      isGenericDescriptor(token) ||
+      (core.productClass === "apparel" && isApparelDescriptiveToken(token)) ||
+      Boolean(classGroupOf(token)) ||
+      followsNumber;
+
+    if (
+      excluded ||
+      !/[a-z]/.test(token) ||
+      (!precededByCode && !followedByCode && !properNameSequence)
+    ) {
+      return [];
+    }
+
+    return [{ token, index }];
+  });
+
+  return structuralCandidates[0]?.token ?? null;
 }
 
 /**
@@ -91,7 +144,11 @@ function extractModelCodes(query: string, core: QueryCore): string[] {
 
   // Use existing identity anchors that are alphanumeric codes
   for (const anchor of core.identityAnchors) {
-    if (anchor.kind === "ALPHANUMERIC" || anchor.kind === "LETTER_NUMBER") {
+    if (
+      anchor.kind === "ALPHANUMERIC" ||
+      anchor.kind === "LETTER_NUMBER" ||
+      (anchor.kind === "MODEL" && /^[a-z]{3,8}$/.test(anchor.value))
+    ) {
       codes.push(anchor.value);
     }
   }
@@ -117,25 +174,74 @@ function extractModelName(query: string, core: QueryCore): string | null {
 }
 
 /**
+ * Returns the nominal portion of a product line after structural product
+ * tokens and measurable specifications have been removed.
+ */
+export function extractNominalModelLineTokens(
+  text: string,
+  core: Pick<QueryCore, "soldHeadToken">,
+): string[] {
+  return tokenize(text).filter((token) => {
+    if (
+      token === core.soldHeadToken ||
+      /\d/.test(token) ||
+      isStopWord(token) ||
+      isAttributeWord(token) ||
+      isAccessoryHead(token) ||
+      isReplacementHead(token) ||
+      isCapacityOrQuantityUnit(token) ||
+      isDimensionHint(token) ||
+      isGenericDescriptor(token) ||
+      Boolean(classGroupOf(token))
+    ) {
+      return false;
+    }
+
+    return /[a-z]/.test(token);
+  });
+}
+
+/**
  * Extract model line (e.g., "GTS Dexter", "Emilly Pop", "Slim", "GTW").
- * Appears in soldText or identity anchors.
  */
 function extractModelLine(query: string, core: QueryCore): string | null {
-  const normalized = normalizeMultistoreText(query);
+  const nominalTokens = extractNominalModelLineTokens(query, core);
+  return nominalTokens.length > 0 ? nominalTokens.slice(0, 3).join(" ") : null;
+}
 
-  // Check for specific line patterns in sold text
-  if (core.soldText) {
-    const soldTokens = core.soldText.split(/\s+/);
-    // Often first 2-3 tokens after brand
-    if (soldTokens.length >= 2) {
-      const line = soldTokens.slice(0, 3).join(" ");
-      if (line.length >= 4) {
-        return line;
-      }
-    }
+export function findNominalModelLineMismatch(
+  queryIdentity: QueryIdentity,
+  candidateTitle: string,
+): { queryValue: string; candidateValue: string } | null {
+  const queryLine = queryIdentity.strongIdentity.modelLine;
+  if (!queryLine) {
+    return null;
   }
 
-  return null;
+  const queryTokens = tokenize(queryLine);
+  if (queryTokens.length < 2) {
+    return null;
+  }
+
+  const candidateTokens = extractNominalModelLineTokens(
+    candidateTitle,
+    queryIdentity.queryCore,
+  );
+  if (candidateTokens.length < 2) {
+    return null;
+  }
+
+  const sharesNominalToken = queryTokens.some((token) =>
+    candidateTokens.includes(token),
+  );
+  if (sharesNominalToken) {
+    return null;
+  }
+
+  return {
+    queryValue: queryTokens.join(" "),
+    candidateValue: candidateTokens.slice(0, 3).join(" "),
+  };
 }
 
 /**
@@ -197,25 +303,6 @@ function extractColor(query: string, core: QueryCore): string | null {
 }
 
 /**
- * Extract bundle quantity (2, 4, etc.) when it's significant to the product.
- * Only extract if explicitly present and material to the product.
- */
-function extractBundleQuantity(query: string, core: QueryCore): number | null {
-  const attr = core.attributes.quantity;
-  if (attr) {
-    const match = attr.match(/^(\d+)/);
-    if (match) {
-      const qty = parseInt(match[1], 10);
-      // Only meaningful quantities (2-99)
-      if (qty >= 2 && qty <= 99) {
-        return qty;
-      }
-    }
-  }
-  return null;
-}
-
-/**
  * Extract generic terms (product classes: "sofá", "aspirador", "bicicleta").
  */
 function extractGenericTerms(query: string, core: QueryCore): string[] {
@@ -225,6 +312,18 @@ function extractGenericTerms(query: string, core: QueryCore): string[] {
     terms.push(...core.productCoreLabels.map((l) =>
       normalizeMultistoreText(l).toLowerCase(),
     ));
+  } else {
+    // Keep the source product wording available to relevance when no semantic
+    // product concept has been classified yet.
+    terms.push(
+      ...core.distinctiveTokens.filter(
+        (token) =>
+          !isGenericDescriptor(token) &&
+          !isAttributeWord(token) &&
+          !isCapacityOrQuantityUnit(token) &&
+          !isDimensionHint(token),
+      ),
+    );
   }
 
   // Add product class if known
@@ -363,7 +462,7 @@ export function extractQueryIdentity(sanitizedQuery: string): QueryIdentity {
     voltage: extractVoltage(sanitizedQuery, core),
     color: extractColor(sanitizedQuery, core),
     condition: null, // will be set by caller from sanitizer
-    bundleQuantity: extractBundleQuantity(sanitizedQuery, core),
+    bundleQuantity: extractBundleQuantity(sanitizedQuery),
   };
 
   const descriptiveContext: DescriptiveContext = {
@@ -412,13 +511,7 @@ export function detectIdentityConflict(
   if (queryIdentity.strongIdentity.brand) {
     const brand = queryIdentity.strongIdentity.brand.toLowerCase();
     if (!candidateNorm.includes(brand)) {
-      // But only if brand is explicitly required (strong anchor)
-      const brandIsStrong = queryIdentity.identityAnchors.some(
-        (a) => a.value.toLowerCase() === brand && a.required,
-      );
-      if (brandIsStrong) {
-        return { conflict: true, reason: `brand:${brand} not in candidate` };
-      }
+      return { conflict: true, reason: `brand:${brand} not in candidate` };
     }
   }
 
@@ -440,9 +533,13 @@ export function detectIdentityConflict(
   // Hard conflict: voltage mismatch
   if (queryIdentity.strongIdentity.voltage) {
     const queryVoltage = queryIdentity.strongIdentity.voltage.toLowerCase();
+    const compactQueryVoltage = queryVoltage.replace(/\s+/g, "");
     if (!candidateNorm.includes(queryVoltage)) {
       const voltageMatch = candidateNorm.match(/(\d+)\s*v(?![a-z0-9])/i);
-      if (voltageMatch && voltageMatch[0].toLowerCase() !== queryVoltage) {
+      if (
+        voltageMatch &&
+        voltageMatch[0].toLowerCase().replace(/\s+/g, "") !== compactQueryVoltage
+      ) {
         return {
           conflict: true,
           reason: `voltage:${queryVoltage}!=${voltageMatch[0]}`,
@@ -469,20 +566,26 @@ export function detectIdentityConflict(
     }
   }
 
+  const modelLineMismatch = findNominalModelLineMismatch(
+    queryIdentity,
+    candidateTitle,
+  );
+  if (modelLineMismatch) {
+    return {
+      conflict: true,
+      reason: `modelLine:${modelLineMismatch.queryValue}!=${modelLineMismatch.candidateValue}`,
+    };
+  }
+
   // Hard conflict: bundle quantity mismatch when material
   if (queryIdentity.strongIdentity.bundleQuantity && queryIdentity.strongIdentity.bundleQuantity > 1) {
     const queryQty = queryIdentity.strongIdentity.bundleQuantity;
-    // Only reject if candidate shows DIFFERENT bundle quantity
-    const qtyMatch = candidateNorm.match(/(?:kit\s+)?(\d+)\s+(?:pack|unidades?|peças?|un\.?)/i);
-    if (qtyMatch) {
-      const candidateQty = parseInt(qtyMatch[1], 10);
-      if (candidateQty !== queryQty && candidateQty === 1) {
-        // Query wants bundle but candidate is single unit
-        return {
-          conflict: true,
-          reason: `bundleQuantity:${queryQty}!=1`,
-        };
-      }
+    const candidateQty = extractBundleQuantity(candidateTitle);
+    if (candidateQty && candidateQty !== queryQty) {
+      return {
+        conflict: true,
+        reason: `bundleQuantity:${queryQty}!=${candidateQty}`,
+      };
     }
   }
 

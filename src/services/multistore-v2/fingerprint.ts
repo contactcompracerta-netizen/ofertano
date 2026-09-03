@@ -17,6 +17,7 @@ import {
   extractBrand,
   extractQuantity,
   extractSize,
+  extractStructuredNumericAttributes,
   extractVoltage,
   inferRole,
   isQuantitativeCompactToken,
@@ -82,6 +83,7 @@ export function buildFingerprint(
   const color = extractColor(soldTokens);
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
+  const numericAttributes = extractStructuredNumericAttributes(soldTokens);
   const structuredVoltage = candidate.structuredVoltage ?? null;
   const voltage = structuredVoltage ?? extractVoltage(title);
   const model = sku || modelTokens[0] || null;
@@ -136,6 +138,7 @@ export function buildFingerprint(
     material: field(material, material ? "MEDIUM" : "NONE", material ? "TITLE" : "UNKNOWN"),
     condition: field("new", "LOW", "INFERRED"),
     importantAttributes: {
+      ...numericAttributes,
       ...(capacity ? { capacity } : {}),
       ...(quantity ? { quantity } : {}),
       ...(color ? { color } : {}),

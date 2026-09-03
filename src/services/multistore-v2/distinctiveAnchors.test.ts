@@ -5,7 +5,7 @@
  * Verifies brand, storage, voltage, bundle quantity, and model code conflicts.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "./nativeTestHarness";
 import {
   detectDistinctiveConflict,
   type IdentityConflictDetail,

@@ -246,6 +246,7 @@ export type PublicProductView = {
 
 export type MultistoreV2Result = {
   query: string;
+  rawQuery?: string;
   intent: QueryIntent;
   acquisitions: MarketplaceAcquisition[];
   rawCandidates: number;

@@ -14,8 +14,15 @@
  */
 
 import type { QueryIdentity } from "./queryIdentity";
-import { normalizeMultistoreText } from "./normalizeCandidate";
-import { alphanumericCodeOccurs } from "./identityAnchors";
+import { findNominalModelLineMismatch } from "./queryIdentity";
+import {
+  extractBundleQuantity,
+  normalizeMultistoreText,
+} from "./normalizeCandidate";
+import {
+  alphanumericCodeOccurs,
+  extractIdentityAnchors,
+} from "./identityAnchors";
 
 export type IdentityConflictReason =
   | "brand_mismatch"
@@ -25,6 +32,7 @@ export type IdentityConflictReason =
   | "bundle_quantity_mismatch"
   | "dimension_mismatch"
   | "condition_mismatch"
+  | "model_line_mismatch"
   | "capacity_mismatch";
 
 export type IdentityConflictDetail = {
@@ -138,12 +146,10 @@ function checkBrandConflict(
     return null; // No conflict
   }
 
-  // Only report conflict if brand is strong (required) in identity anchors
-  const brandIsRequired = queryIdentity.identityAnchors.some(
-    (a) =>
-      normalizeMultistoreText(a.value).toLowerCase() ===
-        normalizeMultistoreText(brand).toLowerCase() && a.required,
-  );
+  // Any extracted brand is an explicit requirement for the query unless it is
+  // clearly not a brand-like token. Prefer the conservative rule: if the brand
+  // was extracted from the query, a different candidate brand is a hard conflict.
+  const brandIsRequired = true;
 
   if (!brandIsRequired) {
     return null;
@@ -254,37 +260,15 @@ function checkBundleQuantityConflict(
   const queryQty = queryIdentity.strongIdentity.bundleQuantity;
   if (!queryQty || queryQty <= 1) return null;
 
-  const normalized = normalizeMultistoreText(candidate).toLowerCase();
-
-  // Look for explicit bundle indicators in candidate
-  const qtyPattern = new RegExp(
-    `(?:kit\\s+)?${queryQty}\\s+(?:pack|un(?:idades?)?|peças?|camisas?|pares?)`,
-    "i",
-  );
-
-  if (qtyPattern.test(normalized)) {
-    return null; // No conflict
-  }
-
-  // Check if candidate shows DIFFERENT quantity
-  const candidateQtyMatch = normalized.match(
-    /(?:kit\s+)?(\d+)\s+(?:pack|un(?:idades?)?|peças?|camisas?|pares?)/i,
-  );
-
-  if (candidateQtyMatch) {
-    const candidateQty = parseInt(candidateQtyMatch[1], 10);
-    if (candidateQty !== queryQty) {
-      // Special case: if query wants bundle but candidate is single unit
-      if (queryQty > 1 && candidateQty === 1) {
-        return {
-          conflict: true,
-          reason: "bundle_quantity_mismatch",
-          description: `Query requires ${queryQty}-pack but candidate appears to be single unit`,
-          queryValue: String(queryQty),
-          candidateValue: "1",
-        };
-      }
-    }
+  const candidateQty = extractBundleQuantity(candidate);
+  if (candidateQty && candidateQty !== queryQty) {
+    return {
+      conflict: true,
+      reason: "bundle_quantity_mismatch",
+      description: `Query requires ${queryQty}-pack but candidate offers ${candidateQty}`,
+      queryValue: String(queryQty),
+      candidateValue: String(candidateQty),
+    };
   }
 
   return null;
@@ -309,25 +293,52 @@ function checkModelCodeConflict(
   }
 
   // All codes are absent. Check if candidate has CONFLICTING code.
-  const normalized = normalizeMultistoreText(candidate).toLowerCase();
-  const codePattern = /(?:^|[^a-z0-9])([a-z]\d+[a-z]?)(?![a-z0-9])/i;
-  const candidateCode = normalized.match(codePattern);
+  const candidateCodes = extractIdentityAnchors(candidate)
+    .filter((anchor) =>
+      anchor.kind === "ALPHANUMERIC" ||
+      anchor.kind === "LETTER_NUMBER" ||
+      anchor.kind === "MODEL",
+    )
+    .map((anchor) => anchor.value);
 
-  if (candidateCode) {
-    const codeValue = candidateCode[1].toLowerCase();
-    // If candidate has a code different from query's codes, it's a conflict
-    if (!codes.some((c) => normalizeMultistoreText(c).toLowerCase() === codeValue)) {
-      return {
-        conflict: true,
-        reason: "model_code_mismatch",
-        description: `Query requires model ${codes.join(" or ")} but candidate appears to be ${codeValue}`,
-        queryValue: codes[0],
-        candidateValue: codeValue,
-      };
-    }
+  const conflictingCode = candidateCodes.find(
+    (candidateCode) =>
+      !codes.some(
+        (code) =>
+          normalizeMultistoreText(code).toLowerCase() ===
+          normalizeMultistoreText(candidateCode).toLowerCase(),
+      ),
+  );
+
+  if (conflictingCode) {
+    return {
+      conflict: true,
+      reason: "model_code_mismatch",
+      description: `Query requires model ${codes.join(" or ")} but candidate appears to be ${conflictingCode}`,
+      queryValue: codes[0],
+      candidateValue: conflictingCode,
+    };
   }
 
   return null;
+}
+
+function checkModelLineConflict(
+  queryIdentity: QueryIdentity,
+  candidate: string,
+): IdentityConflictDetail | null {
+  const mismatch = findNominalModelLineMismatch(queryIdentity, candidate);
+  if (!mismatch) {
+    return null;
+  }
+
+  return {
+    conflict: true,
+    reason: "model_line_mismatch",
+    description: `Query requires model line ${mismatch.queryValue} but candidate offers ${mismatch.candidateValue}`,
+    queryValue: mismatch.queryValue,
+    candidateValue: mismatch.candidateValue,
+  };
 }
 
 /**
@@ -418,6 +429,7 @@ export function detectDistinctiveConflict(
   const checks = [
     () => checkBrandConflict(queryIdentity, candidateTitle),
     () => checkModelCodeConflict(queryIdentity, candidateTitle),
+    () => checkModelLineConflict(queryIdentity, candidateTitle),
     () => checkStorageConflict(queryIdentity, candidateTitle),
     () => checkVoltageConflict(queryIdentity, candidateTitle),
     () => checkBundleQuantityConflict(queryIdentity, candidateTitle),

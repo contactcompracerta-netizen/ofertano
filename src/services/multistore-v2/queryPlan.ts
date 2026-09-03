@@ -1,12 +1,23 @@
 import { buildQueryCore, queryIntentFromCore, type QueryCore } from "./queryCore";
 import {
   canonicalClassToken,
+  conceptLexicalTokens,
   conceptSynonymPhrases,
   isVehicleBrandToken,
   isWeakModifier,
+  matchesConceptLexeme,
   normalizeConceptText,
 } from "./productConcepts";
 import { compactIdentity, humanizeAnchor } from "./identityAnchors";
+import { normalizeMultistoreText } from "./normalizeCandidate";
+import { sanitizeCommerceQuery } from "./querySanitizer";
+import {
+  extractSanitizedIdentity,
+  type SanitizedIdentity,
+} from "./sanitizedIdentity";
+import { buildCommerceSearchPlan } from "./searchPlan";
+
+const MAX_COMPACT_DESCRIPTOR_TOKENS = 6;
 
 function uniqueQueries(values: Array<string | null | undefined>): string[] {
   return Array.from(
@@ -97,6 +108,10 @@ function keepPlanVariant(variant: string, core: QueryCore, original: string): bo
     return true;
   }
 
+  if (core.productClass === "apparel" && /(^|\s)apparel(\s|$)/.test(normalizeConceptText(variant))) {
+    return false;
+  }
+
   if (variantHasProductCore(variant, core)) {
     return true;
   }
@@ -112,8 +127,246 @@ function keepPlanVariant(variant: string, core: QueryCore, original: string): bo
   return false;
 }
 
-export function buildSearchPlan(query: string, queryCore?: QueryCore): string[] {
-  const core = queryCore ?? buildQueryCore(query);
+function normalizedCompactTokens(value: string | null | undefined): string[] {
+  return normalizeMultistoreText(value ?? "")
+    .split(" ")
+    .filter(Boolean);
+}
+
+function addCompactUnit(
+  parts: string[],
+  seen: Set<string>,
+  value: string | null | undefined,
+  atomic: boolean,
+): void {
+  const tokens = normalizedCompactTokens(value);
+  if (tokens.length === 0 || tokens.every((token) => seen.has(token))) {
+    return;
+  }
+
+  if (atomic) {
+    parts.push(tokens.join(" "));
+    tokens.forEach((token) => seen.add(token));
+    return;
+  }
+
+  const fresh = tokens.filter((token) => !seen.has(token));
+  if (fresh.length === 0) {
+    return;
+  }
+
+  parts.push(fresh.join(" "));
+  fresh.forEach((token) => seen.add(token));
+}
+
+function structuredIdentityUnits(core: QueryCore): string[] {
+  return Object.entries(core.attributes)
+    .filter(([, value]) => Boolean(value))
+    .filter(([key]) => key !== "capacity" && key !== "voltage")
+    .map(([key, value]) => {
+      if (key === "quantity") {
+        return value;
+      }
+
+      return `${key} ${value}`;
+    });
+}
+
+function primaryModelUnit(query: string, modelCode: string | undefined): string | null {
+  const codeTokens = normalizedCompactTokens(modelCode);
+  if (codeTokens.length === 0) {
+    return null;
+  }
+
+  const queryTokens = normalizedCompactTokens(query);
+  for (let index = 0; index <= queryTokens.length - codeTokens.length; index += 1) {
+    const matchesCode = codeTokens.every(
+      (token, offset) => queryTokens[index + offset] === token,
+    );
+    if (!matchesCode) {
+      continue;
+    }
+
+    const next = queryTokens[index + codeTokens.length];
+    if (!next || isWeakModifier(next) || /^\d/.test(next)) {
+      return codeTokens.join(" ");
+    }
+
+    return [...codeTokens, next].join(" ");
+  }
+
+  return codeTokens.join(" ");
+}
+
+function compactApparelDescriptorTokens(query: string, core: QueryCore): string[] {
+  const apparelTerms = new Set([
+    ...conceptLexicalTokens(core.productClass),
+    "manga",
+    "curta",
+    "longa",
+    "polo",
+    "masculina",
+    "masculino",
+    "feminina",
+    "feminino",
+    "camisa",
+    "camiseta",
+    "blusa",
+    "vestido",
+    "calca",
+  ]);
+  const apparelNounHeads = new Set([
+    "camisa",
+    "camiseta",
+    "blusa",
+    "vestido",
+    "calca",
+  ]);
+  const source = core.soldNucleus || query;
+  const sourceTokens = normalizedCompactTokens(source).map((token) => {
+    const singular = token.endsWith("s") ? token.slice(0, -1) : token;
+    return apparelTerms.has(singular) ? singular : token;
+  });
+  const hasNounHead = sourceTokens.some((token) => apparelNounHeads.has(token));
+  const descriptors: string[] = [];
+  const seen = new Set<string>();
+  let productHead: string | null = null;
+
+  for (const rawToken of normalizedCompactTokens(source)) {
+    const singular = rawToken.endsWith("s") ? rawToken.slice(0, -1) : rawToken;
+    const token = apparelTerms.has(singular) ? singular : rawToken;
+    const isApparelTerm = apparelTerms.has(token) || Array.from(apparelTerms).some(
+      (term) => matchesConceptLexeme(rawToken, term),
+    );
+    if (!isApparelTerm || isWeakModifier(rawToken) || seen.has(token)) {
+      continue;
+    }
+
+    const isProductHead = apparelNounHeads.has(token) || (!hasNounHead && token === "polo");
+    if (isProductHead) {
+      if (productHead && productHead !== token) {
+        continue;
+      }
+      productHead = token;
+    }
+
+    seen.add(token);
+    descriptors.push(token);
+  }
+
+  return descriptors;
+}
+
+function compactDescriptorTokens(query: string, core: QueryCore): string[] {
+  if (core.productClass === "apparel") {
+    return compactApparelDescriptorTokens(query, core);
+  }
+
+  const words = normalizeConceptText(query)
+    .split(" ")
+    .filter((token) => token.length > 0);
+
+  const compactWords: string[] = [];
+  const seen = new Set<string>();
+  for (const token of words) {
+    const normalized = normalizeMultistoreText(token);
+    if (!normalized || seen.has(normalized) || isWeakModifier(normalized)) {
+      continue;
+    }
+
+    if (normalized === "apparel") {
+      continue;
+    }
+
+    seen.add(normalized);
+    compactWords.push(normalized);
+  }
+
+  return compactWords;
+}
+
+export function buildAliExpressCompactFallbackQuery(
+  query: string,
+  queryCore: QueryCore,
+  identity: Pick<SanitizedIdentity, "strongIdentity">,
+): string | null {
+  const core = queryCore;
+  const words = normalizedCompactTokens(query);
+
+  if (words.length === 0) {
+    return null;
+  }
+
+  const strong = identity.strongIdentity;
+  const parts: string[] = [];
+  const seen = new Set<string>();
+
+  // Strong identity is added first and never participates in descriptor truncation.
+  addCompactUnit(parts, seen, strong.brand, true);
+  const [primaryModelCode, ...remainingModelCodes] = strong.modelCodes;
+  addCompactUnit(parts, seen, primaryModelUnit(query, primaryModelCode), true);
+  for (const modelCode of remainingModelCodes) {
+    addCompactUnit(parts, seen, modelCode, true);
+  }
+  addCompactUnit(parts, seen, strong.modelName, false);
+  const hasNominalStrongIdentity = Boolean(
+    strong.brand ||
+    strong.modelCodes.length > 0 ||
+    strong.modelName ||
+    strong.storage ||
+    strong.capacity ||
+    strong.voltage ||
+    strong.bundleQuantity,
+  );
+  if (core.productClass !== "apparel" || hasNominalStrongIdentity) {
+    addCompactUnit(parts, seen, strong.modelLine, false);
+  }
+  addCompactUnit(parts, seen, strong.storage, true);
+  addCompactUnit(parts, seen, strong.capacity, true);
+  addCompactUnit(parts, seen, strong.voltage, true);
+  if (strong.bundleQuantity) {
+    addCompactUnit(parts, seen, `kit ${strong.bundleQuantity}`, true);
+  }
+  addCompactUnit(parts, seen, strong.condition, true);
+  addCompactUnit(parts, seen, core.hostText, false);
+  for (const attribute of structuredIdentityUnits(core)) {
+    addCompactUnit(parts, seen, attribute, true);
+  }
+
+  let descriptorsAdded = 0;
+  for (const descriptor of compactDescriptorTokens(query, core)) {
+    if (descriptorsAdded >= MAX_COMPACT_DESCRIPTOR_TOKENS) {
+      break;
+    }
+
+    const before = parts.length;
+    addCompactUnit(parts, seen, descriptor, false);
+    if (parts.length > before) {
+      descriptorsAdded += normalizedCompactTokens(parts.at(-1)).length;
+    }
+  }
+
+  return parts.join(" ").trim() || null;
+}
+
+export function buildSearchPlan(
+  query: string,
+  queryCore?: QueryCore,
+  identity?: ReturnType<typeof extractSanitizedIdentity>,
+): string[] {
+  if (identity) {
+    return buildCommerceSearchPlan(identity).map((variant) => variant.originalText);
+  }
+
+  if (!queryCore) {
+    return buildCommerceSearchPlan(extractSanitizedIdentity(query)).map(
+      (variant) => variant.originalText,
+    );
+  }
+
+  const sanitized = sanitizeCommerceQuery(query);
+  const effectiveQuery = sanitized.sanitizedQuery || query;
+  const core = queryCore ?? buildQueryCore(effectiveQuery);
   const original = core.rawQuery;
   const classLabel = canonicalClassToken(core.productClass);
   const attributes = [
@@ -128,9 +381,19 @@ export function buildSearchPlan(query: string, queryCore?: QueryCore): string[] 
     .join(" ");
 
   const productCore = core.productCoreLabels[0] || classLabel;
-  const coreWithHost = [productCore, core.hostText].filter(Boolean).join(" ");
-  const coreWithAttributes = [productCore, attributes].filter(Boolean).join(" ");
-  const brandWithCore = [core.brand, productCore].filter(Boolean).join(" ");
+  const resolvedProductCore =
+    core.productClass === "apparel" && productCore === "apparel"
+      ? core.distinctiveTokens.find((token) =>
+          /^(camisa|camiseta|polo|manga|blusa|vestido|calca|masculina|masculino)$/.test(
+            normalizeConceptText(token),
+          ),
+        ) || productCore
+      : productCore;
+  const effectiveProductCore =
+    resolvedProductCore === "apparel" ? productCore : resolvedProductCore;
+  const coreWithHost = [effectiveProductCore, core.hostText].filter(Boolean).join(" ");
+  const coreWithAttributes = [effectiveProductCore, attributes].filter(Boolean).join(" ");
+  const brandWithCore = [core.brand, effectiveProductCore].filter(Boolean).join(" ");
   const soldIdentityAnchors = core.identityAnchors.filter((anchor) =>
     compactIdentity(core.soldText).includes(anchor.value),
   );
@@ -138,8 +401,8 @@ export function buildSearchPlan(query: string, queryCore?: QueryCore): string[] 
     ...core.identityAnchors
       .filter((anchor) => anchor.value.length >= 5)
       .flatMap((anchor) => [
-        [productCore, humanizeAnchor(anchor.value)].filter(Boolean).join(" "),
-        [core.brand, productCore, humanizeAnchor(anchor.value)].filter(Boolean).join(" "),
+        [effectiveProductCore, humanizeAnchor(anchor.value)].filter(Boolean).join(" "),
+        [core.brand, effectiveProductCore, humanizeAnchor(anchor.value)].filter(Boolean).join(" "),
       ]),
     ...soldIdentityAnchors
       .filter((anchor) => anchor.value.length >= 5)
@@ -147,7 +410,7 @@ export function buildSearchPlan(query: string, queryCore?: QueryCore): string[] 
   ];
   const strongModel = [
     core.brand,
-    productCore,
+    effectiveProductCore,
     ...core.modelTokens,
     core.attributes.voltage,
   ]
@@ -179,7 +442,7 @@ export function buildSearchPlan(query: string, queryCore?: QueryCore): string[] 
     brandWithCore,
     strongModel,
     brandModelVoltage,
-    productCore,
+    effectiveProductCore,
     distinctiveQuery,
     ...phraseSynonyms,
     ...strongIdentityQueries,

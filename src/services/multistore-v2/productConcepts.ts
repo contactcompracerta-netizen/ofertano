@@ -468,8 +468,8 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
   },
   {
     id: "console",
-    phrases: [],
-    tokens: ["console", "videogame"],
+    phrases: ["playstation", "playstation 4", "playstation 5", "ps4", "ps5"],
+    tokens: ["console", "videogame", "playstation", "ps4", "ps5", "switch", "xbox"],
     coreMode: "token",
   },
   {
@@ -813,8 +813,14 @@ export function normalizeConceptText(value: string): string {
     .replace(/\s+/g, " ");
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function matchesConceptLexeme(candidateToken: string, conceptToken: string): boolean {
+  const candidate = normalizeConceptText(candidateToken);
+  const concept = normalizeConceptText(conceptToken);
+  if (!candidate || !concept) {
+    return false;
+  }
+
+  return candidate === concept || (!concept.endsWith("s") && candidate === `${concept}s`);
 }
 
 function tokenBoundaryMatch(text: string, token: string): boolean {
@@ -823,8 +829,8 @@ function tokenBoundaryMatch(text: string, token: string): boolean {
     return false;
   }
 
-  return new RegExp(`(?:^|\\s)${escapeRegex(normalizedToken)}(?:\\s|$)`).test(
-    ` ${text} `,
+  return contentTokens(text).some((candidateToken) =>
+    matchesConceptLexeme(candidateToken, normalizedToken),
   );
 }
 
@@ -855,7 +861,9 @@ function phraseAppears(normalized: string, phrase: string): boolean {
   }
 
   for (let index = 0; index <= textTokens.length - phraseTokens.length; index += 1) {
-    if (phraseTokens.every((token, offset) => textTokens[index + offset] === token)) {
+    if (phraseTokens.every((token, offset) =>
+      matchesConceptLexeme(textTokens[index + offset]!, token),
+    )) {
       return true;
     }
   }
@@ -927,6 +935,32 @@ export function isWeakModifier(token: string): boolean {
   }
 
   return token.length <= 2 && !/\d/.test(token);
+}
+
+export function isApparelDescriptiveToken(token: string): boolean {
+  const normalized = normalizeConceptText(token);
+  if (!normalized) {
+    return false;
+  }
+
+  const apparelLexemes = new Set([
+    ...conceptLexicalTokens("apparel"),
+    "manga",
+    "curta",
+    "longa",
+    "polo",
+    "masculina",
+    "masculino",
+    "feminina",
+    "feminino",
+    "camisa",
+    "camiseta",
+    "blusa",
+    "vestido",
+    "calca",
+  ]);
+
+  return apparelLexemes.has(normalized);
 }
 
 const GENERIC_DESCRIPTORS = new Set([
@@ -1394,7 +1428,9 @@ function headEvidenceWidth(family: ConceptFamily, normalized: string): number {
     if (
       phraseTokens.length === 0 ||
       phraseTokens.length > textTokens.length ||
-      !phraseTokens.every((token, offset) => textTokens[offset] === token)
+      !phraseTokens.every((token, offset) =>
+        matchesConceptLexeme(textTokens[offset]!, token),
+      )
     ) {
       continue;
     }
@@ -1403,7 +1439,7 @@ function headEvidenceWidth(family: ConceptFamily, normalized: string): number {
   }
 
   for (const token of family.tokens) {
-    if (textTokens[0] === normalizeConceptText(token)) {
+    if (matchesConceptLexeme(textTokens[0] ?? "", token)) {
       width = Math.max(width, 1);
     }
   }
@@ -1460,7 +1496,9 @@ function firstHitTokenIndex(family: ConceptFamily, normalized: string): number {
     }
 
     for (let index = 0; index <= textTokens.length - phraseTokens.length; index += 1) {
-      if (phraseTokens.every((token, offset) => textTokens[index + offset] === token)) {
+      if (phraseTokens.every((token, offset) =>
+        matchesConceptLexeme(textTokens[index + offset]!, token),
+      )) {
         best = Math.min(best, index);
         break;
       }
@@ -1469,7 +1507,9 @@ function firstHitTokenIndex(family: ConceptFamily, normalized: string): number {
 
   for (const token of family.tokens) {
     const normalizedToken = normalizeConceptText(token);
-    const index = textTokens.indexOf(normalizedToken);
+    const index = textTokens.findIndex((candidateToken) =>
+      matchesConceptLexeme(candidateToken, normalizedToken),
+    );
     if (index >= 0) {
       best = Math.min(best, index);
     }
@@ -1477,7 +1517,9 @@ function firstHitTokenIndex(family: ConceptFamily, normalized: string): number {
 
   for (const group of family.allOf ?? []) {
     const indexes = group
-      .map((token) => textTokens.indexOf(normalizeConceptText(token)))
+      .map((token) => textTokens.findIndex((candidateToken) =>
+        matchesConceptLexeme(candidateToken, token),
+      ))
       .filter((index) => index >= 0);
     if (indexes.length === group.length) {
       best = Math.min(best, Math.min(...indexes));

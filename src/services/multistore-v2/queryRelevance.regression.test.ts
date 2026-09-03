@@ -1964,7 +1964,7 @@ assert.equal(
 
 const bicycleQuery = "Bicicleta Aro 29 GTS Dexter 24 Marchas Quadro 21";
 assert.equal(
-  relevance(bicycleQuery, "Bicicleta GTS Dexter 24 Aro 29 Marchas Quadro 21").status,
+  relevance(bicycleQuery, "Bicicleta GTS Dexter 24 Marchas Aro 29 Quadro 21").status,
   "RELEVANT",
   "equivalente estrutural da bicicleta entra sem regra específica",
 );

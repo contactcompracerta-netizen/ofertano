@@ -23,8 +23,10 @@ import {
   extractIdentityNumbers,
   extractMaterial,
   extractModelTokens,
+  extractBundleQuantity,
   extractQuantity,
   extractSize,
+  extractStructuredNumericAttributes,
   extractVoltage,
   inferRole,
   isStopWord,
@@ -40,6 +42,7 @@ import {
   extractIdentityAnchors,
   hasStrongIdentity,
 } from "./identityAnchors";
+import { isApparelDescriptiveToken } from "./productConcepts";
 
 const KNOWN_BRANDS = new Set([
   "ihome",
@@ -111,8 +114,13 @@ export function inferSoldRole(soldText: string, hostText?: string | null): Produ
 }
 
 function extractKnownBrand(text: string, productClass: ProductConceptId): string | null {
-  const words = wordsOf(text);
+  const words = wordsOf(text).map((word) => normalizeMultistoreText(word).toLowerCase());
+
   for (const word of words) {
+    if (productClass === "apparel" && isApparelDescriptiveToken(word)) {
+      continue;
+    }
+
     if (!KNOWN_BRANDS.has(word)) {
       continue;
     }
@@ -122,6 +130,164 @@ function extractKnownBrand(text: string, productClass: ProductConceptId): string
     }
 
     return word;
+  }
+
+  const genericWords = new Set([
+    "sofa",
+    "sofá",
+    "console",
+    "playstation",
+    "ps4",
+    "ps5",
+    "terno",
+    "ternos",
+    "paleto",
+    "paletó",
+    "calca",
+    "calça",
+    "social",
+    "conjunto",
+    "moto",
+    "pressao",
+    "pressão",
+    "cozinha",
+    "panela",
+    "panelas",
+    "armario",
+    "armário",
+    "mesa",
+    "cabeceira",
+    "cadeira",
+    "criado",
+    "moveis",
+    "móveis",
+    "jogo",
+    "jogos",
+    "controles",
+    "portas",
+    "gavetas",
+    "livro",
+    "produto",
+    "recondicionado",
+    "seminovo",
+    "refurbished",
+    "novo",
+    "novas",
+    "usado",
+    "com",
+    "mais",
+    "inclui",
+    "kit",
+    "slim",
+    "pro",
+    "plus",
+    "max",
+    "retratil",
+    "retrátil",
+    "lugares",
+    "linho",
+    "cru",
+    "inox",
+    "preto",
+    "branco",
+    "cinza",
+    "azul",
+    "verde",
+    "amarelo",
+    "rosa",
+    "bege",
+    "madeira",
+    "tecido",
+    "algodao",
+    "algodão",
+    "veludo",
+    "couro",
+    "plastico",
+    "plástico",
+    "metal",
+    "manga",
+    "curta",
+    "longa",
+    "polo",
+    "masculina",
+    "masculino",
+    "feminina",
+    "feminino",
+    "camisa",
+    "camiseta",
+    "blusa",
+    "vestido",
+  ]);
+
+  const materialWords = new Set([
+    "linho",
+    "cru",
+    "inox",
+    "preto",
+    "branco",
+    "cinza",
+    "azul",
+    "verde",
+    "amarelo",
+    "rosa",
+    "bege",
+    "madeira",
+    "tecido",
+    "algodao",
+    "algodão",
+    "veludo",
+    "couro",
+    "plastico",
+    "plástico",
+    "metal",
+  ]);
+
+  const suffixIndex = words.findIndex((token) => materialWords.has(token));
+  const modelLikePattern = /^(?=.*[a-z])(?=.*\d)[a-z0-9]+$/;
+  const modelTokens = new Set(
+    extractModelTokens(tokenize(text)).map((token) => normalizeMultistoreText(token).toLowerCase()),
+  );
+
+  const isModelLikeContext = (token: string, prev?: string, next?: string): boolean => {
+    if (modelTokens.has(token)) {
+      return true;
+    }
+
+    if (next && (modelLikePattern.test(next) || /^(19|20)\d{2}$/.test(next))) {
+      return true;
+    }
+
+    if (prev && (modelLikePattern.test(prev) || /^(19|20)\d{2}$/.test(prev))) {
+      return true;
+    }
+
+    return false;
+  };
+
+  if (suffixIndex >= 0) {
+    for (let index = suffixIndex - 1; index >= 0; index--) {
+      const token = words[index];
+      const next = words[index + 1];
+      const prev = words[index - 1];
+      if (token.length >= 4 && /[a-z]/.test(token) && !genericWords.has(token)) {
+        if (isModelLikeContext(token, prev, next)) {
+          continue;
+        }
+        return token;
+      }
+    }
+  }
+
+  for (let index = words.length - 1; index >= 0; index--) {
+    const token = words[index];
+    const next = words[index + 1];
+    const prev = words[index - 1];
+    if (token.length >= 4 && /[a-z]/.test(token) && !genericWords.has(token)) {
+      if (isModelLikeContext(token, prev, next)) {
+        continue;
+      }
+      return token;
+    }
   }
 
   return null;
@@ -135,17 +301,31 @@ export function buildQueryCore(query: string): QueryCore {
   const classified = classifyProductConcept(soldSource);
   const soldTokens = tokenize(split.sold);
   const allTokens = tokenize(rawQuery);
-  const brand = extractKnownBrand(rawQuery, classified.id);
+  const brandCandidate = extractKnownBrand(rawQuery, classified.id);
+  const soldNucleusTokens = new Set(
+    wordsOf(nucleus.normalizedText).map((token) => normalizeMultistoreText(token).toLowerCase()),
+  );
+  const brand =
+    brandCandidate &&
+    !soldNucleusTokens.has(normalizeMultistoreText(brandCandidate).toLowerCase())
+      ? brandCandidate
+      : null;
   const brandTokens = brand
     ? brand.split(" ").filter((token) => token.length >= 3)
     : [];
   const capacity = extractCapacity(soldTokens);
-  const quantity = extractQuantity(soldTokens);
+  const quantity =
+    extractQuantity(soldTokens) ??
+    (() => {
+      const bundleQuantity = extractBundleQuantity(rawQuery);
+      return bundleQuantity ? `${bundleQuantity}unidades` : null;
+    })();
   const color = extractColor(soldTokens);
   const age = extractAge(tokenize(rawQuery));
   const year = extractQueryYear(rawQuery);
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
+  const numericAttributes = extractStructuredNumericAttributes(soldTokens);
   const voltage = extractVoltage(rawQuery);
   const modelTokens = extractModelTokens(soldTokens);
   const identityAnchors = extractIdentityAnchors(rawQuery).filter((anchor) => {
@@ -183,6 +363,10 @@ export function buildQueryCore(query: string): QueryCore {
         ...brandTokens,
         ...soldTokens.filter((token) => {
           if (isWeakModifier(token) || isStopWord(token) || token.length < 3) {
+            return false;
+          }
+
+          if (classified.id === "apparel" && isApparelDescriptiveToken(token)) {
             return false;
           }
 
@@ -242,6 +426,7 @@ export function buildQueryCore(query: string): QueryCore {
     identityAnchors,
     identityNumbers,
     attributes: {
+      ...numericAttributes,
       ...(capacity ? { capacity } : {}),
       ...(quantity ? { quantity } : {}),
       ...(color ? { color } : {}),

@@ -4,7 +4,11 @@
  * Tests variant generation with identity preservation rules.
  */
 
-import { describe, it, expect } from "vitest";
+import assert from "node:assert/strict";
+
+import { describe, expect, it } from "./nativeTestHarness";
+import { normalizeMultistoreText } from "./normalizeCandidate";
+import { buildAliExpressCompactFallbackQuery } from "./queryPlan";
 import { buildCommerceSearchPlan, variantPreservesCriticalIdentity } from "./searchPlan";
 import { extractSanitizedIdentity } from "./sanitizedIdentity";
 
@@ -192,5 +196,56 @@ describe("PHASE 4: Search Plan Variants", () => {
     );
     // May or may not depending on sanitization
     expect(variants.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+function compactAliExpressQuery(query: string): string {
+  const identity = extractSanitizedIdentity(query);
+  const compact = buildAliExpressCompactFallbackQuery(
+    query,
+    identity.queryCore,
+    identity,
+  );
+  assert.ok(compact, `compact query missing for: ${query}`);
+  return normalizeMultistoreText(compact);
+}
+
+describe("AliExpress compact query strong identity", () => {
+  it("preserves structured strong identity without truncating semantic units", () => {
+    const vacuum = compactAliExpressQuery(
+      "Aspirador de Pó e Água Wap GTW Inox 12 1400W com Bocal de Sopro - 220V",
+    );
+    assert.match(vacuum, /\bwap\b/);
+    assert.match(vacuum, /\bgtw\b/);
+    assert.match(vacuum, /\b220\s*v\b/);
+    assert.match(vacuum, /\b1400\s*w\b/);
+
+    const bundle = compactAliExpressQuery("KIT 4 Camisa Térmica Proteção UV 50+");
+    assert.match(bundle, /(?:\bkit\s+4\b|\b4\s*(?:unidades?|un|x)\b)/);
+
+    const consoleQuery = compactAliExpressQuery(
+      "Console Playstation 4 Ps4 Slim 1 Tb 2controles + Jogos (Recondicionado)",
+    );
+    assert.match(consoleQuery, /\bps\s*4\s+slim\b/);
+    assert.match(consoleQuery, /\b1\s*tb\b/);
+    assert.match(consoleQuery, /\brefurbished\b/);
+
+    const bicycle = compactAliExpressQuery(
+      "Bicicleta Aro 29 GTS Dexter 24 Marchas Quadro 21",
+    );
+    assert.match(bicycle, /\bgts\s+dexter\b/);
+  });
+
+  it("keeps generic apparel natural and free of synthetic identity", () => {
+    const apparel = compactAliExpressQuery(
+      "Novas Camisas Polo Masculinas de Manga Curta Camiseta Casual de Cor Sólida",
+    );
+
+    assert.doesNotMatch(apparel, /\bapparel\b/);
+    assert.doesNotMatch(apparel, /\b(?:novas|casual|solida)\b/);
+    assert.equal((apparel.match(/\bmanga\b/g) ?? []).length, 1);
+    assert.equal(apparel.split(" ")[0], "camisa");
+    assert.equal(apparel, "camisa polo masculina manga curta");
+    assert.equal(new Set(apparel.split(" ")).size, apparel.split(" ").length);
   });
 });

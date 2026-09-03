@@ -4,11 +4,13 @@ import {
   isAccessoryHead,
   isAttributeWord,
   classGroupOf,
+  isStopWord,
   tokenize,
   normalizeMultistoreText,
   isCapacityOrQuantityUnit,
-  isSizeHint,
+  isDimensionHint,
 } from "./normalizeCandidate";
+import { isGenericDescriptor } from "./productConcepts";
 
 const ADULT_AGE_TOKENS = new Set([
   "adulto",
@@ -74,7 +76,11 @@ export function alphanumericCodeOccurs(
   suffixBoundary: "digit" | "alnum" = "digit",
 ): boolean {
   const compactCode = presentationCompact(code);
-  if (compactCode.length < 3 || !/\d/.test(compactCode)) {
+  const alphabeticCommercialCode = /^[a-z]{3,8}$/.test(compactCode);
+  if (
+    compactCode.length < 3 ||
+    (!/\d/.test(compactCode) && !alphabeticCommercialCode)
+  ) {
     return false;
   }
 
@@ -84,7 +90,10 @@ export function alphanumericCodeOccurs(
   }
 
   const body = [...compactCode].map(escapeRegex).join("[\\s.-]*");
-  const suffix = suffixBoundary === "alnum" ? "(?![a-z0-9])" : "(?![0-9])";
+  const suffix =
+    suffixBoundary === "alnum" || alphabeticCommercialCode
+      ? "(?![a-z0-9])"
+      : "(?![0-9])";
   const pattern = new RegExp(`(?:^|[^a-z0-9])${body}${suffix}`);
   return pattern.test(searchText);
 }
@@ -115,7 +124,39 @@ function isDistinctiveLetterToken(token: string): boolean {
     return false;
   }
 
-  return !classGroupOf(token) && !isAttributeWord(token) && !isAccessoryHead(token);
+  return (
+    !isStopWord(token) &&
+    !classGroupOf(token) &&
+    !isAttributeWord(token) &&
+    !isAccessoryHead(token) &&
+    !isGenericDescriptor(token)
+  );
+}
+
+function isTitleCaseNominal(value: string, token: string): boolean {
+  return (
+    /^[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]{2,}$/u.test(value) &&
+    isDistinctiveLetterToken(token)
+  );
+}
+
+function isCommercialAlphabeticCode(
+  rawTokens: string[],
+  normalizedTokens: string[],
+  index: number,
+): boolean {
+  const raw = rawTokens[index] ?? "";
+  const token = normalizedTokens[index] ?? "";
+  if (!/^[A-Z]{3,8}$/.test(raw) || !isDistinctiveLetterToken(token)) {
+    return false;
+  }
+
+  const neighbors = [index - 1, index + 1];
+  return neighbors.some((neighborIndex) => {
+    const neighborRaw = rawTokens[neighborIndex] ?? "";
+    const neighborToken = normalizedTokens[neighborIndex] ?? "";
+    return isTitleCaseNominal(neighborRaw, neighborToken);
+  });
 }
 
 export function extractIdentityAnchors(text: string): IdentityAnchor[] {
@@ -132,7 +173,12 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
       return;
     }
 
-    if (!/[a-z]/.test(compact) || !/\d/.test(compact)) {
+    const alphabeticCommercialCode =
+      kind === "MODEL" && /^[a-z]{3,8}$/.test(compact);
+    if (
+      !/[a-z]/.test(compact) ||
+      (!/\d/.test(compact) && !alphabeticCommercialCode)
+    ) {
       return;
     }
 
@@ -161,6 +207,16 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
   }
 
   const tokens = tokenize(text);
+  const rawTokens = text.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const normalizedRawTokens = rawTokens.map((token) =>
+    normalizeMultistoreText(token),
+  );
+  for (let index = 0; index < rawTokens.length; index += 1) {
+    if (isCommercialAlphabeticCode(rawTokens, normalizedRawTokens, index)) {
+      push(normalizedRawTokens[index]!, "MODEL");
+    }
+  }
+
   for (const token of extractModelTokens(tokens)) {
     push(
       token,
@@ -176,7 +232,7 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
       continue;
     }
 
-    if (isCapacityOrQuantityUnit(tokens[index + 2]) || isSizeHint(current)) {
+    if (isCapacityOrQuantityUnit(tokens[index + 2]) || isDimensionHint(current)) {
       continue;
     }
 

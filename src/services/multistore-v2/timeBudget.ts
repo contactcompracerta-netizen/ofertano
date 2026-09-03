@@ -39,7 +39,7 @@ export function createSearchDeadline(
   const deadlineAt = startedAt + budget.globalMs;
   const boundedResponseReserveMs = Math.min(
     Math.max(0, responseReserveMs),
-    Math.max(25, Math.floor(budget.globalMs * 0.2)),
+    Math.max(25, Math.floor(budget.globalMs * 0.3)),
   );
   const controller = new AbortController();
   const globalTimer = setTimeout(() => {

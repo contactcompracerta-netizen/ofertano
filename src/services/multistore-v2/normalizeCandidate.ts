@@ -261,6 +261,10 @@ const QUANTITY_UNITS = new Set([
   "pc",
   "pcs",
   "litros",
+  "marcha",
+  "marchas",
+  "lugar",
+  "lugares",
 ]);
 
 const VOLTAGE_VALUES = new Set(["110", "127", "220", "240"]);
@@ -271,6 +275,13 @@ const SIZE_HINTS = new Set([
   "size",
   "numero",
   "nr",
+]);
+
+const DIMENSION_HINTS = new Set([
+  ...SIZE_HINTS,
+  "aro",
+  "quadro",
+  "frame",
 ]);
 
 const CAPACITY_UNITS = new Set([
@@ -618,6 +629,13 @@ function firstUnabsorbedPartHead(
 
   for (let index = 0; index < words.length; index += 1) {
     const token = words[index]!;
+    if (
+      token === "quadro" &&
+      words[index + 1] &&
+      /^\d+(?:[.]\d+)?$/.test(words[index + 1]!)
+    ) {
+      continue;
+    }
     if (STOP_WORDS.has(token) || isCapacityOrQuantityUnit(token)) {
       const phraseHead = partHeadAt(words, index);
       if (!phraseHead || phraseHead.span <= 1) {
@@ -928,6 +946,93 @@ export function extractQuantity(tokens: string[]): string | null {
   return null;
 }
 
+export function extractStructuredNumericAttributes(
+  value: string | string[],
+): Record<string, string> {
+  const tokens = Array.isArray(value) ? value : wordsOf(value);
+  const attributes: Record<string, string> = {};
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    const next = tokens[index + 1];
+    if (!next) {
+      continue;
+    }
+
+    if (DIMENSION_HINTS.has(token) && /^\d+(?:\.\d+)?$/.test(next)) {
+      attributes[token] = next;
+      continue;
+    }
+
+    if (/^\d+(?:\.\d+)?$/.test(token) && QUANTITY_UNITS.has(next)) {
+      attributes[next] = token;
+    }
+  }
+
+  return attributes;
+}
+
+/**
+ * Extracts an explicitly advertised bundle quantity without treating ordinary
+ * product specifications as a bundle. Query and candidate parsing share this
+ * rule so `KIT 4`, `kit 2` and `4 unidades` are interpreted consistently.
+ */
+export function extractBundleQuantity(value: string | string[]): number | null {
+  const tokens = Array.isArray(value) ? value : wordsOf(value);
+  const bundleMarkers = new Set(["kit", "kits", "pack", "pacote", "conjunto"]);
+  const bundleUnits = new Set([
+    "unidade",
+    "unidades",
+    "un",
+    "und",
+    "unid",
+    "pc",
+    "pcs",
+    "peca",
+    "pecas",
+    "camisa",
+    "camisas",
+    "par",
+    "pares",
+  ]);
+  const asQuantity = (token: string | undefined): number | null => {
+    if (!token || !/^\d{1,2}$/.test(token)) {
+      return null;
+    }
+
+    const quantity = Number.parseInt(token, 10);
+    return quantity >= 1 && quantity <= 99 ? quantity : null;
+  };
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    const next = tokens[index + 1];
+    const afterNext = tokens[index + 2];
+
+    if (bundleMarkers.has(token)) {
+      const directQuantity = asQuantity(next);
+      const qualifiedQuantity =
+        next === "de" || next === "com" || next === "c"
+          ? asQuantity(afterNext)
+          : null;
+      if (directQuantity ?? qualifiedQuantity) {
+        return directQuantity ?? qualifiedQuantity;
+      }
+    }
+
+    const quantity = asQuantity(token);
+    if (quantity && next && bundleUnits.has(next)) {
+      return quantity;
+    }
+
+    if (bundleUnits.has(token) && !next) {
+      return 1;
+    }
+  }
+
+  return null;
+}
+
 export function extractSize(tokens: string[]): string | null {
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
@@ -950,6 +1055,10 @@ export function isCapacityOrQuantityUnit(token: string | undefined): boolean {
 
 export function isSizeHint(token: string | undefined): boolean {
   return Boolean(token && SIZE_HINTS.has(token));
+}
+
+export function isDimensionHint(token: string | undefined): boolean {
+  return Boolean(token && DIMENSION_HINTS.has(token));
 }
 
 export function extractColor(tokens: string[]): string | null {
@@ -1102,7 +1211,7 @@ export function extractModelTokens(tokens: string[]): string[] {
       continue;
     }
 
-    if (/^[a-z]{1,}$/.test(current) && /^\d{2,}$/.test(next) && !QUANTITY_UNITS.has(tokens[index + 2] ?? "") && !CAPACITY_UNITS.has(tokens[index + 2] ?? "") && !isSizeHint(current)) {
+    if (/^[a-z]{1,}$/.test(current) && /^\d{2,}$/.test(next) && !QUANTITY_UNITS.has(tokens[index + 2] ?? "") && !CAPACITY_UNITS.has(tokens[index + 2] ?? "") && !isDimensionHint(current)) {
       if (!isAttributeWord(current) && !classGroupOf(current) && !isAccessoryHead(current)) {
         models.push(`${current}${next}`);
       }
@@ -1132,7 +1241,7 @@ export function extractIdentityNumbers(tokens: string[]): string[] {
     }
 
     const previous = tokens[index - 1];
-    if (previous && (CAPACITY_UNITS.has(previous) || SIZE_HINTS.has(previous))) {
+    if (previous && (CAPACITY_UNITS.has(previous) || DIMENSION_HINTS.has(previous))) {
       continue;
     }
 

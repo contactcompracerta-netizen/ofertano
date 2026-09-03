@@ -12,6 +12,7 @@ import {
   detectHostSplit,
   extractAge,
   extractVoltage,
+  extractStructuredNumericAttributes,
   extractYearCoverage,
   normalizeMultistoreText,
   tokenize,
@@ -351,6 +352,16 @@ export function scoreQueryRelevance(
   const attributeConflicts: string[] = [];
   const compatibilityMatches: string[] = [];
   const compatibilityConflicts: string[] = [];
+
+  const queryNumericAttributes = extractStructuredNumericAttributes(intent.rawQuery);
+  const candidateNumericAttributes = extractStructuredNumericAttributes(candidateText);
+  for (const [attribute, queryValue] of Object.entries(queryNumericAttributes)) {
+    const candidateValue = candidateNumericAttributes[attribute];
+    if (candidateValue && candidateValue !== queryValue) {
+      attributeConflicts.push(`numeric:${attribute}:${queryValue}!=${candidateValue}`);
+      hardConflicts.push(`numeric:${attribute}:${queryValue}!=${candidateValue}`);
+    }
+  }
 
   if (classCompatibility === "CONFLICT") {
     hardConflicts.push(
@@ -695,9 +706,20 @@ export function scoreQueryRelevance(
   const missingContextIsMaterial =
     missingContext.length * 2 >=
     Math.max(1, (intent.distinctiveContext ?? []).length);
+  const strongBrandMatch = Boolean(
+    intent.brand &&
+      fingerprint.brand.value &&
+      (
+        intent.brand === fingerprint.brand.value ||
+        intent.brand.split(/\s+/).includes(fingerprint.brand.value) ||
+        fingerprint.brand.value.split(/\s+/).includes(intent.brand)
+      )
+  );
+  const skipContextHardConflict = strongBrandMatch && matchedDistinctive.length >= 2;
   if (
     missingContext.length > 0 &&
     !modelPresentEnough &&
+    !skipContextHardConflict &&
     (competingCandidateContext || missingContextIsMaterial)
   ) {
     hardConflicts.push(
