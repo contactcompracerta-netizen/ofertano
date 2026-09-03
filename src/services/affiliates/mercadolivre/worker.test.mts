@@ -54,6 +54,9 @@ function createMemoryStores(seed: {
     async listPendingMercadoLivreOffers(limit) {
       return pendingList.slice(0, limit);
     },
+    async countPending() {
+      return pendingList.length;
+    },
     async findOfferById(offerId) {
       const o = offers.get(offerId);
       return o ? { ...o } : null;

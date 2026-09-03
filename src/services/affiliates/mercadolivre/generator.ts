@@ -81,6 +81,125 @@ export function extractItemId(url: string): string | null {
   return m ? m[1].toUpperCase().replace(/_/g, "-") : null;
 }
 
+/** Só aceita http/https (mesmo esquema seguro da requisição). */
+export function isResolvableHttpUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Domínio oficial Mercado Livre (hostname .mercadolivre.com.br ou
+ * .mercadolivre.com). Resolução que saia daqui é REJEITADA: nunca seguir
+ * URL externa arbitrária.
+ */
+export function isOfficialMercadoLivreUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === "mercadolivre.com.br" ||
+      host.endsWith(".mercadolivre.com.br") ||
+      host.endsWith(".mercadolivre.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** ID de catálogo `/p/MLB...` presente na URL. */
+export function extractCatalogId(url: string): string | null {
+  const m = url.match(/(?:^|[/?#])\/?p\/(MLB[-_]?\d{5,})/i);
+  return m ? m[1].toUpperCase().replace(/_/g, "-") : null;
+}
+
+/** `item_id` presente na URL (query `item_id:MLB...` do pdp_filters). */
+export function extractItemIdFromQuery(url: string): string | null {
+  const m = url.match(/item_id[=:](MLB[-_]?\d{5,})/i);
+  return m ? m[1].toUpperCase().replace(/_/g, "-") : null;
+}
+
+export type ResolvedTargetMeta = {
+  catalogId: string | null;
+  itemId: string | null;
+};
+
+/**
+ * Extrai o alvo resolvido de uma URL final (após redirect oficial).
+ * O catalog ID tem precedência sobre o MLB cru da path.
+ */
+export function resolveTargetMeta(url: string): ResolvedTargetMeta {
+  return {
+    catalogId: extractCatalogId(url) ?? extractItemId(url),
+    itemId: extractItemIdFromQuery(url),
+  };
+}
+
+/**
+ * Marcadores usados na validação do meli.la. Incluem o item original e o
+ * alvo RESOLVIDO (catalog/item). Não exige que o MLB stale continue
+ * aparecendo depois do redirect oficial. Para robustez, registra cada ID nas
+ * formas com e sem hífen (o ML os exibe de forma inconsistente).
+ */
+export function buildAffiliateTargetMarkers(
+  originalItemId: string | null,
+  resolved: ResolvedTargetMeta,
+): string[] {
+  const set = new Set<string>();
+  const add = (id: string | null | undefined) => {
+    if (!id) return;
+    const up = id.toUpperCase();
+    set.add(up);
+    set.add(up.replace(/MLB-?/, "MLB-"));
+    set.add(up.replace(/MLB-?/, "MLB"));
+  };
+  add(originalItemId);
+  add(resolved.catalogId);
+  add(resolved.itemId);
+  return [...set];
+}
+
+export type ResolvedSource = {
+  requestedUrl: string;
+  resolvedUrl: string;
+  redirect: boolean;
+  catalogId: string | null;
+  itemId: string | null;
+  official: boolean;
+  /** URL a usar como entrada do Link Builder (resolvida ou original). */
+  linkBuilderInput: string;
+};
+
+/**
+ * Decisão pura (sem IO) sobre a resolução: determina se houve redirect
+ * oficial e qual URL alimenta o Link Builder. Mantém a entrada ORIGINAL se
+ * não houver redirect relevante; usa a RESOLVIDA apenas quando permanece no
+ * domínio oficial do Mercado Livre.
+ */
+export function decideResolvedSource(
+  requestedUrl: string,
+  resolvedUrl: string,
+): ResolvedSource {
+  const official = isOfficialMercadoLivreUrl(resolvedUrl);
+  const redirect = requestedUrl !== resolvedUrl;
+  const meta = resolveTargetMeta(resolvedUrl);
+
+  // Redirect não-oficial (saiu do ML) ou não-resolvível → não usa resolved.
+  const linkBuilderInput = redirect && official ? resolvedUrl : requestedUrl;
+
+  return {
+    requestedUrl,
+    resolvedUrl,
+    redirect,
+    catalogId: meta.catalogId,
+    itemId: meta.itemId,
+    official,
+    linkBuilderInput,
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -352,15 +471,17 @@ async function diagnoseCapture(
 
 async function findExpectedMlb(
   page: import("playwright").Page,
-  expectedItem: string,
+  needles: string[],
 ): Promise<boolean> {
-  const needle = expectedItem;
   const foundIn = async (urls: string[], text?: string[]): Promise<boolean> => {
-    for (const u of urls) {
-      if (u && u.includes(needle)) return true;
-    }
-    for (const t of text || []) {
-      if (t && t.includes(needle)) return true;
+    for (const n of needles) {
+      if (!n) continue;
+      for (const u of urls) {
+        if (u && u.includes(n)) return true;
+      }
+      for (const t of text || []) {
+        if (t && t.includes(n)) return true;
+      }
     }
     return false;
   };
@@ -395,9 +516,9 @@ async function findExpectedMlb(
   );
   if (ld) {
     const joined = ld.join("\n");
-    if (joined.includes(needle)) return true;
+    if (await foundIn([], [joined])) return true;
     const urlFromLd = joined.match(/https?:\/\/[^"\\ ]*MLB\d{5,}/i);
-    if (urlFromLd && urlFromLd[0].includes(needle)) return true;
+    if (urlFromLd && (await foundIn([urlFromLd[0]]))) return true;
   }
 
   const bodies = await safeEval(
@@ -415,7 +536,7 @@ async function findExpectedMlb(
 async function diagnoseValidationInNewPage(
   context: import("playwright").BrowserContext,
   affiliateUrl: string,
-  expectedItem: string,
+  expectedItems: string[],
   log: (msg: string) => void,
 ): Promise<boolean> {
   const page = await context.newPage();
@@ -454,7 +575,7 @@ async function diagnoseValidationInNewPage(
         recordHop(cur);
         last = cur;
       }
-      if (await findExpectedMlb(page, expectedItem)) {
+      if (await findExpectedMlb(page, expectedItems)) {
         found = true;
         break;
       }
@@ -465,6 +586,55 @@ async function diagnoseValidationInNewPage(
   }
 
   return found;
+}
+
+/**
+ * Resolve a sourceUrl pelo mesmo Chrome (CDP) em página temporária e
+ * controlada. Captura requestedUrl e resolvedUrl (após redirect) e extrai os
+ * IDs do alvo resolvido. Segurança:
+ * - só http/https (senão retorna null); hostname deve continuar no domínio
+ *   oficial do ML (redirect externo fica sinalizado em `official=false` e é
+ *   rejeitado pelo chamador — nunca segue URL arbitrária);
+ * - login/CAPTCHA vira AUTH_REQUIRED pelo chamador;
+ * - timeout → transient (catch do chamador).
+ */
+async function resolveSourceUrl(
+  context: import("playwright").BrowserContext,
+  sourceUrl: string,
+  log: (msg: string) => void,
+): Promise<ResolvedSource | null> {
+  if (!isResolvableHttpUrl(sourceUrl)) {
+    log(`SOURCE_URL_REQUESTED=<inválida>`);
+    return null;
+  }
+
+  const requestedUrl = sourceUrl;
+  log(`SOURCE_URL_REQUESTED=${sourceUrl}`);
+
+  const page = await context.newPage();
+  let resolvedUrl = requestedUrl;
+  try {
+    await page
+      .goto(sourceUrl, { waitUntil: "domcontentloaded", timeout: 30000 })
+      .catch(() => {});
+    try {
+      const current = page.url();
+      if (current && current !== "about:blank") resolvedUrl = current;
+    } catch {
+      /* mantém requestedUrl */
+    }
+
+    const decision = decideResolvedSource(requestedUrl, resolvedUrl);
+    log(`SOURCE_URL_RESOLVED=${resolvedUrl}`);
+    log(`SOURCE_REDIRECTED=${decision.redirect}`);
+    log(`RESOLVED_CATALOG_ID=${decision.catalogId ?? "none"}`);
+    log(`RESOLVED_ITEM_ID=${decision.itemId ?? "none"}`);
+    log(`LINK_BUILDER_INPUT=${decision.linkBuilderInput === resolvedUrl ? "RESOLVED" : "ORIGINAL"}`);
+
+    return decision;
+  } finally {
+    await page.close().catch(() => {});
+  }
 }
 
 async function waitForUrlField(
@@ -561,6 +731,50 @@ export async function generateMercadoLivreAffiliateLink(
     const contexts = browser.contexts();
     context = contexts.length > 0 ? contexts[0] : await browser.newContext();
 
+    // Resolve a sourceUrl antes do Link Builder (redirect oficial pode apontar
+    // para o catálogo /p/MLB... correto). Guarda o resultado para usar como
+    // entrada do Link Builder e como alvo da validação. NÃO muta a oferta.
+    let resolved: ResolvedSource | null = null;
+    try {
+      resolved = await resolveSourceUrl(context, sourceUrl, log);
+    } catch (err) {
+      if (isTransientNavError(err)) {
+        log("SOURCE_RESOLUTION=TRANSIENT");
+      } else {
+        log("SOURCE_RESOLUTION=FAILED");
+      }
+    }
+    if (resolved === null) {
+      // URL inválida (não http/https).
+      if (!isResolvableHttpUrl(sourceUrl)) {
+        return { status: "GENERATION_FAILED", reason: "sourceUrl inválida (apenas http/https)" };
+      }
+      return {
+        status: "GENERATION_FAILED",
+        reason: "sourceUrl não pôde ser resolvida via CDP.",
+      };
+    }
+    // Redirect saiu do domínio oficial do ML → rejeitado (não segue externa).
+    if (resolved.redirect && !resolved.official) {
+      if (urlNeedsAuth(resolved.resolvedUrl)) {
+        return {
+          status: "AUTH_REQUIRED",
+          reason: "Resolução caiu em login do Mercado Livre; autentique manualmente.",
+        };
+      }
+      log("SOURCE_REDIRECT_REJECTED=fora do domínio oficial Mercado Livre");
+      return {
+        status: "GENERATION_FAILED",
+        reason: "Resolução da URL saiu do domínio oficial Mercado Livre.",
+      };
+    }
+
+    const linkBuilderInput = resolved.linkBuilderInput;
+    const resolvedMeta = {
+      catalogId: resolved.catalogId ?? null,
+      itemId: resolved.itemId ?? null,
+    };
+
     let page = context.pages().find((p) => !p.isClosed());
     if (!page) {
       page = await context.newPage();
@@ -602,8 +816,8 @@ export async function generateMercadoLivreAffiliateLink(
       return { status: "GENERATION_FAILED", reason: "Campo de URL não localizado no gerador" };
     }
     await field.click();
-    await field.fill(sourceUrl);
-    log("[input] URL inserida no campo.");
+    await field.fill(linkBuilderInput);
+    log(`[input] URL inserida no campo (${linkBuilderInput === sourceUrl ? "ORIGINAL" : "RESOLVED"}).`);
 
     const btn = await waitForGenerateButton(page);
     if (!btn) {
@@ -619,10 +833,12 @@ export async function generateMercadoLivreAffiliateLink(
     }
 
     const affiliateUrl = diag.capturedUrl;
+    // Valida o meli.la contra o alvo RESOLVIDO (catalog/item) + item original.
+    const targetMarkers = buildAffiliateTargetMarkers(expectedItemId, resolvedMeta);
     const validated = await diagnoseValidationInNewPage(
       context,
       affiliateUrl,
-      expectedItemId,
+      targetMarkers,
       log,
     );
 

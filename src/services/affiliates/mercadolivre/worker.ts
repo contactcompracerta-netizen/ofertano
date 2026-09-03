@@ -1,6 +1,6 @@
 import type { GenerateOutcome } from "./generator";
 import { confirmarAffiliateLinkMercadoLivre } from "@/lib/affiliates/publicPurchase";
-import type { MercadoLivreApplyStore, MercadoLivrePending, MercadoLivrePendingStore } from "./pending";
+import type { MercadoLivreApplyStore, MercadoLivrePendingStore } from "./pending";
 
 export type GeneratorFn = (input: {
   sourceUrl: string;
@@ -46,7 +46,6 @@ export async function runMercadoLivreWorker(
   config: WorkerConfig,
 ): Promise<WorkerRunResult> {
   const log = config.log ?? (() => {});
-  const pendingItems: MercadoLivrePending[] = [];
 
   log("ML_AFFILIATE_WORKER_START");
   const pending = await input.pendingStore.listPendingMercadoLivreOffers(
@@ -114,6 +113,17 @@ export async function runMercadoLivreWorker(
         reason: ("reason" in outcome ? outcome.reason : "") as string,
       });
       failedCount += 1;
+      // CHROME_NOT_RUNNING e AUTH_REQUIRED são condições GLOBAIS: interrompe
+      // imediatamente o ciclo, não tenta as demais ofertas e preserva pendências.
+      if (
+        outcome.status === "CHROME_NOT_RUNNING" ||
+        outcome.status === "AUTH_REQUIRED"
+      ) {
+        log(
+          `ML_AFFILIATE_FAIL_FAST=${outcome.status} (interrompe ciclo; pendências preservadas)`,
+        );
+        break;
+      }
       continue;
     }
 

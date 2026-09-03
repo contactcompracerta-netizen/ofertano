@@ -29,3 +29,18 @@ export {
   createPrismaMercadoLivreApplyStore,
   createPrismaMercadoLivreWorkerStores,
 } from "./prisma";
+
+export {
+  createMercadoLivreAffiliateDaemon,
+  acquireInstanceLock,
+} from "./daemon";
+export type {
+  DaemonState,
+  ItemTone,
+  DaemonConfig,
+  DaemonDeps,
+  CycleSummary,
+  DaemonRuntimeEvents,
+  MercadoLivreAffiliateDaemon,
+  InstanceLock,
+} from "./daemon";

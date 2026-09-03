@@ -10,6 +10,8 @@ export type MercadoLivrePending = {
 
 export type MercadoLivrePendingStore = {
   listPendingMercadoLivreOffers(limit: number): Promise<MercadoLivrePending[]>;
+  /** Conta pendências candidatas (mesmo filtro de listagem, sem limite). */
+  countPending(): Promise<number>;
   findOfferById(offerId: string): Promise<{
     id: string;
     productId: string;
@@ -90,7 +92,7 @@ export function createPrismaMercadoLivrePendingStore(
       }
 
       return opportunities
-        .map((opportunity) => {
+        .map((opportunity): MercadoLivrePending | null => {
           if (!opportunity.productId) return null;
           const offer = offersByProduct.get(opportunity.productId);
           if (!offer) return null;
@@ -103,6 +105,17 @@ export function createPrismaMercadoLivrePendingStore(
           };
         })
         .filter((p): p is MercadoLivrePending => Boolean(p));
+    },
+
+    async countPending() {
+      return client.productOpportunity.count({
+        where: {
+          marketplace: "MERCADO_LIVRE",
+          status: "WAITING_AFFILIATE",
+          affiliateLink: null,
+          productId: { not: null },
+        },
+      });
     },
 
     async findOfferById(offerId) {
