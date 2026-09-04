@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+
 import { supabase } from "@/lib/supabaseClient";
 
 type AlertType = "ANY_DROP" | "TARGET";
@@ -230,7 +232,7 @@ export default function PriceAlertButton({
   }, [productId]);
 
   useEffect(() => {
-    if (!aberto) {
+  if (!aberto) {
       document.body.style.overflow = "";
       return;
     }
@@ -449,98 +451,105 @@ export default function PriceAlertButton({
     Boolean(alertaAtual?.active);
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() =>
-          setAberto((valor) => !valor)
-        }
-        disabled={carregando}
-        aria-expanded={aberto}
-        className={`flex h-9 w-9 items-center justify-center rounded-full border transition disabled:cursor-wait disabled:opacity-60 ${
-          alertaAtivo
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-            : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-        }`}
-        aria-label={
-          alertaAtivo
-            ? "Alerta de preço ativo"
-            : "Criar alerta de preço"
-        }
-        title={
-          alertaAtivo
-            ? "Alerta de preço ativo"
-            : "Criar alerta de preço"
-        }
-      >
-        <BellIcon className="h-5 w-5" />
-      </button>
-
-      {aberto && (
-        <div
-          className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-0 sm:absolute sm:right-0 sm:top-12 sm:inset-auto sm:z-50 sm:block sm:bg-transparent"
-          onClick={() => setAberto(false)}
+    <>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() =>
+            setAberto((valor) => !valor)
+          }
+          disabled={carregando}
+          aria-expanded={aberto}
+          aria-haspopup="dialog"
+          className={`flex h-9 w-9 items-center justify-center rounded-full border transition disabled:cursor-wait disabled:opacity-60 ${
+            alertaAtivo
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+          }`}
+          aria-label={
+            alertaAtivo
+              ? "Alerta de preço ativo"
+              : "Criar alerta de preço"
+          }
+          title={
+            alertaAtivo
+              ? "Alerta de preço ativo"
+              : "Criar alerta de preço"
+          }
         >
+          <BellIcon className="h-5 w-5" />
+        </button>
+      </div>
+
+      {aberto &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            className="flex max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl [padding-bottom:calc(1rem+env(safe-area-inset-bottom))] sm:block sm:max-h-none sm:max-w-[calc(100vw-32px)] sm:w-[360px] sm:rounded-2xl sm:pb-4"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
+            className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4"
+            onClick={() => setAberto(false)}
           >
-            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-200 sm:hidden" />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="flex max-h-[100dvh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:max-w-[480px] sm:rounded-2xl"
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div className="mx-auto mb-3 mt-2 h-1.5 w-14 rounded-full bg-slate-200 sm:hidden" />
 
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
-                  Alerta de preço
-                </p>
+              <div className="flex shrink-0 items-start justify-between gap-3 px-4 pt-2 sm:pt-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                    Alerta de preço
+                  </p>
 
-                <h3 className="mt-1 text-base font-black leading-5 text-slate-950">
-                  Avise quando o preço baixar
-                </h3>
+                  <h3 className="mt-1 text-base font-black leading-5 text-slate-950">
+                    Avise quando o preço baixar
+                  </h3>
 
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Menor preço atual:{" "}
-                  <strong className="text-slate-800">
-                    {formatarPreco(
-                      currentPrice
-                    )}
-                  </strong>
-                </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Menor preço atual:{" "}
+                    <strong className="text-slate-800">
+                      {formatarPreco(
+                        currentPrice
+                      )}
+                    </strong>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAberto(false)
+                  }
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                  aria-label="Fechar alerta"
+                >
+                  <CloseIcon className="h-4 w-4" />
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setAberto(false)
-                }
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
-                aria-label="Fechar alerta"
-              >
-                <CloseIcon className="h-4 w-4" />
-              </button>
-            </div>
+              <div className="mt-4 min-h-0 min-w-0 w-full flex-1 overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4">
+                {!autenticado ? (
+                  <div>
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-sm font-bold leading-5 text-amber-900">
+                        Entre na sua conta para
+                        salvar alertas e recebê-los
+                        em todos os seus dispositivos.
+                      </p>
+                    </div>
 
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 sm:max-h-[75vh] sm:flex-none">
-              {!autenticado ? (
-                <div>
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                    <p className="text-sm font-bold leading-5 text-amber-900">
-                      Entre na sua conta para
-                      salvar alertas e recebê-los
-                      em todos os seus dispositivos.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={abrirLogin}
+                      className="mt-3 flex min-h-11 w-full max-w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
+                    >
+                      Entrar para criar alerta
+                    </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={abrirLogin}
-                    className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
-                  >
-                    Entrar para criar alerta
-                  </button>
-                </div>
-              ) : (
+                ) : (
                 <>
                   <div className="space-y-2">
                     <button
@@ -550,7 +559,7 @@ export default function PriceAlertButton({
                         setErro(null);
                         setSucesso(null);
                       }}
-                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                      className={`w-full max-w-full rounded-2xl border p-3 text-left transition ${
                         tipo === "ANY_DROP"
                           ? "border-emerald-500 bg-emerald-50"
                           : "border-slate-200 bg-white hover:border-slate-300"
@@ -594,7 +603,7 @@ export default function PriceAlertButton({
                         setErro(null);
                         setSucesso(null);
                       }}
-                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                      className={`w-full max-w-full rounded-2xl border p-3 text-left transition ${
                         tipo === "TARGET"
                           ? "border-emerald-500 bg-emerald-50"
                           : "border-slate-200 bg-white hover:border-slate-300"
@@ -637,7 +646,7 @@ export default function PriceAlertButton({
                         Avise quando chegar a:
                       </label>
 
-                      <div className="flex h-11 items-center rounded-xl border border-slate-300 bg-white px-3 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10">
+                      <div className="flex h-11 w-full max-w-full items-center rounded-xl border border-slate-300 bg-white px-3 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10">
                         <span className="mr-2 text-sm font-black text-slate-500">
                           R$
                         </span>
@@ -681,7 +690,7 @@ export default function PriceAlertButton({
                       void salvarAlerta()
                     }
                     disabled={salvando}
-                    className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                    className="mt-4 flex min-h-11 w-full max-w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
                   >
                     <BellIcon className="h-4 w-4" />
 
@@ -699,17 +708,18 @@ export default function PriceAlertButton({
                         void desativarAlerta()
                       }
                       disabled={salvando}
-                      className="mt-2 flex min-h-10 w-full items-center justify-center rounded-xl px-4 text-xs font-black text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60"
+                      className="mt-2 flex min-h-10 w-full max-w-full items-center justify-center rounded-xl px-4 text-xs font-black text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60"
                     >
                       Desativar alerta
                     </button>
                   )}
                 </>
               )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

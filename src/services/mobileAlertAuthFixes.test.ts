@@ -54,8 +54,8 @@ async function run() {
   assert.match(alerta, /overflow-y-auto/);
   assert.match(
     alerta,
-    /min-h-0 flex-1 overflow-y-auto/,
-    "Conteúdo do modal precisa ser flex-1 com min-h-0 e scroll interno.",
+    /min-h-0 min-w-0 w-full flex-1 overflow-y-auto/,
+    "Conteúdo do modal precisa ser flex-1 com min-h-0/min-w-0 e scroll interno.",
   );
 
   // ALERT_MODAL_NO_BOTTOM_CLIPPING — altura limitada à viewport dinâmica
@@ -66,7 +66,7 @@ async function run() {
   );
   assert.match(
     alerta,
-    /flex max-h-\[100dvh\] w-full max-w-none flex-col overflow-hidden/,
+    /flex max-h-\[100dvh\] w-full min-w-0 max-w-full flex-col overflow-hidden/,
     "Modal precisa ser flex-col com overflow-hidden dentro da altura da viewport.",
   );
 
@@ -81,14 +81,12 @@ async function run() {
     "Modal precisa respeitar env(safe-area-inset-bottom).",
   );
 
-  // ALERT_MODAL_DESKTOP_REGRESSION — dropdown desktop preservado
+  // ALERT_MODAL_DESKTOP_REGRESSION — desktop usa dialog centralizado,
+  // nunca dropdown absoluto preso ao botão
   for (const token of [
-    "sm:block",
-    "sm:max-h-none",
-    "sm:w-[360px]",
-    "sm:rounded-2xl",
-    "sm:max-h-[75vh]",
-    "sm:pb-4",
+    "sm:items-center",
+    "sm:justify-center",
+    "sm:p-4",
   ]) {
     assert.match(
       alerta,
@@ -98,6 +96,46 @@ async function run() {
       `Desktop: ${token} precisa permanecer no alerta.`,
     );
   }
+
+  for (const proibido of [
+    "sm:absolute",
+    "sm:right-0",
+    "sm:top-12",
+    "sm:inset-auto",
+    "sm:block",
+    "sm:max-h-none",
+    "sm:w-[360px]",
+    "sm:max-h-[75vh]",
+  ]) {
+    assert.doesNotMatch(
+      alerta,
+      new RegExp(
+        proibido.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      ),
+      `Desktop: ${proibido} não pode existir (dropdown antigo).`,
+    );
+  }
+
+  // ALERT_MODAL_DESKTOP_SAFE_WIDTH — largura confortável no desktop
+  assert.match(
+    alerta,
+    /sm:max-w-\[480px\]/,
+    "Desktop: dialog precisa ter largura máxima confortável.",
+  );
+  assert.match(
+    alerta,
+    /sm:max-h-\[calc\(100dvh-2rem\)\]/,
+    "Desktop: dialog precisa respeitar a altura da viewport.",
+  );
+
+  // ALERT_MODAL_PORTAL_TO_BODY — modal renderizado fora do container do botão
+  assert.match(alerta, /createPortal/);
+  assert.match(alerta, /document\.body/);
+  assert.match(
+    alerta,
+    /aberto &&\s*typeof document !== "undefined" &&\s*createPortal/,
+    "Portal precisa montar somente no cliente (guard de document).",
+  );
 
   // Scroll do fundo bloqueado enquanto o modal está aberto
   assert.match(
