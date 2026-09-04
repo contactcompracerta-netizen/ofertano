@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { syncFavoritesAfterAuthentication } from "@/lib/favorites/store";
+import { siteUrl } from "@/lib/siteUrl";
 import { supabase } from "@/lib/supabaseClient";
 
 type Mode = "login" | "signup";
@@ -80,7 +81,7 @@ export default function LoginPage() {
           email: emailLimpo,
           password: senha,
           options: {
-            emailRedirectTo: `${window.location.origin}/favoritos`,
+            emailRedirectTo: siteUrl("/favoritos"),
           },
         });
 
@@ -140,7 +141,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.resetPasswordForEmail(
         emailLimpo,
         {
-          redirectTo: `${window.location.origin}/login`,
+          redirectTo: siteUrl("/recuperar-senha"),
         }
       );
 

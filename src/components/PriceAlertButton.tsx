@@ -478,11 +478,11 @@ export default function PriceAlertButton({
 
       {aberto && (
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/45 p-0 sm:absolute sm:right-0 sm:top-12 sm:inset-auto sm:z-50 sm:block sm:bg-transparent"
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-0 sm:absolute sm:right-0 sm:top-12 sm:inset-auto sm:z-50 sm:block sm:bg-transparent"
           onClick={() => setAberto(false)}
         >
           <div
-            className="w-full max-w-none rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:w-[360px] sm:max-w-[calc(100vw-32px)] sm:rounded-2xl"
+            className="flex max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl [padding-bottom:calc(1rem+env(safe-area-inset-bottom))] sm:block sm:max-h-none sm:max-w-[calc(100vw-32px)] sm:w-[360px] sm:rounded-2xl sm:pb-4"
             onClick={(event) =>
               event.stopPropagation()
             }
@@ -521,7 +521,7 @@ export default function PriceAlertButton({
               </button>
             </div>
 
-            <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1 sm:max-h-[75vh]">
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 sm:max-h-[75vh] sm:flex-none">
               {!autenticado ? (
                 <div>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
