@@ -142,7 +142,105 @@ await searchMultistoreV2("Tênis adidas Feminino Corrida", {
 });
 assert.equal(aliAttempts, 1);
 
-console.log("production regressions: sanitizer, identity, Amazon title, fallback and AliExpress short-circuit passed");
+const huntCandidate = (
+  marketplace: "AMAZON" | "SHOPEE" | "MAGAZINE_LUIZA",
+  externalId: string,
+  title: string,
+) => ({
+  marketplace,
+  marketplaceName:
+    marketplace === "AMAZON"
+      ? "Amazon"
+      : marketplace === "SHOPEE"
+        ? "Shopee"
+        : "Magazine Luiza",
+  externalId,
+  sourceUrl: `https://example.com/${externalId}`,
+  title,
+  image: "https://example.com/image.jpg",
+  price: 100,
+  oldPrice: null,
+  brand: "JBL",
+  seller: null,
+  status: "FOUND" as const,
+  error: null,
+});
+const huntResult = (
+  marketplace: "AMAZON" | "SHOPEE" | "MAGAZINE_LUIZA",
+  query: string,
+  candidates: ReturnType<typeof huntCandidate>[],
+) => ({
+  marketplace,
+  query,
+  success: true,
+  searchOutcome: "SEARCH_COMPLETED" as const,
+  candidates,
+  scanned: candidates.length,
+});
+
+const huntTitleA = "Headphone JBL Tune 520BT";
+const huntTitleB = "Headphone JBL Tune 510BT";
+const huntCalls: string[] = [];
+const huntRegression = await searchMultistoreV2("Headphone JBL", {
+  persist: false,
+  hunt: true,
+  limit: 10,
+  budget: { globalMs: 12000, marketplaceMs: 2000, fetchMs: 200, responseReserveMs: 200, persistReserveMs: 200, hangGraceMs: 50 },
+  adapters: [
+    {
+      marketplace: "AMAZON",
+      marketplaceName: "Amazon",
+      enabled: true,
+      searcher: async (request) => huntResult("AMAZON", request.query, [
+        huntCandidate("AMAZON", "hunt-a-amazon", huntTitleA),
+        huntCandidate("AMAZON", "hunt-b-amazon", huntTitleB),
+      ]),
+    },
+    {
+      marketplace: "SHOPEE",
+      marketplaceName: "Shopee",
+      enabled: true,
+      searcher: async (request) => {
+        if (request.query.includes("Tune 510BT")) {
+          huntCalls.push("SHOPEE:510BT");
+          return huntResult("SHOPEE", request.query, [
+            huntCandidate("SHOPEE", "hunt-b-shopee", huntTitleB),
+          ]);
+        }
+        return huntResult("SHOPEE", request.query, [
+          huntCandidate("SHOPEE", "hunt-a-shopee", huntTitleA),
+        ]);
+      },
+    },
+    {
+      marketplace: "MAGAZINE_LUIZA",
+      marketplaceName: "Magazine Luiza",
+      enabled: true,
+      searcher: async (request) => {
+        if (request.query.includes("Tune 520BT")) {
+          huntCalls.push("MAGAZINE_LUIZA:520BT");
+          return huntResult("MAGAZINE_LUIZA", request.query, [
+            huntCandidate("MAGAZINE_LUIZA", "hunt-a-magalu", huntTitleA),
+          ]);
+        }
+        return huntResult("MAGAZINE_LUIZA", request.query, []);
+      },
+    },
+  ],
+});
+const huntedA = huntRegression.products.find((product) =>
+  product.offers.some((offer) => offer.externalId === "hunt-a-amazon"),
+);
+const huntedB = huntRegression.products.find((product) =>
+  product.offers.some((offer) => offer.externalId === "hunt-b-amazon"),
+);
+assert.ok(huntCalls.includes("SHOPEE:510BT"), "hunt continua mesmo com o Cluster A Multi Loja visivel");
+assert.ok(huntCalls.includes("MAGAZINE_LUIZA:520BT"), "hunt consulta Magalu para o Cluster A ja Multi Loja");
+assert.equal(huntRegression.multiStoreClusters, 2, "os dois clusters ficam Multi Loja apos o hunt");
+assert.deepEqual(huntedB?.marketplaces.slice().sort(), ["AMAZON", "SHOPEE"]);
+assert.deepEqual(huntedA?.marketplaces.slice().sort(), ["AMAZON", "MAGAZINE_LUIZA", "SHOPEE"]);
+
+console.log("production regressions: sanitizer, identity, Amazon title, fallback, AliExpress short-circuit and hunt coverage passed");
 }
 
 main().catch((error) => {

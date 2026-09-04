@@ -1211,7 +1211,7 @@ export async function searchMultistoreV2(
       options.hunt === true &&
       !deadline.expired() &&
       deadline.remainingMs() > deadline.responseReserveMs &&
-      !processedProducts.some((product) => isSearchVisible(product));
+      clusters.length > 0;
     const huntedClusters = shouldHunt
       ? await huntMissingStoreOffers(
           clusters,
