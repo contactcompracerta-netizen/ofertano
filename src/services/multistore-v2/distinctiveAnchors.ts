@@ -15,6 +15,7 @@
 
 import type { QueryIdentity } from "./queryIdentity";
 import { findNominalModelLineMismatch } from "./queryIdentity";
+import { findAdjacentModelNumberMismatch } from "./modelNumberIdentity";
 import {
   extractBundleQuantity,
   normalizeMultistoreText,
@@ -327,6 +328,22 @@ function checkModelLineConflict(
   queryIdentity: QueryIdentity,
   candidate: string,
 ): IdentityConflictDetail | null {
+  const modelNumberMismatch = findAdjacentModelNumberMismatch({
+    query: queryIdentity.sanitizedQuery,
+    candidate,
+    modelLine: queryIdentity.strongIdentity.modelLine,
+    identityNumbers: queryIdentity.queryCore.identityNumbers,
+  });
+  if (modelNumberMismatch) {
+    return {
+      conflict: true,
+      reason: "model_line_mismatch",
+      description: `Query requires model ${modelNumberMismatch.queryNumber} but candidate offers ${modelNumberMismatch.candidateNumber}`,
+      queryValue: modelNumberMismatch.queryNumber,
+      candidateValue: modelNumberMismatch.candidateNumber,
+    };
+  }
+
   const mismatch = findNominalModelLineMismatch(queryIdentity, candidate);
   if (!mismatch) {
     return null;

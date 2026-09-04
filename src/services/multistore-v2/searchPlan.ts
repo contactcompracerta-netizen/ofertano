@@ -43,8 +43,13 @@ function resolveProductCoreLabel(identity: SanitizedIdentity): string {
     return label || "";
   }
 
+  const soldHead = normalizeMultistoreText(identity.queryCore.soldHeadToken || "");
+  if (/^(tenis|sapato|calcado|camisa|camiseta|blusa|vestido|calca)$/.test(soldHead)) {
+    return soldHead;
+  }
+
   const apparelDescriptor = identity.queryCore.distinctiveTokens.find((token) =>
-    /^(camisa|camiseta|polo|manga|blusa|vestido|calca|masculina|masculino)$/.test(
+    /^(camisa|camiseta|polo|manga|blusa|vestido|calca|tenis|sapato|masculina|masculino)$/.test(
       normalizeMultistoreText(token),
     ),
   );

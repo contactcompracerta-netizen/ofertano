@@ -144,6 +144,22 @@ function titleHasBrand(title: string, brand: string | null): boolean {
   return brand.split(" ").every((token) => normalized.includes(token));
 }
 
+function isAliExpressPermanentConfigurationError(
+  error: string | null | undefined,
+): boolean {
+  return /invalidappkey|invalid app key|app key is invalid|authentication|autentica(?:c|ç)(?:a|ã)o/i.test(
+    error ?? "",
+  );
+}
+
+function isPublicSearchSafeFallback(product: CanonicalProduct): boolean {
+  if (product.marketplaces.length !== 1 || product.rankTier >= 3) {
+    return false;
+  }
+
+  return product.offers.length === 1 && product.offers[0]!.price > 0;
+}
+
 /*
  * A aquisicao so precisa decidir se vale tentar outra variante de consulta.
  * A relevancia completa cria fingerprint/conceitos e pertence a fase protegida
@@ -679,6 +695,19 @@ async function acquireOneMarketplace(
         }
 
         if (
+          adapter.marketplace === "ALIEXPRESS" &&
+          isAliExpressPermanentConfigurationError(result.error)
+        ) {
+          outcomes.push("ERROR");
+          traceV2("aliexpress-variant-short-circuit", {
+            variantIndex: index + 1,
+            reason: "PERMANENT_CONFIGURATION_ERROR",
+            error: result.error,
+          });
+          break;
+        }
+
+        if (
           !acceptingResults ||
           trace.closed ||
           isolated.signal.aborted ||
@@ -1194,23 +1223,30 @@ export async function searchMultistoreV2(
       : clusters;
     const coverageStatus = coverageStatusOf(acquisitionsSnapshot);
     const responseCanonicalProducts: CanonicalProduct[] = [];
-    for (const cluster of huntedClusters) {
-      if (!canRunPostprocess(deadline)) {
-        break;
-      }
-      const canonical = canonicalizeCluster(cluster);
-      if (canonical) {
-        responseCanonicalProducts.push(canonical);
+    if (canRunPostprocess(deadline)) {
+      for (const cluster of huntedClusters) {
+        if (!canRunPostprocess(deadline)) {
+          break;
+        }
+        const canonical = canonicalizeCluster(cluster);
+        if (canonical) {
+          responseCanonicalProducts.push(canonical);
+        }
       }
     }
     const rankedResponseProducts = canRunPostprocess(deadline)
       ? rankCanonicalProducts(responseCanonicalProducts)
-      : [];
+      : processedProducts;
+    const hasMultiStoreExact = rankedResponseProducts.some(
+      (product) => product.marketplaces.length >= 2 && product.rankTier < 3,
+    );
     const products = rankedResponseProducts.map((product) => {
       const withCoverage = { ...product, coverageStatus };
       return {
         ...withCoverage,
-        searchVisible: isSearchVisible(withCoverage),
+        searchVisible:
+          isSearchVisible(withCoverage) ||
+          (!hasMultiStoreExact && isPublicSearchSafeFallback(withCoverage)),
         publishable: isClusterPublishable(withCoverage),
       };
     });

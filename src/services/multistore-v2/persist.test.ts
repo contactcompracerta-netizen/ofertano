@@ -491,8 +491,9 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(timeoutSingle.acquisitions), "INCOMPLETE");
   assert.equal(timeoutSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.ok(timeoutSingle.relevantCandidates.length >= 1);
-  assert.equal(timeoutSingle.products.length, 0, "B) 1 loja + TIMEOUT nao e visivel");
-  assert.equal(timeoutSingle.views.length, 0);
+  assert.equal(timeoutSingle.products.length, 1, "B) 1 loja + TIMEOUT aparece como fallback");
+  assert.equal(timeoutSingle.views.length, 1);
+  assert.equal(timeoutSingle.multiStoreClusters, 0);
 
   const blockedSingle = await searchMultistoreV2(query, {
     persist: false,
@@ -508,8 +509,9 @@ async function runCoveragePublicationCases() {
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
     ],
   });
-  assert.equal(blockedSingle.products.length, 0);
-  assert.equal(blockedSingle.views.length, 0);
+  assert.equal(blockedSingle.products.length, 1);
+  assert.equal(blockedSingle.views.length, 1);
+  assert.equal(blockedSingle.multiStoreClusters, 0);
 
   const errorSingle = await searchMultistoreV2(query, {
     persist: false,
@@ -527,8 +529,9 @@ async function runCoveragePublicationCases() {
       }),
     ],
   });
-  assert.equal(errorSingle.products.length, 0);
-  assert.equal(errorSingle.views.length, 0);
+  assert.equal(errorSingle.products.length, 1);
+  assert.equal(errorSingle.views.length, 1);
+  assert.equal(errorSingle.multiStoreClusters, 0);
 
   let multiTimeoutWrites = 0;
   const twoValidTimeout = await searchMultistoreV2(query, {
@@ -694,8 +697,9 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(notRunSingle.acquisitions), "INCOMPLETE");
   assert.equal(notRunSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "NOT_RUN");
-  assert.equal(notRunSingle.products.length, 0);
-  assert.equal(notRunSingle.views.length, 0);
+  assert.equal(notRunSingle.products.length, 1);
+  assert.equal(notRunSingle.views.length, 1);
+  assert.equal(notRunSingle.multiStoreClusters, 0);
 
   const allEmpty = await searchMultistoreV2(query, {
     persist: false,
@@ -1330,8 +1334,9 @@ async function runPersistContract() {
     partialTimeout.relevantCandidates.length >= 1,
     "timeout parcial preserva o candidato relevante internamente",
   );
-  assert.equal(partialTimeout.products.length, 0);
-  assert.equal(partialTimeout.views.length, 0);
+  assert.equal(partialTimeout.products.length, 1);
+  assert.equal(partialTimeout.views.length, 1);
+  assert.equal(partialTimeout.multiStoreClusters, 0);
   assert.equal(
     timeoutTitles.length,
     0,

@@ -20,11 +20,12 @@ export type SanitizationResult = {
  */
 const NOISE_PATTERNS = [
   // Rating/review patterns
+  /\b\d+(?:[.,]\d+)?\s+(?=(?:avalia(?:c|ç)(?:a|ã)o|rating|nota)\b)/gi,
+  /\b(?:avalia(?:c|ç)(?:a|ã)o|rating|nota)\s*[:=-]?\s*\d+(?:[.,]\d+)?(?:\s*de\s*5(?:\s*estrelas?)?)?\b/gi,
   /\b\d+(?:[.,]\d+)?\s*de\s*5\s*estrelas?\b/gi, // "4,5 de 5 estrelas"
   /\b\d+\.\d+\s*de\s*5\b/gi, // "4.5 de 5"
-  /\(\s*\d+\s*\)/gi, // "(5)"
-  /\(\s*\d+(?:\s*avaliações?|\s*classificações?|\s*reviews?)\s*\)/gi, // "(5 avaliações)"
-  /\b\d+\s*(?:avaliações?|classificações?|reviews?)\b/gi, // "5 avaliações" standalone
+  /\(\s*\d+(?:\s*avaliações?|\s*classificações?|\s*reviews?|\s*opiniões?)\s*\)/gi, // "(5 avaliações)"
+  /\b\d+\s*(?:avaliações?|classificações?|reviews?|opiniões?)\b/gi, // "5 avaliações" standalone
   
   // Commerce labels
   /\b(?:mais\s+vendido|escolha\s*(?:do|da)\s*(?:amazon|loja)|patrocinado|exclusivo|premium)\b/gi,
@@ -87,8 +88,22 @@ export function sanitizeCommerceQuery(rawQuery: string): SanitizationResult {
     cleaned = cleaned.replace(pattern, " ");
   }
 
+  if (/(?:avalia(?:c|ç)(?:a|ã)o|rating|nota|reviews?|opini(?:a|ã)o)/i.test(normalized)) {
+    const reviewCount = /\(\s*\d+\s*\)/gi;
+    const matches = cleaned.match(reviewCount);
+    if (matches) {
+      noise.push(...matches);
+      cleaned = cleaned.replace(reviewCount, " ");
+    }
+  }
+
   // Collapse multiple spaces
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  cleaned = cleaned
+    .replace(/\s+([.,])/g, "$1")
+    .replace(/([.,])\s+(?=[.,])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.,;:!?]+$/g, "");
 
   const changed = cleaned !== normalized && noise.length > 0;
 

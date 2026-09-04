@@ -1015,6 +1015,10 @@ const GENERIC_DESCRIPTORS = new Set([
   "compacta",
   "corredicas",
   "corredica",
+  "corrida",
+  "caminhada",
+  "leve",
+  "confortavel",
 ]);
 
 export function isGenericDescriptor(token: string): boolean {

@@ -29,6 +29,7 @@ import {
 } from "./normalizeCandidate";
 import { buildQueryCore, type QueryCore } from "./queryCore";
 import { isApparelDescriptiveToken, isGenericDescriptor } from "./productConcepts";
+import { findAdjacentModelNumberMismatch } from "./modelNumberIdentity";
 
 /**
  * STRONG_IDENTITY: Must be preserved across all query variants.
@@ -179,11 +180,12 @@ function extractModelName(query: string, core: QueryCore): string | null {
  */
 export function extractNominalModelLineTokens(
   text: string,
-  core: Pick<QueryCore, "soldHeadToken">,
+  core: Pick<QueryCore, "soldHeadToken" | "brand">,
 ): string[] {
   return tokenize(text).filter((token) => {
     if (
       token === core.soldHeadToken ||
+      token === core.brand ||
       /\d/.test(token) ||
       isStopWord(token) ||
       isAttributeWord(token) ||
@@ -570,6 +572,20 @@ export function detectIdentityConflict(
     queryIdentity,
     candidateTitle,
   );
+
+  const modelNumberMismatch = findAdjacentModelNumberMismatch({
+    query: queryIdentity.sanitizedQuery,
+    candidate: candidateTitle,
+    modelLine: queryIdentity.strongIdentity.modelLine,
+    identityNumbers: queryIdentity.queryCore.identityNumbers,
+  });
+  if (modelNumberMismatch) {
+    return {
+      conflict: true,
+      reason: `modelNumber:${modelNumberMismatch.queryNumber}!=${modelNumberMismatch.candidateNumber}`,
+    };
+  }
+
   if (modelLineMismatch) {
     return {
       conflict: true,

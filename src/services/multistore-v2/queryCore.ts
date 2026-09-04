@@ -47,6 +47,8 @@ import { isApparelDescriptiveToken } from "./productConcepts";
 const KNOWN_BRANDS = new Set([
   "ihome",
   "jbl",
+  "adidas",
+  "nike",
   "samsung",
   "xiaomi",
   "motorola",
@@ -217,6 +219,12 @@ function extractKnownBrand(text: string, productClass: ProductConceptId): string
     "camiseta",
     "blusa",
     "vestido",
+    "tenis",
+    "sapato",
+    "corrida",
+    "caminhada",
+    "leve",
+    "confortavel",
   ]);
 
   const materialWords = new Set([
@@ -307,7 +315,8 @@ export function buildQueryCore(query: string): QueryCore {
   );
   const brand =
     brandCandidate &&
-    !soldNucleusTokens.has(normalizeMultistoreText(brandCandidate).toLowerCase())
+    (!soldNucleusTokens.has(normalizeMultistoreText(brandCandidate).toLowerCase()) ||
+      KNOWN_BRANDS.has(normalizeMultistoreText(brandCandidate).toLowerCase()))
       ? brandCandidate
       : null;
   const brandTokens = brand

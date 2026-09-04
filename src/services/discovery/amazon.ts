@@ -628,6 +628,25 @@ function limparTitulo(
     .trim();
 }
 
+export function selectAmazonProductTitle(input: {
+  title?: string;
+  brand?: string;
+  asin?: string;
+}): string | null {
+  const title = limparTitulo(input.title);
+  const brand = limparTitulo(input.brand);
+  const asin = limparTitulo(input.asin);
+  if (!title || (asin && title.toLowerCase() === asin.toLowerCase())) {
+    return null;
+  }
+
+  if (brand && title.toLowerCase() === brand.toLowerCase()) {
+    return null;
+  }
+
+  return title;
+}
+
 function normalizarAsin(
   value: string | undefined,
 ): string | null {
@@ -782,11 +801,17 @@ export function criarCandidatos(
       continue;
     }
 
-    const title = limparTitulo(
-      result.title,
-    );
+    const title = selectAmazonProductTitle({
+      title: result.title,
+      brand: result.brand,
+      asin,
+    });
 
     if (!title) {
+      console.warn(
+        "[Amazon Discovery] candidato ignorado:",
+        JSON.stringify({ asin, rejectionReason: "insufficient_product_title" }),
+      );
       continue;
     }
 

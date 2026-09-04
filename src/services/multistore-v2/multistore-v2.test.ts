@@ -947,11 +947,13 @@ async function runAcquisitionContract() {
   );
   assert.equal(
     mixed.views.length,
-    0,
-    "1 oferta + BLOCKED/ERROR nao permanece visivel na busca",
+    1,
+    "1 oferta relevante + BLOCKED/ERROR permanece visivel como single-store",
   );
-  assert.equal(mixed.products.length, 0);
-  assert.equal(mixed.singleStoreClusters, 0);
+  assert.equal(mixed.products.length, 1);
+  assert.equal(mixed.singleStoreClusters, 1);
+  assert.equal(mixed.multiStoreClusters, 0);
+  assert.equal(mixed.persistedProductIds[0], "");
   assert.ok(
     mixed.relevantCandidates.some((item) => item.status === "RELEVANT"),
     "Persistencia desligada nao apaga o candidato vivo interno.",
@@ -1060,10 +1062,12 @@ async function runAcquisitionContract() {
   );
   assert.equal(
     timeoutResult.views.length,
-    0,
-    "CASO timeout: singleton incompleto nao permanece visivel na busca",
+    1,
+    "CASO timeout: singleton relevante permanece visivel como fallback",
   );
-  assert.equal(timeoutResult.products.length, 0);
+  assert.equal(timeoutResult.products.length, 1);
+  assert.equal(timeoutResult.multiStoreClusters, 0);
+  assert.equal(timeoutResult.persistedProductIds[0], "");
   assert.equal(
     timeoutResult.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status,
     "TIMEOUT",
