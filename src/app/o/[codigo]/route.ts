@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,11 +57,25 @@ async function redirecionarProduto(
       },
       select: {
         id: true,
+        offers: {
+          where: {
+            active: true,
+            matchStatus: "EXACT",
+          },
+          select: {
+            marketplace: true,
+            available: true,
+            status: true,
+            price: true,
+          },
+        },
       },
       take: 2,
     });
 
-  if (produtos.length !== 1) {
+  const produtosVisiveis = produtos.filter(hasPublicMultiStore);
+
+  if (produtosVisiveis.length !== 1) {
     return new NextResponse(
       "Produto não encontrado.",
       {
@@ -70,7 +85,7 @@ async function redirecionarProduto(
   }
 
   const destino = new URL(
-    `/produto/${produtos[0].id}`,
+    `/produto/${produtosVisiveis[0].id}`,
     request.url,
   );
 

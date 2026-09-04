@@ -4,6 +4,7 @@ import ProductCard from "@/components/ProductCard";
 import AnalyticsListingScope from "@/components/analytics/AnalyticsListingScope";
 import ProductImpression from "@/components/analytics/ProductImpression";
 import Footer from "@/components/Footer";
+import { hasPublicMultiStore, PUBLIC_OFFER_SELECT } from "@/services/publicVisibility/multiStoreVisibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,6 +23,16 @@ export default async function OfertasPage() {
       },
     },
 
+    include: {
+      offers: {
+        where: {
+          active: true,
+          matchStatus: "EXACT",
+        },
+        ...PUBLIC_OFFER_SELECT,
+      },
+    },
+
     orderBy: [
       {
         featured: "desc",
@@ -31,6 +42,8 @@ export default async function OfertasPage() {
       },
     ],
   });
+
+  const produtosMultiLoja = produtos.filter(hasPublicMultiStore);
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -61,8 +74,8 @@ export default async function OfertasPage() {
             </h2>
 
             <p className="mt-2 text-gray-600">
-              {produtos.length}{" "}
-              {produtos.length === 1
+              {produtosMultiLoja.length}{" "}
+              {produtosMultiLoja.length === 1
                 ? "produto encontrado"
                 : "produtos encontrados"}
               .
@@ -70,7 +83,7 @@ export default async function OfertasPage() {
           </div>
         </div>
 
-        {produtos.length === 0 ? (
+        {produtosMultiLoja.length === 0 ? (
           <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-sm">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-sm font-black text-green-800">
               —
@@ -87,7 +100,7 @@ export default async function OfertasPage() {
         ) : (
           <AnalyticsListingScope surface="ofertas">
             <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {produtos.map((produto, index) => (
+            {produtosMultiLoja.map((produto, index) => (
               <ProductImpression
                 key={produto.id}
                 productId={produto.id}

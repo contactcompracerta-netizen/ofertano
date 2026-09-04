@@ -26,6 +26,7 @@ import {
 } from "@/services/multistore-v2";
 import type { SearchBudget } from "@/services/multistore-v2/timeBudget";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
+import { countDistinctNonEmptyMarketplaces, hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
 function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -424,7 +425,12 @@ export async function searchCatalogOrDiscover(
         budget: options.budget,
       });
 
-      const visibleProducts = v2.products.filter(isSearchVisible);
+      const visibleProducts = v2.products
+        .filter(isSearchVisible)
+        .filter(
+          (product) =>
+            countDistinctNonEmptyMarketplaces(product.offers) >= 2,
+        );
       if (visibleProducts.length > 0 && (options.schedulePersist || options.persistProduct)) {
         const persistedIds = options.schedulePersist
           ? await persistCanonicalProducts(search, visibleProducts, {
@@ -477,11 +483,18 @@ export async function searchCatalogOrDiscover(
           };
         }
       } else if (v2.views.length > 0 && visibleProducts.length > 0) {
+        const visibleIndexes = new Set(
+          v2.products.map((product, index) =>
+            countDistinctNonEmptyMarketplaces(product.offers) >= 2
+              ? index
+              : -1,
+          ),
+        );
         return {
           query: search,
           source: "DISCOVERY",
           products: v2.views.filter((_, index) =>
-            Boolean(v2.products[index]?.searchVisible),
+            visibleIndexes.has(index),
           ) as Awaited<ReturnType<typeof searchCatalog>>,
         };
       }
@@ -572,12 +585,15 @@ export async function searchCatalogOrDiscover(
             },
             select: {
               marketplace: true,
+              available: true,
+              status: true,
+              price: true,
             },
           },
         },
       });
 
-      if (publishedProduct?.active) {
+      if (publishedProduct?.active && hasPublicMultiStore(publishedProduct)) {
         return {
           query: search,
           source: existing.length > 0 ? "CATALOG" : "DISCOVERY",

@@ -24,6 +24,7 @@ import {
   ProductLivePurchase,
 } from "@/components/product/ProductLivePurchase";
 import prisma from "@/lib/prisma";
+import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
 type ProdutoPageProps = {
   params: Promise<{
@@ -587,10 +588,22 @@ export async function generateMetadata({
       images: true,
       active: true,
       publicationStatus: true,
+      offers: {
+        where: {
+          active: true,
+          matchStatus: "EXACT",
+        },
+        select: {
+          marketplace: true,
+          available: true,
+          status: true,
+          price: true,
+        },
+      },
     },
   });
 
-  if (!produto) {
+  if (!produto || !hasPublicMultiStore(produto)) {
     return {
       title: "Produto não encontrado | Ofertano",
       robots: {
@@ -676,6 +689,10 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   });
 
   if (!produto) {
+    notFound();
+  }
+
+  if (!hasPublicMultiStore(produto)) {
     notFound();
   }
 
@@ -838,9 +855,21 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     brand: true,
     rating: true,
     reviews: true,
+    offers: {
+      where: {
+        active: true,
+        matchStatus: "EXACT",
+      },
+      select: {
+        marketplace: true,
+        available: true,
+        status: true,
+        price: true,
+      },
+    },
   } as const;
 
-  const produtosSemelhantesDiretos = await prisma.product.findMany({
+  const produtosSemelhantesDiretos = (await prisma.product.findMany({
     where: {
       id: { not: produto.id },
       active: true,
@@ -851,7 +880,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     select: selectRecomendado,
     orderBy: [{ featured: "desc" }, { updatedAt: "desc" }],
     take: 8,
-  });
+  })).filter(hasPublicMultiStore);
 
   const idsJaSelecionados = produtosSemelhantesDiretos.map(
     (item) => item.id,
@@ -859,7 +888,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
   const produtosComplementares =
     produtosSemelhantesDiretos.length < 8
-      ? await prisma.product.findMany({
+      ? (await prisma.product.findMany({
           where: {
             id: {
               notIn: [produto.id, ...idsJaSelecionados],
@@ -871,7 +900,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           select: selectRecomendado,
           orderBy: [{ featured: "desc" }, { updatedAt: "desc" }],
           take: 8 - produtosSemelhantesDiretos.length,
-        })
+        })).filter(hasPublicMultiStore)
       : [];
 
   const produtosRecomendados = [

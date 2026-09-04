@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sanitizarOfertaCompraPublica } from "@/lib/affiliates/liveOffers";
 import { resolverLinkLegadoPrincipal } from "@/lib/affiliates/publicPurchase";
+import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,13 @@ export async function GET(_request: Request, context: RouteContext) {
     });
 
     if (!product) {
+      return NextResponse.json(
+        { success: false, error: "Produto não encontrado." },
+        { status: 404 },
+      );
+    }
+
+    if (!hasPublicMultiStore(product)) {
       return NextResponse.json(
         { success: false, error: "Produto não encontrado." },
         { status: 404 },

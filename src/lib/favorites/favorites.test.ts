@@ -236,6 +236,20 @@ async function main() {
             rating: null,
             reviews: null,
             stock: null,
+            offers: [
+              {
+                marketplace: "MERCADO_LIVRE",
+                available: true,
+                status: "ACTIVE",
+                price: 1,
+              },
+              {
+                marketplace: "AMAZON",
+                available: true,
+                status: "ACTIVE",
+                price: 1,
+              },
+            ],
           }));
       },
     },
@@ -361,6 +375,20 @@ async function main() {
           rating: null,
           reviews: null,
           stock: null,
+          offers: [
+            {
+              marketplace: "MERCADO_LIVRE",
+              available: true,
+              status: "ACTIVE",
+              price: 10,
+            },
+            {
+              marketplace: "AMAZON",
+              available: true,
+              status: "ACTIVE",
+              price: 10,
+            },
+          ],
         }));
       },
     },

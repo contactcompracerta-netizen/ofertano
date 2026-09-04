@@ -2,6 +2,7 @@ import Link from "next/link";
 import prisma from "@/lib/prisma";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { hasPublicMultiStore, PUBLIC_OFFER_SELECT } from "@/services/publicVisibility/multiStoreVisibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -92,12 +93,21 @@ export default async function CategoriasPage() {
     },
     select: {
       category: true,
+      offers: {
+        where: {
+          active: true,
+          matchStatus: "EXACT",
+        },
+        ...PUBLIC_OFFER_SELECT,
+      },
     },
   });
 
+  const produtosMultiLoja = produtos.filter(hasPublicMultiStore);
+
   const categoriasMap = new Map<string, number>();
 
-  produtos.forEach((produto) => {
+  produtosMultiLoja.forEach((produto) => {
     const categoria = produto.category?.trim();
 
     if (!categoria) {

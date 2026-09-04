@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { MAX_FAVORITE_IDS } from "@/lib/favorites/constants";
 import { normalizeFavoriteIds } from "@/lib/favorites/ids";
+import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
 export const FAVORITE_PRODUCT_SELECT = {
   id: true,
@@ -16,6 +17,18 @@ export const FAVORITE_PRODUCT_SELECT = {
   rating: true,
   reviews: true,
   stock: true,
+  offers: {
+    where: {
+      active: true,
+      matchStatus: "EXACT",
+    },
+    select: {
+      marketplace: true,
+      available: true,
+      status: true,
+      price: true,
+    },
+  },
 } as const;
 
 export type FavoriteProductRecord = {
@@ -59,11 +72,26 @@ export async function loadFavoriteProducts(
 
   const order = new Map(unique.map((id, index) => [id, index]));
 
-  products.sort(
+  const visiveis = products.filter(hasPublicMultiStore);
+
+  visiveis.sort(
     (a, b) =>
       (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
       (order.get(b.id) ?? Number.MAX_SAFE_INTEGER),
   );
 
-  return products;
+  return visiveis.map((produto) => ({
+    id: produto.id,
+    name: produto.name,
+    image: produto.image,
+    price: produto.price,
+    oldPrice: produto.oldPrice,
+    discount: produto.discount,
+    store: produto.store,
+    brand: produto.brand,
+    installments: produto.installments,
+    rating: produto.rating,
+    reviews: produto.reviews,
+    stock: produto.stock,
+  }));
 }

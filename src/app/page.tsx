@@ -9,6 +9,10 @@ import Benefits from "@/components/Benefits";
 import Footer from "@/components/Footer";
 
 import { searchCatalogOrDiscover } from "@/services/search/searchCatalogOrDiscover";
+import {
+  hasPublicMultiStore,
+  multiStorePublicWhere,
+} from "@/services/publicVisibility/multiStoreVisibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -49,6 +53,8 @@ export default async function HomePage({
           image: {
             not: "",
           },
+
+          AND: multiStorePublicWhere().AND,
         },
 
         include: {
@@ -72,12 +78,9 @@ export default async function HomePage({
         },
       });
 
-    const produtosComparador = produtos
-      .filter(
-        (produto) =>
-          produto.publicationStatus === "LIVE_PARTIAL" ||
-          produto.publicationStatus === "LIVE_COMPLETE",
-      )
+    const produtosMultiLoja = produtos.filter(hasPublicMultiStore);
+
+    const produtosComparador = produtosMultiLoja
       .map((produto) => {
         const ofertasValidas = produto.offers
           .filter(
@@ -130,7 +133,7 @@ export default async function HomePage({
         <Hero produtos={produtosComparador} />
 
         <OffersSection
-          produtos={produtos}
+          produtos={produtosMultiLoja}
           busca=""
         />
 
