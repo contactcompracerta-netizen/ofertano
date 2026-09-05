@@ -24,6 +24,8 @@ import {
   emailTransporterPadrao,
   type EmailTransporter,
 } from "./channels/emailChannel";
+import type { ResolverEmailDoUsuario } from "./userEmail";
+import { emailUsuarioValido } from "./userEmail";
 import {
   whatsAppSenderPadrao,
   type WhatsAppSender,
@@ -45,7 +47,7 @@ export type DependenciasMotorAlertas = {
   emailTransporter?: EmailTransporter;
   whatsAppSender?: WhatsAppSender;
   whatsAppConfigurado?: boolean;
-  resolverEmailDoUsuario?: (userId: string) => Promise<string | null>;
+  resolverEmailDoUsuario?: ResolverEmailDoUsuario;
   cooldownMs?: number;
   now?: Date;
 };
@@ -150,11 +152,28 @@ async function processarCanalEmail(
     };
   }
 
-  const emailUsuario = deps.resolverEmailDoUsuario
+  const resolucao = deps.resolverEmailDoUsuario
     ? await deps.resolverEmailDoUsuario(alerta.userId)
     : null;
 
-  if (!emailUsuario) {
+  if (!resolucao) {
+    return { canal: "EMAIL", status: "EMAIL_NOT_CONFIGURED" };
+  }
+
+  if (resolucao.status === "RESOLVER_NAO_CONFIGURADO") {
+    return {
+      canal: "EMAIL",
+      status: "EMAIL_USER_RESOLVER_NOT_CONFIGURED",
+    };
+  }
+
+  if (resolucao.status === "USUARIO_NAO_ENCONTRADO") {
+    return { canal: "EMAIL", status: "EMAIL_NOT_CONFIGURED" };
+  }
+
+  const emailUsuario = resolucao.email;
+
+  if (!emailUsuarioValido(emailUsuario)) {
     return { canal: "EMAIL", status: "EMAIL_NOT_CONFIGURED" };
   }
 
@@ -165,6 +184,7 @@ async function processarCanalEmail(
   try {
     envio = await transporter({
       toEmail: emailUsuario,
+      productId: contexto.productId,
       productName: contexto.productName ?? "Produto",
       previousPrice: contexto.previousPrice ?? contexto.currentPrice,
       currentPrice: contexto.currentPrice,

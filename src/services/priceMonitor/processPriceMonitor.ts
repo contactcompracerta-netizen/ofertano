@@ -4,6 +4,7 @@ import { importarProduto } from "@/services/importers";
 import { montarContextoAlertas } from "@/services/priceAlerts/priceContext";
 import { createPrismaPriceAlertRepository } from "@/services/priceAlerts/repository";
 import { processProductAlerts } from "@/services/priceAlerts/processProductAlerts";
+import { buscarEmailDoUsuario } from "@/services/priceAlerts/userEmail";
 
 const LIMITE_PADRAO = 5;
 const LIMITE_MAXIMO = 10;
@@ -285,7 +286,10 @@ export async function processPriceMonitor(
 
           await processProductAlerts(
             contexto,
-            { repository: repositorio },
+            {
+              repository: repositorio,
+              resolverEmailDoUsuario: buscarEmailDoUsuario,
+            },
           );
         } catch (errorAlertas) {
           console.error(

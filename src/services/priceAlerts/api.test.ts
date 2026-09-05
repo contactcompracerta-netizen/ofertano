@@ -43,7 +43,10 @@ function criarDeps(
 ) {
   const deps: DependenciasMotorAlertas = {
     repository,
-    resolverEmailDoUsuario: async () => "cliente@exemplo.com",
+    resolverEmailDoUsuario: async () => ({
+      status: "RESOLVIDO",
+      email: "cliente@exemplo.com",
+    }),
     emailTransporter: async () => ({ status: "EMAIL_SENT" }),
     whatsAppSender: async () => ({ status: "WHATSAPP_SENT" }),
     whatsAppConfigurado: true,
