@@ -26,6 +26,20 @@ import {
 import prisma from "@/lib/prisma";
 import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
+import PriceHistoryPanel, {
+  type PeriodoPrecoSerializado,
+} from "@/components/product/PriceHistoryPanel";
+
+import {
+  UM_DIA_EM_MS,
+  construirSerieMelhorPrecoMultiLojaComBaseline,
+  historicoPrecisaNovaEntrada,
+  precoValidoParaHistorico,
+  resumirHistorico,
+  type HistoricoPrecoEntrada,
+  type ResumoPrecoPeriodo,
+} from "@/services/priceHistory/priceHistoryService";
+
 type ProdutoPageProps = {
   params: Promise<{
     id: string;
@@ -209,101 +223,12 @@ function TruckIcon({ className }: IconProps) {
   );
 }
 
-type HistoricoPrecoEntrada = {
-  offerId: string | null;
-  marketplace: string | null;
-  price: number;
-  recordedAt: Date;
-};
-
-type PontoHistoricoPreco = {
-  price: number;
-  recordedAt: Date;
-};
-
 type AnalisePreco = {
   titulo: string;
   descricao: string;
   badgeClassName: string;
   cardClassName: string;
 };
-
-const UM_DIA_EM_MS = 24 * 60 * 60 * 1000;
-
-function construirHistoricoMelhorPreco(
-  historico: HistoricoPrecoEntrada[],
-): PontoHistoricoPreco[] {
-  const precosPorOferta = new Map<string, number>();
-  const pontos: PontoHistoricoPreco[] = [];
-
-  for (const registro of historico) {
-    if (!Number.isFinite(registro.price) || registro.price <= 0) {
-      continue;
-    }
-
-    const chaveOferta =
-      registro.offerId ??
-      `marketplace:${registro.marketplace ?? "DESCONHECIDO"}`;
-
-    precosPorOferta.set(chaveOferta, registro.price);
-
-    const precosConhecidos = Array.from(precosPorOferta.values());
-
-    if (precosConhecidos.length === 0) {
-      continue;
-    }
-
-    const melhorPreco = Math.min(...precosConhecidos);
-    const ultimoPonto = pontos.at(-1);
-
-    if (
-      !ultimoPonto ||
-      Math.abs(ultimoPonto.price - melhorPreco) > 0.009
-    ) {
-      pontos.push({
-        price: melhorPreco,
-        recordedAt: registro.recordedAt,
-      });
-    }
-  }
-
-  return pontos;
-}
-
-function calcularMediaPonderada(
-  pontos: PontoHistoricoPreco[],
-  fimPeriodo: Date,
-) {
-  if (pontos.length === 0) {
-    return null;
-  }
-
-  if (pontos.length === 1) {
-    return pontos[0].price;
-  }
-
-  let totalPonderado = 0;
-  let duracaoTotal = 0;
-
-  for (let indice = 0; indice < pontos.length; indice += 1) {
-    const pontoAtual = pontos[indice];
-    const proximoPonto = pontos[indice + 1];
-
-    const inicio = pontoAtual.recordedAt.getTime();
-    const fim = proximoPonto
-      ? proximoPonto.recordedAt.getTime()
-      : fimPeriodo.getTime();
-
-    const duracao = Math.max(fim - inicio, 1);
-
-    totalPonderado += pontoAtual.price * duracao;
-    duracaoTotal += duracao;
-  }
-
-  return duracaoTotal > 0
-    ? totalPonderado / duracaoTotal
-    : pontos.at(-1)?.price ?? null;
-}
 
 function analisarPrecoAtual({
   precoAtual,
@@ -402,135 +327,27 @@ function analisarPrecoAtual({
   };
 }
 
-function formatarDataHistorico(data: Date) {
-  return data.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-  });
-}
-
-function PriceHistoryChart({
-  pontos,
-}: {
-  pontos: PontoHistoricoPreco[];
-}) {
-  if (pontos.length === 0) {
-    return null;
-  }
-
-  const largura = 720;
-  const altura = 110;
-  const margemX = 20;
-  const margemSuperior = 9;
-  const margemInferior = 13;
-  const larguraGrafico = largura - margemX * 2;
-  const alturaGrafico = altura - margemSuperior - margemInferior;
-
-  const valores = pontos.map((ponto) => ponto.price);
-  const minimo = Math.min(...valores);
-  const maximo = Math.max(...valores);
-  const amplitudeOriginal = maximo - minimo;
-  const amplitude = Math.max(
-    amplitudeOriginal,
-    Math.max(maximo * 0.08, 1),
-  );
-
-  const piso = Math.max(0, minimo - amplitude * 0.18);
-  const teto = maximo + amplitude * 0.18;
-  const faixa = Math.max(teto - piso, 1);
-
-  const primeiroTempo = pontos[0].recordedAt.getTime();
-  const ultimoTempo = pontos.at(-1)?.recordedAt.getTime() ?? primeiroTempo;
-  const faixaTempo = Math.max(ultimoTempo - primeiroTempo, 1);
-
-  const coordenadas = pontos.map((ponto, indice) => {
-    const tempo = ponto.recordedAt.getTime();
-
-    const x =
-      pontos.length === 1
-        ? largura / 2
-        : margemX +
-          ((tempo - primeiroTempo) / faixaTempo) *
-            larguraGrafico;
-
-    const y =
-      margemSuperior +
-      ((teto - ponto.price) / faixa) * alturaGrafico;
-
-    return {
-      ...ponto,
-      x,
-      y,
-      indice,
-    };
-  });
-
-  const linha = coordenadas
-    .map((ponto) => `${ponto.x.toFixed(2)},${ponto.y.toFixed(2)}`)
-    .join(" ");
-
-  const linhasGrade = [0, 0.5, 1].map((proporcao) => ({
-    y: margemSuperior + alturaGrafico * proporcao,
-  }));
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div>
-        <svg
-          viewBox={`0 0 ${largura} ${altura}`}
-          role="img"
-          aria-label="Gráfico do histórico do melhor preço do produto"
-          className="h-auto w-full"
-        >
-          {linhasGrade.map((linhaGrade, indice) => (
-            <line
-              key={indice}
-              x1={margemX}
-              x2={largura - margemX}
-              y1={linhaGrade.y}
-              y2={linhaGrade.y}
-              stroke="currentColor"
-              strokeWidth="1"
-              className="text-slate-200"
-            />
-          ))}
-
-          {coordenadas.length > 1 && (
-            <polyline
-              points={linha}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-emerald-600"
-            />
-          )}
-
-          {coordenadas.map((ponto) => (
-            <circle
-              key={`${ponto.recordedAt.toISOString()}-${ponto.indice}`}
-              cx={ponto.x}
-              cy={ponto.y}
-              r={coordenadas.length <= 20 ? 4.2 : 3.2}
-              fill="currentColor"
-              className="text-emerald-600"
-            />
-          ))}
-        </svg>
-      </div>
-
-      <div className="flex items-center justify-between border-t border-slate-100 px-2.5 py-1.5 text-[9px] font-bold text-slate-500 sm:text-[10px]">
-        <span>{formatarDataHistorico(pontos[0].recordedAt)}</span>
-        <span>
-          {formatarDataHistorico(
-            pontos.at(-1)?.recordedAt ?? pontos[0].recordedAt,
-          )}
-        </span>
-      </div>
-    </div>
-  );
+function serializarPeriodoPreco(
+  resumo: ResumoPrecoPeriodo,
+  analise: AnalisePreco,
+): PeriodoPrecoSerializado {
+  return {
+    dias: resumo.dias,
+    pontos: resumo.pontos.map((ponto) => ({
+      price: ponto.price,
+      recordedAt: ponto.recordedAt.getTime(),
+    })),
+    menorPreco: resumo.menorPreco,
+    maiorPreco: resumo.maiorPreco,
+    mediaPreco: resumo.mediaPreco,
+    diasMonitorados: resumo.diasMonitorados,
+    analise: {
+      titulo: analise.titulo,
+      descricao: analise.descricao,
+      badgeClassName: analise.badgeClassName,
+      cardClassName: analise.cardClassName,
+    },
+  };
 }
 
 const SITE_URL = (
@@ -661,6 +478,14 @@ export async function generateMetadata({
 export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const { id } = await params;
 
+  const agoraHistorico = new Date();
+  const inicioJanela90 = new Date(
+    agoraHistorico.getTime() - 90 * UM_DIA_EM_MS,
+  );
+  const inicioJanela30 = new Date(
+    agoraHistorico.getTime() - 30 * UM_DIA_EM_MS,
+  );
+
   const produto = await prisma.product.findFirst({
     where: criterioProdutoNavegavel(id),
     include: {
@@ -674,10 +499,15 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         },
       },
       priceHistory: {
+        where: {
+          recordedAt: {
+            gte: inicioJanela90,
+          },
+        },
         orderBy: {
           recordedAt: "desc",
         },
-        take: 120,
+        take: 400,
         select: {
           offerId: true,
           marketplace: true,
@@ -734,16 +564,110 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     ofertasComparador.map((oferta) => oferta.id),
   );
 
-  const historicoCronologico = [...produto.priceHistory]
-    .reverse()
+  const historicoJanela: HistoricoPrecoEntrada[] = [
+    ...produto.priceHistory,
+  ]
     .filter(
       (registro) =>
         registro.offerId === null ||
         idsOfertasComparador.has(registro.offerId),
+    )
+    .sort(
+      (a, b) =>
+        a.recordedAt.getTime() - b.recordedAt.getTime(),
     );
 
-  const pontosHistorico = construirHistoricoMelhorPreco(
-    historicoCronologico,
+  /*
+   * BASELINE antes da janela de 90 dias.
+   *
+   * PriceHistory so grava quando o preco muda. Uma oferta que ficou
+   * estavel por mais de 90 dias nao possui nenhum registro dentro da
+   * janela — apenas o registro anterior ao seu inicio. Para calcular o
+   * preco vigente no começo do periodo (e nao inventa-lo), buscamos, por
+   * oferta relevante, o ULTIMO registro conhecido antes da janela.
+   */
+  const idsComHistoricoNaJanela = new Set(
+    historicoJanela
+      .map((registro) => registro.offerId)
+      .filter((offerId): offerId is string => offerId !== null),
+  );
+
+  const ofertasParaBaseline = ofertasComparador.filter(
+    (oferta) =>
+      idsComHistoricoNaJanela.has(oferta.id) ||
+      !historicoJanela.some(
+        (registro) => registro.offerId === oferta.id,
+      ),
+  );
+
+  const baselines: HistoricoPrecoEntrada[] = [];
+
+  for (const oferta of ofertasParaBaseline) {
+    const ultimoAntes = await prisma.priceHistory.findFirst({
+      where: {
+        productId: id,
+        offerId: oferta.id,
+        recordedAt: {
+          lt: inicioJanela90,
+        },
+      },
+      orderBy: {
+        recordedAt: "desc",
+      },
+      select: {
+        offerId: true,
+        marketplace: true,
+        price: true,
+        recordedAt: true,
+      },
+    });
+
+    if (ultimoAntes && precoValidoParaHistorico(ultimoAntes.price)) {
+      baselines.push(ultimoAntes);
+    }
+  }
+
+  const ultimaHistoricoSemOferta = await prisma.priceHistory.findFirst({
+    where: {
+      productId: id,
+      offerId: null,
+      recordedAt: {
+        lt: inicioJanela90,
+      },
+    },
+    orderBy: {
+      recordedAt: "desc",
+    },
+    select: {
+      offerId: true,
+      marketplace: true,
+      price: true,
+      recordedAt: true,
+    },
+  });
+
+  if (
+    ultimaHistoricoSemOferta &&
+    precoValidoParaHistorico(ultimaHistoricoSemOferta.price)
+  ) {
+    baselines.push(ultimaHistoricoSemOferta);
+  }
+
+  const eventosJanela90: HistoricoPrecoEntrada[] = [
+    ...baselines,
+    ...historicoJanela,
+  ].sort(
+    (a, b) => a.recordedAt.getTime() - b.recordedAt.getTime(),
+  );
+
+  const pontosHistorico90 = construirSerieMelhorPrecoMultiLojaComBaseline(
+    eventosJanela90,
+    inicioJanela90,
+  );
+
+  const pontosHistorico30 = construirSerieMelhorPrecoMultiLojaComBaseline(
+    eventosJanela90,
+    inicioJanela30,
   );
 
   const ultimaVerificacao = ofertasComparador.reduce<Date | null>(
@@ -770,74 +694,72 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
    * pontos artificiais no gráfico.
    */
   if (precoAtualMercado > 0) {
-    const ultimoPonto = pontosHistorico.at(-1);
+    const ultimoPonto = pontosHistorico90.at(-1);
     const dataAtualDoPreco =
       ultimaVerificacao ??
       ultimoPonto?.recordedAt ??
       produto.updatedAt;
 
     if (
-      !ultimoPonto ||
-      Math.abs(
-        ultimoPonto.price - precoAtualMercado,
-      ) > 0.009
+      historicoPrecisaNovaEntrada({
+        precoAnterior: ultimoPonto?.price ?? null,
+        precoNovo: precoAtualMercado,
+      })
     ) {
-      pontosHistorico.push({
+      pontosHistorico90.push({
         price: precoAtualMercado,
         recordedAt: dataAtualDoPreco,
       });
+
+      const ultimoPonto30 = pontosHistorico30.at(-1);
+
+      if (
+        historicoPrecisaNovaEntrada({
+          precoAnterior: ultimoPonto30?.price ?? null,
+          precoNovo: precoAtualMercado,
+        })
+      ) {
+        pontosHistorico30.push({
+          price: precoAtualMercado,
+          recordedAt: dataAtualDoPreco,
+        });
+      }
     }
   }
 
-  const precosHistorico = pontosHistorico.map(
-    (ponto) => ponto.price,
+  const resumo30 = resumirHistorico(
+    pontosHistorico30,
+    30,
+    agoraHistorico,
   );
 
-  const menorPrecoHistorico =
-    precosHistorico.length > 0
-      ? Math.min(...precosHistorico)
-      : precoAtualMercado;
+  const resumo90 = resumirHistorico(
+    pontosHistorico90,
+    90,
+    agoraHistorico,
+  );
 
-  const maiorPrecoHistorico =
-    precosHistorico.length > 0
-      ? Math.max(...precosHistorico)
-      : precoAtualMercado;
-
-  const inicioMonitoramento =
-    historicoCronologico[0]?.recordedAt ?? null;
-
-  const fimMonitoramento =
-    ultimaVerificacao ??
-    pontosHistorico.at(-1)?.recordedAt ??
-    inicioMonitoramento;
-
-  const diasMonitorados =
-    inicioMonitoramento && fimMonitoramento
-      ? Math.max(
-          0,
-          Math.floor(
-            (fimMonitoramento.getTime() -
-              inicioMonitoramento.getTime()) /
-              UM_DIA_EM_MS,
-          ),
-        )
-      : 0;
-
-  const mediaHistorica =
-    calcularMediaPonderada(
-      pontosHistorico,
-      fimMonitoramento ??
-        pontosHistorico.at(-1)?.recordedAt ??
-        new Date(),
-    ) ?? precoAtualMercado;
-
-  const analisePreco = analisarPrecoAtual({
+  const analise30 = analisarPrecoAtual({
     precoAtual: precoAtualMercado,
-    menorPreco: menorPrecoHistorico,
-    maiorPreco: maiorPrecoHistorico,
-    mediaPreco: mediaHistorica,
-    diasMonitorados,
+    menorPreco: resumo30.menorPreco ?? precoAtualMercado,
+    maiorPreco: resumo30.maiorPreco ?? precoAtualMercado,
+    mediaPreco: resumo30.mediaPreco ?? precoAtualMercado,
+    diasMonitorados: resumo30.diasMonitorados,
   });
+
+  const analise90 = analisarPrecoAtual({
+    precoAtual: precoAtualMercado,
+    menorPreco: resumo90.menorPreco ?? precoAtualMercado,
+    maiorPreco: resumo90.maiorPreco ?? precoAtualMercado,
+    mediaPreco: resumo90.mediaPreco ?? precoAtualMercado,
+    diasMonitorados: resumo90.diasMonitorados,
+  });
+
+  const painelPeriodo30: PeriodoPrecoSerializado =
+    serializarPeriodoPreco(resumo30, analise30);
+
+  const painelPeriodo90: PeriodoPrecoSerializado =
+    serializarPeriodoPreco(resumo90, analise90);
 
   const filtrosSemelhantes = [
     { category: produto.category },
@@ -1206,85 +1128,14 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           </div>
 
           <LiveComparatorOffers />
-          {pontosHistorico.length > 0 && (
-            <section className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-3">
-              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
-                    Inteligência de preço
-                  </p>
-                  <h2 className="mt-0.5 text-lg font-black tracking-tight text-slate-950 sm:text-xl">
-                    Histórico de preços
-                  </h2>
-                </div>
-
-                <p className="max-w-xl text-[11px] leading-4 text-slate-600 sm:text-xs">
-                  Acompanhamos o melhor preço registrado no Ofertano sem inventar valores anteriores.
-                </p>
-              </div>
-
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-                  <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
-                    Menor preço atual
-                  </p>
-                  <p className="mt-0.5 text-base font-black text-emerald-700 sm:text-lg">
-                    {formatarPreco(precoAtualMercado)}
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-                  <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
-                    Menor registrado
-                  </p>
-                  <p className="mt-0.5 text-base font-black text-slate-950 sm:text-lg">
-                    {formatarPreco(menorPrecoHistorico)}
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-                  <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
-                    Média do período
-                  </p>
-                  <p className="mt-0.5 text-base font-black text-slate-950 sm:text-lg">
-                    {formatarPreco(mediaHistorica)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1fr)_260px]">
-                <PriceHistoryChart pontos={pontosHistorico} />
-
-                <div
-                  className={`rounded-lg border p-2.5 ${analisePreco.cardClassName}`}
-                >
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                    Comprar agora ou esperar?
-                  </p>
-
-                  <span
-                    className={`mt-1.5 block rounded-lg px-3 py-2 text-[12px] font-black leading-5 sm:text-sm ${analisePreco.badgeClassName}`}
-                  >
-                    {analisePreco.titulo}
-                  </span>
-
-                  <p className="mt-1.5 text-[10px] leading-4 text-slate-700 sm:text-[11px]">
-                    {analisePreco.descricao}
-                  </p>
-
-                  <div className="mt-2 border-t border-slate-200/80 pt-2">
-                    <p className="text-[11px] font-bold text-slate-600">
-                      {diasMonitorados > 0
-                        ? `${diasMonitorados} ${diasMonitorados === 1 ? "dia" : "dias"} de acompanhamento`
-                        : "Acompanhamento iniciado recentemente"}
-                    </p>
-                    <p className="mt-0.5 text-[9px] leading-[14px] text-slate-500 sm:text-[10px] sm:leading-4">
-                      A análise usa somente preços realmente registrados pelo Ofertano e pode mudar conforme novas verificações são realizadas.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </section>
+          {(precoAtualMercado > 0 ||
+            resumo30.pontos.length > 0 ||
+            resumo90.pontos.length > 0) && (
+            <PriceHistoryPanel
+              precoAtualMercado={precoAtualMercado}
+              periodo30={painelPeriodo30}
+              periodo90={painelPeriodo90}
+            />
           )}
 
           {(produto.description || especificacoes.length > 0) && (

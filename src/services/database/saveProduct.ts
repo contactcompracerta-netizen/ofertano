@@ -11,6 +11,11 @@ import {
   resolverIdentidadeProduto,
 } from "@/services/identity";
 
+import {
+  historicoPrecisaNovaEntrada,
+  precoValidoParaHistorico,
+} from "@/services/priceHistory/priceHistoryService";
+
 type MarketplaceDatabase =
   | "MERCADO_LIVRE"
   | "AMAZON"
@@ -3003,11 +3008,10 @@ export async function saveProduct(
       });
 
     if (
-      !ultimoHistorico ||
-      precoMudou(
-        ultimoHistorico.price,
-        product.price,
-      )
+      historicoPrecisaNovaEntrada({
+        precoAnterior: ultimoHistorico?.price ?? null,
+        precoNovo: product.price,
+      })
     ) {
       await tx.priceHistory.create({
         data: {
@@ -3016,7 +3020,11 @@ export async function saveProduct(
           marketplace,
 
           price: product.price,
-          oldPrice: product.oldPrice,
+          oldPrice:
+            product.oldPrice !== null &&
+            precoValidoParaHistorico(product.oldPrice)
+              ? product.oldPrice
+              : null,
 
           source: discoverySource,
         },
