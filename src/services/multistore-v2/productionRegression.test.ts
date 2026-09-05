@@ -97,11 +97,10 @@ const fallback = await searchMultistoreV2("Disco de serra 80 dentes", {
   adapters: [amazon(candidateResult("AMAZON", "Disco de serra 80 dentes")), blockedShopee],
   budget: { globalMs: 3000, marketplaceMs: 500, fetchMs: 300, responseReserveMs: 200, persistReserveMs: 200, hangGraceMs: 50 },
 });
-assert.equal(fallback.views.length, 1);
+assert.equal(fallback.views.length, 0, "resultado publico nao usa fallback de loja unica");
 assert.equal(fallback.multiStoreClusters, 0);
-assert.equal(fallback.singleStoreClusters, 1);
-assert.equal(fallback.persistedProductIds[0], "");
-assert.equal(fallback.products[0]?.publishable, false);
+assert.equal(fallback.singleStoreClusters, 0);
+assert.equal(fallback.persistedProductIds.length, 0);
 
 for (const [query, candidate] of [
   ["Disco de serra 80 dentes", "Disco de serra 60 dentes"],

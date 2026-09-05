@@ -500,6 +500,52 @@ export function productCoreCoverage(
     : "UNKNOWN";
 }
 
+/*
+ * Corte barato e conservador para lotes grandes: so rejeita quando os dois
+ * nucleos comerciais foram classificados com confianca suficiente e as
+ * familias sao incompatíveis. UNKNOWN continua para a relevancia completa.
+ */
+export function hasStrongProductConceptConflict(
+  core: QueryCore,
+  candidateText: string,
+): boolean {
+  const queryHasExplicitHead = Boolean(
+    core.soldHeadToken &&
+      core.productClass !== "UNKNOWN" &&
+      conceptLexicalTokens(core.productClass).includes(core.soldHeadToken),
+  );
+  if (
+    core.productClass === "UNKNOWN" ||
+    (
+      core.productClassConfidence !== "HIGH" &&
+      core.productClassConfidence !== "MEDIUM" &&
+      !queryHasExplicitHead
+    )
+  ) {
+    return false;
+  }
+
+  const candidateNucleus = extractSoldItemNucleus(candidateText);
+  const candidate = classifyProductConcept(candidateNucleus.normalizedText);
+  const candidateHasExplicitHead = Boolean(
+    candidateNucleus.headToken &&
+      candidate.id !== "UNKNOWN" &&
+      conceptLexicalTokens(candidate.id).includes(candidateNucleus.headToken),
+  );
+  if (
+    candidate.id === "UNKNOWN" ||
+    (
+      candidate.confidence !== "HIGH" &&
+      candidate.confidence !== "MEDIUM" &&
+      !candidateHasExplicitHead
+    )
+  ) {
+    return false;
+  }
+
+  return compareProductConcepts(core.productClass, candidate.id) === "CONFLICT";
+}
+
 function isAccessoryLikeRole(role: ProductRole): boolean {
   return role === "ACCESSORY" || role === "REPLACEMENT_PART";
 }

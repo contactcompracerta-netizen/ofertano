@@ -5,6 +5,10 @@ export type SearchBudget = {
   fetchMs: number;
   persistReserveMs: number;
   hangGraceMs: number;
+  /** Tempo protegido para ampliar a cobertura de lojas depois do clustering. */
+  huntReserveMs?: number;
+  /** Janela protegida para a relevancia antes de iniciar o hunt. */
+  relevanceReserveMs?: number;
 };
 
 export const DEFAULT_SEARCH_BUDGET: SearchBudget = {
@@ -14,9 +18,26 @@ export const DEFAULT_SEARCH_BUDGET: SearchBudget = {
   fetchMs: 6_000,
   persistReserveMs: 2_000,
   hangGraceMs: 300,
+  huntReserveMs: 5_000,
+  relevanceReserveMs: 2_500,
 };
 
 export const V2_RESPONSE_RESERVE_MS = 1_500;
+export const DEFAULT_HUNT_RESERVE_MS = 5_000;
+
+export function resolveHuntReserveMs(
+  budget: SearchBudget,
+  responseReserveMs = V2_RESPONSE_RESERVE_MS,
+): number {
+  const configured = budget.huntReserveMs ?? DEFAULT_HUNT_RESERVE_MS;
+  const minimumAcquisitionWindow = Math.max(150, Math.floor(budget.globalMs * 0.4));
+  const availableAfterResponse = Math.max(
+    0,
+    budget.globalMs - responseReserveMs - minimumAcquisitionWindow,
+  );
+
+  return Math.min(Math.max(0, configured), availableAfterResponse);
+}
 
 export type SearchDeadline = {
   startedAt: number;

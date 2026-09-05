@@ -17,6 +17,8 @@ export type ProductConceptId =
   | "lighting"
   | "mirror"
   | "toy"
+  | "sports_ball"
+  | "air_pump"
   | "book"
   | "apparel"
   | "cookware"
@@ -209,7 +211,19 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
   {
     id: "toy",
     phrases: ["brinquedo infantil", "jogo infantil", "roupa de boneca"],
-    tokens: ["brinquedo", "brinquedos", "boneco", "boneca", "funko"],
+    tokens: ["brinquedo", "brinquedos", "boneco", "boneca", "funko", "mordedor", "mordedores"],
+    coreMode: "token",
+  },
+  {
+    id: "sports_ball",
+    phrases: ["bola de futebol", "bola futebol", "bola de futsal", "bola de volei", "bola de basquete"],
+    tokens: ["bola", "bolas"],
+    coreMode: "token",
+  },
+  {
+    id: "air_pump",
+    phrases: ["bomba de ar", "bomba para bola", "bomba de encher"],
+    tokens: ["bomba", "bombas"],
     coreMode: "token",
   },
   {
@@ -612,7 +626,7 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
       "suporte para celular",
       "suporte de notebook",
     ],
-    tokens: ["estojo", "estojos"],
+    tokens: ["estojo", "estojos", "chaveiro", "chaveiros"],
     coreMode: "token",
   },
   {
@@ -632,7 +646,7 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
   {
     id: "consumable",
     phrases: ["saco de poeira", "sacos de poeira"],
-    tokens: ["saco", "sacos", "refil", "refis"],
+    tokens: ["saco", "sacos", "refil", "refis", "cola", "colas"],
     coreMode: "token",
   },
   {
