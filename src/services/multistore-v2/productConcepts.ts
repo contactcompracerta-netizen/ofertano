@@ -1120,7 +1120,6 @@ const LEADING_BRANDS = new Set([
   "cadence",
   "britania",
   "novatech",
-  "marcax",
 ]);
 
 export type SoldItemNucleus = {

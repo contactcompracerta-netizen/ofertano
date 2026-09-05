@@ -74,7 +74,6 @@ const KNOWN_BRANDS = new Set([
   "cadence",
   "britania",
   "novatech",
-  "marcax",
 ]);
 
 export type QueryCore = {
@@ -509,6 +508,14 @@ export function hasStrongProductConceptConflict(
   core: QueryCore,
   candidateText: string,
 ): boolean {
+  const candidateSplit = splitSoldAndHost(candidateText);
+  if (candidateSplit.host) {
+    const hostClass = classifyProductConcept(candidateSplit.host).id;
+    if (core.productClass !== "UNKNOWN" && hostClass === core.productClass) {
+      return true;
+    }
+  }
+
   const queryHasExplicitHead = Boolean(
     core.soldHeadToken &&
       core.productClass !== "UNKNOWN" &&

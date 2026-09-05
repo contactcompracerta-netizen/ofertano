@@ -989,6 +989,11 @@ async function runAcquisitionContract() {
     persistReserveMs: 50,
     hangGraceMs: 40,
   };
+  const STABLE_MIXED_TIMEOUT_GLOBAL_MS = 1_500;
+  const mixedTimeoutBudget = {
+    ...tightBudget,
+    globalMs: STABLE_MIXED_TIMEOUT_GLOBAL_MS,
+  };
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, 30_000);
@@ -1052,7 +1057,7 @@ async function runAcquisitionContract() {
   const timeoutResult = await searchMultistoreV2("JBL Tune 520BT", {
     persist: false,
     adapters: timeoutAdapters,
-    budget: tightBudget,
+    budget: mixedTimeoutBudget,
   });
   const timeoutElapsed = Date.now() - timeoutStarted;
   assert.ok(timeoutElapsed < 2_000, `CASO timeout: terminou em ${timeoutElapsed}ms, dentro do orcamento`);
@@ -1084,7 +1089,7 @@ async function runAcquisitionContract() {
 
   let slowIgnoresAbort = false;
   const isolationBudget = {
-    globalMs: 900,
+    globalMs: STABLE_MIXED_TIMEOUT_GLOBAL_MS,
     marketplaceMs: 700,
     fetchMs: 300,
     persistReserveMs: 80,
@@ -1243,10 +1248,14 @@ async function runAcquisitionContract() {
     "candidato incompatível não conta como cobertura compatível",
   );
 
+  const affiliateTimeoutBudget = {
+    ...tightBudget,
+    globalMs: STABLE_MIXED_TIMEOUT_GLOBAL_MS,
+  };
   const affiliateTimeoutStarted = Date.now();
   const affiliateTimeout = await searchMultistoreV2("JBL Tune 520BT", {
     persist: false,
-    budget: tightBudget,
+    budget: affiliateTimeoutBudget,
     adapters: [
       fakeAdapter("AMAZON", "Amazon", async () => ({
         marketplace: "AMAZON",

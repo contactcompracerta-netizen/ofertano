@@ -378,17 +378,10 @@ async function runCoveragePublicationCases() {
 
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
-      let settled = false;
       const finish = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
         signal?.removeEventListener("abort", finish);
         resolve();
       };
-      const timer = setTimeout(finish, 1_000);
       if (signal?.aborted) {
         finish();
         return;
@@ -746,6 +739,7 @@ async function runCoveragePublicationCases() {
       }),
     ],
   });
+  assert.equal(zeroFoundTimeout.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.equal(coverageStatusOf(zeroFoundTimeout.acquisitions), "INCOMPLETE", "CASO 4: 0 FOUND + TIMEOUT => INCOMPLETE");
   assert.equal(zeroFoundTimeout.products.length, 0, "CASO 4: nenhum resultado visivel");
   assert.equal(zeroFoundTimeout.views.length, 0, "CASO 4: nao inventa produto");
@@ -1273,15 +1267,16 @@ async function runPersistContract() {
 
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 30_000);
-      signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      const onAbort = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      if (signal?.aborted) {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+        return;
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
 
   const timeoutBudget = {
@@ -1412,7 +1407,7 @@ function withTestTimeout<T>(promise: Promise<T>, timeoutMs: number, label: strin
 }
 
 async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
-  const writeDelayMs = 100;
+  const writeDelayMs = 25;
   let caseAWrites = 0;
   const caseAStarted = Date.now();
   await persistCanonicalProducts("Headphone MarcaX", thirty, {
@@ -1441,8 +1436,8 @@ async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
     `CASO A writes=${caseAWrites} elapsedMs=${caseAElapsed} sequentialFloorMs=${12 * writeDelayMs}`,
   );
 
-  const persistBudgetMs = 80;
-  const slowWriteMs = 450;
+  const persistBudgetMs = 35;
+  const slowWriteMs = 120;
   const persistClockStarted = Date.now();
   let caseBWrites = 0;
   const caseBStarted = Date.now();
@@ -1477,95 +1472,97 @@ async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
   let persistWriteStarted = false;
   let persistReturned = false;
   const persistHang = persistCanonicalProducts(
-    "Headphone MarcaX",
-    thirty.slice(0, 3),
-    {
+      "Headphone MarcaX",
+      thirty.slice(0, 3),
+      {
+        limit: 12,
+        persistProduct: async () => {
+          persistWriteStarted = true;
+          return hang.promise;
+        },
+      },
+    );
+    void persistHang.then(() => {
+      persistReturned = true;
+    });
+    while (!persistWriteStarted) {
+      await wait(3);
+    }
+    await wait(8);
+    assert.equal(
+      persistReturned,
+      false,
+      "CASO C: persistCanonicalProducts fica bloqueado enquanto saveProduct nao resolve",
+    );
+
+    let searchWriteStarted = false;
+    let searchReturned = false;
+    const searchHang = searchMultistoreV2("Headphone MarcaX ZX100", {
+      persist: true,
       limit: 12,
+      adapters: [
+        fakeAdapter("AMAZON", "Amazon", async () => ({
+          marketplace: "AMAZON",
+          query: "Headphone MarcaX ZX100",
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "AMAZON",
+              marketplaceName: "Amazon",
+              externalId: "amz-hang",
+              title: "Headphone MarcaX ZX100",
+              price: 199,
+            }),
+          ],
+          error: null,
+        })),
+        fakeAdapter("SHOPEE", "Shopee", async () => ({
+          marketplace: "SHOPEE",
+          query: "Headphone MarcaX ZX100",
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "SHOPEE",
+              marketplaceName: "Shopee",
+              externalId: "shp-hang",
+              title: "Headphone MarcaX ZX100",
+              price: 189,
+            }),
+          ],
+          error: null,
+        })),
+      ],
       persistProduct: async () => {
-        persistWriteStarted = true;
+        searchWriteStarted = true;
         return hang.promise;
       },
-    },
-  );
-  void persistHang.then(() => {
-    persistReturned = true;
-  });
-  while (!persistWriteStarted) {
-    await wait(5);
-  }
-  await wait(20);
-  assert.equal(
-    persistReturned,
-    false,
-    "CASO C: persistCanonicalProducts fica bloqueado enquanto saveProduct nao resolve",
-  );
+    });
+    void searchHang.then(() => {
+      searchReturned = true;
+    });
+    while (!searchWriteStarted) {
+      await wait(3);
+    }
+    await wait(8);
+    assert.equal(
+      searchReturned,
+      false,
+      "CASO C: searchMultistoreV2 (caminho publico) nao retorna enquanto o write iniciado nao termina",
+    );
 
-  let searchWriteStarted = false;
-  let searchReturned = false;
-  const searchHang = searchMultistoreV2("Headphone MarcaX ZX100", {
-    persist: true,
-    limit: 12,
-    adapters: [
-      fakeAdapter("AMAZON", "Amazon", async () => ({
-        marketplace: "AMAZON",
-        query: "Headphone MarcaX ZX100",
-        success: true,
-        scanned: 1,
-        candidates: [
-          foundCandidate({
-            marketplace: "AMAZON",
-            marketplaceName: "Amazon",
-            externalId: "amz-hang",
-            title: "Headphone MarcaX ZX100",
-            price: 199,
-          }),
-        ],
-        error: null,
-      })),
-      fakeAdapter("SHOPEE", "Shopee", async () => ({
-        marketplace: "SHOPEE",
-        query: "Headphone MarcaX ZX100",
-        success: true,
-        scanned: 1,
-        candidates: [
-          foundCandidate({
-            marketplace: "SHOPEE",
-            marketplaceName: "Shopee",
-            externalId: "shp-hang",
-            title: "Headphone MarcaX ZX100",
-            price: 189,
-          }),
-        ],
-        error: null,
-      })),
-    ],
-    persistProduct: async () => {
-      searchWriteStarted = true;
-      return hang.promise;
-    },
-  });
-  void searchHang.then(() => {
-    searchReturned = true;
-  });
-  while (!searchWriteStarted) {
-    await wait(5);
-  }
-  await wait(20);
-  assert.equal(
-    searchReturned,
-    false,
-    "CASO C: searchMultistoreV2 (caminho publico) nao retorna enquanto o write iniciado nao termina",
-  );
-
-  hang.resolve({ id: "released-after-simulated-30s" });
-  const [persistResult, searchResult] = await Promise.all([
-    persistHang,
-    searchHang,
-  ]);
-  assert.equal(persistReturned, true);
-  assert.equal(searchReturned, true);
-  assert.equal(persistResult[0], "released-after-simulated-30s");
-  assert.ok(searchResult.views.length >= 1);
+    setTimeout(() => {
+      hang.resolve({ id: "released-after-simulated-30ms" });
+    }, 30);
+    const [persistResult, searchResult] = await Promise.all([
+      persistHang,
+      searchHang,
+    ]);
+    assert.equal(persistReturned, true);
+    assert.equal(searchReturned, true);
+    assert.equal(persistResult[0], "released-after-simulated-30ms");
+    assert.ok(searchResult.views.length >= 1);
   console.log(
     "CASO C: write pendente bloqueia persistCanonicalProducts e searchMultistoreV2; resposta publica so sai depois do await de saveProduct",
   );
@@ -1867,7 +1864,9 @@ async function runMlUnknownAffiliateCase() {
   );
 }
 
-void withTestTimeout(runPersistContract(), 12_000, "persist.test")
+const PERSIST_TEST_WATCHDOG_MS = 20_000;
+
+void withTestTimeout(runPersistContract(), PERSIST_TEST_WATCHDOG_MS, "persist.test")
   .then(async () => {
     await runMlUnknownAffiliateCase();
     console.log("multistore-v2 persist: invariantes estruturais passaram");

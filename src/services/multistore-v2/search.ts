@@ -42,6 +42,7 @@ import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
 import { buildAliExpressCompactFallbackQuery, buildSearchPlan } from "./queryPlan";
 import { extractSanitizedIdentity } from "./sanitizedIdentity";
+import { classifyQueryMode } from "./queryIdentity";
 import { detectDistinctiveConflict } from "./distinctiveAnchors";
 export { buildSearchPlan };
 import { rankCanonicalProducts } from "./rank";
@@ -463,7 +464,7 @@ function selectStrongHuntSeeds(
 ): HuntSeed[] {
   const adaptiveCount = Math.max(
     1,
-    Math.min(MAX_HUNT_SEEDS, Math.floor(huntMs / 900)),
+    Math.min(MAX_HUNT_SEEDS, Math.ceil(huntMs / 900)),
   );
 
   const seeds = clusters
@@ -1270,6 +1271,7 @@ export async function searchMultistoreV2(
     relevanceReserveMs +
     PHASE_HANDOFF_RESERVE_MS;
   const identity = extractSanitizedIdentity(rawQuery);
+  const queryMode = classifyQueryMode(identity);
   const search = identity.sanitizedQuery || rawQuery;
   const core = identity.queryCore;
   const intent = queryIntentFromCore(core);
@@ -1286,6 +1288,7 @@ export async function searchMultistoreV2(
   });
   traceV2("query", {
     query: search,
+    queryMode,
     budgetMs: budget.globalMs,
     deadlineAt: deadline.deadlineAt,
     marketplaceBudgetMs: budget.marketplaceMs,
@@ -1335,6 +1338,7 @@ export async function searchMultistoreV2(
     const rawCandidates = acquisitionsSnapshot.flatMap((item) => item.candidates);
     const queryCore = prepared.core;
     const normalized: ReturnType<typeof normalizeCandidate>[] = [];
+    const processedAcquiredKeys = new Set<string>();
     let prefilterDropped = 0;
     for (const raw of rawCandidates) {
       if (!hasPhaseBudget(deadline, normalizationStopMs)) {
@@ -1345,7 +1349,9 @@ export async function searchMultistoreV2(
         });
         break;
       }
+      const key = candidateKey(raw.marketplace, raw.externalId);
       if (hasStrongProductConceptConflict(queryCore, raw.title)) {
+        processedAcquiredKeys.add(key);
         prefilterDropped += 1;
         traceV2("concept-prefilter", {
           marketplace: raw.marketplace,
@@ -1359,6 +1365,7 @@ export async function searchMultistoreV2(
       const candidate = normalizeCandidate(raw);
       const conflict = detectDistinctiveConflict(identity, candidate.raw.title);
       if (conflict.conflict) {
+        processedAcquiredKeys.add(key);
         traceV2("candidate-identity", {
           marketplace: raw.marketplace,
           externalId: raw.externalId,
@@ -1371,6 +1378,7 @@ export async function searchMultistoreV2(
         continue;
       }
       normalized.push(candidate);
+      processedAcquiredKeys.add(key);
     }
     traceV2Phase("NORMALIZATION", "end", normalizationStarted, deadline, {
       rawCandidates: rawCandidates.length,
@@ -1457,9 +1465,7 @@ export async function searchMultistoreV2(
       });
     }
 
-    const knownKeys = new Set(
-      rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
-    );
+    const knownKeys = new Set(processedAcquiredKeys);
     const shouldHunt =
       options.hunt === true &&
       !deadline.expired() &&
