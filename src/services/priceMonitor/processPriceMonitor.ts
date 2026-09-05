@@ -1,6 +1,9 @@
 import prisma from "@/lib/prisma";
 import { saveProduct } from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
+import { montarContextoAlertas } from "@/services/priceAlerts/priceContext";
+import { createPrismaPriceAlertRepository } from "@/services/priceAlerts/repository";
+import { processProductAlerts } from "@/services/priceAlerts/processProductAlerts";
 
 const LIMITE_PADRAO = 5;
 const LIMITE_MAXIMO = 10;
@@ -260,6 +263,38 @@ export async function processPriceMonitor(
 
       if (priceChanged) {
         precosAlterados += 1;
+
+        /*
+         * FLUXO AUTOMATICO DE ALERTAS: somente depois de o novo preco
+         * estar persistido (saveProduct ja gravou preco + historico),
+         * processamos os alertas ativos do produto. Falha aqui nunca
+         * quebra o monitor: registramos e seguimos.
+         */
+        try {
+          const contexto = await montarContextoAlertas({
+            productId: oferta.productId,
+            currentPrice: produtoImportado.price,
+            previousPrice: oferta.price,
+            productName: produtoImportado.title ?? oferta.productId,
+            marketplace: produtoImportado.marketplace,
+            store: produtoImportado.seller ?? null,
+          });
+
+          const repositorio =
+            await createPrismaPriceAlertRepository(prisma);
+
+          await processProductAlerts(
+            contexto,
+            { repository: repositorio },
+          );
+        } catch (errorAlertas) {
+          console.error(
+            "Erro ao processar alertas de preco (nao interrompe o monitor):",
+            errorAlertas instanceof Error
+              ? errorAlertas.message
+              : "Erro desconhecido.",
+          );
+        }
       }
 
       resultados.push({

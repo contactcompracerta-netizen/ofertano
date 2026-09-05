@@ -14,11 +14,18 @@ type PriceAlertButtonProps = {
 
 type PriceAlertRow = {
   id: string;
-  alert_type: AlertType;
-  target_price: number | null;
-  reference_price: number;
-  last_seen_price: number;
+  alertType: AlertType;
+  targetPrice: number | null;
+  percentageDrop: number | null;
+  referencePrice: number;
+  lowestSeenPrice: number | null;
   active: boolean;
+};
+
+type PriceAlertApiResponse = {
+  success: boolean;
+  alert: PriceAlertRow | null;
+  error?: string;
 };
 
 function formatarPreco(valor: number) {
@@ -137,30 +144,39 @@ export default function PriceAlertButton({
 
         setAutenticado(true);
 
-        const { data, error } = await supabase
-          .from("price_alerts")
-          .select(
-            `
-              id,
-              alert_type,
-              target_price,
-              reference_price,
-              last_seen_price,
-              active
-            `
-          )
-          .eq("user_id", user.id)
-          .eq("product_id", productId)
-          .maybeSingle();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          setAlertaAtual(null);
+          return;
+        }
+
+        const resposta = await fetch(
+          `/api/price-alerts?productId=${encodeURIComponent(
+            productId
+          )}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        );
 
         if (!ativo) {
           return;
         }
 
-        if (error) {
+        let payload: PriceAlertApiResponse;
+
+        try {
+          payload = (await resposta.json()) as PriceAlertApiResponse;
+        } catch {
           console.error(
-            "Erro ao carregar alerta:",
-            error.message
+            "Resposta inválida ao carregar alerta:",
+            resposta.status
           );
           setErro(
             "Não foi possível consultar seu alerta."
@@ -168,28 +184,39 @@ export default function PriceAlertButton({
           return;
         }
 
-        if (!data) {
+        if (!resposta.ok || !payload.success) {
+          console.error(
+            "Erro ao carregar alerta:",
+            payload.error ?? resposta.status
+          );
+          setErro(
+            "Não foi possível consultar seu alerta."
+          );
+          return;
+        }
+
+        if (!payload.alert) {
           setAlertaAtual(null);
           setTipo("ANY_DROP");
           setPrecoAlvo("");
           return;
         }
 
-        const alerta = data as PriceAlertRow;
+        const alerta = payload.alert;
 
         setAlertaAtual(alerta);
         setTipo(
-          alerta.alert_type === "TARGET"
+          alerta.alertType === "TARGET"
             ? "TARGET"
             : "ANY_DROP"
         );
 
         if (
-          alerta.alert_type === "TARGET" &&
-          alerta.target_price
+          alerta.alertType === "TARGET" &&
+          alerta.targetPrice
         ) {
           setPrecoAlvo(
-            alerta.target_price.toLocaleString(
+            alerta.targetPrice.toLocaleString(
               "pt-BR",
               {
                 minimumFractionDigits: 2,
@@ -293,6 +320,18 @@ export default function PriceAlertButton({
       return;
     }
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setAutenticado(false);
+      setErro(
+        "Entre na sua conta para criar alertas de preço."
+      );
+      return;
+    }
+
     let targetPrice: number | null = null;
 
     if (tipo === "TARGET") {
@@ -322,44 +361,43 @@ export default function PriceAlertButton({
     try {
       setSalvando(true);
 
-      const { data, error } = await supabase
-        .from("price_alerts")
-        .upsert(
-          {
-            user_id: user.id,
-            product_id: productId,
-            alert_type: tipo,
-            target_price:
+      const resposta = await fetch(
+        "/api/price-alerts",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            productId,
+            alertType: tipo,
+            targetPrice:
               tipo === "TARGET"
                 ? targetPrice
                 : null,
-            reference_price: currentPrice,
-            last_seen_price: currentPrice,
+            referencePrice: currentPrice,
             active: true,
-            last_notified_price: null,
-            last_notified_at: null,
-          },
-          {
-            onConflict:
-              "user_id,product_id",
-          }
-        )
-        .select(
-          `
-            id,
-            alert_type,
-            target_price,
-            reference_price,
-            last_seen_price,
-            active
-          `
-        )
-        .single();
+          }),
+        }
+      );
 
-      if (error) {
+      let payload: PriceAlertApiResponse;
+
+      try {
+        payload = (await resposta.json()) as PriceAlertApiResponse;
+      } catch {
+        payload = {
+          success: false,
+          alert: null,
+          error: "Resposta inválida.",
+        };
+      }
+
+      if (!resposta.ok || !payload.success || !payload.alert) {
         console.error(
           "Erro ao salvar alerta:",
-          error.message
+          payload.error ?? resposta.status
         );
         setErro(
           "Não foi possível salvar o alerta."
@@ -367,7 +405,7 @@ export default function PriceAlertButton({
         return;
       }
 
-      const alerta = data as PriceAlertRow;
+      const alerta = payload.alert;
       setAlertaAtual(alerta);
 
       if (tipo === "TARGET") {
@@ -408,21 +446,46 @@ export default function PriceAlertButton({
       return;
     }
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setAutenticado(false);
+      return;
+    }
+
     try {
       setSalvando(true);
 
-      const { error } = await supabase
-        .from("price_alerts")
-        .update({
-          active: false,
-        })
-        .eq("user_id", user.id)
-        .eq("product_id", productId);
+      const resposta = await fetch(
+        `/api/price-alerts?productId=${encodeURIComponent(
+          productId
+        )}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
 
-      if (error) {
+      let payload: PriceAlertApiResponse;
+
+      try {
+        payload = (await resposta.json()) as PriceAlertApiResponse;
+      } catch {
+        payload = {
+          success: false,
+          alert: null,
+          error: "Resposta inválida.",
+        };
+      }
+
+      if (!resposta.ok || !payload.success) {
         console.error(
           "Erro ao desativar alerta:",
-          error.message
+          payload.error ?? resposta.status
         );
         setErro(
           "Não foi possível desativar o alerta."

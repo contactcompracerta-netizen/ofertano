@@ -49,6 +49,11 @@ enum DiscoverySource {
   API
 }
 
+enum PriceAlertType {
+  ANY_DROP
+  TARGET
+}
+
 enum SearchRequestStatus {
   PENDING
   SEARCHING
@@ -108,6 +113,7 @@ model Product {
   offers         MarketplaceOffer[]
   priceHistory   PriceHistory[]     @relation("ProductPriceHistory")
   searchRequests SearchRequest[]
+  priceAlerts    PriceAlert[]
 
   @@index([active, updatedAt])
   @@index([category, active])
@@ -213,6 +219,44 @@ model PriceHistory {
   @@index([productId, recordedAt])
   @@index([offerId, recordedAt])
   @@index([marketplace, recordedAt])
+}
+
+// Alerta de preco criado por um usuario. Mantem compatibilidade com a
+// tabela `price_alerts` que o frontend ja usava via Supabase, adicionando
+// regras e dedupe por canal. userId referencia auth.users do Supabase e
+// NAO possui FK (nao ha tabela de usuarios no schema Prisma).
+model PriceAlert {
+  id        String  @id @default(cuid())
+  userId    String
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  alertType       PriceAlertType @default(ANY_DROP)
+  targetPrice     Float?
+  // Menor preco ja observado pelo monitor, usado como referencia de baixa.
+  referencePrice  Float
+  lowestSeenPrice Float?
+  // Queda minima percentual (0-100) exigida para disparo, quando definida.
+  percentageDrop  Float?
+
+  active Boolean @default(true)
+
+  // Canais de notificacao. Whatsapp so fica true quando ha provider real.
+  notifyEmail    Boolean @default(true)
+  notifyWhatsApp Boolean @default(false)
+
+  // Dedupe/cooldown por canal: evita reenviar o mesmo alerta.
+  lastEmailNotifiedPrice    Float?
+  lastEmailNotifiedAt       DateTime?
+  lastWhatsAppNotifiedPrice Float?
+  lastWhatsAppNotifiedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([productId, active])
+  @@index([active, updatedAt])
 }
 
 model SearchRequest {
