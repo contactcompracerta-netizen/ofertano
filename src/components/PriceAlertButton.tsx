@@ -20,6 +20,8 @@ type PriceAlertRow = {
   referencePrice: number;
   lowestSeenPrice: number | null;
   active: boolean;
+  notifyEmail?: boolean;
+  notifyWhatsApp?: boolean;
 };
 
 type PriceAlertApiResponse = {
@@ -120,6 +122,8 @@ export default function PriceAlertButton({
     useState<string | null>(null);
   const [sucesso, setSucesso] =
     useState<string | null>(null);
+  const [testandoEmail, setTestandoEmail] =
+    useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -506,6 +510,63 @@ export default function PriceAlertButton({
     }
   }
 
+  async function enviarEmailTeste() {
+    if (
+      testandoEmail ||
+      !alertaAtual
+    ) {
+      return;
+    }
+
+    setErro(null);
+    setSucesso(null);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setErro(
+        "Não foi possível enviar o e-mail de teste."
+      );
+      return;
+    }
+
+    try {
+      setTestandoEmail(true);
+
+      const resposta = await fetch(
+        "/api/price-alerts/test-email",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ productId }),
+        }
+      );
+
+      let payload: { ok?: boolean } = {};
+
+      try {
+        payload = (await resposta.json()) as { ok?: boolean };
+      } catch {
+        payload = {};
+      }
+
+      if (resposta.ok && payload.ok) {
+        setSucesso("E-mail de teste enviado.");
+      } else {
+        setErro(
+          "Não foi possível enviar o e-mail de teste."
+        );
+      }
+    } finally {
+      setTestandoEmail(false);
+    }
+  }
+
   function abrirLogin() {
     window.location.href = "/login";
   }
@@ -776,6 +837,23 @@ export default function PriceAlertButton({
                       Desativar alerta
                     </button>
                   )}
+
+                  {autenticado &&
+                    alertaAtivo &&
+                    alertaAtual?.notifyEmail === true && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void enviarEmailTeste()
+                        }
+                        disabled={testandoEmail}
+                        className="mt-2 flex min-h-10 w-full max-w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {testandoEmail
+                          ? "Enviando e-mail de teste..."
+                          : "Enviar e-mail de teste"}
+                      </button>
+                    )}
                 </>
               )}
               </div>

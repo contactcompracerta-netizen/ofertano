@@ -17,6 +17,8 @@ export type PriceAlertApiRecord = {
   referencePrice: number;
   lowestSeenPrice: number | null;
   active: boolean;
+  notifyEmail: boolean;
+  notifyWhatsApp: boolean;
 };
 
 export type PriceAlertApiStore = {
@@ -46,6 +48,8 @@ export type PrismaPriceAlertRow = {
   referencePrice: number;
   lowestSeenPrice: number | null;
   active: boolean;
+  notifyEmail: boolean;
+  notifyWhatsApp: boolean;
 };
 
 export function createPrismaPriceAlertApiStore(
@@ -135,6 +139,8 @@ function normalizeRow(row: PrismaPriceAlertRow): PriceAlertApiRecord {
     referencePrice: row.referencePrice,
     lowestSeenPrice: row.lowestSeenPrice,
     active: row.active,
+    notifyEmail: row.notifyEmail,
+    notifyWhatsApp: row.notifyWhatsApp,
   };
 }
 
@@ -192,6 +198,8 @@ export function createMemoryPriceAlertApiStore(): PriceAlertApiStore & {
         referencePrice: input.referencePrice,
         lowestSeenPrice: null,
         active: input.active,
+        notifyEmail: true,
+        notifyWhatsApp: false,
       };
       rows.push(created);
       return { ...created };

@@ -23,6 +23,8 @@ export function normalizeAlertResponse(alert: {
   referencePrice: number;
   lowestSeenPrice: number | null;
   active: boolean;
+  notifyEmail?: boolean;
+  notifyWhatsApp?: boolean;
 }) {
   return {
     id: alert.id,
@@ -32,6 +34,8 @@ export function normalizeAlertResponse(alert: {
     referencePrice: alert.referencePrice,
     lowestSeenPrice: alert.lowestSeenPrice,
     active: alert.active,
+    notifyEmail: alert.notifyEmail ?? true,
+    notifyWhatsApp: alert.notifyWhatsApp ?? false,
   };
 }
 
