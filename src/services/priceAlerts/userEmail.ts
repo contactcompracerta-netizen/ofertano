@@ -27,7 +27,8 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * Resultado tipado da resolucao do email. Distingue "resolver ausente na
  * configuracao" de "usuario/email nao encontrado" para o motor decidir o
- * status por canal sem quebrar o fluxo.
+ * status por canal sem quebrar o fluxo. O monitor consome apenas este
+ * contrato (fails closed).
  */
 export type ResolucaoEmailUsuario =
   | { status: "RESOLVIDO"; email: string }
@@ -37,6 +38,21 @@ export type ResolucaoEmailUsuario =
 export type ResolverEmailDoUsuario = (
   userId: string,
 ) => Promise<ResolucaoEmailUsuario>;
+
+/**
+ * Contrato usado SOMENTE pelo smoke test: igual ao resolver canonico mas
+ * preserva `RESOLUTION_FAILED` (chamada Admin falhou) para o diagnostico
+ * distinguir as tres falhas. Nunca expoe o email fora do caso RESOLVIDO.
+ */
+export type ResolucaoEmailSmoke =
+  | { status: "RESOLVIDO"; email: string }
+  | { status: "RESOLVER_NAO_CONFIGURADO" }
+  | { status: "USUARIO_NAO_ENCONTRADO" }
+  | { status: "RESOLUTION_FAILED" };
+
+export type ResolverEmailSmoke = (
+  userId: string,
+) => Promise<ResolucaoEmailSmoke>;
 
 /**
  * Valida o formato basico de um email sem aceitar destino forjado.
@@ -74,24 +90,21 @@ export function resolverEmailUsuarioConfigurado(): boolean {
   return Boolean(url && serviceRoleKey);
 }
 
-/**
- * Resolve o email do usuario pelo id via Supabase Auth Admin API.
- *
- * Somente leitura e falha de forma segura: qualquer problema de
- * permissao/conexao/resposta devolve `USUARIO_NAO_ENCONTRADO`, e a chave
- * ausente devolve `RESOLVER_NAO_CONFIGURADO`. Nunca lanca e nunca loga o
- * email retornado. Requer email existente, confirmado e usuario nao
- * deletado.
- */
-export async function buscarEmailDoUsuario(
+type DetalheResolucaoEmailUsuario =
+  | { tipo: "RESOLVIDO"; email: string }
+  | { tipo: "RESOLVER_NAO_CONFIGURADO" }
+  | { tipo: "USUARIO_NAO_ENCONTRADO" }
+  | { tipo: "RESOLUTION_FAILED" };
+
+async function resolverEmailComDetalhe(
   userId: string,
-): Promise<ResolucaoEmailUsuario> {
+): Promise<DetalheResolucaoEmailUsuario> {
   if (!userId || typeof userId !== "string") {
-    return { status: "USUARIO_NAO_ENCONTRADO" };
+    return { tipo: "USUARIO_NAO_ENCONTRADO" };
   }
 
   if (!resolverEmailUsuarioConfigurado()) {
-    return { status: "RESOLVER_NAO_CONFIGURADO" };
+    return { tipo: "RESOLVER_NAO_CONFIGURADO" };
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim();
@@ -111,24 +124,75 @@ export async function buscarEmailDoUsuario(
       error,
     } = await supabaseAdmin.auth.admin.getUserById(userId);
 
-    if (error || !user) {
-      return { status: "USUARIO_NAO_ENCONTRADO" };
+    if (error) {
+      return { tipo: "RESOLUTION_FAILED" };
+    }
+
+    if (!user) {
+      return { tipo: "USUARIO_NAO_ENCONTRADO" };
     }
 
     if (user.deleted_at || user.banned_until) {
-      return { status: "USUARIO_NAO_ENCONTRADO" };
+      return { tipo: "USUARIO_NAO_ENCONTRADO" };
     }
 
     if (!user.email_confirmed_at && !user.email) {
-      return { status: "USUARIO_NAO_ENCONTRADO" };
+      return { tipo: "USUARIO_NAO_ENCONTRADO" };
     }
 
     const email = user.email ?? null;
 
     return emailUsuarioValido(email)
-      ? { status: "RESOLVIDO", email }
-      : { status: "USUARIO_NAO_ENCONTRADO" };
+      ? { tipo: "RESOLVIDO", email }
+      : { tipo: "USUARIO_NAO_ENCONTRADO" };
   } catch {
-    return { status: "USUARIO_NAO_ENCONTRADO" };
+    return { tipo: "RESOLUTION_FAILED" };
+  }
+}
+
+/**
+ * Resolve o email do usuario pelo id via Supabase Auth Admin API.
+ *
+ * Somente leitura e falha de forma segura: qualquer problema de
+ * permissao/conexao/resposta devolve `USUARIO_NAO_ENCONTRADO`, e a chave
+ * ausente devolve `RESOLVER_NAO_CONFIGURADO`. Nunca lanca e nunca loga o
+ * email retornado. Requer email existente, confirmado e usuario nao
+ * deletado.
+ */
+export async function buscarEmailDoUsuario(
+  userId: string,
+): Promise<ResolucaoEmailUsuario> {
+  const detalhe = await resolverEmailComDetalhe(userId);
+
+  if (detalhe.tipo === "RESOLVIDO") {
+    return { status: "RESOLVIDO", email: detalhe.email };
+  }
+
+  if (detalhe.tipo === "RESOLVER_NAO_CONFIGURADO") {
+    return { status: "RESOLVER_NAO_CONFIGURADO" };
+  }
+
+  return { status: "USUARIO_NAO_ENCONTRADO" };
+}
+
+/**
+ * Variante do resolver com definitivo RESOLUTION_FAILED, usada somente
+ * pelo smoke test. Compartilha a resolucao real (mesma Auth Admin API,
+ * somente leitura) e mapeia o detalhe para o contrato do smoke test.
+ */
+export async function buscarEmailDoUsuarioDiagnostico(
+  userId: string,
+): Promise<ResolucaoEmailSmoke> {
+  const detalhe = await resolverEmailComDetalhe(userId);
+
+  switch (detalhe.tipo) {
+    case "RESOLVIDO":
+      return { status: "RESOLVIDO", email: detalhe.email };
+    case "RESOLVER_NAO_CONFIGURADO":
+      return { status: "RESOLVER_NAO_CONFIGURADO" };
+    case "RESOLUTION_FAILED":
+      return { status: "RESOLUTION_FAILED" };
+    default:
+      return { status: "USUARIO_NAO_ENCONTRADO" };
   }
 }

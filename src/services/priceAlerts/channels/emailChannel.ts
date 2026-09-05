@@ -26,7 +26,7 @@ export type ConteudoEmailAlerta = {
 
 export type ResultadoEnvioEmail =
   | { status: "EMAIL_SENT" }
-  | { status: "EMAIL_FAILED"; error?: string }
+  | { status: "EMAIL_FAILED"; error?: string; code?: string }
   | { status: "EMAIL_NOT_CONFIGURED" };
 
 export type EmailTransporter = (
@@ -45,6 +45,30 @@ export function emailTransacionalConfigurado(): boolean {
   const remetenteEmail = process.env.BREVO_SENDER_EMAIL?.trim();
 
   return Boolean(chaveBrevo && remetenteEmail);
+}
+
+/**
+ * Codigo sanitizado a partir de um status HTTP da Brevo (v3). Nunca
+ * inclui body bruto nem detalhes do provider: mapeia agrupamentos uteis
+ * para o diagnostico sem expor resposta completa.
+ */
+export function codigoBrevoDeStatus(statusHttp: number): string {
+  if (statusHttp === 400) {
+    return "BREVO_BAD_REQUEST";
+  }
+  if (statusHttp === 401) {
+    return "BREVO_AUTH_FAILED";
+  }
+  if (statusHttp === 403) {
+    return "BREVO_FORBIDDEN";
+  }
+  if (statusHttp === 429) {
+    return "BREVO_RATE_LIMITED";
+  }
+  if (statusHttp >= 500 && statusHttp < 600) {
+    return "BREVO_PROVIDER_ERROR";
+  }
+  return "BREVO_UNKNOWN_ERROR";
 }
 
 /**
@@ -103,8 +127,13 @@ export const emailTransporterPadrao: EmailTransporter =
       return {
         status: "EMAIL_FAILED",
         error: `http_${resposta.status}`,
+        code: codigoBrevoDeStatus(resposta.status),
       };
     } catch {
-      return { status: "EMAIL_FAILED", error: "network_exception" };
+      return {
+        status: "EMAIL_FAILED",
+        error: "network_exception",
+        code: "BREVO_NETWORK_ERROR",
+      };
     }
   };

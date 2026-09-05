@@ -14,18 +14,63 @@
  * - resolve o email exclusivamente via userEmail.ts;
  * - envia UM email marcado claramente como teste tecnico, sem afirmar
  *   queda de preco e sem usar preco anterior falso;
- * - retorna apenas `{ ok: true }` ou erro sanitizado (sem email, token,
- *   chave, secret ou resposta completa da Brevo).
+ * - retorna apenas `{ ok: true }` ou `{ ok: false, code }` com codigo
+ *   sanitizado (sem email, token, chave, secret ou resposta completa da
+ *   Brevo);
+ * - registra logging sanitizado por estagio para diagnostico no runtime
+ *   sem vazar segredos.
  */
 
 import { escapeHtml, formatarPrecoBRL, produtoLinkPublico } from "./content";
-import { emailTransacionalConfigurado } from "./channels/emailChannel";
-import type { ResolverEmailDoUsuario } from "./userEmail";
+import {
+  codigoBrevoDeStatus,
+  emailTransacionalConfigurado,
+} from "./channels/emailChannel";
+import type { ResolverEmailSmoke } from "./userEmail";
 import { emailUsuarioValido } from "./userEmail";
 
 const BREVO_SMTP_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
 export const ASSUNTO_TESTE_EMAIL = "Ofertano — teste de alerta de preço";
+
+/**
+ * Codigos sanitizados do smoke test. NUNCA contem email, userId completo,
+ * token, Authorization, chaves, sender email, body bruto ou resposta do
+ * provider.
+ */
+export type TestEmailDiagnosticCode =
+  | "AUTH_FAILED"
+  | "INVALID_PRODUCT_ID"
+  | "ALERT_NOT_FOUND"
+  | "PRODUCT_NOT_FOUND"
+  | "EMAIL_RESOLVED"
+  | "SUPABASE_ADMIN_NOT_CONFIGURED"
+  | "EMAIL_RESOLUTION_FAILED"
+  | "EMAIL_NOT_FOUND"
+  | "BREVO_NOT_CONFIGURED"
+  | "BREVO_BAD_REQUEST"
+  | "BREVO_AUTH_FAILED"
+  | "BREVO_FORBIDDEN"
+  | "BREVO_RATE_LIMITED"
+  | "BREVO_PROVIDER_ERROR"
+  | "BREVO_NETWORK_ERROR"
+  | "BREVO_UNKNOWN_ERROR";
+
+/**
+ * Log sanitizado por estagio. Exige que todos os campos sejam seguros;
+ * `providerStatus` e apenas o status HTTP numerico (nunca o body).
+ */
+export function logDiagnosticoTesteEmail(
+  stage: string,
+  code: string,
+  extra?: { providerStatus?: number },
+) {
+  console.error("[PRICE_ALERT_TEST_EMAIL]", {
+    stage,
+    code,
+    providerStatus: extra?.providerStatus ?? undefined,
+  });
+}
 
 export type TestEmailSenderInput = {
   toEmail: string;
@@ -36,9 +81,12 @@ export type TestEmailSenderInput = {
 };
 
 export type ResultadoEnvioTeste =
-  | { status: "EMAIL_SENT" }
-  | { status: "EMAIL_FAILED"; error?: string }
-  | { status: "EMAIL_NOT_CONFIGURED" };
+  | { status: "EMAIL_SENT"; code?: "EMAIL_SENT" }
+  | { status: "EMAIL_FAILED"; code?: TestEmailDiagnosticCode; error?: string }
+  | {
+      status: "EMAIL_NOT_CONFIGURED";
+      code?: "BREVO_NOT_CONFIGURED";
+    };
 
 export type TestEmailSender = (
   input: TestEmailSenderInput,
@@ -46,12 +94,15 @@ export type TestEmailSender = (
 
 /**
  * Transporte REAL via Brevo (REST v3), mesmo contrato do canal de email
- * de producao (emailChannel.ts), mas com conteudo de teste tecnico.
+ * de producao (emailChannel.ts), mas com conteudo de teste tecnico. Loga
+ * estagios BREVO_CONFIGURATION / BREVO_REQUEST / BREVO_RESPONSE com codigo
+ * sanitizado e apenas o status HTTP numerico.
  */
 export const testEmailSenderPadrao: TestEmailSender =
   async function enviarEmailTeste(input) {
     if (!emailTransacionalConfigurado()) {
-      return { status: "EMAIL_NOT_CONFIGURED" };
+      logDiagnosticoTesteEmail("BREVO_CONFIGURATION", "BREVO_NOT_CONFIGURED");
+      return { status: "EMAIL_NOT_CONFIGURED", code: "BREVO_NOT_CONFIGURED" };
     }
 
     const chaveBrevo = process.env.BREVO_API_KEY?.trim();
@@ -60,10 +111,13 @@ export const testEmailSenderPadrao: TestEmailSender =
       process.env.BREVO_SENDER_NAME?.trim() || "Ofertano";
 
     if (!chaveBrevo || !remetenteEmail) {
-      return { status: "EMAIL_NOT_CONFIGURED" };
+      logDiagnosticoTesteEmail("BREVO_CONFIGURATION", "BREVO_NOT_CONFIGURED");
+      return { status: "EMAIL_NOT_CONFIGURED", code: "BREVO_NOT_CONFIGURED" };
     }
 
     const { subject, html, text } = montarConteudoTeste(input);
+
+    logDiagnosticoTesteEmail("BREVO_REQUEST", "BREVO_REQUEST_SENT");
 
     try {
       const resposta = await fetch(BREVO_SMTP_ENDPOINT, {
@@ -86,15 +140,33 @@ export const testEmailSenderPadrao: TestEmailSender =
       });
 
       if (resposta.ok) {
-        return { status: "EMAIL_SENT" };
+        logDiagnosticoTesteEmail("BREVO_RESPONSE", "EMAIL_SENT", {
+          providerStatus: resposta.status,
+        });
+        return { status: "EMAIL_SENT", code: "EMAIL_SENT" };
       }
+
+      const code = codigoBrevoDeStatus(resposta.status) as TestEmailDiagnosticCode;
+
+      logDiagnosticoTesteEmail("BREVO_RESPONSE", code, {
+        providerStatus: resposta.status,
+      });
 
       return {
         status: "EMAIL_FAILED",
+        code,
         error: `http_${resposta.status}`,
       };
     } catch {
-      return { status: "EMAIL_FAILED", error: "network_exception" };
+      logDiagnosticoTesteEmail(
+        "BREVO_RESPONSE",
+        "BREVO_NETWORK_ERROR",
+      );
+      return {
+        status: "EMAIL_FAILED",
+        code: "BREVO_NETWORK_ERROR",
+        error: "network_exception",
+      };
     }
   };
 
@@ -192,53 +264,69 @@ export function createPrismaTestEmailStore(prisma: {
 
 export type TestEmailOutcome =
   | { ok: true; status: 200 }
-  | { ok: false; status: 400; error: string }
-  | { ok: false; status: 404; error: string }
-  | { ok: false; status: 500; error: string };
+  | { ok: false; status: 400; code: TestEmailDiagnosticCode }
+  | { ok: false; status: 404; code: TestEmailDiagnosticCode }
+  | { ok: false; status: 500; code: TestEmailDiagnosticCode };
+
+function codigoDeResolucao(
+  resolucao: Awaited<ReturnType<ResolverEmailSmoke>>,
+): TestEmailDiagnosticCode {
+  switch (resolucao.status) {
+    case "RESOLVER_NAO_CONFIGURADO":
+      return "SUPABASE_ADMIN_NOT_CONFIGURED";
+    case "RESOLUTION_FAILED":
+      return "EMAIL_RESOLUTION_FAILED";
+    case "USUARIO_NAO_ENCONTRADO":
+      return "EMAIL_NOT_FOUND";
+    default:
+      return emailUsuarioValido(resolucao.email)
+        ? "EMAIL_RESOLVED"
+        : "EMAIL_NOT_FOUND";
+  }
+}
 
 export async function sendTestEmailForUser(
   userId: string,
   productId: unknown,
   store: TestEmailStore,
-  resolverEmailDoUsuario: ResolverEmailDoUsuario,
+  resolverEmailDoUsuario: ResolverEmailSmoke,
   sender: TestEmailSender = testEmailSenderPadrao,
 ): Promise<TestEmailOutcome> {
   if (typeof productId !== "string" || !productId.trim()) {
-    return { ok: false, status: 400, error: "productId é obrigatório." };
+    return {
+      ok: false,
+      status: 400,
+      code: "INVALID_PRODUCT_ID",
+    };
   }
 
   try {
     const alerta = await store.findActiveAlert(userId, productId);
 
     if (!alerta || !alerta.active || !alerta.notifyEmail) {
-      return {
-        ok: false,
-        status: 404,
-        error: "Alerta de preço não encontrado para este produto.",
-      };
+      logDiagnosticoTesteEmail("ALERT_LOOKUP", "ALERT_NOT_FOUND");
+      return { ok: false, status: 404, code: "ALERT_NOT_FOUND" };
     }
 
+    logDiagnosticoTesteEmail("ALERT_LOOKUP", "ALERT_FOUND");
+
     const resolucao = await resolverEmailDoUsuario(userId);
+    const codigoResolucao = codigoDeResolucao(resolucao);
+
+    logDiagnosticoTesteEmail("EMAIL_RESOLUTION", codigoResolucao);
 
     if (
       resolucao.status !== "RESOLVIDO" ||
       !emailUsuarioValido(resolucao.email)
     ) {
-      return {
-        ok: false,
-        status: 500,
-        error: "Não foi possível resolver o e-mail de destino.",
-      };
+      return { ok: false, status: 500, code: codigoResolucao };
     }
 
     const produto = await store.getProduct(productId);
 
     if (!produto) {
-      return {
-        ok: false,
-        status: 404,
-        error: "Produto não encontrado.",
-      };
+      logDiagnosticoTesteEmail("ALERT_LOOKUP", "PRODUCT_NOT_FOUND");
+      return { ok: false, status: 404, code: "PRODUCT_NOT_FOUND" };
     }
 
     const envio = await sender({
@@ -253,16 +341,21 @@ export async function sendTestEmailForUser(
       return { ok: true, status: 200 };
     }
 
+    if (envio.status === "EMAIL_NOT_CONFIGURED") {
+      return {
+        ok: false,
+        status: 500,
+        code: "BREVO_NOT_CONFIGURED",
+      };
+    }
+
     return {
       ok: false,
       status: 500,
-      error: "Não foi possível enviar o e-mail de teste.",
+      code: envio.code ?? "BREVO_UNKNOWN_ERROR",
     };
   } catch {
-    return {
-      ok: false,
-      status: 500,
-      error: "Não foi possível enviar o e-mail de teste.",
-    };
+    logDiagnosticoTesteEmail("UNKNOWN", "BREVO_UNKNOWN_ERROR");
+    return { ok: false, status: 500, code: "BREVO_UNKNOWN_ERROR" };
   }
 }
