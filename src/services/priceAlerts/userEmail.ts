@@ -40,21 +40,6 @@ export type ResolverEmailDoUsuario = (
 ) => Promise<ResolucaoEmailUsuario>;
 
 /**
- * Contrato usado SOMENTE pelo smoke test: igual ao resolver canonico mas
- * preserva `RESOLUTION_FAILED` (chamada Admin falhou) para o diagnostico
- * distinguir as tres falhas. Nunca expoe o email fora do caso RESOLVIDO.
- */
-export type ResolucaoEmailSmoke =
-  | { status: "RESOLVIDO"; email: string }
-  | { status: "RESOLVER_NAO_CONFIGURADO" }
-  | { status: "USUARIO_NAO_ENCONTRADO" }
-  | { status: "RESOLUTION_FAILED" };
-
-export type ResolverEmailSmoke = (
-  userId: string,
-) => Promise<ResolucaoEmailSmoke>;
-
-/**
  * Valida o formato basico de um email sem aceitar destino forjado.
  * Tambem usado como guarda final antes de qualquer envio.
  */
@@ -173,26 +158,4 @@ export async function buscarEmailDoUsuario(
   }
 
   return { status: "USUARIO_NAO_ENCONTRADO" };
-}
-
-/**
- * Variante do resolver com definitivo RESOLUTION_FAILED, usada somente
- * pelo smoke test. Compartilha a resolucao real (mesma Auth Admin API,
- * somente leitura) e mapeia o detalhe para o contrato do smoke test.
- */
-export async function buscarEmailDoUsuarioDiagnostico(
-  userId: string,
-): Promise<ResolucaoEmailSmoke> {
-  const detalhe = await resolverEmailComDetalhe(userId);
-
-  switch (detalhe.tipo) {
-    case "RESOLVIDO":
-      return { status: "RESOLVIDO", email: detalhe.email };
-    case "RESOLVER_NAO_CONFIGURADO":
-      return { status: "RESOLVER_NAO_CONFIGURADO" };
-    case "RESOLUTION_FAILED":
-      return { status: "RESOLUTION_FAILED" };
-    default:
-      return { status: "USUARIO_NAO_ENCONTRADO" };
-  }
 }
