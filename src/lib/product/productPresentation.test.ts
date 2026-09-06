@@ -217,6 +217,117 @@ console.log("BRAND_BOILERPLATE_CLEANUP_VISITE_LOJA=PASS");
 }
 console.log("BRAND_BOILERPLATE_CLEANUP_MARCA_PREFIX=PASS");
 
+// ---- PHASE 13: UNIFIED BRAND NORMALIZATION TESTS ----
+{
+  const result = createProductPresentation({
+    name: "Celular Positivo P26 4G",
+    brand: "Visite a loja Positivo",
+    specifications: { Marca: "Positivo" },
+  });
+  assert.equal(result.resolvedBrand, "Positivo", "Same brand with boilerplate in canonical should resolve");
+  assert.equal(result.brandConflict, false, "No conflict when brands match after normalization");
+}
+console.log("BRAND_UNIFIED_CANONICAL_BOILERPLATE=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Chave Vonder",
+    brand: "Visite a loja da VONDER",
+    specifications: { Marca: "Vonder" },
+  });
+  assert.ok(result.resolvedBrand === "Vonder" || result.resolvedBrand === "VONDER", "Same brand with 'da' variant should resolve");
+  assert.equal(result.brandConflict, false, "No conflict with 'da' variant");
+}
+console.log("BRAND_UNIFIED_DA_VARIANT=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Celular Motorola",
+    brand: "Marca: Motorola",
+    specifications: { Marca: "Motorola" },
+  });
+  assert.equal(result.resolvedBrand, "Motorola", "Same brand with 'Marca:' prefix should resolve");
+  assert.equal(result.brandConflict, false, "No conflict with 'Marca:' prefix");
+}
+console.log("BRAND_UNIFIED_MARCA_PREFIX=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Chave Fertak",
+    brand: "Fertak",
+    specifications: { Marca: "VONDER" },
+  });
+  assert.equal(result.resolvedBrand, null, "Different brands should still conflict");
+  assert.equal(result.brandConflict, true, "Conflict detected for different brands");
+}
+console.log("BRAND_CONFLICT_FERTAK_VONDER=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Chave Mayle",
+    brand: "Mayle",
+    specifications: { Marca: "VONDER" },
+  });
+  assert.equal(result.resolvedBrand, null, "Mayle vs VONDER should conflict");
+  assert.equal(result.brandConflict, true, "Conflict detected for Mayle vs VONDER");
+}
+console.log("BRAND_CONFLICT_MAYLE_VONDER=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Chave Moretzsohn",
+    brand: "Moretzsohn",
+    specifications: { Marca: "VONDER" },
+  });
+  assert.equal(result.resolvedBrand, null, "Moretzsohn vs VONDER should conflict");
+  assert.equal(result.brandConflict, true, "Conflict detected for Moretzsohn vs VONDER");
+}
+console.log("BRAND_CONFLICT_MORETZSOHN_VONDER=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Fita 3M",
+    brand: "3M",
+    specifications: null,
+  });
+  assert.equal(result.resolvedBrand, "3M", "3M should remain valid");
+  assert.equal(result.brandConflict, false, "No conflict for valid brand 3M");
+}
+console.log("BRAND_VALID_3M_PRESERVED=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Spray WD-40",
+    brand: "WD-40",
+    specifications: null,
+  });
+  assert.equal(result.resolvedBrand, "WD-40", "WD-40 should remain valid");
+  assert.equal(result.brandConflict, false, "No conflict for valid brand WD-40");
+}
+console.log("BRAND_VALID_WD40_PRESERVED=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Produto Amazon",
+    brand: "Amazon",
+    specifications: null,
+  });
+  assert.equal(result.resolvedBrand, null, "Amazon should be rejected as brand");
+  assert.equal(result.brandConflict, false, "No conflict for invalid brand");
+}
+console.log("BRAND_MARKETPLACE_REJECTED=PASS");
+
+{
+  const result = createProductPresentation({
+    name: "Produto Teste",
+    brand: "Positivo Visite a loja",
+    specifications: null,
+  });
+  assert.equal(result.resolvedBrand, "Positivo Visite a loja", "Internal 'Visite a loja' not removed if not at start");
+  assert.equal(result.brandConflict, false, "No conflict for brand with internal boilerplate");
+}
+console.log("BRAND_INTERNAL_BOILERPLATE_PRESERVED=PASS");
+
 // ---- PHASE 9: REAL REGRESSION PRODUCT TEST ----
 {
   const realProduct: ProductPresentationInput = {

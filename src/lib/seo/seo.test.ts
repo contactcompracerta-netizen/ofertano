@@ -11,6 +11,7 @@ import {
   normalizeAbsoluteUrl,
   sanitizeBrand,
   sanitizeProductTitle,
+  cleanBrandBoilerplate,
   type ProductSeoInput,
 } from "./product";
 import { serializeJsonLd } from "./serialize";
@@ -266,6 +267,25 @@ console.log("SEO_PRODUCT_METADATA=PASS");
   assert.equal(sanitizeBrand("B07CXTZ2KS"), null);
   assert.equal(sanitizeBrand("sku123456"), null);
   assert.equal(sanitizeBrand("abc123def456"), null);
+
+  // SEO_BRAND_BOILERPLATE_REMOVAL
+  assert.equal(cleanBrandBoilerplate("Visite a loja Positivo"), "Positivo");
+  assert.equal(cleanBrandBoilerplate("Visite a loja da VONDER"), "VONDER");
+  assert.equal(cleanBrandBoilerplate("Marca: Motorola"), "Motorola");
+  assert.equal(cleanBrandBoilerplate("Positivo"), "Positivo");
+  assert.equal(cleanBrandBoilerplate("Vonder"), "Vonder");
+  assert.equal(cleanBrandBoilerplate("Motorola"), "Motorola");
+  assert.equal(cleanBrandBoilerplate("Positivo Visite a loja"), "Positivo Visite a loja");
+  assert.equal(cleanBrandBoilerplate("Marca Positivo"), "Marca Positivo");
+
+  // SEO_SANITIZE_BRAND_WITH_BOILERPLATE
+  assert.equal(sanitizeBrand("Visite a loja Positivo"), "Positivo");
+  assert.equal(sanitizeBrand("Visite a loja da VONDER"), "VONDER");
+  assert.equal(sanitizeBrand("Marca: Motorola"), "Motorola");
+  assert.equal(sanitizeBrand("Positivo"), "Positivo");
+  assert.equal(sanitizeBrand("3M"), "3M");
+  assert.equal(sanitizeBrand("WD-40"), "WD-40");
+  assert.equal(sanitizeBrand("Amazon"), null);
 }
 console.log("SEO_FASE_8_TESTES_PASS=PASS");
 // ---- SEO_PRODUCT_CANONICAL ----------------------------------------------------

@@ -89,6 +89,19 @@ export function sanitizeProductTitle(name: string): string {
     .trim();
 }
 
+/**
+ * Removes deterministic boilerplate prefixes from brand values.
+ * This ensures consistent normalization between canonical and structured brands.
+ * Only removes prefixes at the start of the string.
+ */
+export function cleanBrandBoilerplate(value: string): string {
+  return value
+    .replace(/^visite\s+a\s+loja\s+da\s+/i, "")  // Must come before basic pattern
+    .replace(/^visite\s+a\s+loja\s+/i, "")
+    .replace(/^marca:\s*/i, "")
+    .trim();
+}
+
 export function sanitizeBrand(brand: string | null | undefined): string | null {
   if (!brand) return null;
   const b = brand.trim();
@@ -96,22 +109,26 @@ export function sanitizeBrand(brand: string | null | undefined): string | null {
   // Rejeitar apenas se for descrição clara (tamanho alto + muitas palavras)
   if (b.length > 80 && b.split(/\s+/).length > 5) return null;
 
-  const lower = b.toLowerCase();
+  // Remove deterministic boilerplate prefixes for consistency
+  const cleaned = cleanBrandBoilerplate(b);
+  if (!cleaned) return null;
+
+  const lower = cleaned.toLowerCase();
   const invalid = ['sem marca', 'genérico', 'generic', 'n/a', 'na', 'null', 'não informado'];
   if (invalid.includes(lower)) return null;
 
-  if (/^https?:\/\/[^\s]+$/i.test(b)) return null; // URL
+  if (/^https?:\/\/[^\s]+$/i.test(cleaned)) return null; // URL
 
   // Specific code detection
-  if (isCodeLike(b)) return null;
+  if (isCodeLike(cleaned)) return null;
 
-  if (/^[\p{P}\p{S}]+$/u.test(b)) return null; // Only punctuation/symbols
+  if (/^[\p{P}\p{S}]+$/u.test(cleaned)) return null; // Only punctuation/symbols
 
   // Marketplaces
   const marketplaces = ['Amazon', 'Mercado Livre', 'Shopee', 'AliExpress', 'Magalu', 'Magazine Luiza'];
   if (marketplaces.some(m => lower === m.toLowerCase())) return null;
 
-  return b;
+  return cleaned;
 }
 
 export function createProductDescription(

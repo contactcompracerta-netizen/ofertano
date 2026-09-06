@@ -1,4 +1,4 @@
-import { sanitizeProductTitle, sanitizeBrand, isDescriptionInvalid } from "@/lib/seo/product";
+import { sanitizeProductTitle, sanitizeBrand, isDescriptionInvalid, cleanBrandBoilerplate } from "@/lib/seo/product";
 
 export type ProductPresentationInput = {
   name: string;
@@ -54,11 +54,7 @@ function extractStructuredBrand(specifications: Record<string, unknown> | null |
 }
 
 function cleanStructuredBrandValue(value: string): string | null {
-  const cleaned = value
-    .replace(/^visite\s+a\s+loja\s+/i, "")
-    .replace(/^visite\s+a\s+loja\s+da\s+/i, "")
-    .replace(/^marca:\s*/i, "")
-    .trim();
+  const cleaned = cleanBrandBoilerplate(value);
 
   if (!cleaned) {
     return null;
