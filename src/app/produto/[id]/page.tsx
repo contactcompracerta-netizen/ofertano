@@ -8,6 +8,7 @@ import {
   buildProductStructuredData,
 } from "@/lib/seo/product";
 import { serializeJsonLd } from "@/lib/seo/serialize";
+import { createProductPresentation } from "@/lib/product/productPresentation";
 
 import FavoriteButton from "@/components/FavoriteButton";
 import PriceAlertButton from "@/components/PriceAlertButton";
@@ -88,43 +89,6 @@ function formatarMarketplace(marketplace: string) {
       .toLowerCase()
       .replace(/\b\w/g, (letra) => letra.toUpperCase())
   );
-}
-
-function limparMarca(marca: string | null | undefined) {
-  const valor = marca?.trim();
-
-  if (!valor) return null;
-
-  return (
-    valor
-      .replace(/^visite\s+a\s+loja\s+/i, "")
-      .replace(/^marca:\s*/i, "")
-      .trim() || null
-  );
-}
-
-function formatarValorEspecificacao(valor: unknown) {
-  if (valor === null || valor === undefined) {
-    return "Não informado";
-  }
-
-  if (typeof valor === "boolean") {
-    return valor ? "Sim" : "Não";
-  }
-
-  if (typeof valor === "string" || typeof valor === "number") {
-    return String(valor);
-  }
-
-  if (Array.isArray(valor)) {
-    return valor.map((item) => String(item)).join(", ");
-  }
-
-  try {
-    return JSON.stringify(valor);
-  } catch {
-    return String(valor);
-  }
 }
 
 function ChevronRightIcon({ className }: IconProps) {
@@ -719,9 +683,16 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const painelPeriodo90: PeriodoPrecoSerializado =
     serializarPeriodoPreco(resumo90, analise90);
 
+  const productPresentation = createProductPresentation({
+    name: produto.name,
+    description: produto.description,
+    brand: produto.brand,
+    specifications: produto.specifications as Record<string, unknown> | null,
+  });
+
   const filtrosSemelhantes = [
     { category: produto.category },
-    ...(produto.brand?.trim() ? [{ brand: produto.brand }] : []),
+    ...(productPresentation.resolvedBrand ? [{ brand: productPresentation.resolvedBrand }] : []),
   ];
 
   const selectRecomendado = {
@@ -874,17 +845,6 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const possuiEstoque =
     produto.stock !== null && produto.stock > 0;
 
-  const marcaExibicao = limparMarca(produto.brand);
-
-  const especificacoes =
-    produto.specifications &&
-    typeof produto.specifications === "object" &&
-    !Array.isArray(produto.specifications)
-      ? Object.entries(
-          produto.specifications as Record<string, unknown>,
-        )
-      : [];
-
   const ofertasAoVivo = ofertasComparador.map((oferta) =>
     sanitizarOfertaCompraPublica({
       id: oferta.id,
@@ -914,7 +874,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     images: produto.images,
     active: produto.active,
     publicationStatus: produto.publicationStatus,
-    brand: produto.brand,
+    brand: productPresentation.resolvedBrand,
     offers: ofertasComparadorDisponiveis.map((oferta) => ({
       marketplace: formatarMarketplace(oferta.marketplace),
       price: oferta.price,
@@ -924,7 +884,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
   const structuredDataBreadcrumb = buildProductBreadcrumbData({
     id: produto.id,
-    name: produto.name,
+    name: productPresentation.displayName,
   });
 
   return (
@@ -989,7 +949,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
               <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-slate-300" />
 
               <span className="min-w-0 truncate font-semibold text-slate-700">
-                {produto.name}
+                {productPresentation.displayName}
               </span>
             </nav>
           </div>
@@ -999,7 +959,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
           <div className="grid items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-0 lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-2.5 lg:shadow-sm xl:grid-cols-[minmax(0,1fr)_375px] xl:p-3">
             <ProductGallery
               images={imagens}
-              productName={produto.name}
+              productName={productPresentation.displayName}
               discountPercent={percentualDesconto}
               featured={produto.featured}
             />
@@ -1010,9 +970,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <LiveMarketplaceBadge />
 
-                    {marcaExibicao && (
+                    {productPresentation.resolvedBrand && !productPresentation.brandConflict && (
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600 sm:text-[11px]">
-                        {marcaExibicao}
+                        {productPresentation.resolvedBrand}
                       </span>
                     )}
                   </div>
@@ -1029,22 +989,22 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                     />
 
                     <ShareProductButton
-                      title={produto.name}
-                      text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                      title={productPresentation.displayName}
+                      text={`Confira esta oferta no Ofertano: ${productPresentation.displayName}`}
                       platform="whatsapp"
                       variant="icon"
                     />
 
                     <ShareProductButton
-                      title={produto.name}
-                      text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                      title={productPresentation.displayName}
+                      text={`Confira esta oferta no Ofertano: ${productPresentation.displayName}`}
                       variant="icon"
                     />
                   </div>
                 </div>
 
                 <h1 className="mt-2 text-[16px] font-bold leading-[1.25] tracking-[-0.01em] text-slate-950 sm:text-[17px] lg:text-[18px]">
-                  {produto.name}
+                  {productPresentation.displayName}
                 </h1>
 
                 {(possuiAvaliacao ||
@@ -1138,9 +1098,9 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             />
           )}
 
-          {(produto.description || especificacoes.length > 0) && (
+          {(productPresentation.publicDescription || productPresentation.displaySpecifications.length > 0) && (
             <div className="mt-4 grid gap-3 sm:mt-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
-              {produto.description && (
+              {productPresentation.publicDescription && (
                 <details className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none transition hover:bg-slate-50 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-emerald-100 sm:px-5 [&::-webkit-details-marker]:hidden">
                     <div className="min-w-0">
@@ -1167,13 +1127,13 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
                   <div className="border-t border-slate-200 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
                     <p className="whitespace-pre-line text-[13px] leading-6 text-slate-600 sm:text-sm">
-                      {produto.description}
+                      {productPresentation.publicDescription}
                     </p>
                   </div>
                 </details>
               )}
 
-              {especificacoes.length > 0 && (
+              {productPresentation.displaySpecifications.length > 0 && (
                 <details className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none transition hover:bg-slate-50 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-emerald-100 sm:px-5 [&::-webkit-details-marker]:hidden">
                     <div className="min-w-0">
@@ -1200,7 +1160,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
 
                   <div className="border-t border-slate-200 px-4 pb-4 sm:px-5 sm:pb-5">
                     <dl className="divide-y divide-slate-200">
-                      {especificacoes.map(([chave, valor]) => (
+                      {productPresentation.displaySpecifications.map(([chave, valor]) => (
                         <div
                           key={chave}
                           className="grid gap-1 py-2.5 sm:grid-cols-[0.8fr_1.2fr] sm:gap-3"
@@ -1209,7 +1169,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                             {chave}
                           </dt>
                           <dd className="text-xs leading-5 text-slate-600 sm:text-right sm:text-[13px]">
-                            {formatarValorEspecificacao(valor)}
+                            {valor}
                           </dd>
                         </div>
                       ))}
@@ -1358,16 +1318,16 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
             <>
               <div className="[&_button]:h-9 [&_button]:w-9">
                 <ShareProductButton
-                  title={produto.name}
-                  text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                  title={productPresentation.displayName}
+                  text={`Confira esta oferta no Ofertano: ${productPresentation.displayName}`}
                   platform="whatsapp"
                   variant="icon"
                 />
               </div>
               <div className="[&_button]:h-9 [&_button]:w-9">
                 <ShareProductButton
-                  title={produto.name}
-                  text={`Confira esta oferta no Ofertano: ${produto.name}`}
+                  title={productPresentation.displayName}
+                  text={`Confira esta oferta no Ofertano: ${productPresentation.displayName}`}
                   variant="icon"
                 />
               </div>

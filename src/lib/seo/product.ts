@@ -306,12 +306,14 @@ export function buildProductStructuredData(
     base.description = descricao;
   }
 
-  const marca = sanitizeBrand(product.brand);
-  if (marca) {
-    base.brand = {
-      "@type": "Brand",
-      name: marca,
-    };
+  if (product.brand) {
+    const marca = sanitizeBrand(product.brand);
+    if (marca) {
+      base.brand = {
+        "@type": "Brand",
+        name: marca,
+      };
+    }
   }
 
   if (ofertasAgregadas) {
