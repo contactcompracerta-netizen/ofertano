@@ -16,6 +16,17 @@ export type ProductPresentation = {
   brandConflict: boolean;
 };
 
+/**
+ * Simple helper for sanitizing product names for public display.
+ * Use this in components for quick sanitization without full presentation layer.
+ *
+ * @param name - Raw product name from database
+ * @returns Sanitized product name safe for public display
+ */
+export function sanitizeProductNameForDisplay(name: string): string {
+  return sanitizeProductTitle(name);
+}
+
 function normalizeSpecificationKey(key: string): string {
   return key
     .normalize("NFD")

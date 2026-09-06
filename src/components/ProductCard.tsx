@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
 
 type ProductCardProps = {
   produto: {
@@ -34,6 +35,8 @@ function formatarQuantidade(valor: number) {
 }
 
 export default function ProductCard({ produto }: ProductCardProps) {
+  const displayName = sanitizeProductNameForDisplay(produto.name);
+
   const lojasComparadas = Array.from(
     new Set(
       (produto.offers ?? []).map(
@@ -103,7 +106,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
 
         <img
           src={produto.image}
-          alt={produto.name}
+          alt={displayName}
           loading="lazy"
           className="h-full w-full object-contain transition duration-500 group-hover:scale-[1.04]"
         />
@@ -124,7 +127,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
 
         <Link href={`/produto/${produto.id}`} className="block">
           <h2 className="mt-1.5 line-clamp-2 min-h-[34px] text-[12px] font-extrabold leading-[1.35] text-slate-950 transition group-hover:text-emerald-700 sm:mt-2 sm:min-h-11 sm:text-[15px] sm:leading-[1.4]">
-            {produto.name}
+            {displayName}
           </h2>
         </Link>
 

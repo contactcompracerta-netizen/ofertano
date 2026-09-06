@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
 
 export type HeroComparisonOffer = {
   marketplace: string;
@@ -272,7 +273,7 @@ export default function HeroComparison({
                     <div className="flex h-11 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 p-1 sm:h-16 sm:w-20 sm:rounded-xl sm:p-1.5">
                       <img
                         src={produto.image}
-                        alt={produto.name}
+                        alt={sanitizeProductNameForDisplay(produto.name)}
                         decoding="async"
                         className="h-full w-full object-contain"
                       />
@@ -280,7 +281,7 @@ export default function HeroComparison({
 
                     <div className="min-w-0 flex-1">
                       <h2 className="line-clamp-2 text-[11px] font-black leading-[1.3] text-slate-950 sm:text-sm sm:leading-5 xl:text-base">
-                        {produto.name}
+                        {sanitizeProductNameForDisplay(produto.name)}
                       </h2>
 
                       <div className="mt-0.5 flex items-center gap-2 text-[10px] font-bold text-slate-500 sm:mt-1 sm:text-[11px]">

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
 
 type ProductCardProps = {
   id: string;
@@ -22,13 +23,15 @@ export default function ProductCard({
   discount,
   link,
 }: ProductCardProps) {
+  const displayName = sanitizeProductNameForDisplay(name);
+
   return (
     <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg">
       <Link href={`/produto/${id}`} className="block">
         <div className="relative aspect-square w-full bg-gray-50">
           <Image
             src={image}
-            alt={name}
+            alt={displayName}
             fill
             className="object-contain p-4"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
@@ -49,7 +52,7 @@ export default function ProductCard({
 
         <Link href={`/produto/${id}`} className="block">
           <h2 className="line-clamp-2 min-h-12 text-base font-semibold text-gray-900 transition hover:text-green-700">
-            {name}
+            {displayName}
           </h2>
         </Link>
 

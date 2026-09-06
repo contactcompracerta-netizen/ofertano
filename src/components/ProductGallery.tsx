@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
 
 type ProductGalleryProps = {
   images: string[];
@@ -56,6 +57,8 @@ export default function ProductGallery({
   discountPercent = 0,
   featured = false,
 }: ProductGalleryProps) {
+  const displayName = sanitizeProductNameForDisplay(productName);
+
   const imagensOriginais = useMemo(
     () =>
       Array.from(
@@ -240,7 +243,7 @@ export default function ProductGallery({
         <img
           key={imagemSelecionada}
           src={imagemSelecionada}
-          alt={`${productName} - imagem ${selectedIndex + 1}`}
+          alt={`${displayName} - imagem ${selectedIndex + 1}`}
           referrerPolicy="no-referrer"
           decoding="async"
           fetchPriority={selectedIndex === 0 ? "high" : "auto"}
@@ -296,7 +299,7 @@ export default function ProductGallery({
                 >
                   <img
                     src={imagem}
-                    alt={`${productName} - miniatura ${indice + 1}`}
+                    alt={`${displayName} - miniatura ${indice + 1}`}
                     referrerPolicy="no-referrer"
                     loading="lazy"
                     decoding="async"

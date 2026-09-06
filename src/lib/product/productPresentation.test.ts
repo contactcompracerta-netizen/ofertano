@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   createProductPresentation,
+  sanitizeProductNameForDisplay,
   type ProductPresentationInput,
 } from "./productPresentation";
 
@@ -365,3 +366,48 @@ console.log("EDGE_CASE_BOOLEAN_VALUES=PASS");
 console.log("EDGE_CASE_ARRAY_VALUES=PASS");
 
 console.log("All product presentation tests passed successfully!");
+
+// ---- NEW TESTS FOR sanitizeProductNameForDisplay ----
+{
+  const result = sanitizeProductNameForDisplay("Produto,   ");
+  assert.equal(result, "Produto", "Trailing comma and spaces should be removed");
+}
+console.log("SANITIZE_NAME_TRAILING_CLEANUP=PASS");
+
+{
+  const result = sanitizeProductNameForDisplay("TV\nSamsung");
+  assert.equal(result, "TV Samsung", "Newlines should be normalized to spaces");
+}
+console.log("SANITIZE_NAME_NEWLINE_NORMALIZATION=PASS");
+
+{
+  const result = sanitizeProductNameForDisplay("Produto!!!");
+  assert.equal(result, "Produto!", "Multiple exclamation marks should be preserved");
+}
+console.log("SANITIZE_NAME_PUNCTUATION_PRESERVED=PASS");
+
+{
+  const result = sanitizeProductNameForDisplay("Produto... edição 2026");
+  assert.equal(result, "Produto... edição 2026", "Internal ellipsis should be preserved");
+}
+console.log("SANITIZE_NAME_INTERNAL_ELLIPSIS_PRESERVED=PASS");
+
+{
+  const result = sanitizeProductNameForDisplay("Notebook XYZ 220V 16GB");
+  assert.equal(result, "Notebook XYZ 220V 16GB", "Model, voltage, and capacity should be preserved");
+}
+console.log("SANITIZE_NAME_TECHNICAL_SPECS_PRESERVED=PASS");
+
+{
+  const result = sanitizeProductNameForDisplay("  Produto com espaços  ");
+  assert.equal(result, "Produto com espaços", "Leading/trailing spaces should be trimmed");
+}
+console.log("SANITIZE_NAME_WHITESPACE_TRIMMED=PASS");
+
+{
+  const result = sanitizeProductNameForDisplay("Produto,    com,    vírgulas,    ");
+  assert.equal(result, "Produto, com, vírgulas", "Multiple spaces after commas should be normalized");
+}
+console.log("SANITIZE_NAME_COMMA_SPACES_NORMALIZED=PASS");
+
+console.log("All sanitizeProductNameForDisplay tests passed successfully!");

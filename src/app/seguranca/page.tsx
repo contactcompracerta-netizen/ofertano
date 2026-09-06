@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import prisma from "@/lib/prisma";
+import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -130,6 +131,8 @@ export default async function ProdutoPage({
     produto.stock !== null &&
     produto.stock > 0;
 
+  const displayName = sanitizeProductNameForDisplay(produto.name);
+
   const linkLegadoPrincipal = produto.affiliateLink.trim();
 
   const ofertaPrincipalComLink = produto.offers.find((oferta) => {
@@ -184,7 +187,7 @@ export default async function ProdutoPage({
             <span aria-hidden="true">/</span>
 
             <span className="max-w-md truncate font-semibold text-gray-700">
-              {produto.name}
+              {displayName}
             </span>
           </nav>
         </div>
@@ -211,7 +214,7 @@ export default async function ProdutoPage({
 
                 <Image
                   src={produto.image}
-                  alt={produto.name}
+                  alt={displayName}
                   width={800}
                   height={800}
                   priority
@@ -231,7 +234,7 @@ export default async function ProdutoPage({
                       >
                         <Image
                           src={imagem}
-                          alt={`${produto.name} - imagem ${indice + 1}`}
+                          alt={`${displayName} - imagem ${indice + 1}`}
                           width={140}
                           height={140}
                           className="h-full w-full object-contain"
@@ -257,7 +260,7 @@ export default async function ProdutoPage({
                 </div>
 
                 <h1 className="mt-6 text-3xl font-black leading-tight tracking-tight text-gray-900 sm:text-4xl">
-                  {produto.name}
+                  {displayName}
                 </h1>
 
                 <div className="mt-5 flex flex-wrap items-center gap-3 text-sm">
