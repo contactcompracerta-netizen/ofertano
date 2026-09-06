@@ -49,21 +49,92 @@ export function normalizeAbsoluteUrl(url: string): string | null {
   return siteUrl(valor);
 }
 
+export function isCodeLike(token: string): boolean {
+  if (/^(ASIN|SKU|GTIN|EAN|UPC|MPN)[:\s]*[A-Z0-9]+$/i.test(token)) return true;
+  if (/^B0[A-Z0-9]{8}$/i.test(token)) return true;
+  // Reject tokens with 2+ intercalated alpha/numeric blocks
+  if (/(?:[a-zA-Z]+[0-9]+){2,}|(?:[0-9]+[a-zA-Z]+){2,}/i.test(token)) return true;
+  return false;
+}
+
+export function isDescriptionInvalid(description: string | null | undefined): boolean {
+  if (!description) return true;
+  const clean = description.trim();
+  if (!clean) return true;
+
+  // Junk patterns
+  if (/^[\d\s]+$/.test(clean)) return true; // Only numbers/spaces
+  if (/^https?:\/\/[^\s]+$/i.test(clean)) return true; // URL
+  if (/^[\p{P}\p{S}]+$/u.test(clean)) return true; // Only punctuation/symbols
+
+  const lower = clean.toLowerCase();
+  if (['---', 'null', 'n/a', 'na', 'não informado', 'sem descrição'].includes(lower)) return true;
+
+  // Code-like detection
+  if (isCodeLike(clean)) return true;
+  if (/^[0-9a-fA-F]{16,}$/.test(clean)) return true; // Long hex
+
+  if (/^\{.*\}$/.test(clean) || /^\[.*\]$/.test(clean)) return true; // JSON
+
+  return false;
+}
+
+export function sanitizeProductTitle(name: string): string {
+  return name
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, " ") // Control chars to space
+    .replace(/,(\s*)$/, "")                // Trailing comma/spaces first
+    .replace(/\s+/g, " ")                  // Extra whitespace
+    .replace(/\s+([,.!?;:])/g, "$1")       // Space before punctuation
+    .replace(/([,.!?;:])\1+$/g, "$1")      // Duplicate punct at end
+    .trim();
+}
+
+export function sanitizeBrand(brand: string | null | undefined): string | null {
+  if (!brand) return null;
+  const b = brand.trim();
+
+  // Rejeitar apenas se for descrição clara (tamanho alto + muitas palavras)
+  if (b.length > 80 && b.split(/\s+/).length > 5) return null;
+
+  const lower = b.toLowerCase();
+  const invalid = ['sem marca', 'genérico', 'generic', 'n/a', 'na', 'null', 'não informado'];
+  if (invalid.includes(lower)) return null;
+
+  if (/^https?:\/\/[^\s]+$/i.test(b)) return null; // URL
+
+  // Specific code detection
+  if (isCodeLike(b)) return null;
+
+  if (/^[\p{P}\p{S}]+$/u.test(b)) return null; // Only punctuation/symbols
+
+  // Marketplaces
+  const marketplaces = ['Amazon', 'Mercado Livre', 'Shopee', 'AliExpress', 'Magalu', 'Magazine Luiza'];
+  if (marketplaces.some(m => lower === m.toLowerCase())) return null;
+
+  return b;
+}
+
 export function createProductDescription(
   name: string,
   description: string | null | undefined,
 ): string {
-  const descricaoLimpa = description?.replace(/\s+/g, " ").trim();
+  const cleanName = sanitizeProductTitle(name);
+  const cleanDesc = description?.trim() ?? "";
 
-  if (descricaoLimpa) {
-    return descricaoLimpa.length > 180
-      ? `${descricaoLimpa.slice(0, 177).trimEnd()}...`
-      : descricaoLimpa;
+  const semanticName = cleanName.toLowerCase().replace(/[.,!?;:]$/g, "").replace(/\s+/g, " ");
+  const semanticDesc = sanitizeProductTitle(cleanDesc).toLowerCase().replace(/[.,!?;:]$/g, "").replace(/\s+/g, " ");
+
+  const isInvalid = isDescriptionInvalid(description) ||
+                   (cleanDesc && semanticDesc === semanticName);
+
+  if (isInvalid) {
+    const fallback = `Compare o preço de ${cleanName} no Ofertano e confira ofertas em diferentes lojas parceiras.`;
+    return fallback.length > 180 ? `${fallback.slice(0, 177).trimEnd()}...` : fallback;
   }
 
-  return `Compare o preço de ${name} no Ofertano e compre diretamente na loja parceira.`;
+  const desc = cleanDesc.replace(/\s+/g, " ").trim();
+  return desc.length > 180 ? `${desc.slice(0, 177).trimEnd()}...` : desc;
 }
-
 export function buildProductMetadata(product: ProductSeoInput): Metadata {
   const urlProduto = siteUrl(`/produto/${product.id}`);
   const imagemPrincipal = [product.image, ...(product.images ?? [])]
@@ -76,9 +147,10 @@ export function buildProductMetadata(product: ProductSeoInput): Metadata {
     product.description,
   );
   const indexavel = isProductIndexable(product);
+  const tituloSanitizado = sanitizeProductTitle(product.name);
 
   return {
-    title: product.name,
+    title: tituloSanitizado,
     description: descricao,
     robots: indexavel
       ? undefined
@@ -90,19 +162,19 @@ export function buildProductMetadata(product: ProductSeoInput): Metadata {
       canonical: urlProduto,
     },
     openGraph: {
-      title: `${product.name} | Ofertano`,
+      title: `${tituloSanitizado} | Ofertano`,
       description: descricao,
       url: urlProduto,
       siteName: "Ofertano",
       locale: "pt_BR",
       type: "website",
       images: imagemPrincipal
-        ? [{ url: imagemPrincipal, alt: product.name }]
+        ? [{ url: imagemPrincipal, alt: tituloSanitizado }]
         : undefined,
     },
     twitter: {
       card: "summary_large_image",
-      title: `${product.name} | Ofertano`,
+      title: `${tituloSanitizado} | Ofertano`,
       description: descricao,
       images: imagemPrincipal ? [imagemPrincipal] : undefined,
     },
@@ -134,7 +206,7 @@ export function buildProductBreadcrumbData(
       {
         "@type": "ListItem",
         position: 2,
-        name: product.name,
+        name: sanitizeProductTitle(product.name),
         item: siteUrl(`/produto/${product.id}`),
       },
     ],
@@ -218,7 +290,7 @@ export function buildProductStructuredData(
   const base = {
     "@context": "https://schema.org",
     "@type": "Product",
-    name: product.name,
+    name: sanitizeProductTitle(product.name),
     url: siteUrl(`/produto/${product.id}`),
   } as Record<string, unknown>;
 
@@ -234,7 +306,7 @@ export function buildProductStructuredData(
     base.description = descricao;
   }
 
-  const marca = product.brand?.trim();
+  const marca = sanitizeBrand(product.brand);
   if (marca) {
     base.brand = {
       "@type": "Brand",

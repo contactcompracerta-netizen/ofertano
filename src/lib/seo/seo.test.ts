@@ -6,8 +6,11 @@ import {
   buildProductMetadata,
   buildProductStructuredData,
   createProductDescription,
+  isDescriptionInvalid,
   isProductIndexable,
   normalizeAbsoluteUrl,
+  sanitizeBrand,
+  sanitizeProductTitle,
   type ProductSeoInput,
 } from "./product";
 import { serializeJsonLd } from "./serialize";
@@ -219,6 +222,52 @@ console.log("SEO_BLOG_FALLBACK=PASS");
 }
 console.log("SEO_PRODUCT_METADATA=PASS");
 
+// ---- FASE 8 - NOVOS TESTES OBRIGATÓRIOS -------------------------------------
+{
+  // SEO_DESCRIPTION_REJECTS
+  assert.equal(isDescriptionInvalid("3070218200"), true);
+  assert.equal(isDescriptionInvalid("B07CXTZ2KS"), true);
+  assert.equal(isDescriptionInvalid("HTTP://EXAMPLE.COM"), true);
+  assert.equal(isDescriptionInvalid("!!!"), true);
+  assert.equal(isDescriptionInvalid(""), true);
+  assert.equal(isDescriptionInvalid("null"), true);
+
+  // SEO_DESCRIPTION_ACCEPTS_REAL_TEXT
+  assert.equal(isDescriptionInvalid("Chave de fenda em aço cromo vanádio com ponta magnetizada."), false);
+  assert.equal(isDescriptionInvalid("Novo"), false);
+  assert.equal(isDescriptionInvalid("4K"), false);
+  assert.equal(isDescriptionInvalid("Motorola"), false);
+  assert.equal(isDescriptionInvalid("WD-40"), false);
+
+  // SEO_DESCRIPTION_FALLBACK
+  const fallback = createProductDescription("Produto X", "3070218200");
+  assert.match(fallback, /Compare o preço de Produto X/, "Deve gerar fallback com nome.");
+  assert.ok(fallback.length <= 180, "Fallback <= 180 chars.");
+  assert.equal(fallback.includes("disponíveis"), false, "Fallback não deve conter palavra proibida.");
+
+  // SEO_DESCRIPTION_SEMANTIC_REDUNDANCY
+  assert.equal(createProductDescription("Notebook Lenovo,", "Notebook Lenovo."), `Compare o preço de Notebook Lenovo no Ofertano e confira ofertas em diferentes lojas parceiras.`);
+  assert.equal(createProductDescription("Notebook Lenovo", "  notebook   lenovo  "), `Compare o preço de Notebook Lenovo no Ofertano e confira ofertas em diferentes lojas parceiras.`);
+
+  // SEO_TITLE_CLEANUP
+  assert.equal(sanitizeProductTitle("Produto,   "), "Produto");
+  assert.equal(sanitizeProductTitle("TV\nSamsung"), "TV Samsung");
+  assert.equal(sanitizeProductTitle("Produto... edição 2026"), "Produto... edição 2026");
+  assert.equal(sanitizeProductTitle("Produto!!!"), "Produto!");
+  assert.equal(sanitizeProductTitle("Vonder, Chave , De Fenda"), "Vonder, Chave, De Fenda");
+
+  // SEO_BRAND_REJECTS
+  assert.equal(sanitizeBrand("Amazon"), null);
+  assert.equal(sanitizeBrand("Motorola"), "Motorola");
+  assert.equal(sanitizeBrand("Forever21"), "Forever21");
+  assert.equal(sanitizeBrand("PlayStation5"), "PlayStation5");
+  assert.equal(sanitizeBrand("3M"), "3M");
+  assert.equal(sanitizeBrand("WD-40"), "WD-40");
+  assert.equal(sanitizeBrand("B07CXTZ2KS"), null);
+  assert.equal(sanitizeBrand("sku123456"), null);
+  assert.equal(sanitizeBrand("abc123def456"), null);
+}
+console.log("SEO_FASE_8_TESTES_PASS=PASS");
 // ---- SEO_PRODUCT_CANONICAL ----------------------------------------------------
 {
   const metadata = buildProductMetadata(produtoReal);
