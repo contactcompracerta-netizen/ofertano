@@ -1,5 +1,22 @@
+import type { Metadata } from "next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
+export const metadata: Metadata = {
+  title: "Contato",
+  description:
+    "Entre em contato com o Ofertano para dúvidas, sugestões e solicitações relacionadas à plataforma de comparação de preços.",
+  alternates: {
+    canonical: "/contato",
+  },
+  openGraph: {
+    type: "website",
+    url: "/contato",
+    title: "Contato | Ofertano",
+    description:
+      "Entre em contato com o Ofertano para dúvidas, sugestões e solicitações relacionadas à plataforma de comparação de preços.",
+  },
+};
 
 export default function ContatoPage() {
   return (

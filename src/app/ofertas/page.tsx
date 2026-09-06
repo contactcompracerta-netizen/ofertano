@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import prisma from "@/lib/prisma";
 import Header from "@/components/Header";
 import ProductCard from "@/components/ProductCard";
@@ -8,6 +9,22 @@ import { hasPublicMultiStore, PUBLIC_OFFER_SELECT } from "@/services/publicVisib
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export const metadata: Metadata = {
+  title: "Ofertas",
+  description:
+    "Confira todas as ofertas do Ofertano, compare preços entre lojas parceiras e compre diretamente no marketplace.",
+  alternates: {
+    canonical: "/ofertas",
+  },
+  openGraph: {
+    type: "website",
+    url: "/ofertas",
+    title: "Ofertas | Ofertano",
+    description:
+      "Confira todas as ofertas do Ofertano, compare preços entre lojas parceiras e compre diretamente no marketplace.",
+  },
+};
 
 export default async function OfertasPage() {
   const produtos = await prisma.product.findMany({

@@ -52,38 +52,28 @@ export const metadata: Metadata = {
   publisher: "Ofertano",
   category: "shopping",
 
-  alternates: {
-    canonical: "/",
-  },
-
+  /*
+   * Não usamos canonical nem OpenGraph.url global: cada rota pública
+   * define o próprio (ver page.tsx de cada segmento). Valores globais
+   * seriam herdados incorretamente por páginas que não os sobrescrevem.
+   *
+   * robots fica somente com index/follow verdadeiros. Configurar
+   * googleBot aqui faria ele ser mesclado em páginas que aplicam
+   * noindex, gerando meta tags contraditórias.
+   */
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    url: "/",
     siteName: "Ofertano",
-    title: "Ofertano | Compare preços antes de comprar",
-    description:
-      "Compare preços, encontre ofertas e compre diretamente nas lojas parceiras.",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Ofertano | Compare preços antes de comprar",
-    description:
-      "Compare preços, encontre ofertas e compre diretamente nas lojas parceiras.",
   },
 
   robots: {
     index: true,
     follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      noimageindex: false,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
   },
 
   icons: {

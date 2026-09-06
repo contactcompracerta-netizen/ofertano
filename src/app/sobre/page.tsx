@@ -1,6 +1,23 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
+export const metadata: Metadata = {
+  title: "Sobre",
+  description:
+    "Conheça o Ofertano, a plataforma que reúne produtos e ofertas de lojas parceiras para você comparar preços antes de comprar.",
+  alternates: {
+    canonical: "/sobre",
+  },
+  openGraph: {
+    type: "website",
+    url: "/sobre",
+    title: "Sobre | Ofertano",
+    description:
+      "Conheça o Ofertano, a plataforma que reúne produtos e ofertas de lojas parceiras para você comparar preços antes de comprar.",
+  },
+};
 
 export default function SobrePage() {
   return (

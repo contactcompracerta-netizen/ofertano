@@ -1,5 +1,22 @@
+import type { Metadata } from "next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
+export const metadata: Metadata = {
+  title: "Política de Privacidade",
+  description:
+    "Consulte a Política de Privacidade do Ofertano e entenda como as informações relacionadas ao uso da plataforma podem ser tratadas.",
+  alternates: {
+    canonical: "/politica-de-privacidade",
+  },
+  openGraph: {
+    type: "website",
+    url: "/politica-de-privacidade",
+    title: "Política de Privacidade | Ofertano",
+    description:
+      "Consulte a Política de Privacidade do Ofertano e entenda como as informações relacionadas ao uso da plataforma podem ser tratadas.",
+  },
+};
 
 export default function PoliticaDePrivacidadePage() {
   return (

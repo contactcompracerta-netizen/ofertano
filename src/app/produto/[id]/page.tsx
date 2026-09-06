@@ -2,6 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import {
+  buildProductBreadcrumbData,
+  buildProductMetadata,
+  buildProductStructuredData,
+} from "@/lib/seo/product";
+import { serializeJsonLd } from "@/lib/seo/serialize";
+
 import FavoriteButton from "@/components/FavoriteButton";
 import PriceAlertButton from "@/components/PriceAlertButton";
 import Footer from "@/components/Footer";
@@ -350,37 +357,6 @@ function serializarPeriodoPreco(
   };
 }
 
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || "https://ofertano.vercel.app"
-).replace(/\/$/, "");
-
-function normalizarUrlAbsoluta(url: string) {
-  const valor = url.trim();
-
-  if (!valor) return null;
-
-  if (/^https?:\/\//i.test(valor)) {
-    return valor;
-  }
-
-  return `${SITE_URL}${valor.startsWith("/") ? "" : "/"}${valor}`;
-}
-
-function criarDescricaoCompartilhamento(
-  nome: string,
-  descricao: string | null | undefined,
-) {
-  const descricaoLimpa = descricao?.replace(/\s+/g, " ").trim();
-
-  if (descricaoLimpa) {
-    return descricaoLimpa.length > 180
-      ? `${descricaoLimpa.slice(0, 177).trimEnd()}...`
-      : descricaoLimpa;
-  }
-
-  return `Compare o preço de ${nome} no Ofertano e compre diretamente na loja parceira.`;
-}
-
 function criterioProdutoNavegavel(id: string) {
   return {
     id,
@@ -422,7 +398,7 @@ export async function generateMetadata({
 
   if (!produto || !hasPublicMultiStore(produto)) {
     return {
-      title: "Produto não encontrado | Ofertano",
+      title: "Produto não encontrado",
       robots: {
         index: false,
         follow: false,
@@ -430,49 +406,31 @@ export async function generateMetadata({
     };
   }
 
-  const urlProduto = `${SITE_URL}/produto/${id}`;
-  const imagemPrincipal = [produto.image, ...produto.images]
-    .filter((imagem): imagem is string => Boolean(imagem?.trim()))
-    .map(normalizarUrlAbsoluta)
-    .find((imagem): imagem is string => Boolean(imagem));
+  const ofertasPublicas = produto.offers
+    .filter(
+      (oferta) =>
+        oferta.available &&
+        oferta.status !== "UNAVAILABLE" &&
+        oferta.status !== "ERROR" &&
+        Number.isFinite(oferta.price) &&
+        oferta.price > 0,
+    )
+    .map((oferta) => ({
+      marketplace: oferta.marketplace,
+      price: oferta.price,
+      available: true,
+    }));
 
-  const descricao = criarDescricaoCompartilhamento(
-    produto.name,
-    produto.description,
-  );
-  const indexavel =
-    produto.active && produto.publicationStatus !== "DRAFT";
-
-  return {
-    title: `${produto.name} | Ofertano`,
-    description: descricao,
-    robots: indexavel
-      ? undefined
-      : {
-          index: false,
-          follow: false,
-        },
-    alternates: {
-      canonical: urlProduto,
-    },
-    openGraph: {
-      title: produto.name,
-      description: descricao,
-      url: urlProduto,
-      siteName: "Ofertano",
-      locale: "pt_BR",
-      type: "website",
-      images: imagemPrincipal
-        ? [{ url: imagemPrincipal, alt: produto.name }]
-        : undefined,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: produto.name,
-      description: descricao,
-      images: imagemPrincipal ? [imagemPrincipal] : undefined,
-    },
-  };
+  return buildProductMetadata({
+    id,
+    name: produto.name,
+    description: produto.description,
+    image: produto.image,
+    images: produto.images,
+    active: produto.active,
+    publicationStatus: produto.publicationStatus,
+    offers: ofertasPublicas,
+  });
 }
 
 export default async function ProdutoPage({ params }: ProdutoPageProps) {
@@ -943,6 +901,32 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     }),
   );
 
+  /*
+   * Structured data somente com dados reais e somente para produtos que
+   * podem aparecer publicamente (Multi Loja + ativo + não-rascunho).
+   * Reflete exclusivamente as ofertas válidas do comparador.
+   */
+  const structuredDataProduct = buildProductStructuredData({
+    id: produto.id,
+    name: produto.name,
+    description: produto.description,
+    image: produto.image,
+    images: produto.images,
+    active: produto.active,
+    publicationStatus: produto.publicationStatus,
+    brand: produto.brand,
+    offers: ofertasComparadorDisponiveis.map((oferta) => ({
+      marketplace: formatarMarketplace(oferta.marketplace),
+      price: oferta.price,
+      available: oferta.available,
+    })),
+  });
+
+  const structuredDataBreadcrumb = buildProductBreadcrumbData({
+    id: produto.id,
+    name: produto.name,
+  });
+
   return (
     <ProductLivePurchase
       productId={produto.id}
@@ -953,6 +937,22 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       fallbackOldPrice={precoAnteriorPrincipal}
     >
     <div className="min-h-screen bg-slate-50 pb-20 text-slate-950 lg:pb-0">
+      {structuredDataProduct && (
+        <>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: serializeJsonLd(structuredDataProduct),
+            }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: serializeJsonLd(structuredDataBreadcrumb),
+            }}
+          />
+        </>
+      )}
       <Header />
       <ProductViewTracker
         productId={produto.id}

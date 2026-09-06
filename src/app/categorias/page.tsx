@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import Header from "@/components/Header";
@@ -6,6 +7,22 @@ import { hasPublicMultiStore, PUBLIC_OFFER_SELECT } from "@/services/publicVisib
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export const metadata: Metadata = {
+  title: "Categorias",
+  description:
+    "Navegue pelas categorias do Ofertano e encontre produtos para comparar preços em lojas como Mercado Livre, Amazon e Shopee.",
+  alternates: {
+    canonical: "/categorias",
+  },
+  openGraph: {
+    type: "website",
+    url: "/categorias",
+    title: "Categorias | Ofertano",
+    description:
+      "Navegue pelas categorias do Ofertano e encontre produtos para comparar preços em lojas como Mercado Livre, Amazon e Shopee.",
+  },
+};
 
 type Categoria = {
   nome: string;

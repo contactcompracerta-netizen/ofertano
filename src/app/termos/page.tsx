@@ -1,11 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
-export const metadata = {
-  title: "Termos de Uso | Ofertano",
+export const metadata: Metadata = {
+  title: "Termos de Uso",
   description:
     "Consulte os Termos de Uso do Ofertano e entenda como funciona nossa plataforma de comparação de preços e ofertas.",
+  alternates: {
+    canonical: "/termos",
+  },
+  openGraph: {
+    type: "website",
+    url: "/termos",
+    title: "Termos de Uso | Ofertano",
+    description:
+      "Consulte os Termos de Uso do Ofertano e entenda como funciona nossa plataforma de comparação de preços e ofertas.",
+  },
 };
 
 export default function TermosPage() {

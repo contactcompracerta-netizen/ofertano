@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,6 +9,22 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+/*
+ * A rota /seguranca contém hoje uma página de produto legada (herdada de
+ * uma versão anterior) que renderiza conteúdo de produto arbitrário sem
+ * parâmetro [id]. Enquanto não houver um guia real de segurança, a página
+ * fica fora do índice para não gerar conteúdo duplicado de produto.
+ * BLOCKER documentado: precisa de conteúdo próprio "Orientações de
+ * segurança" na FASE seguinte (fora do escopo desta missão).
+ */
+export const metadata: Metadata = {
+  title: "Segurança",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 type ProdutoPageProps = {
   params: Promise<{
