@@ -128,9 +128,9 @@ const MIN_POSTPROCESS_BUDGET_MS = 100;
 const MAX_CLUSTERING_RESERVE_MS = 1_500;
 const PHASE_HANDOFF_RESERVE_MS = 150;
 const MIN_HUNT_ATTEMPT_MS = 250;
-// Floor estrutural: um Ãºnico search de provider (Shopee/Amazon/AliExpress) leva,
-// nos dados reais observados, ~1.5sâ€“2.5s. Abaixo disso o attempt aborta antes de
-// qualquer candidato. Com a reserva de 5s e concorrÃªncia 2, ~4â€“6 attempts Ãºteis.
+// Floor estrutural: um único search de provider (Shopee/Amazon/AliExpress) leva,
+// nos dados reais observados, ~1.5s–2.5s. Abaixo disso o attempt aborta antes de
+// qualquer candidato. Com a reserva de 5s e concorrência 2, ~4–6 attempts úteis.
 const USEFUL_HUNT_ATTEMPT_MS = 2_500;
 const MAX_HUNT_SEEDS = 5;
 const HUNT_CONCURRENCY = 2;
@@ -211,7 +211,7 @@ function titleHasBrand(title: string, brand: string | null): boolean {
 function isAliExpressPermanentConfigurationError(
   error: string | null | undefined,
 ): boolean {
-  return /invalidappkey|invalid app key|app key is invalid|authentication|autentica(?:c|Ã§)(?:a|Ã£)o/i.test(
+  return /invalidappkey|invalid app key|app key is invalid|authentication|autentica(?:c|ç)(?:a|ã)o/i.test(
     error ?? "",
   );
 }
@@ -450,9 +450,9 @@ function discriminativeIdentityNumbers(identity: ProductFingerprint): string[] {
 function buildHuntIdentityQuery(cluster: ProductCluster): string {
   const identity = cluster.identity;
 
-  // Identidade estrutural, em ordem de forÃ§a: marca, sku, modelo, ancoras
-  // fortes, cÃ³digos de variante, e especificaÃ§Ãµes discriminantes (capacidade
-  // e quantidade). Nada de tÃ­tulo inteiro nem palavra de classe estrangeira.
+  // Identidade estrutural, em ordem de força: marca, sku, modelo, ancoras
+  // fortes, códigos de variante, e especificações discriminantes (capacidade
+  // e quantidade). Nada de título inteiro nem palavra de classe estrangeira.
   const strongTerms = uniqueSearchTerms([
     identity.brand.value,
     identity.manufacturerSku.value,
@@ -464,7 +464,7 @@ function buildHuntIdentityQuery(cluster: ProductCluster): string {
     identity.quantity.value,
   ]);
 
-  // CabeÃ§a nominal em portuguÃªs do item vendido (ex.: "aspirador", "vestido")
+  // Cabeçalha nominal em português do item vendido (ex.: "aspirador", "vestido")
   // serve para desambiguar a classe sem poluir a identidade.
   const headToken = extractSoldItemNucleus(identity.soldItem.value ?? "").headToken;
 
@@ -472,8 +472,8 @@ function buildHuntIdentityQuery(cluster: ProductCluster): string {
     return uniqueSearchTerms([...strongTerms, headToken]).join(" ");
   }
 
-  // Fallback estrutural: identidade fraca vira uma versÃ£o compactada do tÃ­tulo
-  // (cabeÃ§a nominal + poucos termos discriminantes), nunca o tÃ­tulo integral.
+  // Fallback estrutural: identidade fraca vira uma versão compactada do título
+  // (cabeçalha nominal + poucos termos discriminantes), nunca o título integral.
   const compactTitle = uniqueSearchTerms([
     headToken,
     ...(identity.distinctiveTokens ?? []).slice(0, 4),
@@ -747,8 +747,8 @@ async function huntMissingStoreOffers(
     }
   }
 
-// OrÃ§amento/qualidade por attempt: sem divisÃ£o linear. Cada attempt recebe um
-  // orÃ§amento Ãºtil (nÃ£o fragmentado); os attempts que sobrarem sÃ£o naturalmente
+// Orçamento/qualidade por attempt: sem divisão linear. Cada attempt recebe um
+  // orçamento útil (não fragmentado); os attempts que sobrarem são naturalmente
   // impedidos pelo timeout de fase (huntMs) e pelo guard de budget insuficiente.
   const scheduled = interleaved;
 
@@ -1066,9 +1066,9 @@ async function huntMissingStoreOffers(
     huntAbort.cleanup();
   }
 
-  // Fase de proteÃ§Ã£o: garante que o hunt retorna dentro do deadline
+  // Fase de proteção: garante que o hunt retorna dentro do deadline
   // mesmo se workers continuarem rodando. O withTimeout deve ter retornado
-  // dentro de huntMs, mas adicionamos um timeout de proteÃ§Ã£o como seguro.
+  // dentro de huntMs, mas adicionamos um timeout de proteção como seguro.
   if (huntReserveMs > 0) {
     const huntPhaseDeadline = Date.now() + huntMs + 200;
     await new Promise<void>((resolve) => {
