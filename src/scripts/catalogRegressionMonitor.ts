@@ -226,13 +226,21 @@ export function evaluateCatalogRegression(
   };
 }
 
-async function runCatalogRegressionMonitor(): Promise<void> {
-  console.log("CATALOG_MONITOR_MODE=READ_ONLY");
+export type CatalogRegressionCheckResult = {
+  monitorResult: "PASS" | "REGRESSION" | "ERROR";
+  catalogRegression: boolean;
+  counters: PresentationCounters | null;
+  evaluation: RegressionEvaluation | null;
+  offerStatuses: ProtectedOfferStatus[];
+  dbWrites: 0;
+  reasons: string[];
+};
 
+export async function runCatalogRegressionCheck(): Promise<CatalogRegressionCheckResult> {
   let counters: PresentationCounters;
   let offerStatuses: ProtectedOfferStatus[];
+
   try {
-    // READ-ONLY: mesma consulta/filtro da auditoria oficial.
     const allProducts = await prisma.product.findMany({
       where: {
         active: true,
@@ -273,7 +281,6 @@ async function runCatalogRegressionMonitor(): Promise<void> {
       allProducts.length - publicProducts.length,
     );
 
-    // READ-ONLY: verificacao das 5 ofertas protegidas.
     const protectedOffers = await prisma.marketplaceOffer.findMany({
       where: { id: { in: [...PROTECTED_REJECTED_OFFER_IDS] } },
       select: { id: true, matchStatus: true },
@@ -287,21 +294,51 @@ async function runCatalogRegressionMonitor(): Promise<void> {
         matchStatus: found ? found.matchStatus : null,
       };
     });
-
-    console.log("DATABASE_CONNECTION=PASS");
   } catch (error) {
-    console.log("DATABASE_CONNECTION=FAIL");
     const message = error instanceof Error ? error.message : String(error);
-    console.log(`DATABASE_ERROR=${sanitizeDbErrorMessage(message)}`);
+    return {
+      monitorResult: "ERROR",
+      catalogRegression: true,
+      counters: null,
+      evaluation: null,
+      offerStatuses: [],
+      dbWrites: 0,
+      reasons: [`DATABASE_ERROR=${sanitizeDbErrorMessage(message)}`],
+    };
+  }
+
+  const evaluation = evaluateCatalogRegression(counters, offerStatuses);
+
+  return {
+    monitorResult: evaluation.regression ? "REGRESSION" : "PASS",
+    catalogRegression: evaluation.regression,
+    counters,
+    evaluation,
+    offerStatuses,
+    dbWrites: 0,
+    reasons: evaluation.reasons,
+  };
+}
+
+function logCheckResult(result: CatalogRegressionCheckResult): void {
+  console.log("CATALOG_MONITOR_MODE=READ_ONLY");
+
+  if (result.monitorResult === "ERROR") {
+    console.log("DATABASE_CONNECTION=FAIL");
+    for (const reason of result.reasons) {
+      console.log(reason);
+    }
     console.log("PRODUCT_COUNT_INVARIANT=FAIL");
     console.log("DB_WRITES=0");
     console.log("CATALOG_REGRESSION=true");
     console.log("MONITOR_RESULT=ERROR");
-    process.exitCode = 2;
     return;
   }
 
-  const evaluation = evaluateCatalogRegression(counters, offerStatuses);
+  console.log("DATABASE_CONNECTION=PASS");
+
+  const counters = result.counters!;
+  const evaluation = result.evaluation!;
   const okCount =
     PROTECTED_REJECTED_OFFER_IDS.length - evaluation.regressedOfferIds.length;
 
@@ -324,7 +361,7 @@ async function runCatalogRegressionMonitor(): Promise<void> {
   console.log(
     `PROTECTED_REJECTED_OFFERS_REGRESSED=${evaluation.regressedOfferIds.length}`,
   );
-  for (const offer of offerStatuses) {
+  for (const offer of result.offerStatuses) {
     if (!offer.found || offer.matchStatus !== "REJECTED") {
       console.log(`REGRESSED_OFFER_ID=${offer.id}`);
       console.log("EXPECTED_MATCH_STATUS=REJECTED");
@@ -345,8 +382,13 @@ async function runCatalogRegressionMonitor(): Promise<void> {
     }
   }
   console.log(`CATALOG_REGRESSION=${evaluation.regression}`);
-  console.log(`MONITOR_RESULT=${evaluation.regression ? "REGRESSION" : "PASS"}`);
-  process.exitCode = evaluation.regression ? 1 : 0;
+  console.log(`MONITOR_RESULT=${result.monitorResult}`);
+}
+
+async function runCatalogRegressionMonitor(): Promise<void> {
+  const result = await runCatalogRegressionCheck();
+  logCheckResult(result);
+  process.exitCode = result.monitorResult === "PASS" ? 0 : result.monitorResult === "REGRESSION" ? 1 : 2;
 }
 
 const invokedDirectly =

@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/import-queue",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/catalog-regression-monitor",
+      "schedule": "0 * * * *"
     }
   ]
 }
