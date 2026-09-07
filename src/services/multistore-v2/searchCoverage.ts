@@ -161,6 +161,9 @@ export type HuntIdentityDiagnostic = {
   candidatesBeforeRelevance: number;
   candidatesAfterRelevance: number;
   candidatesSentToIdentity: number;
+  huntIdentitySame: number;
+  huntIdentityDifferent: number;
+  huntIdentityUnknown: number;
 };
 
 export function createHuntIdentityDiagnostic(): HuntIdentityDiagnostic {
@@ -176,6 +179,9 @@ export function createHuntIdentityDiagnostic(): HuntIdentityDiagnostic {
     candidatesBeforeRelevance: 0,
     candidatesAfterRelevance: 0,
     candidatesSentToIdentity: 0,
+    huntIdentitySame: 0,
+    huntIdentityDifferent: 0,
+    huntIdentityUnknown: 0,
   };
 }
 

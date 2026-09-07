@@ -1042,6 +1042,39 @@ export function extractSize(tokens: string[]): string | null {
     }
   }
 
+  // Extract tire size format from normalized tokens: width/profile/R/rim
+  // Normalized "205/45R15" → tokens ["205", "45", "r", "15"]
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    const w = tokens[index];
+    const p = tokens[index + 1];
+    const r = tokens[index + 2];
+    const rim = tokens[index + 3];
+
+    if (
+      /^\d{1,3}$/.test(w) &&
+      /^\d{1,2}$/.test(p) &&
+      /^r$/i.test(r) &&
+      /^\d{1,2}$/.test(rim)
+    ) {
+      return `${w}/${p}R${rim}`;
+    }
+  }
+
+  // Extract width/R/rim format: 205R15 → tokens ["205", "r", "15"]
+  for (let index = 0; index < tokens.length - 2; index += 1) {
+    const w = tokens[index];
+    const r = tokens[index + 1];
+    const rim = tokens[index + 2];
+
+    if (
+      /^\d{1,3}$/.test(w) &&
+      /^r$/i.test(r) &&
+      /^\d{1,2}$/.test(rim)
+    ) {
+      return `${w}R${rim}`;
+    }
+  }
+
   return null;
 }
 

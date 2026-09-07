@@ -511,6 +511,19 @@ type HuntSeed = {
   strength: number;
 };
 
+function hasDiscriminativeIdentity(cluster: ProductCluster): boolean {
+  const identity = cluster.identity;
+  const identitySignals = [
+    identity.brand.value,
+    identity.model.value,
+    identity.manufacturerSku.value,
+    ...(identity.variantCodes.value ?? []),
+    ...identity.identityAnchors,
+    ...identity.identityNumbers,
+  ].filter(Boolean).length;
+  return identitySignals >= 2;
+}
+
 function selectStrongHuntSeeds(
   clusters: ProductCluster[],
   adapters: DiscoveryAdapter[],
@@ -521,7 +534,11 @@ function selectStrongHuntSeeds(
     Math.min(MAX_HUNT_SEEDS, Math.ceil(huntMs / 900)),
   );
 
-  const seeds = clusters
+  const clustersWithIdentity = clusters.filter(
+    (cluster) => hasDiscriminativeIdentity(cluster),
+  );
+
+  const seeds = clustersWithIdentity
     .map((cluster) => {
       const present = new Set(
         cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
@@ -537,11 +554,52 @@ function selectStrongHuntSeeds(
     .slice(0, adaptiveCount)
     .map(({ cluster, query, strength }) => ({ cluster, query, strength }));
 
+  // Distribute seeds across remaining adapters if possible
+  const selectedAdapters = new Set(
+    seeds.flatMap((seed) =>
+      seed.cluster.members.map((member) =>
+        member.candidate.normalized.raw.marketplace,
+      ),
+    ),
+  );
+
+  const missingAdapters = adapters.filter(
+    (adapter) => !selectedAdapters.has(adapter.marketplace),
+  );
+
+  if (missingAdapters.length > 0 && seeds.length < adaptiveCount) {
+    const extraClusters = clusters
+      .filter(
+        (cluster) =>
+          !clustersWithIdentity.includes(cluster) &&
+          hasDiscriminativeIdentity(cluster),
+      )
+      .map((cluster) => {
+        const present = new Set(
+          cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+        );
+        const strength = huntSeedStrength(cluster);
+        const query = buildHuntIdentityQuery(cluster);
+        return { cluster, present, strength, query };
+      })
+      .filter(({ present, strength, query }) =>
+        present.size < adapters.length && strength > 0 && Boolean(query),
+      )
+      .sort((left, right) => right.strength - left.strength);
+
+    const additional = extraClusters
+      .slice(0, adaptiveCount - seeds.length)
+      .map(({ cluster, query, strength }) => ({ cluster, query, strength }));
+
+    seeds.push(...additional);
+  }
+
   traceV2("hunt-seeds", {
     availableClusters: clusters.length,
     selected: seeds.length,
     adaptiveCount,
     huntMs,
+    clustersWithDiscriminativeIdentity: clustersWithIdentity.length,
   });
   return seeds;
 }
@@ -969,6 +1027,13 @@ async function huntMissingStoreOffers(
             );
             if (identityDiag) {
               identityDiag.candidatesSentToIdentity += 1;
+              if (versusCluster.relation === "SAME") {
+                identityDiag.huntIdentitySame += 1;
+              } else if (versusCluster.relation === "DIFFERENT") {
+                identityDiag.huntIdentityDifferent += 1;
+              } else if (versusCluster.relation === "UNKNOWN") {
+                identityDiag.huntIdentityUnknown += 1;
+              }
             }
             if (versusCluster.relation !== "SAME") {
               if (identityDiag) {
@@ -1069,21 +1134,27 @@ async function huntMissingStoreOffers(
   // Fase de proteção: garante que o hunt retorna dentro do deadline
   // mesmo se workers continuarem rodando. O withTimeout deve ter retornado
   // dentro de huntMs, mas adicionamos um timeout de proteção como seguro.
-  if (huntReserveMs > 0) {
+  // Este bloco respeita o deadline global - se o deadline expirar, sai imediatamente.
+  if (huntReserveMs > 0 && !deadline.expired() && !huntAbort.signal.aborted) {
     const huntPhaseDeadline = Date.now() + huntMs + 200;
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
         resolve();
       }, huntMs + 500);
-      // Se o withTimeout ja resolveu timeout, o intervalo curta antes
+      // Se o deadline global expirar ou o hunt for abortado, resolver imediatamente
       const check = setInterval(() => {
-        // Se o pipeline ja foi limpo, resolver
         if (!acceptingHuntResults) {
           clearInterval(check);
           clearTimeout(timer);
           resolve();
         }
-        // Se ja passou o tempo limite total, resolver de qualquer jeito
+        // Se o deadline global expirar, resolver de qualquer jeito
+        if (deadline.expired() || huntAbort.signal.aborted) {
+          clearInterval(check);
+          clearTimeout(timer);
+          resolve();
+        }
+        // Se ja passou o tempo limite total do hunt, resolver
         if (Date.now() >= huntPhaseDeadline) {
           clearInterval(check);
           clearTimeout(timer);
