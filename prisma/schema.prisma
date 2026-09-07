@@ -114,6 +114,7 @@ model Product {
   priceHistory   PriceHistory[]     @relation("ProductPriceHistory")
   searchRequests SearchRequest[]
   priceAlerts    PriceAlert[]
+  socialPosts    SocialPost[]
 
   @@index([active, updatedAt])
   @@index([category, active])
@@ -390,6 +391,54 @@ enum BlogPostStatus {
   SCHEDULED
   PUBLISHED
   ARCHIVED
+}
+
+enum SocialPostType {
+  DUEL_PRICE
+  FOUND_DEAL
+  PRICE_COMPARISON
+  SAVING_TIP
+  ENGAGEMENT_QUESTION
+  SHOPPING_CURIOSITY
+}
+
+enum SocialPostStatus {
+  READY
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SocialPostSlot {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+model SocialPost {
+  id String @id @default(cuid())
+
+  dayKey String
+  slot   SocialPostSlot
+
+  type   SocialPostType
+  status SocialPostStatus @default(READY)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  caption  String @db.Text
+  hashtags String[]
+  data     Json
+
+  fingerprint String
+
+  createdAt   DateTime @default(now())
+  publishedAt DateTime?
+
+  @@unique([dayKey, slot])
+  @@index([status, createdAt])
+  @@index([productId, createdAt])
+  @@index([fingerprint])
 }
 
 model BlogPost {
