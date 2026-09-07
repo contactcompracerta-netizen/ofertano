@@ -199,8 +199,8 @@ const huntRegression = await searchMultistoreV2("Headphone JBL", {
       marketplace: "SHOPEE",
       marketplaceName: "Shopee",
       enabled: true,
-      searcher: async (request) => {
-        if (request.query.includes("Tune 510BT")) {
+searcher: async (request) => {
+        if (request.query.toLowerCase().includes("510bt")) {
           huntCalls.push("SHOPEE:510BT");
           return huntResult("SHOPEE", request.query, [
             huntCandidate("SHOPEE", "hunt-b-shopee", huntTitleB),
@@ -215,8 +215,8 @@ const huntRegression = await searchMultistoreV2("Headphone JBL", {
       marketplace: "MAGAZINE_LUIZA",
       marketplaceName: "Magazine Luiza",
       enabled: true,
-      searcher: async (request) => {
-        if (request.query.includes("Tune 520BT")) {
+searcher: async (request) => {
+        if (request.query.toLowerCase().includes("520bt")) {
           huntCalls.push("MAGAZINE_LUIZA:520BT");
           return huntResult("MAGAZINE_LUIZA", request.query, [
             huntCandidate("MAGAZINE_LUIZA", "hunt-a-magalu", huntTitleA),

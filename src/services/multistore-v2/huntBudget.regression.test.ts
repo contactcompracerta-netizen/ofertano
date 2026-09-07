@@ -226,7 +226,9 @@ async function main(): Promise<void> {
   );
   assert.match(strongHuntQuery, /jbl/i);
   assert.match(strongHuntQuery.replace(/\s/g, ""), /520bt/i);
-  assert.match(strongHuntQuery, /preto/i);
+  // Cor (preto) é atributo descritivo, não identidade dura: o Hunt não deve
+  // isolar por variação de cor, então não a injeta na query compacta.
+  assert.doesNotMatch(strongHuntQuery, /preto/i);
   assert.match(strongHuntQuery.replace(/\s/g, ""), /40mm/i);
   assert.ok(
     elapsed <= 4_250,
