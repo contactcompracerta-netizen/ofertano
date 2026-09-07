@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { saveProduct } from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
 import { montarContextoAlertas } from "@/services/priceAlerts/priceContext";
@@ -101,6 +102,40 @@ function precoMudou(
   return Math.abs(anterior - atual) > 0.009;
 }
 
+/*
+ * Guarda de identidade rejeitada no Price Monitor.
+ *
+ * O monitor NAO e responsavel por identidade: ofertas REJECTED nao
+ * sao selecionadas para monitoramento (estrategia A). Mesmo que uma
+ * oferta REJECTED chegue ao saveProduct por outro caminho, o upsert
+ * preserva REJECTED — defesa em profundidade.
+ *
+ * Funcao pura e exportada para os testes de regressao.
+ */
+export function buildPriceMonitorCandidateWhere(
+  agora: Date,
+): Prisma.MarketplaceOfferWhereInput {
+  return {
+    active: true,
+    matchStatus: {
+      not: "REJECTED",
+    },
+    sourceUrl: {
+      not: null,
+    },
+    OR: [
+      {
+        nextCheckAt: null,
+      },
+      {
+        nextCheckAt: {
+          lte: agora,
+        },
+      },
+    ],
+  };
+}
+
 export async function processPriceMonitor(
   requestedLimit = LIMITE_PADRAO,
 ) {
@@ -108,22 +143,7 @@ export async function processPriceMonitor(
   const agora = new Date();
 
   const ofertas = await prisma.marketplaceOffer.findMany({
-    where: {
-      active: true,
-      sourceUrl: {
-        not: null,
-      },
-      OR: [
-        {
-          nextCheckAt: null,
-        },
-        {
-          nextCheckAt: {
-            lte: agora,
-          },
-        },
-      ],
-    },
+    where: buildPriceMonitorCandidateWhere(agora),
     orderBy: [
       {
         nextCheckAt: "asc",

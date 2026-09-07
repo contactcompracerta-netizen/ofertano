@@ -38,6 +38,15 @@ export type SaveProductOptions = {
    * arbitrary Discovery candidate to a Product.
    */
   verifiedExactMatch?: boolean;
+  /*
+   * Revalidacao explicita de uma oferta REJECTED.
+   *
+   * Somente fluxos manuais/explicitos (ex.: comparacao manual com
+   * identidade confirmada) podem passar `revalidateRejected: true`.
+   * Fluxos automaticos (Price Monitor, On Demand) NUNCA passam esse
+   * flag: uma oferta REJECTED existente deve permanecer REJECTED.
+   */
+  revalidateRejected?: boolean;
   discoverySource?: DiscoverySourceDatabase;
   autoCreated?: boolean;
   sourceQuery?: string | null;
@@ -68,6 +77,62 @@ export function decidirAlvoDaOferta(input: {
       usarTarget &&
       Boolean(input.ofertaExistenteProductId) &&
       input.ofertaExistenteProductId !== input.targetProductId,
+  };
+}
+
+/*
+ * GUARDA DE IDENTIDADE REJEITADA — persistencia de REJECTED.
+ *
+ * Uma MarketplaceOffer existente com matchStatus=REJECTED representa
+ * uma decisao de identidade (contaminacao confirmada) e NAO pode ser
+ * promovida de volta a EXACT por atualizacoes automaticas: novo preco,
+ * estoque, disponibilidade, redescoberta ou existencia previa por
+ * marketplace+externalId.
+ *
+ * Quando a oferta atual e REJECTED e nao ha revalidacao explicita
+ * (`revalidateRejected`), preserva matchStatus, matchScore e
+ * reviewReason exatamente como estao — inclusive sem substituir a
+ * razao de rejeicao por mensagens operacionais como "Aguardando link
+ * individual de afiliado.". Os demais campos (preco, estoque, status
+ * operacional, disponibilidade etc.) continuam atualizando normalmente.
+ *
+ * Pura e sem acesso a banco: usada pelo upsert do saveProduct e pelos
+ * testes de regressao (Price Monitor e On Demand passam por aqui).
+ */
+export type GuardaRejeicaoEntrada = {
+  ofertaAtualMatchStatus?: string | null;
+  ofertaAtualMatchScore?: number | null;
+  ofertaAtualReviewReason?: string | null;
+  calculadoMatchStatus: "EXACT" | "HIGH";
+  calculadoMatchScore: number | null;
+  calculadoReviewReason: string | null;
+  revalidateRejected?: boolean;
+};
+
+export type GuardaRejeicaoSaida = {
+  matchStatus: "EXACT" | "HIGH" | "REJECTED";
+  matchScore: number | null;
+  reviewReason: string | null;
+};
+
+export function aplicarGuardaRejeicaoIdentidade(
+  entrada: GuardaRejeicaoEntrada,
+): GuardaRejeicaoSaida {
+  const rejeitada =
+    entrada.ofertaAtualMatchStatus === "REJECTED";
+
+  if (!rejeitada || entrada.revalidateRejected) {
+    return {
+      matchStatus: entrada.calculadoMatchStatus,
+      matchScore: entrada.calculadoMatchScore,
+      reviewReason: entrada.calculadoReviewReason,
+    };
+  }
+
+  return {
+    matchStatus: "REJECTED",
+    matchScore: entrada.ofertaAtualMatchScore ?? null,
+    reviewReason: entrada.ofertaAtualReviewReason ?? null,
   };
 }
 
@@ -2170,6 +2235,7 @@ export async function corrigirLinksAmazonPendentes(
         sourceUrl: true,
         active: true,
         available: true,
+        matchStatus: true,
       },
     });
 
@@ -2208,7 +2274,15 @@ export async function corrigirLinksAmazonPendentes(
               oferta.available
                 ? "ACTIVE"
                 : undefined,
-            reviewReason: null,
+            /*
+             * Guarda de identidade rejeitada: o reparo operacional
+             * de link nunca apaga a razao de rejeicao de uma oferta
+             * REJECTED (`undefined` = mantem o valor atual).
+             */
+            reviewReason:
+              oferta.matchStatus === "REJECTED"
+                ? undefined
+                : null,
             errorMessage: null,
             affiliateValidatedAt: agora,
             reviewedAt: agora,
@@ -2368,8 +2442,21 @@ export async function saveProduct(
      * Contrato do Exact Matcher: se o cluster ja escolheu o Product
      * canonico, a oferta precisa ir para esse productId. Um SKU que ja
      * exista em outro Product nao pode sequestrar o cluster.
+     *
+     * Excecao de identidade rejeitada: uma oferta REJECTED nunca e
+     * destruida/movida automaticamente. Sem revalidacao explicita, a
+     * linha rejeitada permanece intacta no Product original (falhar
+     * ruidosamente por unicidade depois e preferivel a ressuscitar
+     * silenciosamente uma identidade rejeitada).
      */
-    if (decisaoAlvo.desanexarOfertaExistente && ofertaPeloCodigo) {
+    if (
+      decisaoAlvo.desanexarOfertaExistente &&
+      ofertaPeloCodigo &&
+      !(
+        ofertaPeloCodigo.matchStatus === "REJECTED" &&
+        !options.revalidateRejected
+      )
+    ) {
       await tx.marketplaceOffer.delete({
         where: {
           id: ofertaPeloCodigo.id,
@@ -2872,6 +2959,34 @@ export async function saveProduct(
               ? produtoCompativelPorIdentidade.score
               : null;
 
+    /*
+     * Guarda de identidade rejeitada: fluxos automaticos (Price
+     * Monitor, On Demand) atualizam preco/estoque/disponibilidade,
+     * mas nunca promovem REJECTED -> EXACT nem apagam a razao de
+     * rejeicao. Somente revalidacao explicita (`revalidateRejected`,
+     * ex.: comparacao manual) pode reverter.
+     */
+    const identidadePreservada =
+      aplicarGuardaRejeicaoIdentidade({
+        ofertaAtualMatchStatus:
+          ofertaAtual?.matchStatus,
+        ofertaAtualMatchScore:
+          ofertaAtual?.matchScore,
+        ofertaAtualReviewReason:
+          ofertaAtual?.reviewReason,
+        calculadoMatchStatus:
+          matchScoreExato !== null
+            ? "EXACT"
+            : "HIGH",
+        calculadoMatchScore: matchScoreExato,
+        calculadoReviewReason: affiliateLink
+          ? null
+          : ofertaAtual?.reviewReason ??
+            "Aguardando link individual de afiliado.",
+        revalidateRejected:
+          options.revalidateRejected,
+      });
+
     const oferta =
       await tx.marketplaceOffer.upsert({
         where: {
@@ -2900,21 +3015,18 @@ export async function saveProduct(
           status,
 
           matchStatus:
-            matchScoreExato !== null
-              ? "EXACT"
-              : "HIGH",
+            identidadePreservada.matchStatus,
 
-          matchScore: matchScoreExato,
+          matchScore:
+            identidadePreservada.matchScore,
 
           discoverySource,
 
           active: true,
           available: disponivel,
 
-          reviewReason: affiliateLink
-            ? null
-            : ofertaAtual?.reviewReason ??
-              "Aguardando link individual de afiliado.",
+          reviewReason:
+            identidadePreservada.reviewReason,
 
           errorMessage: null,
 

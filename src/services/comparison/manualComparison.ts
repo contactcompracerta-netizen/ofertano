@@ -3145,6 +3145,12 @@ termoBusca,
           {
             targetProductId,
             verifiedExactMatch: true,
+            /*
+             * Caminho explicito/manual: identidade confirmada pela
+             * comparacao manual, portanto pode revalidar uma oferta
+             * REJECTED. Fluxos automaticos nunca passam esse flag.
+             */
+            revalidateRejected: true,
             discoverySource:
               "ON_DEMAND_SEARCH",
             sourceQuery:
