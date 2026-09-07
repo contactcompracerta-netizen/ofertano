@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/catalog-regression-monitor",
-      "schedule": "0 * * * *"
+      "schedule": "0 11 * * *"
     }
   ]
 }
