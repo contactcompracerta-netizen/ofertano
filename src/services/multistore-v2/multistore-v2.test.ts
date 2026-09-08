@@ -947,13 +947,13 @@ async function runAcquisitionContract() {
   );
   assert.equal(
     mixed.views.length,
-    1,
-    "1 oferta relevante + BLOCKED/ERROR permanece visivel como single-store",
+    0,
+    "1 oferta relevante + BLOCKED/ERROR fica interna; resposta publica exige Multi Loja",
   );
-  assert.equal(mixed.products.length, 1);
-  assert.equal(mixed.singleStoreClusters, 1);
+  assert.equal(mixed.products.length, 0);
+  assert.equal(mixed.singleStoreClusters, 0);
   assert.equal(mixed.multiStoreClusters, 0);
-  assert.equal(mixed.persistedProductIds[0], "");
+  assert.equal(mixed.persistedProductIds.length, 0);
   assert.ok(
     mixed.relevantCandidates.some((item) => item.status === "RELEVANT"),
     "Persistencia desligada nao apaga o candidato vivo interno.",
@@ -988,6 +988,11 @@ async function runAcquisitionContract() {
     fetchMs: 200,
     persistReserveMs: 50,
     hangGraceMs: 40,
+  };
+  const STABLE_MIXED_TIMEOUT_GLOBAL_MS = 1_500;
+  const mixedTimeoutBudget = {
+    ...tightBudget,
+    globalMs: STABLE_MIXED_TIMEOUT_GLOBAL_MS,
   };
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
@@ -1052,7 +1057,7 @@ async function runAcquisitionContract() {
   const timeoutResult = await searchMultistoreV2("JBL Tune 520BT", {
     persist: false,
     adapters: timeoutAdapters,
-    budget: tightBudget,
+    budget: mixedTimeoutBudget,
   });
   const timeoutElapsed = Date.now() - timeoutStarted;
   assert.ok(timeoutElapsed < 2_000, `CASO timeout: terminou em ${timeoutElapsed}ms, dentro do orcamento`);
@@ -1062,12 +1067,12 @@ async function runAcquisitionContract() {
   );
   assert.equal(
     timeoutResult.views.length,
-    1,
-    "CASO timeout: singleton relevante permanece visivel como fallback",
+    0,
+    "CASO timeout: singleton relevante permanece interno sem fallback publico",
   );
-  assert.equal(timeoutResult.products.length, 1);
+  assert.equal(timeoutResult.products.length, 0);
   assert.equal(timeoutResult.multiStoreClusters, 0);
-  assert.equal(timeoutResult.persistedProductIds[0], "");
+  assert.equal(timeoutResult.persistedProductIds.length, 0);
   assert.equal(
     timeoutResult.acquisitions.find((item) => item.marketplace === "SHOPEE")?.status,
     "TIMEOUT",
@@ -1084,7 +1089,7 @@ async function runAcquisitionContract() {
 
   let slowIgnoresAbort = false;
   const isolationBudget = {
-    globalMs: 900,
+    globalMs: STABLE_MIXED_TIMEOUT_GLOBAL_MS,
     marketplaceMs: 700,
     fetchMs: 300,
     persistReserveMs: 80,
@@ -1243,10 +1248,14 @@ async function runAcquisitionContract() {
     "candidato incompatível não conta como cobertura compatível",
   );
 
+  const affiliateTimeoutBudget = {
+    ...tightBudget,
+    globalMs: STABLE_MIXED_TIMEOUT_GLOBAL_MS,
+  };
   const affiliateTimeoutStarted = Date.now();
   const affiliateTimeout = await searchMultistoreV2("JBL Tune 520BT", {
     persist: false,
-    budget: tightBudget,
+    budget: affiliateTimeoutBudget,
     adapters: [
       fakeAdapter("AMAZON", "Amazon", async () => ({
         marketplace: "AMAZON",

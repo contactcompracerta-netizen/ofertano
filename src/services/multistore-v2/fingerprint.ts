@@ -19,6 +19,7 @@ import {
   extractSize,
   extractStructuredNumericAttributes,
   extractVoltage,
+  extractPower,
   inferRole,
   isQuantitativeCompactToken,
   normalizeMultistoreText,
@@ -79,6 +80,7 @@ export function buildFingerprint(
       ? normalizeMultistoreText(candidate.structuredBrand)
       : null) || extractBrand(title);
   const capacity = extractCapacity(soldTokens);
+  const power = extractPower(soldTokens);
   const quantity = extractQuantity(soldTokens);
   const color = extractColor(soldTokens);
   const material = extractMaterial(soldTokens);
@@ -140,6 +142,7 @@ export function buildFingerprint(
     importantAttributes: {
       ...numericAttributes,
       ...(capacity ? { capacity } : {}),
+      ...(power ? { power } : {}),
       ...(quantity ? { quantity } : {}),
       ...(color ? { color } : {}),
       ...(material ? { material } : {}),

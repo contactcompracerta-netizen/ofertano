@@ -24,6 +24,7 @@ import {
   extractMaterial,
   extractModelTokens,
   extractBundleQuantity,
+  extractPower,
   extractQuantity,
   extractSize,
   extractStructuredNumericAttributes,
@@ -74,7 +75,6 @@ const KNOWN_BRANDS = new Set([
   "cadence",
   "britania",
   "novatech",
-  "marcax",
 ]);
 
 export type QueryCore = {
@@ -335,6 +335,7 @@ export function buildQueryCore(query: string): QueryCore {
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
   const numericAttributes = extractStructuredNumericAttributes(soldTokens);
+  const power = extractPower(soldTokens);
   const voltage = extractVoltage(rawQuery);
   const modelTokens = extractModelTokens(soldTokens);
   const identityAnchors = extractIdentityAnchors(rawQuery).filter((anchor) => {
@@ -437,6 +438,7 @@ export function buildQueryCore(query: string): QueryCore {
     attributes: {
       ...numericAttributes,
       ...(capacity ? { capacity } : {}),
+      ...(power ? { power } : {}),
       ...(quantity ? { quantity } : {}),
       ...(color ? { color } : {}),
       ...(material ? { material } : {}),
@@ -498,6 +500,60 @@ export function productCoreCoverage(
   return compareProductConcepts(core.productClass, candidateClass) === "CONFLICT"
     ? "CONFLICT"
     : "UNKNOWN";
+}
+
+/*
+ * Corte barato e conservador para lotes grandes: so rejeita quando os dois
+ * nucleos comerciais foram classificados com confianca suficiente e as
+ * familias sao incompatíveis. UNKNOWN continua para a relevancia completa.
+ */
+export function hasStrongProductConceptConflict(
+  core: QueryCore,
+  candidateText: string,
+): boolean {
+  const candidateSplit = splitSoldAndHost(candidateText);
+  if (candidateSplit.host) {
+    const hostClass = classifyProductConcept(candidateSplit.host).id;
+    if (core.productClass !== "UNKNOWN" && hostClass === core.productClass) {
+      return true;
+    }
+  }
+
+  const queryHasExplicitHead = Boolean(
+    core.soldHeadToken &&
+      core.productClass !== "UNKNOWN" &&
+      conceptLexicalTokens(core.productClass).includes(core.soldHeadToken),
+  );
+  if (
+    core.productClass === "UNKNOWN" ||
+    (
+      core.productClassConfidence !== "HIGH" &&
+      core.productClassConfidence !== "MEDIUM" &&
+      !queryHasExplicitHead
+    )
+  ) {
+    return false;
+  }
+
+  const candidateNucleus = extractSoldItemNucleus(candidateText);
+  const candidate = classifyProductConcept(candidateNucleus.normalizedText);
+  const candidateHasExplicitHead = Boolean(
+    candidateNucleus.headToken &&
+      candidate.id !== "UNKNOWN" &&
+      conceptLexicalTokens(candidate.id).includes(candidateNucleus.headToken),
+  );
+  if (
+    candidate.id === "UNKNOWN" ||
+    (
+      candidate.confidence !== "HIGH" &&
+      candidate.confidence !== "MEDIUM" &&
+      !candidateHasExplicitHead
+    )
+  ) {
+    return false;
+  }
+
+  return compareProductConcepts(core.productClass, candidate.id) === "CONFLICT";
 }
 
 function isAccessoryLikeRole(role: ProductRole): boolean {

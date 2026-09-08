@@ -42,6 +42,7 @@ export type StrongIdentity = {
   modelLine: string | null;
   capacity: string | null; // "1TB", "500GB", "12L"
   storage: string | null; // "256GB", "512GB"
+  power: string | null; // "1400W", "550W"
   voltage: string | null; // "110V", "220V", "127V"
   color: string | null;
   condition: "refurbished" | "used" | "repackaged" | null; // from sanitizer
@@ -258,6 +259,17 @@ function extractCapacity(query: string, core: QueryCore): string | null {
 }
 
 /**
+ * Extract power (electrical: "1400W", "550W", "1.5kW").
+ */
+function extractPower(query: string, core: QueryCore): string | null {
+  const attr = core.attributes.power;
+  if (attr) {
+    return attr;
+  }
+  return null;
+}
+
+/**
  * Extract storage (data: "256GB", "512GB", "1TB", "500GB").
  */
 function extractStorage(query: string, core: QueryCore): string | null {
@@ -436,6 +448,7 @@ function calculateConfidence(identity: StrongIdentity, anchors: IdentityAnchor[]
   if (identity.modelCodes.length > 0) signals += Math.min(identity.modelCodes.length, 2);
   if (identity.capacity) signals++;
   if (identity.storage) signals++;
+  if (identity.power) signals++;
   if (identity.voltage) signals++;
   if (identity.color) signals++;
   if (identity.bundleQuantity) signals++;
@@ -461,6 +474,7 @@ export function extractQueryIdentity(sanitizedQuery: string): QueryIdentity {
     modelLine: extractModelLine(sanitizedQuery, core),
     capacity: extractCapacity(sanitizedQuery, core),
     storage: extractStorage(sanitizedQuery, core),
+    power: extractPower(sanitizedQuery, core),
     voltage: extractVoltage(sanitizedQuery, core),
     color: extractColor(sanitizedQuery, core),
     condition: null, // will be set by caller from sanitizer
@@ -486,6 +500,133 @@ export function extractQueryIdentity(sanitizedQuery: string): QueryIdentity {
     identityAnchors: core.identityAnchors,
     queryCore: core,
   };
+}
+
+export type QueryMode = "GENERIC" | "SPECIFIC";
+
+function isMeaningfulIdentityToken(value: string): boolean {
+  const token = normalizeMultistoreText(value);
+  if (!token || token.length < 3 || !/[a-z]/.test(token)) {
+    return false;
+  }
+  if (isStopWord(token) || isAccessoryHead(token) || isReplacementHead(token)) {
+    return false;
+  }
+  if (isDimensionHint(token) || isAttributeWord(token) || isGenericDescriptor(token)) {
+    return false;
+  }
+  if (Boolean(classGroupOf(token))) {
+    return false;
+  }
+  return true;
+}
+
+function isHeadPlusDimensionToken(token: string, headToken: string | null): boolean {
+  if (!token || !headToken) {
+    return false;
+  }
+  const normalizedToken = normalizeMultistoreText(token).replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const normalizedHead = normalizeMultistoreText(headToken).replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (!normalizedHead || !normalizedToken.startsWith(normalizedHead)) {
+    return false;
+  }
+  const trailing = normalizedToken.slice(normalizedHead.length).replace(/[^0-9]/g, "");
+  return trailing.length > 0 && /^\d+$/.test(trailing);
+}
+
+function hasDimensionContext(rawQuery: string, core: QueryCore): boolean {
+  if (!rawQuery) {
+    return false;
+  }
+
+  const normalized = normalizeMultistoreText(rawQuery).toLowerCase();
+  if (/(?:^|\s)(?:aro|polegada|polegadas|inch|inches|cm|mm|metros|metro|diametro|altura|largura|profundidade)(?:$|\s)/.test(normalized)) {
+    return true;
+  }
+
+  if (/\d+\s*(?:cm|mm|inch|inches|polegadas)/.test(normalized)) {
+    return true;
+  }
+
+  return Boolean(core.attributes.size);
+}
+
+export function classifyQueryMode(
+  identity: Partial<QueryIdentity> & {
+    queryCore?: QueryCore;
+    sanitizedQuery?: string;
+    rawQuery?: string;
+  },
+): QueryMode {
+  const rawQuery = (identity.rawQuery ?? identity.sanitizedQuery ?? "").trim();
+  const core = identity.queryCore ?? buildQueryCore(rawQuery);
+  const strongIdentity = identity.strongIdentity;
+  if (!rawQuery) {
+    return "GENERIC";
+  }
+
+  const dimensionContext = hasDimensionContext(rawQuery, core);
+
+  const brand = core.brand ? normalizeMultistoreText(core.brand) : "";
+  const headToken = normalizeMultistoreText(core.soldHeadToken ?? core.productClass ?? "");
+
+  const strongModelLineTokens = (strongIdentity?.modelLine ? [strongIdentity.modelLine] : [])
+    .map((value) => normalizeMultistoreText(value))
+    .filter((value) => value && value.length > 0)
+    .filter((value) => !(dimensionContext && isHeadPlusDimensionToken(value, headToken)))
+    .filter((value) => !(core.productClass === "apparel" && value.split(/\s+/).length === 1))
+    .filter((value) => /\d/.test(value) || value.length <= 5)
+    .filter((value) => isMeaningfulIdentityToken(value));
+
+  const strongModelCodeTokens = (strongIdentity?.modelCodes ?? [])
+    .map((value) => normalizeMultistoreText(value))
+    .filter((value) => value && value.length > 0)
+    .filter((value) => !(dimensionContext && isHeadPlusDimensionToken(value, headToken)))
+    .filter((value) => isMeaningfulIdentityToken(value));
+
+  const meaningfulModelTokens = (core.modelTokens ?? [])
+    .map((token) => normalizeMultistoreText(token))
+    .filter((token) => !(dimensionContext && isHeadPlusDimensionToken(token, headToken)))
+    .filter((token) => isMeaningfulIdentityToken(token));
+  const meaningfulAnchors = (core.identityAnchors ?? [])
+    .map((anchor) => normalizeMultistoreText(anchor.value))
+    .filter((value) => !(dimensionContext && isHeadPlusDimensionToken(value, headToken)))
+    .filter((value) => isMeaningfulIdentityToken(value));
+  const meaningfulNumbers = (core.identityNumbers ?? [])
+    .map((value) => normalizeMultistoreText(value))
+    .filter((value) => {
+      const token = value.replace(/[^a-z0-9]/gi, "");
+      return !(dimensionContext && isHeadPlusDimensionToken(token, headToken)) && token.length >= 3 && /[a-z]/.test(token) && isMeaningfulIdentityToken(token);
+    });
+
+  const hasBrand = Boolean(brand);
+  const meaningfulEvidence =
+    meaningfulModelTokens.length +
+    meaningfulAnchors.length +
+    meaningfulNumbers.length +
+    strongModelLineTokens.length +
+    strongModelCodeTokens.length;
+
+  if (hasBrand && meaningfulEvidence > 0) {
+    return "SPECIFIC";
+  }
+
+  if (!hasBrand && meaningfulEvidence >= 2) {
+    return "SPECIFIC";
+  }
+
+  if (!hasBrand && strongModelLineTokens.length > 0) {
+    return "SPECIFIC";
+  }
+
+  if (!hasBrand && meaningfulModelTokens.length > 0 && /\d/.test(normalizeMultistoreText(rawQuery))) {
+    if (dimensionContext) {
+      return "GENERIC";
+    }
+    return "SPECIFIC";
+  }
+
+  return "GENERIC";
 }
 
 /**

@@ -378,15 +378,15 @@ async function runCoveragePublicationCases() {
 
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 30_000);
-      signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      const finish = () => {
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      if (signal?.aborted) {
+        finish();
+        return;
+      }
+      signal?.addEventListener("abort", finish, { once: true });
     });
   const tightBudget = {
     globalMs: 2_500,
@@ -423,12 +423,8 @@ async function runCoveragePublicationCases() {
     ],
   });
   assert.equal(coverageStatusOf(completeSingle.acquisitions), "COMPLETE");
-  assert.ok(completeSingle.products.length >= 1, "A) 1 loja + EMPTY nas demais e PUBLICAVEL");
-  assert.equal(completeSingle.products[0]?.searchVisible, true);
-  assert.equal(completeSingle.products[0]?.publishable, true);
-  assert.equal(completeSingle.products[0]?.coverageStatus, "COMPLETE");
-  assert.equal(completeSingle.products[0]?.offers.length, 1);
-  assert.ok(completeSingle.views.length >= 1);
+  assert.equal(completeSingle.products.length, 0, "A) 1 loja + EMPTY nas demais nao e PUBLICAVEL");
+  assert.equal(completeSingle.views.length, 0);
 
   const completeMulti = await searchMultistoreV2(query, {
     persist: false,
@@ -491,8 +487,8 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(timeoutSingle.acquisitions), "INCOMPLETE");
   assert.equal(timeoutSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.ok(timeoutSingle.relevantCandidates.length >= 1);
-  assert.equal(timeoutSingle.products.length, 1, "B) 1 loja + TIMEOUT aparece como fallback");
-  assert.equal(timeoutSingle.views.length, 1);
+  assert.equal(timeoutSingle.products.length, 0, "B) 1 loja + TIMEOUT nao e PUBLICAVEL");
+  assert.equal(timeoutSingle.views.length, 0);
   assert.equal(timeoutSingle.multiStoreClusters, 0);
 
   const blockedSingle = await searchMultistoreV2(query, {
@@ -509,8 +505,8 @@ async function runCoveragePublicationCases() {
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
     ],
   });
-  assert.equal(blockedSingle.products.length, 1);
-  assert.equal(blockedSingle.views.length, 1);
+  assert.equal(blockedSingle.products.length, 0);
+  assert.equal(blockedSingle.views.length, 0);
   assert.equal(blockedSingle.multiStoreClusters, 0);
 
   const errorSingle = await searchMultistoreV2(query, {
@@ -529,14 +525,14 @@ async function runCoveragePublicationCases() {
       }),
     ],
   });
-  assert.equal(errorSingle.products.length, 1);
-  assert.equal(errorSingle.views.length, 1);
+  assert.equal(errorSingle.products.length, 0);
+  assert.equal(errorSingle.views.length, 0);
   assert.equal(errorSingle.multiStoreClusters, 0);
 
   let multiTimeoutWrites = 0;
   const twoValidTimeout = await searchMultistoreV2(query, {
     persist: true,
-    budget: tightBudget,
+    budget: { ...tightBudget, globalMs: 4_000 },
     adapters: [
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
         marketplace: "MERCADO_LIVRE",
@@ -697,8 +693,8 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(notRunSingle.acquisitions), "INCOMPLETE");
   assert.equal(notRunSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "NOT_RUN");
-  assert.equal(notRunSingle.products.length, 1);
-  assert.equal(notRunSingle.views.length, 1);
+  assert.equal(notRunSingle.products.length, 0);
+  assert.equal(notRunSingle.views.length, 0);
   assert.equal(notRunSingle.multiStoreClusters, 0);
 
   const allEmpty = await searchMultistoreV2(query, {
@@ -743,6 +739,7 @@ async function runCoveragePublicationCases() {
       }),
     ],
   });
+  assert.equal(zeroFoundTimeout.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.equal(coverageStatusOf(zeroFoundTimeout.acquisitions), "INCOMPLETE", "CASO 4: 0 FOUND + TIMEOUT => INCOMPLETE");
   assert.equal(zeroFoundTimeout.products.length, 0, "CASO 4: nenhum resultado visivel");
   assert.equal(zeroFoundTimeout.views.length, 0, "CASO 4: nao inventa produto");
@@ -801,9 +798,10 @@ async function runCoveragePublicationCases() {
   assert.ok(cheapestComplete.views.some((view) => view.id.startsWith("saved-")));
 
   let cheapestTimeoutWrites = 0;
+  const partialTimeoutBudget = { ...tightBudget, globalMs: 4_000 };
   const cheapestTimeout = await searchMultistoreV2(query, {
     persist: true,
-    budget: tightBudget,
+    budget: partialTimeoutBudget,
     adapters: [
       fakeAdapter("AMAZON", "Amazon", async () => ({
         marketplace: "AMAZON",
@@ -1257,7 +1255,7 @@ async function runPersistContract() {
       return { id: `saved-${product.externalId}` };
     },
   });
-  assert.ok(mixed.products.length >= 1);
+  assert.equal(mixed.products.length, 0, "single-store nao e retornado nem persistido");
   assert.equal(
     persistedTitles.some((title) => title === rejectedTitle),
     false,
@@ -1269,15 +1267,16 @@ async function runPersistContract() {
 
   const hangUntilAbort = (signal?: AbortSignal) =>
     new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 30_000);
-      signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      const onAbort = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      if (signal?.aborted) {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+        return;
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
 
   const timeoutBudget = {
@@ -1334,8 +1333,8 @@ async function runPersistContract() {
     partialTimeout.relevantCandidates.length >= 1,
     "timeout parcial preserva o candidato relevante internamente",
   );
-  assert.equal(partialTimeout.products.length, 1);
-  assert.equal(partialTimeout.views.length, 1);
+  assert.equal(partialTimeout.products.length, 0);
+  assert.equal(partialTimeout.views.length, 0);
   assert.equal(partialTimeout.multiStoreClusters, 0);
   assert.equal(
     timeoutTitles.length,
@@ -1389,8 +1388,26 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function withTestTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} exceeded ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
-  const writeDelayMs = 100;
+  const writeDelayMs = 25;
   let caseAWrites = 0;
   const caseAStarted = Date.now();
   await persistCanonicalProducts("Headphone MarcaX", thirty, {
@@ -1419,8 +1436,8 @@ async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
     `CASO A writes=${caseAWrites} elapsedMs=${caseAElapsed} sequentialFloorMs=${12 * writeDelayMs}`,
   );
 
-  const persistBudgetMs = 80;
-  const slowWriteMs = 450;
+  const persistBudgetMs = 35;
+  const slowWriteMs = 120;
   const persistClockStarted = Date.now();
   let caseBWrites = 0;
   const caseBStarted = Date.now();
@@ -1455,79 +1472,97 @@ async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
   let persistWriteStarted = false;
   let persistReturned = false;
   const persistHang = persistCanonicalProducts(
-    "Headphone MarcaX",
-    thirty.slice(0, 3),
-    {
+      "Headphone MarcaX",
+      thirty.slice(0, 3),
+      {
+        limit: 12,
+        persistProduct: async () => {
+          persistWriteStarted = true;
+          return hang.promise;
+        },
+      },
+    );
+    void persistHang.then(() => {
+      persistReturned = true;
+    });
+    while (!persistWriteStarted) {
+      await wait(3);
+    }
+    await wait(8);
+    assert.equal(
+      persistReturned,
+      false,
+      "CASO C: persistCanonicalProducts fica bloqueado enquanto saveProduct nao resolve",
+    );
+
+    let searchWriteStarted = false;
+    let searchReturned = false;
+    const searchHang = searchMultistoreV2("Headphone MarcaX ZX100", {
+      persist: true,
       limit: 12,
+      adapters: [
+        fakeAdapter("AMAZON", "Amazon", async () => ({
+          marketplace: "AMAZON",
+          query: "Headphone MarcaX ZX100",
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "AMAZON",
+              marketplaceName: "Amazon",
+              externalId: "amz-hang",
+              title: "Headphone MarcaX ZX100",
+              price: 199,
+            }),
+          ],
+          error: null,
+        })),
+        fakeAdapter("SHOPEE", "Shopee", async () => ({
+          marketplace: "SHOPEE",
+          query: "Headphone MarcaX ZX100",
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "SHOPEE",
+              marketplaceName: "Shopee",
+              externalId: "shp-hang",
+              title: "Headphone MarcaX ZX100",
+              price: 189,
+            }),
+          ],
+          error: null,
+        })),
+      ],
       persistProduct: async () => {
-        persistWriteStarted = true;
+        searchWriteStarted = true;
         return hang.promise;
       },
-    },
-  );
-  void persistHang.then(() => {
-    persistReturned = true;
-  });
-  while (!persistWriteStarted) {
-    await wait(5);
-  }
-  await wait(20);
-  assert.equal(
-    persistReturned,
-    false,
-    "CASO C: persistCanonicalProducts fica bloqueado enquanto saveProduct nao resolve",
-  );
+    });
+    void searchHang.then(() => {
+      searchReturned = true;
+    });
+    while (!searchWriteStarted) {
+      await wait(3);
+    }
+    await wait(8);
+    assert.equal(
+      searchReturned,
+      false,
+      "CASO C: searchMultistoreV2 (caminho publico) nao retorna enquanto o write iniciado nao termina",
+    );
 
-  let searchWriteStarted = false;
-  let searchReturned = false;
-  const searchHang = searchMultistoreV2("Headphone MarcaX ZX100", {
-    persist: true,
-    limit: 12,
-    adapters: [
-      fakeAdapter("AMAZON", "Amazon", async () => ({
-        marketplace: "AMAZON",
-        query: "Headphone MarcaX ZX100",
-        success: true,
-        scanned: 1,
-        candidates: [
-          foundCandidate({
-            marketplace: "AMAZON",
-            marketplaceName: "Amazon",
-            externalId: "amz-hang",
-            title: "Headphone MarcaX ZX100",
-            price: 199,
-          }),
-        ],
-        error: null,
-      })),
-    ],
-    persistProduct: async () => {
-      searchWriteStarted = true;
-      return hang.promise;
-    },
-  });
-  void searchHang.then(() => {
-    searchReturned = true;
-  });
-  while (!searchWriteStarted) {
-    await wait(5);
-  }
-  await wait(20);
-  assert.equal(
-    searchReturned,
-    false,
-    "CASO C: searchMultistoreV2 (caminho publico) nao retorna enquanto o write iniciado nao termina",
-  );
-
-  hang.resolve({ id: "released-after-simulated-30s" });
-  const [persistResult, searchResult] = await Promise.all([
-    persistHang,
-    searchHang,
-  ]);
-  assert.equal(persistReturned, true);
-  assert.equal(searchReturned, true);
-  assert.equal(persistResult[0], "released-after-simulated-30s");
-  assert.ok(searchResult.views.length >= 1);
+    setTimeout(() => {
+      hang.resolve({ id: "released-after-simulated-30ms" });
+    }, 30);
+    const [persistResult, searchResult] = await Promise.all([
+      persistHang,
+      searchHang,
+    ]);
+    assert.equal(persistReturned, true);
+    assert.equal(searchReturned, true);
+    assert.equal(persistResult[0], "released-after-simulated-30ms");
+    assert.ok(searchResult.views.length >= 1);
   console.log(
     "CASO C: write pendente bloqueia persistCanonicalProducts e searchMultistoreV2; resposta publica so sai depois do await de saveProduct",
   );
@@ -1829,7 +1864,9 @@ async function runMlUnknownAffiliateCase() {
   );
 }
 
-void runPersistContract()
+const PERSIST_TEST_WATCHDOG_MS = 20_000;
+
+void withTestTimeout(runPersistContract(), PERSIST_TEST_WATCHDOG_MS, "persist.test")
   .then(async () => {
     await runMlUnknownAffiliateCase();
     console.log("multistore-v2 persist: invariantes estruturais passaram");

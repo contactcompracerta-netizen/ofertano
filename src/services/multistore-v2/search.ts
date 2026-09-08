@@ -1,4 +1,4 @@
-import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
+﻿import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
@@ -17,6 +17,7 @@ import type {
   MarketplaceCode,
   MultistoreV2Result,
   ProductCluster,
+  ProductFingerprint,
   PublicProductView,
   QueryIntent,
   RawCandidate,
@@ -24,7 +25,11 @@ import type {
 } from "./types";
 import { buildQueryIntent } from "./queryIntent";
 import { scoreQueryRelevance } from "./queryRelevance";
-import { buildQueryCore, queryIntentFromCore } from "./queryCore";
+import {
+  buildQueryCore,
+  hasStrongProductConceptConflict,
+  queryIntentFromCore,
+} from "./queryCore";
 import { clusterCandidates } from "./cluster";
 import { canonicalizeCluster } from "./canonicalize";
 import {
@@ -38,12 +43,15 @@ import { compareFingerprints, mergeFingerprints } from "./pairMatcher";
 import { normalizeCandidate, normalizeMultistoreText } from "./normalizeCandidate";
 import { buildAliExpressCompactFallbackQuery, buildSearchPlan } from "./queryPlan";
 import { extractSanitizedIdentity } from "./sanitizedIdentity";
+import { classifyQueryMode } from "./queryIdentity";
 import { detectDistinctiveConflict } from "./distinctiveAnchors";
+import { extractSoldItemNucleus } from "./productConcepts";
 export { buildSearchPlan };
 import { rankCanonicalProducts } from "./rank";
 import {
   DEFAULT_SEARCH_BUDGET,
   createSearchDeadline,
+  resolveHuntReserveMs,
   waitForAbsoluteTime,
   withTimeout,
   type SearchBudget,
@@ -59,6 +67,21 @@ import {
   isConfirmedAffiliateLink,
   type AffiliateResolver,
 } from "./affiliateEligibility";
+import {
+  createCoverageStats,
+  createHuntAttemptStats,
+  createHuntIdentityDiagnostic,
+  diffFingerprints,
+  distributionOfClusters,
+  emitCoverageSummary,
+  emitHuntAttemptSummary,
+  emitHuntIdentityDiagnostic,
+  MARKETPLACE_TO_COVERAGE_KEY,
+  summarizeFingerprint,
+  type HuntAttemptStats,
+  type HuntCoverage,
+  type HuntIdentityDiagnostic,
+} from "./searchCoverage";
 
 export function usarMotorMultistoreV2(): boolean {
   const value = process.env.MULTISTORE_ENGINE?.trim().toLowerCase();
@@ -102,7 +125,15 @@ type PreparedSearchQuery = {
 };
 
 const MIN_POSTPROCESS_BUDGET_MS = 100;
-const CLUSTERING_RESERVE_MS = 1_500;
+const MAX_CLUSTERING_RESERVE_MS = 1_500;
+const PHASE_HANDOFF_RESERVE_MS = 150;
+const MIN_HUNT_ATTEMPT_MS = 250;
+// Floor estrutural: um único search de provider (Shopee/Amazon/AliExpress) leva,
+// nos dados reais observados, ~1.5s–2.5s. Abaixo disso o attempt aborta antes de
+// qualquer candidato. Com a reserva de 5s e concorrência 2, ~4–6 attempts úteis.
+const USEFUL_HUNT_ATTEMPT_MS = 2_500;
+const MAX_HUNT_SEEDS = 5;
+const HUNT_CONCURRENCY = 2;
 
 function canRunPostprocess(
   deadline: SearchDeadline,
@@ -113,6 +144,39 @@ function canRunPostprocess(
   }
 
   return deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS;
+}
+
+function hasPhaseBudget(
+  deadline: SearchDeadline,
+  reservedMs: number,
+): boolean {
+  return !deadline.expired() && deadline.remainingMs() > reservedMs;
+}
+
+function resolveClusteringReserveMs(budget: SearchBudget): number {
+  return Math.min(
+    MAX_CLUSTERING_RESERVE_MS,
+    Math.max(150, Math.floor(budget.globalMs * 0.1)),
+  );
+}
+
+function resolveRelevanceReserveMs(
+  budget: SearchBudget,
+  deadline: SearchDeadline,
+  huntReserveMs: number,
+  clusteringReserveMs: number,
+  persist: boolean,
+): number {
+  const configured = budget.relevanceReserveMs ?? Math.min(2_500, Math.floor(budget.globalMs * 0.15));
+  const available = Math.max(
+    0,
+    budget.globalMs -
+      deadline.responseReserveMs -
+      huntReserveMs -
+      clusteringReserveMs -
+      (persist ? budget.persistReserveMs : 0),
+  );
+  return Math.min(Math.max(0, configured), available);
 }
 
 function traceV2Phase(
@@ -150,14 +214,6 @@ function isAliExpressPermanentConfigurationError(
   return /invalidappkey|invalid app key|app key is invalid|authentication|autentica(?:c|ç)(?:a|ã)o/i.test(
     error ?? "",
   );
-}
-
-function isPublicSearchSafeFallback(product: CanonicalProduct): boolean {
-  if (product.marketplaces.length !== 1 || product.rankTier >= 3) {
-    return false;
-  }
-
-  return product.offers.length === 1 && product.offers[0]!.price > 0;
 }
 
 /*
@@ -348,6 +404,225 @@ function candidateKey(marketplace: string, externalId: string): string {
   return `${marketplace}:${externalId}`;
 }
 
+function uniqueSearchTerms(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const value of values) {
+    const term = (value ?? "").replace(/\s+/g, " ").trim();
+    const key = normalizeMultistoreText(term).replace(/\s+/g, " ");
+    const coveredByExistingTerm = terms.some((existing) => {
+      const existingKey = normalizeMultistoreText(existing).replace(/\s+/g, " ");
+      return existingKey.includes(key) || key.includes(existingKey);
+    });
+    if (!key || seen.has(key) || coveredByExistingTerm) {
+      continue;
+    }
+    seen.add(key);
+    terms.push(term);
+  }
+  return terms;
+}
+
+function discriminativeIdentityNumbers(identity: ProductFingerprint): string[] {
+  const strongFields = [
+    identity.model.value,
+    identity.manufacturerSku.value,
+    ...(identity.variantCodes.value ?? []),
+    ...(identity.identityAnchors ?? []),
+  ].filter((item): item is string => Boolean(item));
+
+  return (identity.identityNumbers ?? []).filter((number) => {
+    const compact = number.replace(/\s+/g, "");
+
+    // Se o numero ja aparece dentro de um campo forte tipado (modelo/sku/
+    // ancora/variante), nao o replique separadamente.
+    if (strongFields.some((field) => field.includes(compact) || compact.includes(field))) {
+      return false;
+    }
+
+    // Numeros isolados de 1-4 digitos extraidos genericamente de titulo sao
+    // SOFT. So contam como identidade quando sao codigos longos tipados
+    // (GTIN/EAN etc.), nunca tokens soltos como "3" ou "2".
+    return /^\d{6,}$/.test(compact);
+  });
+}
+
+function buildHuntIdentityQuery(cluster: ProductCluster): string {
+  const identity = cluster.identity;
+
+  // Identidade estrutural, em ordem de força: marca, sku, modelo, ancoras
+  // fortes, códigos de variante, e especificações discriminantes (capacidade
+  // e quantidade). Nada de título inteiro nem palavra de classe estrangeira.
+  const strongTerms = uniqueSearchTerms([
+    identity.brand.value,
+    identity.manufacturerSku.value,
+    identity.model.value,
+    ...(identity.identityAnchors ?? []),
+    ...(identity.variantCodes.value ?? []),
+    ...discriminativeIdentityNumbers(identity),
+    identity.capacity.value,
+    identity.quantity.value,
+  ]);
+
+  // Cabeçalha nominal em português do item vendido (ex.: "aspirador", "vestido")
+  // serve para desambiguar a classe sem poluir a identidade.
+  const headToken = extractSoldItemNucleus(identity.soldItem.value ?? "").headToken;
+
+  if (strongTerms.length > 0) {
+    return uniqueSearchTerms([...strongTerms, headToken]).join(" ");
+  }
+
+  // Fallback estrutural: identidade fraca vira uma versão compactada do título
+  // (cabeçalha nominal + poucos termos discriminantes), nunca o título integral.
+  const compactTitle = uniqueSearchTerms([
+    headToken,
+    ...(identity.distinctiveTokens ?? []).slice(0, 4),
+  ]);
+
+  return compactTitle.join(" ");
+}
+
+function huntSeedStrength(cluster: ProductCluster): number {
+  const identity = cluster.identity;
+  const identitySignals = [
+    identity.brand.value,
+    identity.model.value,
+    identity.manufacturerSku.value,
+    ...(identity.variantCodes.value ?? []),
+    ...identity.identityAnchors,
+    ...identity.identityNumbers,
+  ].filter(Boolean).length;
+  const hasPurchasableMainMember = cluster.members.some((member) =>
+    member.candidate.status === "RELEVANT" &&
+    member.candidate.fingerprint.role.value === "MAIN" &&
+    (member.candidate.normalized.raw.price ?? 0) > 0,
+  );
+
+  if (!hasPurchasableMainMember || identitySignals === 0) {
+    return 0;
+  }
+
+  return identitySignals * 10 + cluster.members.length;
+}
+
+type HuntSeed = {
+  cluster: ProductCluster;
+  query: string;
+  strength: number;
+};
+
+function hasDiscriminativeIdentity(cluster: ProductCluster): boolean {
+  const identity = cluster.identity;
+  const identitySignals = [
+    identity.brand.value,
+    identity.model.value,
+    identity.manufacturerSku.value,
+    ...(identity.variantCodes.value ?? []),
+    ...identity.identityAnchors,
+    ...identity.identityNumbers,
+  ].filter(Boolean).length;
+  return identitySignals >= 2;
+}
+
+function selectStrongHuntSeeds(
+  clusters: ProductCluster[],
+  adapters: DiscoveryAdapter[],
+  huntMs: number,
+): HuntSeed[] {
+  const adaptiveCount = Math.max(
+    1,
+    Math.min(MAX_HUNT_SEEDS, Math.ceil(huntMs / 900)),
+  );
+
+  const clustersWithIdentity = clusters.filter(
+    (cluster) => hasDiscriminativeIdentity(cluster),
+  );
+
+  const seeds = clustersWithIdentity
+    .map((cluster) => {
+      const present = new Set(
+        cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+      );
+      const strength = huntSeedStrength(cluster);
+      const query = buildHuntIdentityQuery(cluster);
+      return { cluster, present, strength, query };
+    })
+    .filter(({ present, strength, query }) =>
+      present.size < adapters.length && strength > 0 && Boolean(query),
+    )
+    .sort((left, right) => right.strength - left.strength)
+    .slice(0, adaptiveCount)
+    .map(({ cluster, query, strength }) => ({ cluster, query, strength }));
+
+  // Distribute seeds across remaining adapters if possible
+  const selectedAdapters = new Set(
+    seeds.flatMap((seed) =>
+      seed.cluster.members.map((member) =>
+        member.candidate.normalized.raw.marketplace,
+      ),
+    ),
+  );
+
+  const missingAdapters = adapters.filter(
+    (adapter) => !selectedAdapters.has(adapter.marketplace),
+  );
+
+  if (missingAdapters.length > 0 && seeds.length < adaptiveCount) {
+    const extraClusters = clusters
+      .filter(
+        (cluster) =>
+          !clustersWithIdentity.includes(cluster) &&
+          hasDiscriminativeIdentity(cluster),
+      )
+      .map((cluster) => {
+        const present = new Set(
+          cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+        );
+        const strength = huntSeedStrength(cluster);
+        const query = buildHuntIdentityQuery(cluster);
+        return { cluster, present, strength, query };
+      })
+      .filter(({ present, strength, query }) =>
+        present.size < adapters.length && strength > 0 && Boolean(query),
+      )
+      .sort((left, right) => right.strength - left.strength);
+
+    const additional = extraClusters
+      .slice(0, adaptiveCount - seeds.length)
+      .map(({ cluster, query, strength }) => ({ cluster, query, strength }));
+
+    seeds.push(...additional);
+  }
+
+  traceV2("hunt-seeds", {
+    availableClusters: clusters.length,
+    selected: seeds.length,
+    adaptiveCount,
+    huntMs,
+    clustersWithDiscriminativeIdentity: clustersWithIdentity.length,
+  });
+  return seeds;
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  run: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, concurrency), items.length) },
+    async () => {
+      while (next < items.length) {
+        const index = next;
+        next += 1;
+        await run(items[index]!, index);
+      }
+    },
+  );
+  await Promise.all(workers);
+}
+
 type MarketplaceRunTrace = {
   closed: boolean;
   scheduledAt: number;
@@ -429,22 +704,41 @@ function toAcquisition(
   };
 }
 
+function clusterStoreCount(cluster: ProductCluster): number {
+  const codes = new Set(
+    cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+  );
+  return codes.size;
+}
+
 async function huntMissingStoreOffers(
   clusters: ProductCluster[],
   knownKeys: Set<string>,
   limit: number,
   deadline: SearchDeadline,
   adapters: DiscoveryAdapter[] = listarDiscoveryAdaptersAtivos(),
+  huntReserveMs = 0,
+  persist = false,
+  coverage?: HuntCoverage,
+  attemptStats?: HuntAttemptStats,
+  identityDiag?: HuntIdentityDiagnostic,
 ): Promise<ProductCluster[]> {
-  if (deadline.remainingMs() < 4_000) {
-    return clusters;
-  }
-
   const huntMs = Math.min(
-    deadline.budget.marketplaceMs,
-    Math.max(0, deadline.remainingMs() - deadline.budget.persistReserveMs),
+    huntReserveMs,
+    Math.max(
+      0,
+      deadline.remainingMs() -
+        deadline.responseReserveMs -
+        (persist ? deadline.budget.persistReserveMs : 0),
+    ),
   );
-  if (huntMs < 500) {
+  if (huntMs < MIN_HUNT_ATTEMPT_MS) {
+    traceV2("phase-budget-stop", {
+      phase: "HUNT",
+      remainingMs: deadline.remainingMs(),
+      reservedMs: huntReserveMs,
+      reason: "HUNT_RESERVE_UNAVAILABLE",
+    });
     return clusters;
   }
 
@@ -454,114 +748,377 @@ async function huntMissingStoreOffers(
     ...cluster,
     members: [...cluster.members],
   }));
+  const seeds = selectStrongHuntSeeds(nextClusters, adapters, huntMs);
+  if (identityDiag) {
+    for (const seed of seeds) {
+      const head = seed.cluster.members[0];
+      identityDiag.seeds.push({
+        seedId: seed.cluster.clusterId,
+        seedMarketplace: head?.candidate.normalized.raw.marketplace ?? "",
+        seedTitle: head?.candidate.normalized.raw.title ?? "",
+        seedExternalId: head?.candidate.normalized.raw.externalId ?? "",
+        fingerprintSummary: summarizeFingerprint(seed.cluster.identity),
+        query: seed.query,
+        identityQuery: seed.query,
+      });
+    }
+  }
+  const generated = seeds.flatMap((seed, seedIndex) => {
+    const present = new Set(
+      seed.cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+    );
+    const missing = adapters.filter(
+      (adapter) => !present.has(adapter.marketplace),
+    );
+    // Rotaciona a ordem das lojas ausentes por seed: evita que o primeiro provider
+    // (ex.: ML, lento) monopolize todos os primeiros slots da fila de attempts.
+    const offset = seedIndex % Math.max(1, missing.length);
+    const rotated = [...missing.slice(offset), ...missing.slice(0, offset)];
+    return rotated.map((adapter) => ({ seed, adapter }));
+  });
 
-  const targets = nextClusters
-    .filter((cluster) => {
-      const stores = new Set(
-        cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
+  // Dedupe redundant attempts (same seed query + same target marketplace).
+  const seen = new Set<string>();
+  const deduped: typeof generated = [];
+  for (const attempt of generated) {
+    const key = `${attempt.adapter.marketplace}\u0000${attempt.seed.query}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(attempt);
+  }
+
+  // Preserve seed diversity: interleave store-slots across seeds (strength DESC).
+  const bySeed = seeds.map((seed) => ({
+    seed,
+    list: deduped.filter((attempt) => attempt.seed === seed),
+  }));
+  const maxSlots = bySeed.reduce((max, group) => Math.max(max, group.list.length), 0);
+  const interleaved: typeof deduped = [];
+  for (let slot = 0; slot < maxSlots; slot += 1) {
+    for (const group of bySeed) {
+      const attempt = group.list[slot];
+      if (attempt) {
+        interleaved.push(attempt);
+      }
+    }
+  }
+
+// Orçamento/qualidade por attempt: sem divisão linear. Cada attempt recebe um
+  // orçamento útil (não fragmentado); os attempts que sobrarem são naturalmente
+  // impedidos pelo timeout de fase (huntMs) e pelo guard de budget insuficiente.
+  const scheduled = interleaved;
+
+  if (scheduled.length === 0) {
+    huntAbort.cleanup();
+    return nextClusters;
+  }
+
+  if (coverage) {
+    coverage.executed = true;
+    coverage.remainingBudgetAtStart = deadline.remainingMs();
+    coverage.seedCount = seeds.length;
+    coverage.queriesGenerated = scheduled.length;
+  }
+  if (attemptStats) {
+    attemptStats.huntReserveMs = huntReserveMs;
+    attemptStats.huntRemainingAtStart = deadline.remainingMs();
+    attemptStats.attemptCount = scheduled.length;
+    attemptStats.attemptsGenerated = generated.length;
+    attemptStats.attemptsDeduplicated = generated.length - deduped.length;
+    attemptStats.attemptsEligible = scheduled.length;
+    attemptStats.attemptsSkippedInsufficientBudget = 0;
+    let skippedAlreadyRepresented = 0;
+    for (const seed of seeds) {
+      const present = new Set(
+        seed.cluster.members.map(
+          (member) => member.candidate.normalized.raw.marketplace,
+        ),
       );
-      return stores.size < adapters.length;
-    })
-    .slice(0, 3);
+      skippedAlreadyRepresented += adapters.filter((adapter) =>
+        present.has(adapter.marketplace),
+      ).length;
+    }
+    attemptStats.attemptsSkippedAlreadyRepresentedStore = skippedAlreadyRepresented;
+    attemptStats.computedPerAttemptMs =
+      scheduled.length > 0 ? Math.floor(huntMs / scheduled.length) : 0;
+    attemptStats.minAttemptMs = MIN_HUNT_ATTEMPT_MS;
+    attemptStats.maxConcurrentAttempts = HUNT_CONCURRENCY;
+    attemptStats.steps = scheduled.map(({ seed, adapter }, index) => ({
+      index,
+      seedId: seed.cluster.clusterId,
+      marketplace: adapter.marketplace,
+      query: seed.query,
+      budgetMs: 0,
+      started: false,
+      elapsedMs: 0,
+      status: "NOT_STARTED",
+      rawReturned: 0,
+      error: null,
+    }));
+  }
+
+  const initialStoreCounts = new Map<string, number>();
+  for (const cluster of nextClusters) {
+    initialStoreCounts.set(cluster.clusterId, clusterStoreCount(cluster));
+  }
+
+  const huntStartedAt = Date.now();
+  const huntEndAt = Date.now() + huntMs;
 
   try {
     const raced = await withTimeout(
-      Promise.allSettled(
-        targets.map(async (cluster) => {
-          if (deadline.expired() || huntAbort.signal.aborted) {
+      runWithConcurrency(scheduled, HUNT_CONCURRENCY, async ({ seed, adapter }, index) => {
+        const step = attemptStats?.steps[index];
+        if (
+          !acceptingHuntResults ||
+          deadline.expired() ||
+          huntAbort.signal.aborted ||
+          !adapter.searcher
+        ) {
+          if (step) {
+            step.status = "NOT_STARTED";
+          }
+          return;
+        }
+
+        const remainingPhase = Math.floor(Math.max(0, huntEndAt - Date.now()));
+        if (remainingPhase < MIN_HUNT_ATTEMPT_MS) {
+          if (step) {
+            step.status = "BUDGET_TOO_SMALL";
+          }
+          return;
+        }
+        const perAttemptMs = Math.min(USEFUL_HUNT_ATTEMPT_MS, remainingPhase);
+        if (step) {
+          step.budgetMs = perAttemptMs;
+          step.started = true;
+        }
+        const attemptAbort = composeAbortSignal(
+          perAttemptMs,
+          huntAbort.signal,
+          deadline.signal,
+        );
+        const huntCore = buildQueryCore(seed.query);
+        const huntIntent = queryIntentFromCore(huntCore);
+
+        traceV2("hunt", {
+          huntQuery: seed.query,
+          marketplace: adapter.marketplace,
+          perAttemptMs,
+          strength: seed.strength,
+          remainingMs: deadline.remainingMs(),
+        });
+
+        const attemptStartedAt = Date.now();
+        try {
+          const outcome = await withTimeout(
+            adapter.searcher({
+              query: seed.query,
+              normalizedQuery: seed.query,
+              limit: Math.min(limit, 8),
+              mode: "MULTILOJA",
+              signal: attemptAbort.signal,
+            }),
+            perAttemptMs,
+            attemptAbort.signal,
+          );
+
+          if (step) {
+            step.elapsedMs = Date.now() - attemptStartedAt;
+          }
+
+          if (outcome.status === "timeout") {
+            if (step) {
+              step.status = "TIMEOUT";
+              step.rawReturned = 0;
+            }
+            if (attemptStats) {
+              attemptStats.attemptsTimedOut += 1;
+              attemptStats.attemptsFinished += 1;
+            }
             return;
           }
-          const present = new Set(
-            cluster.members.map((member) => member.candidate.normalized.raw.marketplace),
-          );
-          const missing = adapters.filter((adapter) => !present.has(adapter.marketplace));
-          const title =
-            cluster.members[0]?.candidate.normalized.raw.title.trim() || "";
-          if (!title || missing.length === 0) {
-            return;
+
+          const value = outcome.value;
+          if (step) {
+            step.rawReturned = value.candidates.length;
+            step.error = value.error ?? null;
           }
-
-          const huntQuery = buildSearchPlan(title)[0] || title;
-          const huntIntent = buildQueryIntent(title);
-
-          traceV2("hunt", {
-            title,
-            huntQuery,
-            missing: missing.map((adapter) => adapter.marketplace),
-          });
-
-          const settled = await Promise.allSettled(
-            missing.map((adapter) =>
-              adapter.searcher!({
-                query: huntQuery,
-                normalizedQuery: huntQuery,
-                limit: Math.min(limit, 8),
-                mode: "MULTILOJA",
-                signal: huntAbort.signal,
-              }),
-            ),
-          );
-
           if (
             !acceptingHuntResults ||
             huntAbort.signal.aborted ||
             deadline.expired()
           ) {
+            if (step) {
+              step.status = "ABORTED";
+            }
+            if (attemptStats) {
+              attemptStats.attemptsFinished += 1;
+            }
             return;
           }
 
-          for (const result of settled) {
-            if (result.status !== "fulfilled") {
+          if (step) {
+            step.status = value.candidates.length === 0 ? "EMPTY" : "SUCCESS";
+          }
+          if (attemptStats) {
+            attemptStats.attemptsFinished += 1;
+            if (value.candidates.length === 0) {
+              attemptStats.attemptsEmpty += 1;
+            } else {
+              attemptStats.attemptsWithCandidates += 1;
+            }
+          }
+
+          for (const candidate of value.candidates) {
+            if (!acceptingHuntResults || huntAbort.signal.aborted) {
+              return;
+            }
+            if (coverage) {
+              coverage.rawCandidatesFound += 1;
+            }
+            const key = candidateKey(candidate.marketplace, candidate.externalId);
+            if (knownKeys.has(key)) {
+              if (identityDiag) {
+                identityDiag.knownKeyDropped += 1;
+              }
               continue;
             }
 
-            for (const candidate of result.value.candidates) {
-              if (!acceptingHuntResults || huntAbort.signal.aborted) {
-                return;
+            const raw = toRawCandidate(candidate);
+            if (!raw || raw.price == null || raw.price <= 0) {
+              if (identityDiag) {
+                identityDiag.priceDropped += 1;
               }
-              const key = candidateKey(candidate.marketplace, candidate.externalId);
-              if (knownKeys.has(key)) {
-                continue;
-              }
+              continue;
+            }
 
-              const raw = toRawCandidate(candidate);
-              if (!raw || raw.price == null || raw.price <= 0) {
-                continue;
+            const scored = scoreQueryRelevance(
+              huntIntent,
+              normalizeCandidate(raw),
+              huntCore,
+              { huntPrefilter: true },
+            );
+            if (identityDiag) {
+              identityDiag.candidatesBeforeRelevance += 1;
+            }
+            if (scored.status !== "RELEVANT") {
+              if (identityDiag) {
+                identityDiag.relevanceRejections += 1;
+                if (identityDiag.relevanceSamples.length < 10) {
+                  identityDiag.relevanceSamples.push({
+                    marketplace: scored.normalized.raw.marketplace,
+                    title: scored.normalized.raw.title,
+                    externalId: scored.normalized.raw.externalId,
+                    reason: scored.reason,
+                  });
+                }
               }
-
-              const scored = scoreQueryRelevance(
-                huntIntent,
-                normalizeCandidate(raw),
-              );
-              const versusCluster = compareFingerprints(
-                scored.fingerprint,
-                cluster.identity,
-              );
-              if (versusCluster.relation !== "SAME") {
-                continue;
+              continue;
+            }
+            if (identityDiag) {
+              identityDiag.candidatesAfterRelevance += 1;
+            }
+            const versusCluster = compareFingerprints(
+              scored.fingerprint,
+              seed.cluster.identity,
+            );
+            if (identityDiag) {
+              identityDiag.candidatesSentToIdentity += 1;
+              if (versusCluster.relation === "SAME") {
+                identityDiag.huntIdentitySame += 1;
+              } else if (versusCluster.relation === "DIFFERENT") {
+                identityDiag.huntIdentityDifferent += 1;
+              } else if (versusCluster.relation === "UNKNOWN") {
+                identityDiag.huntIdentityUnknown += 1;
               }
-
-              const memberConflict = cluster.members.some(
-                (member) =>
-                  compareFingerprints(
+            }
+            if (versusCluster.relation !== "SAME") {
+              if (identityDiag) {
+                identityDiag.totalIdentityRejections += 1;
+                const head = seed.cluster.members[0];
+                const sample = {
+                  seedMarketplace: head?.candidate.normalized.raw.marketplace ?? "",
+                  seedTitle: head?.candidate.normalized.raw.title ?? "",
+                  seedExternalId: head?.candidate.normalized.raw.externalId ?? "",
+                  huntMarketplace: scored.normalized.raw.marketplace,
+                  huntTitle: scored.normalized.raw.title,
+                  huntExternalId: scored.normalized.raw.externalId,
+                  huntQuery: seed.query,
+                  relation: versusCluster.relation,
+                  reason:
+                    versusCluster.hardConflicts.length > 0
+                      ? versusCluster.hardConflicts.join(",")
+                      : versusCluster.positiveEvidence.length > 0
+                        ? `weak:${versusCluster.positiveEvidence.join(",")}`
+                        : "no evidence",
+                  fingerprintDiff: diffFingerprints(
+                    seed.cluster.identity,
                     scored.fingerprint,
-                    member.candidate.fingerprint,
-                  ).relation === "DIFFERENT",
-              );
-              if (memberConflict) {
-                continue;
+                  ),
+                };
+                if (identityDiag.samples.length < 10) {
+                  identityDiag.samples.push(sample);
+                } else if (sample.relation === "UNKNOWN") {
+                  const idx = identityDiag.samples.findIndex(
+                    (item) => item.relation === "DIFFERENT",
+                  );
+                  if (idx >= 0) {
+                    identityDiag.samples[idx] = sample;
+                  }
+                }
               }
+              continue;
+            }
 
-              cluster.members.push({ candidate: scored });
-              cluster.identity = mergeFingerprints(
-                cluster.identity,
-                scored.fingerprint,
-              );
-              knownKeys.add(key);
+            const memberConflict = seed.cluster.members.some(
+              (member) =>
+                compareFingerprints(
+                  scored.fingerprint,
+                  member.candidate.fingerprint,
+                ).relation === "DIFFERENT",
+            );
+            if (memberConflict) {
+              continue;
+            }
+
+            seed.cluster.members.push({ candidate: scored });
+            seed.cluster.identity = mergeFingerprints(
+              seed.cluster.identity,
+              scored.fingerprint,
+            );
+            knownKeys.add(key);
+            if (coverage) {
+              coverage.acceptedIntoClusters += 1;
+            }
+            if (identityDiag) {
+              identityDiag.acceptedCount += 1;
             }
           }
-        }),
-      ),
+        } catch (error) {
+          if (step) {
+            step.elapsedMs = Date.now() - attemptStartedAt;
+            step.rawReturned = 0;
+            if (isAbortError(error) || attemptAbort.signal.aborted) {
+              step.status = "ABORTED";
+            } else {
+              step.status = "ERROR";
+              step.error = error instanceof Error ? error.message : String(error);
+            }
+          }
+          if (attemptStats) {
+            attemptStats.attemptsFinished += 1;
+          }
+        } finally {
+          attemptAbort.abort();
+          attemptAbort.cleanup();
+          if (attemptStats) {
+            attemptStats.attemptsStarted += 1;
+          }
+        }
+      }),
       huntMs,
       huntAbort.signal,
     );
@@ -572,6 +1129,74 @@ async function huntMissingStoreOffers(
   } finally {
     acceptingHuntResults = false;
     huntAbort.cleanup();
+  }
+
+  // Fase de proteção: garante que o hunt retorna dentro do deadline
+  // mesmo se workers continuarem rodando. O withTimeout deve ter retornado
+  // dentro de huntMs, mas adicionamos um timeout de proteção como seguro.
+  // Este bloco respeita o deadline global - se o deadline expirar, sai imediatamente.
+  if (huntReserveMs > 0 && !deadline.expired() && !huntAbort.signal.aborted) {
+    const huntPhaseDeadline = Date.now() + huntMs + 200;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        resolve();
+      }, huntMs + 500);
+      // Se o deadline global expirar ou o hunt for abortado, resolver imediatamente
+      const check = setInterval(() => {
+        if (!acceptingHuntResults) {
+          clearInterval(check);
+          clearTimeout(timer);
+          resolve();
+        }
+        // Se o deadline global expirar, resolver de qualquer jeito
+        if (deadline.expired() || huntAbort.signal.aborted) {
+          clearInterval(check);
+          clearTimeout(timer);
+          resolve();
+        }
+        // Se ja passou o tempo limite total do hunt, resolver
+        if (Date.now() >= huntPhaseDeadline) {
+          clearInterval(check);
+          clearTimeout(timer);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+
+  if (coverage) {
+    coverage.elapsedMs = Date.now() - huntStartedAt;
+  }
+
+  if (attemptStats) {
+    let promoted2 = 0;
+    let promoted3 = 0;
+    for (const cluster of nextClusters) {
+      const count = clusterStoreCount(cluster);
+      const before = initialStoreCounts.get(cluster.clusterId) ?? count;
+      if (before < 2 && count >= 2) {
+        promoted2 += 1;
+      }
+      if (before < 3 && count >= 3) {
+        promoted3 += 1;
+      }
+    }
+    attemptStats.clustersPromotedTo2Stores = promoted2;
+    attemptStats.clustersPromotedTo3Stores = promoted3;
+    attemptStats.attemptsExecuted = attemptStats.attemptsStarted;
+    attemptStats.attemptsSkippedInsufficientBudget = attemptStats.steps.filter(
+      (page) => page.status === "NOT_STARTED" || page.status === "BUDGET_TOO_SMALL",
+    ).length;
+
+    const budgets = attemptStats.steps
+      .filter((page) => page.started)
+      .map((page) => page.budgetMs);
+    attemptStats.attemptBudgetMin = budgets.length > 0 ? Math.min(...budgets) : 0;
+    attemptStats.attemptBudgetMax = budgets.length > 0 ? Math.max(...budgets) : 0;
+    attemptStats.attemptBudgetAvg =
+      budgets.length > 0
+        ? Math.round(budgets.reduce((sum, value) => sum + value, 0) / budgets.length)
+        : 0;
   }
 
   return nextClusters;
@@ -588,6 +1213,7 @@ async function acquireOneMarketplace(
   acquisitionPhase: AbortSignal,
   trace: MarketplaceRunTrace,
   persist: boolean,
+  protectedPostAcquisitionMs: number,
   queryCore: ReturnType<typeof buildQueryCore>,
   identity: ReturnType<typeof extractSanitizedIdentity>,
 ): Promise<MarketplaceAcquisition> {
@@ -598,7 +1224,10 @@ async function acquireOneMarketplace(
       : budget.marketplaceMs;
   const adapterBudgetMs = Math.min(
     configuredAdapterBudgetMs,
-    globalDeadline.acquisitionUntilMs(persist),
+    Math.max(
+      0,
+      globalDeadline.acquisitionUntilMs(persist) - protectedPostAcquisitionMs,
+    ),
   );
   const hardBudgetMs = Math.max(0, adapterBudgetMs);
 
@@ -851,6 +1480,7 @@ export async function acquireMarketplaces(
   deadline: SearchDeadline = createSearchDeadline(budget),
   persist = false,
   prepared?: PreparedSearchQuery,
+  protectedPostAcquisitionMs = 0,
 ): Promise<MarketplaceAcquisition[]> {
   const identity = prepared?.identity ?? extractSanitizedIdentity(query);
   const queryCore = prepared?.core ?? identity.queryCore;
@@ -860,7 +1490,8 @@ export async function acquireMarketplaces(
   const acquisitionEndAt =
     deadline.deadlineAt -
     deadline.responseReserveMs -
-    (persist ? deadline.budget.persistReserveMs : 0);
+    (persist ? deadline.budget.persistReserveMs : 0) -
+    protectedPostAcquisitionMs;
   const acquisitionPhase = composeAbortSignal(
     Math.max(0, acquisitionEndAt - Date.now()),
     deadline.signal,
@@ -887,6 +1518,7 @@ export async function acquireMarketplaces(
           ? (budget.mercadoLivreMs ?? budget.marketplaceMs)
           : budget.marketplaceMs,
       globalRemainingMs: deadline.remainingMs(),
+      protectedPostAcquisitionMs,
       startDelayMs: 0,
     });
 
@@ -913,6 +1545,7 @@ export async function acquireMarketplaces(
       acquisitionPhase.signal,
       trace,
       persist,
+      protectedPostAcquisitionMs,
       queryCore,
       identity,
     ).then((acquisition) => {
@@ -1047,7 +1680,32 @@ export async function searchMultistoreV2(
   const limit = options.limit ?? 12;
   const deadline = createSearchDeadline(budget);
   const persistEnabled = options.persist === true;
+  const clusteringReserveMs = resolveClusteringReserveMs(budget);
+  const huntReserveMs = options.hunt === true
+    ? resolveHuntReserveMs(budget, deadline.responseReserveMs)
+    : 0;
+  const relevanceReserveMs = options.hunt === true
+    ? resolveRelevanceReserveMs(
+        budget,
+        deadline,
+        huntReserveMs,
+        clusteringReserveMs,
+        persistEnabled,
+      )
+    : 0;
+  const preHuntReserveMs =
+    deadline.responseReserveMs +
+    (persistEnabled ? budget.persistReserveMs : 0) +
+    huntReserveMs +
+    clusteringReserveMs;
+  const normalizationStopMs = preHuntReserveMs + relevanceReserveMs;
+  const postAcquisitionReserveMs =
+    huntReserveMs +
+    clusteringReserveMs +
+    relevanceReserveMs +
+    PHASE_HANDOFF_RESERVE_MS;
   const identity = extractSanitizedIdentity(rawQuery);
+  const queryMode = classifyQueryMode(identity);
   const search = identity.sanitizedQuery || rawQuery;
   const core = identity.queryCore;
   const intent = queryIntentFromCore(core);
@@ -1064,10 +1722,35 @@ export async function searchMultistoreV2(
   });
   traceV2("query", {
     query: search,
+    queryMode,
     budgetMs: budget.globalMs,
     deadlineAt: deadline.deadlineAt,
     marketplaceBudgetMs: budget.marketplaceMs,
+    huntReserveMs,
+    relevanceReserveMs,
+    responseReserveMs: deadline.responseReserveMs,
   });
+  if (options.hunt === true) {
+    traceV2("hunt-reserve", {
+      globalMs: budget.globalMs,
+      huntReserveMs,
+      relevanceReserveMs,
+      clusteringReserveMs,
+      responseReserveMs: deadline.responseReserveMs,
+      handoffReserveMs: PHASE_HANDOFF_RESERVE_MS,
+      acquisitionStopRemainingMs: normalizationStopMs,
+    });
+  }
+
+  const coverage = createCoverageStats();
+  const attemptStats = createHuntAttemptStats();
+  const identityDiag = createHuntIdentityDiagnostic();
+  const markExpiredAtStage = (stage: string) => {
+    if (coverage.deadline.expiredAtStage === null && deadline.expired()) {
+      coverage.deadline.expiredAtStage = stage;
+      coverage.deadline.expired = true;
+    }
+  };
 
   try {
     const acquisitionStarted = Date.now();
@@ -1080,11 +1763,27 @@ export async function searchMultistoreV2(
       deadline,
       persistEnabled,
       prepared,
+      postAcquisitionReserveMs,
     );
     const acquisitionsSnapshot = snapshotAcquisitions(acquisitions);
     traceV2Phase("ACQUISITION", "end", acquisitionStarted, deadline, {
       marketplaces: acquisitionsSnapshot.length,
     });
+
+    for (const acquisition of acquisitionsSnapshot) {
+      const storeKey = MARKETPLACE_TO_COVERAGE_KEY[acquisition.marketplace];
+      if (!storeKey) {
+        continue;
+      }
+      coverage.stores[storeKey] = {
+        status: acquisition.status,
+        scanned: acquisition.raw,
+        accepted: acquisition.usable,
+        elapsedMs: acquisition.elapsedMs,
+        error: acquisition.error,
+      };
+    }
+    markExpiredAtStage("ACQUISITION");
 
     const marketplacesAttempted = acquisitionsSnapshot.map(
       (item) => item.marketplace,
@@ -1098,13 +1797,34 @@ export async function searchMultistoreV2(
     const rawCandidates = acquisitionsSnapshot.flatMap((item) => item.candidates);
     const queryCore = prepared.core;
     const normalized: ReturnType<typeof normalizeCandidate>[] = [];
+    const processedAcquiredKeys = new Set<string>();
+    let prefilterDropped = 0;
     for (const raw of rawCandidates) {
-      if (!canRunPostprocess(deadline, rawCandidates.length)) {
+      if (!hasPhaseBudget(deadline, normalizationStopMs)) {
+        traceV2("phase-budget-stop", {
+          phase: "NORMALIZATION",
+          remainingMs: deadline.remainingMs(),
+          reservedMs: normalizationStopMs,
+        });
         break;
+      }
+      const key = candidateKey(raw.marketplace, raw.externalId);
+      if (hasStrongProductConceptConflict(queryCore, raw.title)) {
+        processedAcquiredKeys.add(key);
+        prefilterDropped += 1;
+        traceV2("concept-prefilter", {
+          marketplace: raw.marketplace,
+          externalId: raw.externalId,
+          title: raw.title,
+          queryClass: queryCore.productClass,
+          reason: "STRONG_CONCEPT_CONFLICT",
+        });
+        continue;
       }
       const candidate = normalizeCandidate(raw);
       const conflict = detectDistinctiveConflict(identity, candidate.raw.title);
       if (conflict.conflict) {
+        processedAcquiredKeys.add(key);
         traceV2("candidate-identity", {
           marketplace: raw.marketplace,
           externalId: raw.externalId,
@@ -1117,23 +1837,32 @@ export async function searchMultistoreV2(
         continue;
       }
       normalized.push(candidate);
+      processedAcquiredKeys.add(key);
     }
     traceV2Phase("NORMALIZATION", "end", normalizationStarted, deadline, {
       rawCandidates: rawCandidates.length,
       processed: normalized.length,
       skipped: normalized.length < rawCandidates.length,
+      prefilterDropped,
     });
+    coverage.rawCandidates = rawCandidates.length;
+    coverage.uniqueCandidates = new Set(
+      rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
+    ).size;
+    coverage.normalizedCandidates = normalized.length;
+    markExpiredAtStage("NORMALIZATION");
 
     const relevanceStarted = Date.now();
     traceV2Phase("RELEVANCE", "start", relevanceStarted, deadline);
     const scored: ScoredCandidate[] = [];
-    const relevanceStopMs = deadline.responseReserveMs + CLUSTERING_RESERVE_MS;
-    const allowSmallSetScoring = normalized.length > 0 && normalized.length <= 4;
+    const relevanceStopMs = preHuntReserveMs;
     for (const item of normalized) {
-      if (
-        deadline.remainingMs() <= relevanceStopMs &&
-        !allowSmallSetScoring
-      ) {
+      if (!hasPhaseBudget(deadline, relevanceStopMs)) {
+        traceV2("phase-budget-stop", {
+          phase: "RELEVANCE",
+          remainingMs: deadline.remainingMs(),
+          reservedMs: relevanceStopMs,
+        });
         break;
       }
       scored.push(scoreQueryRelevance(intent, item, queryCore));
@@ -1144,18 +1873,24 @@ export async function searchMultistoreV2(
       processed: scored.length,
       skipped: scored.length < normalized.length,
     });
+    coverage.relevantCandidates = relevant.length;
+    markExpiredAtStage("RELEVANCE");
 
     const clusteringStarted = Date.now();
     traceV2Phase("CLUSTERING", "start", clusteringStarted, deadline);
     let clusters: ProductCluster[] = [];
     let processedProducts: CanonicalProduct[] = [];
-    if (canRunPostprocess(deadline)) {
+    const clusteringStopMs =
+      deadline.responseReserveMs +
+      (persistEnabled ? budget.persistReserveMs : 0) +
+      huntReserveMs;
+    if (hasPhaseBudget(deadline, clusteringStopMs)) {
       clusters = clusterCandidates(relevant, {
-        shouldContinue: () => canRunPostprocess(deadline),
+        shouldContinue: () => hasPhaseBudget(deadline, clusteringStopMs),
       });
       const canonicalProducts: CanonicalProduct[] = [];
       for (const cluster of clusters) {
-        if (!canRunPostprocess(deadline)) {
+        if (!hasPhaseBudget(deadline, clusteringStopMs)) {
           break;
         }
         const canonical = canonicalizeCluster(cluster);
@@ -1170,17 +1905,12 @@ export async function searchMultistoreV2(
       products: processedProducts.length,
       skipped: relevant.length > 0 && clusters.length === 0,
     });
+    coverage.preHunt = distributionOfClusters(clusters);
+    markExpiredAtStage("CLUSTERING");
 
     const responseStarted = Date.now();
     traceV2Phase("RESPONSE", "start", responseStarted, deadline);
 
-    if (!deadline.expired() && deadline.remainingMs() > deadline.responseReserveMs) {
-      await applyAffiliateLayer(
-        clusters,
-        deadline,
-        options.affiliateResolver,
-      );
-    }
     const relevantByMarketplace = new Map<string, number>();
     for (const candidate of relevant) {
       const code = candidate.normalized.raw.marketplace;
@@ -1204,14 +1934,12 @@ export async function searchMultistoreV2(
       });
     }
 
-    const knownKeys = new Set(
-      rawCandidates.map((item) => candidateKey(item.marketplace, item.externalId)),
-    );
+    const knownKeys = new Set(processedAcquiredKeys);
     const shouldHunt =
       options.hunt === true &&
       !deadline.expired() &&
       deadline.remainingMs() > deadline.responseReserveMs &&
-      !processedProducts.some((product) => isSearchVisible(product));
+      clusters.length > 0;
     const huntedClusters = shouldHunt
       ? await huntMissingStoreOffers(
           clusters,
@@ -1219,8 +1947,23 @@ export async function searchMultistoreV2(
           limit,
           deadline,
           options.adapters ?? listarDiscoveryAdaptersAtivos(),
+          huntReserveMs,
+          persistEnabled,
+          coverage.hunt,
+          attemptStats,
+          identityDiag,
         )
       : clusters;
+    markExpiredAtStage("HUNT");
+    if (!deadline.expired() && deadline.remainingMs() > deadline.responseReserveMs) {
+      await applyAffiliateLayer(
+        huntedClusters,
+        deadline,
+        options.affiliateResolver,
+      );
+    }
+    markExpiredAtStage("AFFILIATE");
+    coverage.postHunt = distributionOfClusters(huntedClusters);
     const coverageStatus = coverageStatusOf(acquisitionsSnapshot);
     const responseCanonicalProducts: CanonicalProduct[] = [];
     if (canRunPostprocess(deadline)) {
@@ -1237,22 +1980,26 @@ export async function searchMultistoreV2(
     const rankedResponseProducts = canRunPostprocess(deadline)
       ? rankCanonicalProducts(responseCanonicalProducts)
       : processedProducts;
-    const hasMultiStoreExact = rankedResponseProducts.some(
-      (product) => product.marketplaces.length >= 2 && product.rankTier < 3,
-    );
     const products = rankedResponseProducts.map((product) => {
       const withCoverage = { ...product, coverageStatus };
       return {
         ...withCoverage,
         searchVisible:
-          isSearchVisible(withCoverage) ||
-          (!hasMultiStoreExact && isPublicSearchSafeFallback(withCoverage)),
+          withCoverage.marketplaces.length >= 2 && isSearchVisible(withCoverage),
         publishable: isClusterPublishable(withCoverage),
       };
     });
     const selectedProducts = products
       .filter((product) => product.searchVisible)
       .slice(0, limit);
+    coverage.public.productsBuilt = products.length;
+    coverage.public.eligible2PlusStores = products.filter(
+      (product) => product.marketplaces.length >= 2,
+    ).length;
+    coverage.public.returned = selectedProducts.length;
+    coverage.public.rejectedSingleStore = products.filter(
+      (product) => product.marketplaces.length === 1,
+    ).length;
     const selectedClusters = selectedProducts
       .map((product) =>
         huntedClusters.find((cluster) => cluster.clusterId === product.clusterId),
@@ -1358,6 +2105,13 @@ export async function searchMultistoreV2(
       singleStoreClusters,
     };
   } finally {
+    markExpiredAtStage("RESPONSE");
+    coverage.deadline.expired = deadline.expired();
+    coverage.deadline.elapsedMs = elapsedV2Ms(deadline);
+    coverage.deadline.remainingBudgetMs = deadline.remainingMs();
+    emitCoverageSummary(search, coverage);
+    emitHuntAttemptSummary(attemptStats);
+    emitHuntIdentityDiagnostic(identityDiag);
     deadline.abort();
   }
 }

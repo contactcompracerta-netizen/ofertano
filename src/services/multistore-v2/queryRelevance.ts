@@ -35,6 +35,7 @@ import {
 } from "./productConcepts";
 import { interpretMarketplaceCategory } from "./marketplaceCategory";
 import { assignRankTier } from "./rank";
+import { brandsCompatible } from "./pairMatcher";
 
 function tokenWeight(token: string, intent: QueryIntent): number {
   if (isWeakModifier(token)) {
@@ -266,11 +267,78 @@ function emptyEvidence(
   };
 }
 
+/*
+ * Dimensoes quantitativas semanticas. Valores so podem conflitar quando
+ * pertencem a MESMA dimensao (potencia, volume, massa, comprimento, tensao,
+ * armazenamento). 1400w (potencia) vs 12l (volume) nao sao concorrentes.
+ */
+const QUANTITATIVE_DIMENSION: Record<string, string> = {
+  w: "power",
+  kw: "power",
+  l: "volume",
+  ml: "volume",
+  kg: "mass",
+  g: "mass",
+  mm: "length",
+  cm: "length",
+  m: "length",
+  pol: "length",
+  v: "voltage",
+  gb: "storage",
+  tb: "storage",
+  mb: "storage",
+  mah: "charge",
+};
+
+function parseQuantitative(
+  value: string,
+): { amount: string; dimension: string } | null {
+  const match = /^(\d+(?:\.\d+)?)[\s]*([a-z]+)$/.exec(value.trim().toLowerCase());
+  if (!match) {
+    return null;
+  }
+
+  return {
+    amount: match[1]!,
+    dimension: QUANTITATIVE_DIMENSION[match[2]!] ?? match[2]!,
+  };
+}
+
+function sameDimensionQuantityConflict(
+  seedValue: string | null | undefined,
+  candidateValue: string | null | undefined,
+): boolean {
+  if (!seedValue || !candidateValue) {
+    return false;
+  }
+
+  const seed = parseQuantitative(seedValue);
+  const candidate = parseQuantitative(candidateValue);
+
+  // Sem unidade reconhecida dos dois lados nao ha como provar conflito.
+  if (!seed || !candidate) {
+    return false;
+  }
+
+  // Dimensoes distintas (potencia vs volume vs massa) nao sao conflito.
+  if (seed.dimension !== candidate.dimension) {
+    return false;
+  }
+
+  return seed.amount !== candidate.amount;
+}
+
+export type HuntPrefilterOptions = {
+  huntPrefilter?: boolean;
+};
+
 export function scoreQueryRelevance(
   intent: QueryIntent,
   candidate: NormalizedCandidate,
   queryCore?: QueryCore,
+  options?: HuntPrefilterOptions,
 ): ScoredCandidate {
+  const prefilter = options?.huntPrefilter === true;
   const fingerprint = buildFingerprint(candidate);
   const candidateTokens = new Set(candidate.tokens);
   const candidateText = candidate.rawText;
@@ -391,6 +459,7 @@ export function scoreQueryRelevance(
   }
 
   if (
+    !prefilter &&
     !candidateAccessory &&
     core.productClass !== "UNKNOWN" &&
     coreCoverage !== "MATCH"
@@ -398,10 +467,17 @@ export function scoreQueryRelevance(
     hardConflicts.push(`productCore:${core.productClass}!=ausente`);
   }
 
-  if (candidateAccessory && queryWantsMain && !hostOk) {
-    hardConflicts.push(
-      `host:${core.soldText || intent.rawQuery}!=ausente`,
-    );
+  if (!prefilter && candidateAccessory && queryWantsMain && !hostOk) {
+    /*
+     * Para acessorios com host, o conflito de host nao deve ser fatal se
+     * o host tiver forte compatibilidade com a query (brand + productClass).
+     * O teste de hostOk pode ser muito estrito.
+     */
+    if (!fingerprint.brand.value || !intent.brand || !brandsCompatible(fingerprint.brand.value, intent.brand)) {
+      hardConflicts.push(
+        `host:${core.soldText || intent.rawQuery}!=ausente`,
+      );
+    }
   }
 
   if (roleState === "CONFLICT") {
@@ -458,7 +534,7 @@ export function scoreQueryRelevance(
     hardConflicts.push(`model:${intent.modelTokens.join(",")}!=${fingerprint.model.value}`);
   }
 
-  if (requestedModelCodes.length > 0 && missingRequestedModels.length > 0) {
+  if (!prefilter && requestedModelCodes.length > 0 && missingRequestedModels.length > 0) {
     hardConflicts.push(`model:${missingRequestedModels.join(",")}!=ausente`);
   }
 
@@ -475,7 +551,7 @@ export function scoreQueryRelevance(
   const missingIdentityNumbers = intent.identityNumbers.filter(
     (number) => !candidateHasToken(number, candidateTokens, candidateText),
   );
-  if (intent.identityNumbers.length > 0 && missingIdentityNumbers.length > 0) {
+  if (!prefilter && intent.identityNumbers.length > 0 && missingIdentityNumbers.length > 0) {
     const uncovered = missingIdentityNumbers.filter(
       (number) =>
         !intent.identityAnchors.some((anchor) => anchor.value.includes(number)),
@@ -485,18 +561,25 @@ export function scoreQueryRelevance(
     }
   }
 
-  if (
-    intent.importantAttributes.capacity &&
-    fingerprint.capacity.value &&
-    intent.importantAttributes.capacity !== fingerprint.capacity.value
-  ) {
+  const seedCapacity = intent.importantAttributes.capacity;
+  const candidateCapacity = fingerprint.capacity.value;
+  /*
+   * Conflito de capacidade/potencia vale em todos os modos apenas dentro da
+   * mesma dimensao semantica: 1400w (potencia) vs 12l (volume) nao sao
+   * concorrentes nem no pipeline principal nem no hunt.
+   */
+  const capacityConflicts = sameDimensionQuantityConflict(seedCapacity, candidateCapacity);
+  if (seedCapacity && candidateCapacity && capacityConflicts) {
+    const seedDim = parseQuantitative(seedCapacity)?.dimension;
     attributeConflicts.push(
-      `capacity:${intent.importantAttributes.capacity}!=${fingerprint.capacity.value}`,
+      `capacity:${seedCapacity}!=${candidateCapacity}`,
     );
     hardConflicts.push(
-      `capacity:${intent.importantAttributes.capacity}!=${fingerprint.capacity.value}`,
+      `capacity:${seedCapacity}!=${candidateCapacity}${
+        seedDim ? ` dimension=${seedDim}` : ""
+      }`,
     );
-  } else if (intent.importantAttributes.capacity && fingerprint.capacity.value) {
+  } else if (seedCapacity && candidateCapacity) {
     attributeMatches.push("capacity");
   } else if (intent.importantAttributes.capacity) {
     attributeMissing.push("capacity");
@@ -598,6 +681,7 @@ export function scoreQueryRelevance(
     const missingBrand = brandTokens.filter(
       (token) => !candidateHasToken(token, candidateTokens, candidateText),
     );
+    if (!prefilter) {
     if (
       brandTokens.length > 0 &&
       (missingBrand.length === brandTokens.length ||
@@ -605,6 +689,7 @@ export function scoreQueryRelevance(
     ) {
       hardConflicts.push(`brand:${intent.brand}!=ausente`);
     }
+  }
   }
 
   let strongIdentity: RelevanceEvidenceState = "UNKNOWN";
@@ -622,9 +707,11 @@ export function scoreQueryRelevance(
       );
     if (missingAnchors.length > 0) {
       strongIdentity = "CONFLICT";
-      hardConflicts.push(
-        `identityAnchor:${missingAnchors.map((anchor) => anchor.value).join(",")}!=ausente`,
-      );
+      if (!prefilter) {
+        hardConflicts.push(
+          `identityAnchor:${missingAnchors.map((anchor) => anchor.value).join(",")}!=ausente`,
+        );
+      }
     } else {
       strongIdentity = "MATCH";
     }
@@ -649,7 +736,7 @@ export function scoreQueryRelevance(
     const hostHits = requiredHost.filter((token) =>
       compatibilityMatches.includes(token),
     );
-    if (requiredHost.length > 0 && hostHits.length === 0) {
+    if (!prefilter && requiredHost.length > 0 && hostHits.length === 0) {
       hardConflicts.push(
         `compatibility:${requiredHost.join(",")}!=ausente`,
       );
@@ -665,6 +752,7 @@ export function scoreQueryRelevance(
   const queryClassUnknown =
     core.productClass === "UNKNOWN" || core.productClassConfidence === "NONE";
   if (
+    !prefilter &&
     queryClassUnknown &&
     binding.length > 0 &&
     (intent.modelTokens.length > 0 || intent.hasStrongIdentity) &&
@@ -717,6 +805,7 @@ export function scoreQueryRelevance(
   );
   const skipContextHardConflict = strongBrandMatch && matchedDistinctive.length >= 2;
   if (
+    !prefilter &&
     missingContext.length > 0 &&
     !modelPresentEnough &&
     !skipContextHardConflict &&
@@ -752,6 +841,7 @@ export function scoreQueryRelevance(
     status = "REJECTED";
     reason = `Conflito comprovado: ${hardConflicts.join(", ")}.`;
   } else if (
+    !prefilter &&
     !modelPresentEnough &&
     intent.distinctiveTokens.length > 0 &&
     missingDistinctive.length === intent.distinctiveTokens.length &&
@@ -760,6 +850,7 @@ export function scoreQueryRelevance(
     status = "REJECTED";
     reason = `Nenhum termo distintivo da consulta aparece no candidato: ${missingDistinctive.join(", ")}.`;
   } else if (
+    !prefilter &&
     queryCoverage < 0.18 &&
     twoSided < 0.12 &&
     !modelPresentEnough &&

@@ -1,5 +1,5 @@
 import type { PairVerdict, ProductFingerprint, ProductRole } from "./types";
-import { classesAreIncompatible, isQuantitativeCompactToken, tokenize } from "./normalizeCandidate";
+import { capacityValuesConflict, classesAreIncompatible, isQuantitativeCompactToken, tokenize } from "./normalizeCandidate";
 
 function reliable<T>(
   field: { value: T | null; confidence: string },
@@ -17,7 +17,7 @@ function sameText(first: string | null, second: string | null): boolean {
   return left.length > 0 && left === right;
 }
 
-function brandsCompatible(first: string | null, second: string | null): boolean {
+export function brandsCompatible(first: string | null, second: string | null): boolean {
   if (!first || !second) {
     return true;
   }
@@ -43,6 +43,48 @@ function modelsCompatible(first: string | null, second: string | null): boolean 
   const left = first.replace(/\s+/g, "");
   const right = second.replace(/\s+/g, "");
   return left.includes(right) || right.includes(left);
+}
+
+/*
+ * Modelos fracos/genericos (letras isoladas, numeros soltos, qualificadores
+ * comuns) nunca sustentam equivalencia sozinhos: "gt", "12", "plus", "pro"
+ * aparecem em produtos completamente distintos. Numeros concretos so fazem
+ * parte de modelo quando colados a uma familia (gtw12, a55, l99).
+ */
+function isWeakModelToken(value: string): boolean {
+  const normalized = value.replace(/\s+/g, "");
+  if (/^[a-z]{1,2}$/i.test(normalized)) {
+    return true;
+  }
+
+  if (/^\d{1,2}$/.test(normalized)) {
+    return true;
+  }
+
+  return /^(easy|basic|basico|classic|classica|classico|standard|plus|pro|master|premium|home|nova|novo|new|especial|flex|smart)$/i.test(normalized);
+}
+
+/*
+ * Atributos estruturais (capacidade/potencia) precisam ser SIMETRICOS entre
+ * os dois lados: presentes nos dois e iguais, ou ausentes nos dois. Um lado
+ * com capacidade/potencia e o outro sem nunca pode ser promovido a SAME por
+ * marca+modelo apenas, pois a assimetria indica catalogos diferentes.
+ */
+function structuredCapacityPowerAligned(
+  first: ProductFingerprint,
+  second: ProductFingerprint,
+): boolean {
+  const powerOk =
+    (!first.importantAttributes.power && !second.importantAttributes.power) ||
+    (Boolean(first.importantAttributes.power) &&
+      Boolean(second.importantAttributes.power) &&
+      first.importantAttributes.power === second.importantAttributes.power);
+  const capacityOk =
+    (!first.capacity.value && !second.capacity.value) ||
+    (Boolean(first.capacity.value) &&
+      Boolean(second.capacity.value) &&
+      first.capacity.value === second.capacity.value);
+  return powerOk && capacityOk;
 }
 
 function tokenOverlap(first: string[], second: string[]): number {
@@ -193,12 +235,45 @@ export function compareFingerprints(
     );
   }
 
+  /*
+   * PROVA (Missao 17): fingerprints fieis aos titulos continham
+   * capacity=1400w (potencia arquivada como capacidade) de um lado e
+   * capacity=12l (volume) do outro para o MESMO produto WAP GTW 12, e o
+   * matcher emitia `capacity:1400w!=12l` => DIFFERENT. Potencia e volume
+   * sao dimensoes distintas e nunca conflitam entre si; conflito so vale
+   * dentro da mesma dimensao com montantes divergentes (ex.: 1400w vs
+   * 1600w, 12l vs 20l). Nenhuma regra existente foi afrouxada: valores
+   * nao parseaveis mantem a comparacao literal anterior.
+   */
   if (
-    first.capacity.value &&
-    second.capacity.value &&
-    first.capacity.value !== second.capacity.value
+    capacityValuesConflict(first.capacity.value, second.capacity.value)
   ) {
     hardConflicts.push(`capacity:${first.capacity.value}!=${second.capacity.value}`);
+  }
+
+  if (
+    first.quantity.value &&
+    second.quantity.value &&
+    first.quantity.value !== second.quantity.value
+  ) {
+    hardConflicts.push(`quantity:${first.quantity.value}!=${second.quantity.value}`);
+  }
+
+  /*
+   * Prova (Missao 17B): potencia e dimensao propria e conflita quando os
+   * valores divergem na MESMA dimensao (1400w vs 1600w => DIFFERENT, variante
+   * de potencia). 1400w vs 12l nunca conflitam (dimensoes distintas) e
+   * valores ausentes nao geram conflito.
+   */
+  if (
+    capacityValuesConflict(
+      first.importantAttributes.power ?? null,
+      second.importantAttributes.power ?? null,
+    )
+  ) {
+    hardConflicts.push(
+      `power:${first.importantAttributes.power}!=${second.importantAttributes.power}`,
+    );
   }
 
   if (
@@ -229,9 +304,27 @@ export function compareFingerprints(
       Boolean(second.model.value) &&
       modelsCompatible(first.model.value, second.model.value)) ||
     sharedAnchorsEarly.length > 0;
+  const firstModel = first.model.value;
+  const secondModel = second.model.value;
+  const strongStructuredIdentity =
+    first.role.value === "MAIN" &&
+    second.role.value === "MAIN" &&
+    firstModel !== null &&
+    secondModel !== null &&
+    !isQuantitativeCompactToken(firstModel) &&
+    !isQuantitativeCompactToken(secondModel) &&
+    !isWeakModelToken(firstModel) &&
+    !isWeakModelToken(secondModel) &&
+    modelsCompatible(firstModel, secondModel) &&
+    brandsCompatible(first.brand.value, second.brand.value) &&
+    Boolean(first.capacity.value) &&
+    first.capacity.value === second.capacity.value &&
+    Boolean(first.importantAttributes.power) &&
+    first.importantAttributes.power === second.importantAttributes.power;
 
   if (
     sharedModelLike &&
+    !strongStructuredIdentity &&
     !soldCompatible &&
     soldOverlap < 0.3 &&
     (Boolean(first.productClass.value) ||
@@ -294,8 +387,70 @@ export function compareFingerprints(
     first.lexicalSignature,
     second.lexicalSignature,
   );
+  const powerMatches =
+    first.importantAttributes.power &&
+    second.importantAttributes.power &&
+    first.importantAttributes.power === second.importantAttributes.power;
+  const attributeMatches = [
+    first.capacity.value && first.capacity.value === second.capacity.value ? "capacity" : null,
+    first.quantity.value && first.quantity.value === second.quantity.value ? "quantity" : null,
+    first.material.value && first.material.value === second.material.value ? "material" : null,
+  ].filter((item): item is string => Boolean(item));
 
-  if (sameBrand && sameModel && soldCompatible) {
+  const strongModel =
+    sameModel &&
+    !isWeakModelToken(first.model.value!) &&
+    !isWeakModelToken(second.model.value!);
+  const structuredAligned = structuredCapacityPowerAligned(first, second);
+  const bothMain =
+    first.role.value === "MAIN" && second.role.value === "MAIN";
+
+  /*
+   * Identidade estrutural forte vem ANTES de marca+modelo. MAIN x MAIN com
+   * modelo discriminativo, capacidade e potencia iguais e marca compativel
+   * e SAME mesmo quando os titulos usam vocabularios diferentes. A regra nao
+   * depende de overlap lexical nem exige productClass dos dois lados; conflitos
+   * estruturais continuam retornando DIFFERENT antes deste ponto.
+   */
+  if (
+    sameModel &&
+    strongModel &&
+    brandAligned &&
+    attributeMatches.includes("capacity") &&
+    powerMatches &&
+    bothMain &&
+    (sameClass || !first.productClass.value || !second.productClass.value)
+  ) {
+    positiveEvidence.push("model", "capacity", "power");
+    if (sameClass) {
+      positiveEvidence.push("productClass");
+    }
+    if (sameBrand) {
+      positiveEvidence.push("brand");
+    }
+    return {
+      relation: "SAME",
+      hardConflicts,
+      positiveEvidence,
+      confidence: 0.85,
+    };
+  }
+
+  /*
+   * Marca+modelo so promove SAME quando o modelo e tao forte quanto gtw12/l99
+   * (nunca "gt", "12", "plus") e os atributos estruturais estao alinhados.
+   * Com capacidade/potencia presentes de um lado e ausentes do outro, a
+   * assimetria impede a promocao: o par cai para UNKNOWN ou para as regras
+   * estruturais, nunca para SAME por marca+modelo puro.
+   */
+  if (
+    sameBrand &&
+    sameModel &&
+    strongModel &&
+    structuredAligned &&
+    bothMain &&
+    soldCompatible
+  ) {
     positiveEvidence.push("brand", "model");
     return {
       relation: "SAME",
@@ -305,7 +460,7 @@ export function compareFingerprints(
     };
   }
 
-  if (sameModel && sameClass && soldCompatible) {
+  if (sameModel && strongModel && structuredAligned && bothMain && sameClass && soldCompatible) {
     positiveEvidence.push("model", "productClass");
     return {
       relation: "SAME",
@@ -317,6 +472,9 @@ export function compareFingerprints(
 
   if (
     sameModel &&
+    strongModel &&
+    structuredAligned &&
+    bothMain &&
     soldCompatible &&
     !first.productClass.value &&
     !second.productClass.value
@@ -393,11 +551,6 @@ export function compareFingerprints(
     };
   }
 
-  const attributeMatches = [
-    first.capacity.value && first.capacity.value === second.capacity.value ? "capacity" : null,
-    first.quantity.value && first.quantity.value === second.quantity.value ? "quantity" : null,
-    first.material.value && first.material.value === second.material.value ? "material" : null,
-  ].filter((item): item is string => Boolean(item));
   const identityAttributeMatches = attributeMatches.filter((item) => item !== "capacity");
 
   if (
