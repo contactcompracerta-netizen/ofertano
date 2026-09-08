@@ -14,14 +14,10 @@ CREATE TYPE "SocialPostType" AS ENUM (
 -- CreateEnum
 CREATE TYPE "SocialPostStatus" AS ENUM ('READY', 'PUBLISHED', 'ARCHIVED');
 
--- CreateEnum
-CREATE TYPE "SocialPostSlot" AS ENUM ('MORNING', 'AFTERNOON', 'EVENING');
-
 -- CreateTable
 CREATE TABLE "SocialPost" (
     "id" TEXT NOT NULL,
     "dayKey" TEXT NOT NULL,
-    "slot" "SocialPostSlot" NOT NULL,
     "type" "SocialPostType" NOT NULL,
     "status" "SocialPostStatus" NOT NULL DEFAULT 'READY',
     "productId" TEXT,
@@ -36,7 +32,7 @@ CREATE TABLE "SocialPost" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SocialPost_dayKey_slot_key" ON "SocialPost"("dayKey", "slot");
+CREATE UNIQUE INDEX "SocialPost_dayKey_key" ON "SocialPost"("dayKey");
 CREATE INDEX "SocialPost_status_createdAt_idx" ON "SocialPost"("status", "createdAt");
 CREATE INDEX "SocialPost_productId_createdAt_idx" ON "SocialPost"("productId", "createdAt");
 CREATE INDEX "SocialPost_fingerprint_idx" ON "SocialPost"("fingerprint");
