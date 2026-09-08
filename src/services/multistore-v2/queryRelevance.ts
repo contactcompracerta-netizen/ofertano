@@ -35,6 +35,7 @@ import {
 } from "./productConcepts";
 import { interpretMarketplaceCategory } from "./marketplaceCategory";
 import { assignRankTier } from "./rank";
+import { brandsCompatible } from "./pairMatcher";
 
 function tokenWeight(token: string, intent: QueryIntent): number {
   if (isWeakModifier(token)) {
@@ -467,9 +468,16 @@ export function scoreQueryRelevance(
   }
 
   if (!prefilter && candidateAccessory && queryWantsMain && !hostOk) {
-    hardConflicts.push(
-      `host:${core.soldText || intent.rawQuery}!=ausente`,
-    );
+    /*
+     * Para acessorios com host, o conflito de host nao deve ser fatal se
+     * o host tiver forte compatibilidade com a query (brand + productClass).
+     * O teste de hostOk pode ser muito estrito.
+     */
+    if (!fingerprint.brand.value || !intent.brand || !brandsCompatible(fingerprint.brand.value, intent.brand)) {
+      hardConflicts.push(
+        `host:${core.soldText || intent.rawQuery}!=ausente`,
+      );
+    }
   }
 
   if (roleState === "CONFLICT") {
@@ -555,9 +563,12 @@ export function scoreQueryRelevance(
 
   const seedCapacity = intent.importantAttributes.capacity;
   const candidateCapacity = fingerprint.capacity.value;
-  const capacityConflicts = prefilter
-    ? sameDimensionQuantityConflict(seedCapacity, candidateCapacity)
-    : seedCapacity !== candidateCapacity;
+  /*
+   * Conflito de capacidade/potencia vale em todos os modos apenas dentro da
+   * mesma dimensao semantica: 1400w (potencia) vs 12l (volume) nao sao
+   * concorrentes nem no pipeline principal nem no hunt.
+   */
+  const capacityConflicts = sameDimensionQuantityConflict(seedCapacity, candidateCapacity);
   if (seedCapacity && candidateCapacity && capacityConflicts) {
     const seedDim = parseQuantitative(seedCapacity)?.dimension;
     attributeConflicts.push(

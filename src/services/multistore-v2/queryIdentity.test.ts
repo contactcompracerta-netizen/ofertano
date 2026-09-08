@@ -80,6 +80,20 @@ describe("PHASE 2: Query Identity Extraction", () => {
       expect.arrayContaining([expect.stringMatching(/gtw/i)]),
     );
 
+    // Model name/tokens preserve gtw12
+    expect(identity.strongIdentity.modelName).toMatch(/gtw12/i);
+    expect(identity.queryCore.modelTokens).toEqual(
+      expect.arrayContaining([expect.stringMatching(/gtw12/i)]),
+    );
+
+    // Capacity and power preserved
+    expect(identity.strongIdentity.capacity).toMatch(/12l/i);
+    expect(identity.strongIdentity.power).toMatch(/1400w/i);
+
+    // No MODEL "sopro220" anywhere
+    expect(identity.identityAnchors.some((anchor) => anchor.value === "sopro220")).toBe(false);
+    expect(identity.queryCore.modelTokens.includes("sopro220")).toBe(false);
+
     // Candidate with 110V should hard-conflict
     const conflict110v = detectIdentityConflict(
       identity,

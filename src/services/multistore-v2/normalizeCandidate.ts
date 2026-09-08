@@ -260,7 +260,6 @@ const QUANTITY_UNITS = new Set([
   "unid",
   "pc",
   "pcs",
-  "litros",
   "marcha",
   "marchas",
   "lugar",
@@ -289,8 +288,6 @@ const CAPACITY_UNITS = new Set([
   "ml",
   "kg",
   "g",
-  "w",
-  "v",
   "mm",
   "cm",
   "pol",
@@ -325,8 +322,6 @@ const CAPACITY_UNIT_CANON: Record<string, string> = {
   g: "g",
   grama: "g",
   gramas: "g",
-  w: "w",
-  v: "v",
   mm: "mm",
   cm: "cm",
   pol: "pol",
@@ -335,6 +330,75 @@ const CAPACITY_UNIT_CANON: Record<string, string> = {
   mb: "mb",
   mah: "mah",
 };
+
+/*
+ * Dimensoes quantitativas semanticas. Valores de capacidade/potencia so podem
+ * conflitar quando pertencem a MESMA dimensao. 1400w (potencia) vs 12l
+ * (volume) nunca sao variantes concorrentes. Espelha a regra ja aplicada
+ * na relevancia (QUANTITATIVE_DIMENSION em queryRelevance.ts).
+ */
+const QUANTITATIVE_DIMENSION: Record<string, string> = {
+  w: "power",
+  kw: "power",
+  l: "volume",
+  ml: "volume",
+  kg: "mass",
+  g: "mass",
+  mm: "length",
+  cm: "length",
+  m: "length",
+  pol: "length",
+  v: "voltage",
+  gb: "storage",
+  tb: "storage",
+  mb: "storage",
+  mah: "charge",
+};
+
+function parseQuantitativeValue(
+  value: string,
+): { amount: string; dimension: string } | null {
+  const match = /^(\d+(?:\.\d+)?)[\s]*([a-z]+)$/.exec(value.trim().toLowerCase());
+  if (!match) {
+    return null;
+  }
+
+  return {
+    amount: match[1]!,
+    dimension: QUANTITATIVE_DIMENSION[match[2]!] ?? match[2]!,
+  };
+}
+
+/*
+ * Conflito estrutural de capacidade/potencia: so existe quando ambos os
+ * valores sao parseaveis, pertencem a mesma dimensao semantica e os
+ * montantes divergem. Sem unidade reconhecida dos dois lados, mantem o
+ * comportamento anterior (comparacao literal) para nao afrouxar nada.
+ */
+export function capacityValuesConflict(
+  first: string | null | undefined,
+  second: string | null | undefined,
+): boolean {
+  if (!first || !second) {
+    return false;
+  }
+
+  if (first === second) {
+    return false;
+  }
+
+  const left = parseQuantitativeValue(first);
+  const right = parseQuantitativeValue(second);
+  if (!left || !right) {
+    return first !== second;
+  }
+
+  if (left.dimension !== right.dimension) {
+    return false;
+  }
+
+  return left.amount !== right.amount;
+}
 
 const HOST_RELATION_PATTERN =
   /\b(?:compative(?:l|is)\s+com|compatible(?:s)?\s+with|fits|reposicao\s+para|substituicao\s+para|de\s+substituicao\s+para)\b/;
@@ -898,7 +962,7 @@ export function extractCapacity(tokens: string[]): string | null {
     const token = tokens[index]!;
     const compact = token.replace(/\./g, "");
     const unitMatch = token.match(
-      /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm|gb|tb|mb|mah)$/,
+      /^(\d+(?:\.\d+)?)(l|ml|kg|g|mm|cm|gb|tb|mb|mah)$/,
     );
     if (unitMatch) {
       if (isVoltageReading(unitMatch[1]!, unitMatch[2]!)) {
@@ -928,10 +992,73 @@ export function extractCapacity(tokens: string[]): string | null {
 
       found.push(`${compact}${nextCanon}`);
     }
+
+    /*
+     * Capacidade implícita de volume: inteiro isolado imediatamente antes
+     * de potencia (ex.: "GTW Inox 12 1400w") expressa a capacidade do
+     * produto. So vale quando o inteiro segue um descritor de material/
+     * atributo ("Inox 12 1400w"); numeros de modelo colados a letra
+     * ("L-99 550W", "GSB 13 650W") e inteiros orfaos nunca sao lidos como
+     * capacidade, preservando a extracao de modelo/quantidade.
+     */
+    /*
+     * Potencia pode aparecer compactada ("1400w") ou separada
+     * ("1400 w"). O inteiro imediatamente anterior a um numero de
+     * potencia, seguindo material/atributo, e a capacidade implicita
+     * de volume ("Inox 12 1400 w" => 12l).
+     */
+    const powerCompact = next ? next.match(/^(\d+(?:\.\d+)?)(w|kw)$/) : null;
+    const nextIsPowerNumber =
+      Boolean(next && /^\d+(?:\.\d+)?$/.test(next)) &&
+      (tokens[index + 2] === "w" || tokens[index + 2] === "kw");
+    if (/^\d+$/.test(token) && (powerCompact || nextIsPowerNumber)) {
+      const amount = Number.parseInt(token, 10);
+      const previous = tokens[index - 1];
+      if (
+        amount >= 5 &&
+        amount <= 999 &&
+        previous !== undefined &&
+        previous.length > 1 &&
+        !/^[a-z]$/i.test(previous) &&
+        (MATERIAL_WORDS.has(previous) || ATTRIBUTE_WORDS.has(previous))
+      ) {
+        found.push(`${token}l`);
+        continue;
+      }
+    }
   }
 
   const storage = found.find((item) => /(gb|tb|mb)$/.test(item));
   return storage ?? found[0] ?? null;
+}
+
+export function extractPower(tokens: string[]): string | null {
+  const found: string[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    const compact = token.replace(/\./g, "");
+    const unitMatch = token.match(
+      /^(\d+(?:\.\d+)?)(w|kw)$/,
+    );
+    if (unitMatch) {
+      const unit = unitMatch[2] === "kw" ? "kw" : "w";
+      found.push(`${unitMatch[1]}${unit}`);
+      continue;
+    }
+
+    const next = tokens[index + 1];
+    if (/^\d+(?:\.\d+)?$/.test(token) && (next === "w" || next === "kw")) {
+      found.push(`${token}${next}`);
+      continue;
+    }
+
+    if (/^\d+$/.test(compact) && (next === "w" || next === "kw")) {
+      found.push(`${compact}${next}`);
+    }
+  }
+
+  return found[0] ?? null;
 }
 
 export function extractQuantity(tokens: string[]): string | null {
@@ -1086,6 +1213,45 @@ export function isCapacityOrQuantityUnit(token: string | undefined): boolean {
   return CAPACITY_UNITS.has(token) || QUANTITY_UNITS.has(token) || Boolean(CAPACITY_UNIT_CANON[token]);
 }
 
+/*
+ * Unidades quantitativas semanticas (volume, potencia, tensao, massa,
+ * comprimento, armazenamento, carga). Um numero imediatamente seguido de
+ * uma dessas unidades nunca fabrica modelo: "sopro 220 v" e tensao,
+ * "12 1400 w" e capacidade+potencia, nao "sopro220" nem "121400".
+ * Mantem "v"/"w"/"kw" fora de CAPACITY_UNITS para que extractCapacity
+ * nao os confunda com volume.
+ */
+const QUANTITATIVE_UNIT_TOKENS = new Set([
+  "l",
+  "ml",
+  "kg",
+  "g",
+  "w",
+  "kw",
+  "v",
+  "mm",
+  "cm",
+  "pol",
+  "gb",
+  "tb",
+  "mb",
+  "mah",
+  "litro",
+  "litros",
+  "grama",
+  "gramas",
+  "kilo",
+  "kilos",
+  "quilograma",
+  "quilogramas",
+  "mililitro",
+  "mililitros",
+]);
+
+export function isQuantitativeUnitToken(token: string | undefined): boolean {
+  return Boolean(token && QUANTITATIVE_UNIT_TOKENS.has(token));
+}
+
 export function isSizeHint(token: string | undefined): boolean {
   return Boolean(token && SIZE_HINTS.has(token));
 }
@@ -1194,7 +1360,7 @@ export function isQuantitativeCompactToken(token: string | null | undefined): bo
   }
 
   const compact = token.replace(/[\s.-]+/g, "");
-  return /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|v|mm|cm|pol|gb|tb|mb|mah|litros?|gramas?)$/.test(
+  return /^(\d+(?:\.\d+)?)(l|ml|kg|g|w|kw|v|mm|cm|pol|gb|tb|mb|mah|litros?|gramas?)$/.test(
     compact,
   );
 }
@@ -1211,7 +1377,7 @@ export function extractModelTokens(tokens: string[]): string[] {
       continue;
     }
 
-    if (/^\d+(?:\.\d+)?(l|ml|kg|g|w|v|mm|cm|gb|tb|mb|mah)$/.test(token)) {
+    if (/^\d+(?:\.\d+)?(l|ml|kg|g|w|kw|v|mm|cm|gb|tb|mb|mah)$/.test(token)) {
       continue;
     }
 
@@ -1227,12 +1393,40 @@ export function extractModelTokens(tokens: string[]): string[] {
 
   for (let index = 0; index < tokens.length - 1; index += 1) {
     const current = tokens[index]!;
-    const next = tokens[index + 1]!;
-    if (/^(19|20)\d{2}$/.test(next)) {
+    if (!/^[a-z]{1,}$/.test(current) || isDimensionHint(current)) {
       continue;
     }
 
-    if (QUANTITY_UNITS.has(tokens[index + 2] ?? "")) {
+    /*
+     * Linha + numero do modelo aceitam adjacencia direta ("Gtw 12") ou um
+     * unico qualificador de especificacao/material entre eles
+     * ("GTW Inox 12"). O token intermediario precisa ser palavra de
+     * atributo (material/cor/spec); palavras distintivas nunca sao
+     * puladas, entao "WAP GTW Inox 12" gera gtw12 e jamais wap12.
+     */
+    const immediate = tokens[index + 1];
+    let digits: string | undefined;
+    let afterDigits = "";
+    if (immediate && /^\d{2,}$/.test(immediate)) {
+      digits = immediate;
+      afterDigits = tokens[index + 2] ?? "";
+    } else if (
+      immediate &&
+      isAttributeWord(immediate) &&
+      tokens[index + 2] &&
+      /^\d{2,}$/.test(tokens[index + 2]!)
+    ) {
+      digits = tokens[index + 2]!;
+      afterDigits = tokens[index + 3] ?? "";
+    } else {
+      continue;
+    }
+
+    if (/^(19|20)\d{2}$/.test(digits)) {
+      continue;
+    }
+
+    if (QUANTITY_UNITS.has(afterDigits)) {
       continue;
     }
 
@@ -1240,13 +1434,13 @@ export function extractModelTokens(tokens: string[]): string[] {
       continue;
     }
 
-    if (QUANTITY_UNITS.has(next)) {
+    if (QUANTITY_UNITS.has(digits)) {
       continue;
     }
 
-    if (/^[a-z]{1,}$/.test(current) && /^\d{2,}$/.test(next) && !QUANTITY_UNITS.has(tokens[index + 2] ?? "") && !CAPACITY_UNITS.has(tokens[index + 2] ?? "") && !isDimensionHint(current)) {
+    if (!QUANTITY_UNITS.has(afterDigits) && !CAPACITY_UNITS.has(afterDigits) && !isQuantitativeUnitToken(afterDigits)) {
       if (!isAttributeWord(current) && !classGroupOf(current) && !isAccessoryHead(current)) {
-        models.push(`${current}${next}`);
+        models.push(`${current}${digits}`);
       }
     }
   }

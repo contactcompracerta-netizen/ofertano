@@ -42,6 +42,7 @@ export type StrongIdentity = {
   modelLine: string | null;
   capacity: string | null; // "1TB", "500GB", "12L"
   storage: string | null; // "256GB", "512GB"
+  power: string | null; // "1400W", "550W"
   voltage: string | null; // "110V", "220V", "127V"
   color: string | null;
   condition: "refurbished" | "used" | "repackaged" | null; // from sanitizer
@@ -258,6 +259,17 @@ function extractCapacity(query: string, core: QueryCore): string | null {
 }
 
 /**
+ * Extract power (electrical: "1400W", "550W", "1.5kW").
+ */
+function extractPower(query: string, core: QueryCore): string | null {
+  const attr = core.attributes.power;
+  if (attr) {
+    return attr;
+  }
+  return null;
+}
+
+/**
  * Extract storage (data: "256GB", "512GB", "1TB", "500GB").
  */
 function extractStorage(query: string, core: QueryCore): string | null {
@@ -436,6 +448,7 @@ function calculateConfidence(identity: StrongIdentity, anchors: IdentityAnchor[]
   if (identity.modelCodes.length > 0) signals += Math.min(identity.modelCodes.length, 2);
   if (identity.capacity) signals++;
   if (identity.storage) signals++;
+  if (identity.power) signals++;
   if (identity.voltage) signals++;
   if (identity.color) signals++;
   if (identity.bundleQuantity) signals++;
@@ -461,6 +474,7 @@ export function extractQueryIdentity(sanitizedQuery: string): QueryIdentity {
     modelLine: extractModelLine(sanitizedQuery, core),
     capacity: extractCapacity(sanitizedQuery, core),
     storage: extractStorage(sanitizedQuery, core),
+    power: extractPower(sanitizedQuery, core),
     voltage: extractVoltage(sanitizedQuery, core),
     color: extractColor(sanitizedQuery, core),
     condition: null, // will be set by caller from sanitizer

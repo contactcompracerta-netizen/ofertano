@@ -24,6 +24,7 @@ import {
   extractMaterial,
   extractModelTokens,
   extractBundleQuantity,
+  extractPower,
   extractQuantity,
   extractSize,
   extractStructuredNumericAttributes,
@@ -334,6 +335,7 @@ export function buildQueryCore(query: string): QueryCore {
   const material = extractMaterial(soldTokens);
   const size = extractSize(soldTokens);
   const numericAttributes = extractStructuredNumericAttributes(soldTokens);
+  const power = extractPower(soldTokens);
   const voltage = extractVoltage(rawQuery);
   const modelTokens = extractModelTokens(soldTokens);
   const identityAnchors = extractIdentityAnchors(rawQuery).filter((anchor) => {
@@ -436,6 +438,7 @@ export function buildQueryCore(query: string): QueryCore {
     attributes: {
       ...numericAttributes,
       ...(capacity ? { capacity } : {}),
+      ...(power ? { power } : {}),
       ...(quantity ? { quantity } : {}),
       ...(color ? { color } : {}),
       ...(material ? { material } : {}),

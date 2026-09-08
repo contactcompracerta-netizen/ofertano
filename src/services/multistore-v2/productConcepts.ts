@@ -1159,11 +1159,67 @@ function familyHitAtContentStart(normalized: string): boolean {
 }
 
 /*
+ * Vocabulario de produto: token pertence ao lexico (frase, token ou grupo)
+ * de ao menos uma familia de conceitos. Lideres que nao casam com nenhuma
+ * familia sao prefixos candidatos a marca nao catalogada, nunca cabeca.
+ */
+function tokenMatchesAnyFamilyVocabulary(token: string): boolean {
+  if (!token) {
+    return false;
+  }
+
+  return CONCEPT_FAMILIES.some((family) => familyHasHit(family, token));
+}
+
+/*
+ * Marcadores de relacao com o item hospedeiro ("Copo PARA liquidificador",
+ * "compativel com ...", "peca de reposicao ..."). Um lider desconhecido
+ * separado da cabeca de produto por um desses marcadores nao e marca —
+ * e o proprio item vendido (acessorio/peca) e o nucleo ancora nele.
+ */
+const HOST_RELATION_STOP_TOKENS = new Set([
+  "para",
+  "for",
+  "p",
+  "compativel",
+  "compativeis",
+  "compatible",
+  "fits",
+  "reposicao",
+  "reposicoes",
+  "substituicao",
+  "substituicoes",
+  "replacement",
+  "replacements",
+]);
+
+/*
+ * Posicao inicial da cabeca de produto adiante de `fromIndex`: primeiro
+ * indice cujo restante comeca com evidencia de familia. Retorna -1 quando
+ * nao ha cabeca adiante.
+ */
+function headStartAhead(tokens: string[], fromIndex: number): number {
+  for (let index = fromIndex; index < tokens.length; index += 1) {
+    if (familyHitAtContentStart(tokens.slice(index).join(" "))) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+/*
  * Primeira cabeça semântica do item vendido: ignora modificadores
  * iniciais (grau, gênero, estação, cor, kit, marca, quantidade) e
  * aceita a classe mesmo quando ela não é o token 0 do título.
- * Não atravessa um substantivo desconhecido para alcançar uma classe
- * mencionada depois — isso seria host/contexto, não o sold item.
+ * Marca lider nao catalogada ("WAP Aspirador ..."): token inicial fora
+ * do vocabulario de todas as familias, imediatamente (sem marcador de
+ * relacao com hospedeiro no caminho) seguido de cabeca de produto, e
+ * tratado como prefixo de marca — o nucleo ancora no produto.
+ * Não atravessa vocabulario de produto ("saco", "filtro", "capa"),
+ * marcador de relacao ("Copo PARA liquidificador") nem substantivo
+ * desconhecido sem cabeca de produto adiante — isso seria
+ * host/contexto, não o sold item.
  */
 export function extractSoldItemNucleus(text: string): SoldItemNucleus {
   const tokens = normalizeConceptText(text)
@@ -1182,7 +1238,24 @@ export function extractSoldItemNucleus(text: string): SoldItemNucleus {
     }
 
     const fromHere = tokens.slice(index).join(" ");
-    if (familyHitAtContentStart(fromHere) || !isSoldHeadPrefixToken(token)) {
+    if (familyHitAtContentStart(fromHere)) {
+      start = index;
+      found = true;
+      break;
+    }
+
+    if (isSoldHeadPrefixToken(token)) {
+      continue;
+    }
+
+    if (tokenMatchesAnyFamilyVocabulary(token)) {
+      start = index;
+      found = true;
+      break;
+    }
+
+    const rest = tokens.slice(index + 1).join(" ");
+    if (!rest || !familyHitAtContentStart(rest)) {
       start = index;
       found = true;
       break;

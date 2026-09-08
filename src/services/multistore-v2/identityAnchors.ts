@@ -9,6 +9,7 @@ import {
   normalizeMultistoreText,
   isCapacityOrQuantityUnit,
   isDimensionHint,
+  isQuantitativeUnitToken,
 } from "./normalizeCandidate";
 import { isGenericDescriptor } from "./productConcepts";
 
@@ -232,7 +233,11 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
       continue;
     }
 
-    if (isCapacityOrQuantityUnit(tokens[index + 2]) || isDimensionHint(current)) {
+    if (
+      isCapacityOrQuantityUnit(tokens[index + 2]) ||
+      isQuantitativeUnitToken(tokens[index + 2]) ||
+      isDimensionHint(current)
+    ) {
       continue;
     }
 
@@ -260,10 +265,30 @@ export function extractIdentityAnchors(text: string): IdentityAnchor[] {
 
   return anchors.filter(
     (anchor) =>
-      !anchors.some(
-        (other) =>
-          other.value !== anchor.value && other.value.includes(anchor.value),
-      ),
+      !anchors.some((other) => {
+        if (other.value === anchor.value || !other.value.includes(anchor.value)) {
+          return false;
+        }
+
+        /*
+         * Linha alfabetica comercial (MODEL puro de 3-8 letras, ex.: "gtw")
+         * coexiste com o modelo composto derivado dela ("gtw12"): a linha e
+         * o modelCode, o composto e o modelName/modelToken. Sem essa excecao,
+         * o filtro de substring removeria a linha sempre que o composto
+         * existisse, perdendo o modelCode.
+         */
+        if (
+          anchor.kind === "MODEL" &&
+          /^[a-z]{3,8}$/.test(anchor.value) &&
+          other.kind === "MODEL" &&
+          other.value.startsWith(anchor.value) &&
+          /\d/.test(other.value)
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
   );
 }
 
