@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  buildEditorialContent,
   buildEvergreenContent,
   buildPriceContent,
   fallbackPostTypeForSlot,
@@ -293,5 +294,73 @@ assert.equal(
   ),
   "2026-09-07",
 );
+
+/*
+ * Conteúdo editorial: variedade sem preços, foco em engajamento.
+ */
+const editorialTypes = [
+  "EDITORIAL_CURIOSITY",
+  "EDITORIAL_NOSTALGIA",
+  "EDITORIAL_DEBATE",
+  "EDITORIAL_HISTORY",
+  "EDITORIAL_MYSTERY",
+  "EDITORIAL_QUIZ",
+] as const;
+
+for (const type of editorialTypes) {
+  const content = buildEditorialContent(type, 0);
+
+  assert.equal(content.type, type);
+  assert.equal(content.productId, null);
+  assert.equal(content.data.template, "ENGAGEMENT");
+  assert.equal(content.data.offers.length, 0);
+  assert.equal(content.data.product, null);
+  assert.ok(!content.caption.includes("R$"), `${type} não deve conter preços`);
+  assert.ok(!content.caption.includes("Compre"), `${type} não deve ter chamada de compra`);
+  assert.ok(!content.caption.includes("Acesse"), `${type} não deve chamar para acessar`);
+  assert.ok(!content.caption.includes("Ofertano — Compare preços antes de comprar.") || content.caption.includes("Ofertano — Compare preços antes de comprar."));
+  assert.ok(content.hashtags.length <= 5, `${type} deve ter no máximo 5 hashtags`);
+  assert.ok(content.hashtags.includes("#Ofertano"), `${type} deve ter #Ofertano`);
+  assert.ok(content.hashtags.includes("#Ofertas"), `${type} deve ter #Ofertas`);
+  assert.ok(content.data.eyebrow.length > 0, `${type} deve ter eyebrow`);
+  assert.ok(content.data.headline.length > 0, `${type} deve ter headline`);
+  assert.ok(content.data.subheadline.length > 0, `${type} deve ter subheadline`);
+  assert.ok(content.data.cta.length > 0, `${type} deve ter CTA`);
+}
+
+const curiosity = buildEditorialContent("EDITORIAL_CURIOSITY", 0);
+assert.match(curiosity.caption, /🔍/);
+assert.match(curiosity.caption, /Curiosidade/);
+
+const nostalgia = buildEditorialContent("EDITORIAL_NOSTALGIA", 1);
+assert.match(nostalgia.caption, /📜/);
+assert.match(nostalgia.caption, /Memoria/);
+
+const debate = buildEditorialContent("EDITORIAL_DEBATE", 2);
+assert.match(debate.caption, /⚖️/);
+assert.match(debate.caption, /Debate/);
+
+const historyContent = buildEditorialContent("EDITORIAL_HISTORY", 3);
+assert.match(historyContent.caption, /📚/);
+assert.match(historyContent.caption, /Historia/);
+
+const mystery = buildEditorialContent("EDITORIAL_MYSTERY", 4);
+assert.match(mystery.caption, /🕵️/);
+assert.match(mystery.caption, /Misterio/);
+
+const quiz = buildEditorialContent("EDITORIAL_QUIZ", 5);
+assert.match(quiz.caption, /❓/);
+assert.match(quiz.caption, /Quiz/);
+
+/*
+ * Variedade: índices diferentes geram conteúdo diferente.
+ */
+const variants = [
+  buildEditorialContent("EDITORIAL_CURIOSITY", 0),
+  buildEditorialContent("EDITORIAL_CURIOSITY", 1),
+  buildEditorialContent("EDITORIAL_CURIOSITY", 2),
+];
+assert.notEqual(variants[0].fingerprint, variants[1].fingerprint);
+assert.notEqual(variants[1].fingerprint, variants[2].fingerprint);
 
 console.log("socialAutomation.test: ok");

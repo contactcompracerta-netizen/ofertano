@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 import {
+  buildEditorialContent,
   buildEvergreenContent,
   buildPriceContent,
   fallbackPostTypeForSlot,
@@ -10,6 +11,7 @@ import {
   pricePostTypeForSlot,
   prioritizeUnusedProducts,
   variantIndexFor,
+  type EditorialPostType,
 } from "./content";
 import {
   getBrazilDateKey,
@@ -24,6 +26,7 @@ import {
   type SocialPostData,
   type SocialPostSlot,
   type SocialPostType,
+  isEditorialPostType,
 } from "./types";
 
 const PRODUCT_REPEAT_WINDOW_DAYS = 14;
@@ -191,11 +194,44 @@ function selectContentForSlot(
   }
 
   const fallbackType = fallbackPostTypeForSlot(slot);
+  const editorialType = selectEditorialTypeForSlot(slot, history);
 
-  return selectDistinctEvergreenContent(
-    fallbackType,
-    history,
-  );
+  if (editorialType) {
+    return selectDistinctEditorialContent(editorialType, history);
+  }
+
+  return selectDistinctEvergreenContent(fallbackType, history);
+}
+
+function selectEditorialTypeForSlot(
+  slot: SocialPostSlot,
+  history: SocialHistoryEntry[],
+): SocialPostType | null {
+  const recentTypes = history.slice(0, 20).map((entry) => entry.type);
+  const editorialCounts = new Map<string, number>();
+
+  for (const type of recentTypes) {
+    if (isEditorialPostType(type)) {
+      editorialCounts.set(type, (editorialCounts.get(type) ?? 0) + 1);
+    }
+  }
+
+  const slotPreferences: Record<SocialPostSlot, readonly SocialPostType[]> = {
+    MORNING: ["EDITORIAL_CURIOSITY", "EDITORIAL_HISTORY", "EDITORIAL_NOSTALGIA", "EDITORIAL_MYSTERY", "EDITORIAL_DEBATE", "EDITORIAL_QUIZ"],
+    AFTERNOON: ["EDITORIAL_DEBATE", "EDITORIAL_QUIZ", "EDITORIAL_CURIOSITY", "EDITORIAL_MYSTERY", "EDITORIAL_NOSTALGIA", "EDITORIAL_HISTORY"],
+    EVENING: ["EDITORIAL_NOSTALGIA", "EDITORIAL_MYSTERY", "EDITORIAL_QUIZ", "EDITORIAL_DEBATE", "EDITORIAL_CURIOSITY", "EDITORIAL_HISTORY"],
+  };
+
+  const preferences = slotPreferences[slot];
+
+  for (const type of preferences) {
+    const count = editorialCounts.get(type) ?? 0;
+    if (count < 2) {
+      return type;
+    }
+  }
+
+  return preferences[0];
 }
 
 function selectDistinctEvergreenContent(
@@ -220,6 +256,33 @@ function selectDistinctEvergreenContent(
   }
 
   return buildEvergreenContent(type, start);
+}
+
+function selectDistinctEditorialContent(
+  type: SocialPostType,
+  history: SocialHistoryEntry[],
+): GeneratedSocialContent {
+  const usedFingerprints = new Set(
+    history.map((entry) => entry.fingerprint),
+  );
+
+  const start = variantIndexFor(type, history);
+
+  for (let offset = 0; offset < 125; offset += 1) {
+    const candidate = buildEditorialContent(
+      type as EditorialPostType,
+      start + offset,
+    );
+
+    if (!usedFingerprints.has(candidate.fingerprint)) {
+      return candidate;
+    }
+  }
+
+  return buildEditorialContent(
+    type as EditorialPostType,
+    start,
+  );
 }
 
 function serialize(post: {

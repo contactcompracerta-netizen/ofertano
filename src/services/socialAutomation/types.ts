@@ -5,6 +5,12 @@ export const SOCIAL_POST_TYPES = [
   "SAVING_TIP",
   "ENGAGEMENT_QUESTION",
   "SHOPPING_CURIOSITY",
+  "EDITORIAL_CURIOSITY",
+  "EDITORIAL_NOSTALGIA",
+  "EDITORIAL_DEBATE",
+  "EDITORIAL_HISTORY",
+  "EDITORIAL_MYSTERY",
+  "EDITORIAL_QUIZ",
 ] as const;
 
 export type SocialPostType = (typeof SOCIAL_POST_TYPES)[number];
@@ -18,6 +24,32 @@ export const SOCIAL_POST_SLOTS = [
 export type SocialPostSlot = (typeof SOCIAL_POST_SLOTS)[number];
 
 export type SocialTemplate = "DUEL" | "FOUND_DEAL" | "ENGAGEMENT";
+
+const LEGACY_POST_TYPES = new Set<SocialPostType>([
+  "DUEL_PRICE",
+  "FOUND_DEAL",
+  "PRICE_COMPARISON",
+  "SAVING_TIP",
+  "ENGAGEMENT_QUESTION",
+  "SHOPPING_CURIOSITY",
+]);
+
+export function isLegacyPostType(type: SocialPostType): boolean {
+  return LEGACY_POST_TYPES.has(type);
+}
+
+const EDITORIAL_POST_TYPES = new Set<SocialPostType>([
+  "EDITORIAL_CURIOSITY",
+  "EDITORIAL_NOSTALGIA",
+  "EDITORIAL_DEBATE",
+  "EDITORIAL_HISTORY",
+  "EDITORIAL_MYSTERY",
+  "EDITORIAL_QUIZ",
+]);
+
+export function isEditorialPostType(type: SocialPostType): boolean {
+  return EDITORIAL_POST_TYPES.has(type);
+}
 
 export type SocialOfferData = {
   id: string;
