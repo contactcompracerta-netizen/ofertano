@@ -20,6 +20,7 @@ export type MlTracePhase =
   | "HYDRATION_ITEM"
   | "HYDRATION_BATCH_END"
   | "CANDIDATES"
+  | "CATALOG_QUERY"
   | "CATALOG_RANK_START"
   | "CATALOG_RANK_END"
   | "EXIT";

@@ -25,6 +25,7 @@ import {
   type PersistProductFn,
 } from "@/services/multistore-v2";
 import type { SearchBudget } from "@/services/multistore-v2/timeBudget";
+import type { PublicProductView } from "@/services/multistore-v2";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
 import { countDistinctNonEmptyMarketplaces, hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
@@ -203,7 +204,7 @@ async function searchCatalog(query: string) {
 export type SearchCatalogOrDiscoverResult = {
   query: string;
   source: "CATALOG" | "DISCOVERY" | "NOT_FOUND";
-  products: Awaited<ReturnType<typeof searchCatalog>>;
+  products: Awaited<ReturnType<typeof searchCatalog>> | PublicProductView[];
   discovery?: Awaited<ReturnType<typeof descobrirProdutos>>;
 };
 
@@ -475,11 +476,16 @@ export async function searchCatalogOrDiscover(
           return [{ ...view, id }];
         });
 
-        if (views.length > 0) {
+        const singleViews = v2.views.filter(
+          (view) => view.kind === "SINGLE_MARKETPLACE",
+        );
+        const publicViews = [...views, ...singleViews].slice(0, limit);
+
+        if (publicViews.length > 0) {
           return {
             query: search,
             source: "DISCOVERY",
-            products: views as Awaited<ReturnType<typeof searchCatalog>>,
+            products: publicViews,
           };
         }
       } else if (v2.views.length > 0 && visibleProducts.length > 0) {
@@ -494,8 +500,16 @@ export async function searchCatalogOrDiscover(
           query: search,
           source: "DISCOVERY",
           products: v2.views.filter((_, index) =>
-            visibleIndexes.has(index),
-          ) as Awaited<ReturnType<typeof searchCatalog>>,
+            visibleIndexes.has(index) || v2.views[index]?.kind === "SINGLE_MARKETPLACE",
+          ),
+        };
+      } else if (v2.singleMarketplaceResults.length > 0) {
+        return {
+          query: search,
+          source: "DISCOVERY",
+          products: v2.views.filter(
+            (view) => view.kind === "SINGLE_MARKETPLACE",
+          ),
         };
       }
 

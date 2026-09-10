@@ -33,6 +33,7 @@ export type ProductConceptId =
   | "watch"
   | "console"
   | "blender"
+  | "washer_dryer"
   | "nightstand"
   | "suit"
   | "costume"
@@ -412,6 +413,13 @@ const CONCEPT_FAMILIES: ConceptFamily[] = [
       "calcados",
     ],
     coreMode: "token",
+  },
+  {
+    id: "washer_dryer",
+    phrases: ["lava e seca"],
+    tokens: [],
+    coreMode: "phrase",
+    allOf: [["lava", "seca"]],
   },
   {
     id: "pressure_cooker",
@@ -1769,6 +1777,10 @@ export function canonicalClassToken(id: ProductConceptId): string {
 
   if (id === "rice_cooker") {
     return "panela de arroz";
+  }
+
+  if (id === "washer_dryer") {
+    return "lava e seca";
   }
 
   if (id === "screen_protector") {

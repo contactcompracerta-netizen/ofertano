@@ -424,7 +424,9 @@ async function runCoveragePublicationCases() {
   });
   assert.equal(coverageStatusOf(completeSingle.acquisitions), "COMPLETE");
   assert.equal(completeSingle.products.length, 0, "A) 1 loja + EMPTY nas demais nao e PUBLICAVEL");
-  assert.equal(completeSingle.views.length, 0);
+  assert.equal(completeSingle.views.length, 1, "A) 1 loja relevante aparece como SINGLE_MARKETPLACE");
+  assert.equal(completeSingle.views[0]?.kind, "SINGLE_MARKETPLACE");
+  assert.equal(completeSingle.singleMarketplaceResults.length, 1);
 
   const completeMulti = await searchMultistoreV2(query, {
     persist: false,
@@ -488,7 +490,8 @@ async function runCoveragePublicationCases() {
   assert.equal(timeoutSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "TIMEOUT");
   assert.ok(timeoutSingle.relevantCandidates.length >= 1);
   assert.equal(timeoutSingle.products.length, 0, "B) 1 loja + TIMEOUT nao e PUBLICAVEL");
-  assert.equal(timeoutSingle.views.length, 0);
+  assert.equal(timeoutSingle.views.length, 1, "B) 1 loja + TIMEOUT aparece como SINGLE_MARKETPLACE");
+  assert.equal(timeoutSingle.views[0]?.kind, "SINGLE_MARKETPLACE");
   assert.equal(timeoutSingle.multiStoreClusters, 0);
 
   const blockedSingle = await searchMultistoreV2(query, {
@@ -506,7 +509,8 @@ async function runCoveragePublicationCases() {
     ],
   });
   assert.equal(blockedSingle.products.length, 0);
-  assert.equal(blockedSingle.views.length, 0);
+  assert.equal(blockedSingle.views.length, 1);
+  assert.equal(blockedSingle.views[0]?.kind, "SINGLE_MARKETPLACE");
   assert.equal(blockedSingle.multiStoreClusters, 0);
 
   const errorSingle = await searchMultistoreV2(query, {
@@ -526,7 +530,8 @@ async function runCoveragePublicationCases() {
     ],
   });
   assert.equal(errorSingle.products.length, 0);
-  assert.equal(errorSingle.views.length, 0);
+  assert.equal(errorSingle.views.length, 1);
+  assert.equal(errorSingle.views[0]?.kind, "SINGLE_MARKETPLACE");
   assert.equal(errorSingle.multiStoreClusters, 0);
 
   let multiTimeoutWrites = 0;
@@ -694,7 +699,8 @@ async function runCoveragePublicationCases() {
   assert.equal(coverageStatusOf(notRunSingle.acquisitions), "INCOMPLETE");
   assert.equal(notRunSingle.acquisitions.find((item) => item.marketplace === "AMAZON")?.status, "NOT_RUN");
   assert.equal(notRunSingle.products.length, 0);
-  assert.equal(notRunSingle.views.length, 0);
+  assert.equal(notRunSingle.views.length, 1);
+  assert.equal(notRunSingle.views[0]?.kind, "SINGLE_MARKETPLACE");
   assert.equal(notRunSingle.multiStoreClusters, 0);
 
   const allEmpty = await searchMultistoreV2(query, {
@@ -873,8 +879,9 @@ async function runCoveragePublicationCases() {
     },
     schedulePersist: () => undefined,
   });
-  assert.equal(publicIncomplete.products.length, 0, "singleton incompleto nao aparece na pesquisa");
-  assert.equal(publicIncomplete.source, "NOT_FOUND");
+  assert.equal(publicIncomplete.products.length, 1, "singleton incompleto aparece como SINGLE_MARKETPLACE");
+  assert.equal(publicIncomplete.products[0]?.kind, "SINGLE_MARKETPLACE");
+  assert.equal(publicIncomplete.source, "DISCOVERY");
   assert.equal(publicIncompleteWrites, 0, "singleton incompleto nao persiste HEAD");
 
   let publicMultiIncompleteWrites = 0;
@@ -1334,7 +1341,8 @@ async function runPersistContract() {
     "timeout parcial preserva o candidato relevante internamente",
   );
   assert.equal(partialTimeout.products.length, 0);
-  assert.equal(partialTimeout.views.length, 0);
+  assert.equal(partialTimeout.views.length, 1);
+  assert.equal(partialTimeout.views[0]?.kind, "SINGLE_MARKETPLACE");
   assert.equal(partialTimeout.multiStoreClusters, 0);
   assert.equal(
     timeoutTitles.length,
@@ -1708,6 +1716,7 @@ async function runAfterResponseCases() {
   );
 
   let scheduledCount = 0;
+  scheduled = null;
   const limitedPublic = await searchCatalogOrDiscover("Headphone MarcaX", 5, {
     adapters: [
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -1738,17 +1747,15 @@ async function runAfterResponseCases() {
   });
   assert.ok(limitedPublic.products.length <= 12);
   assert.ok(
-    limitedPublic.products.every((product) => product.id.startsWith("after-")),
-    "cards publicos recebem id persistido da cabeca canonica",
+    limitedPublic.products.every((product) => product.kind === "SINGLE_MARKETPLACE"),
+    "cards de uma loja permanecem efemeros",
   );
   assert.equal(
     scheduledCount,
-    limitedPublic.products.length,
-    "oferta canonica de cada card persiste no caminho sincrono",
+    0,
+    "single efemero nao persiste no caminho sincrono",
   );
-  await scheduled!();
-  assert.ok(scheduledCount <= 12, "after() nao inicia persistencia alem do limit");
-  assert.equal(scheduledCount, limitedPublic.products.length);
+  assert.equal(scheduled, null, "single efemero nao agenda after()");
 
   const logged = await persistSelectedSearchClusters(
     "Headphone MarcaX ZX100",

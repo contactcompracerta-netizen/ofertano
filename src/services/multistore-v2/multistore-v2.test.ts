@@ -947,9 +947,11 @@ async function runAcquisitionContract() {
   );
   assert.equal(
     mixed.views.length,
-    0,
-    "1 oferta relevante + BLOCKED/ERROR fica interna; resposta publica exige Multi Loja",
+    1,
+    "1 oferta relevante + BLOCKED/ERROR vira SINGLE_MARKETPLACE efemero",
   );
+  assert.equal(mixed.views[0]?.kind, "SINGLE_MARKETPLACE");
+  assert.equal(mixed.singleMarketplaceResults.length, 1);
   assert.equal(mixed.products.length, 0);
   assert.equal(mixed.singleStoreClusters, 0);
   assert.equal(mixed.multiStoreClusters, 0);
@@ -966,6 +968,113 @@ async function runAcquisitionContract() {
     "ALIEXPRESS",
   ]);
   assert.deepEqual(mixed.marketplacesSucceeded, ["SHOPEE"]);
+
+  const specificQuery = "Samsung WD11M";
+  assert.ok(buildSearchPlan(specificQuery).length >= 2, "fixture especifica precisa de variante posterior");
+  let specificVariantCalls = 0;
+  const specificLaterVariant = await searchMultistoreV2(specificQuery, {
+    persist: false,
+    adapters: [
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async (request) => {
+        specificVariantCalls += 1;
+        if (specificVariantCalls === 1) {
+          return {
+            marketplace: "MERCADO_LIVRE",
+            query: request.query,
+            success: true,
+            scanned: 1,
+            candidates: [
+              foundCandidate({
+                marketplace: "MERCADO_LIVRE",
+                marketplaceName: "Mercado Livre",
+                externalId: "MLB-SURFACE-SAMSUNG",
+                title: "Lava e Seca Samsung 11kg Inox",
+                brand: "Samsung",
+                price: 2999,
+              }),
+            ],
+            error: null,
+          } satisfies MarketplaceDiscoveryResult;
+        }
+        return {
+          marketplace: "MERCADO_LIVRE",
+          query: request.query,
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "MERCADO_LIVRE",
+              marketplaceName: "Mercado Livre",
+              externalId: "MLB-STRONG-WD11M",
+              title: "Lava e Seca Samsung WD11M 11kg 220V",
+              brand: "Samsung",
+              price: 3199,
+            }),
+          ],
+          error: null,
+        } satisfies MarketplaceDiscoveryResult;
+      }),
+    ],
+  });
+  assert.ok(specificVariantCalls >= 2, "SPECIFIC_QUERY_LATER_VARIANT_CAN_WIN executa variante posterior");
+  assert.ok(
+    specificLaterVariant.singleMarketplaceResults.some(
+      (item) => item.externalId === "MLB-STRONG-WD11M",
+    ),
+    "SPECIFIC_QUERY_LATER_VARIANT_CAN_WIN preserva identidade forte posterior",
+  );
+  console.log("SPECIFIC_QUERY_LATER_VARIANT_CAN_WIN=PASS");
+
+  const genericQuery = "Chaveiro";
+  assert.ok(buildSearchPlan(genericQuery).length >= 2, "fixture generica precisa de variantes");
+  let genericVariantCalls = 0;
+  const genericDiversity = await searchMultistoreV2(genericQuery, {
+    persist: false,
+    adapters: [
+      fakeAdapter("SHOPEE", "Shopee", async (request) => {
+        genericVariantCalls += 1;
+        return {
+          marketplace: "SHOPEE",
+          query: request.query,
+          success: true,
+          scanned: 1,
+          candidates: [
+            foundCandidate({
+              marketplace: "SHOPEE",
+              marketplaceName: "Shopee",
+              externalId: `SHP-CHAVEIRO-${genericVariantCalls}`,
+              title:
+                genericVariantCalls === 1
+                  ? "Chaveiro Metal Personalizado"
+                  : "Chaveiro Couro Mosquetao",
+              brand: null,
+              price: genericVariantCalls === 1 ? 19 : 24,
+            }),
+          ],
+          error: null,
+        } satisfies MarketplaceDiscoveryResult;
+      }),
+    ],
+  });
+  assert.ok(genericVariantCalls >= 2, "GENERIC_QUERY_DOES_NOT_STOP_AFTER_FIRST_CANDIDATE executa mais de uma variante");
+  assert.ok(
+    genericDiversity.relevantCandidates.length >= 2,
+    "GENERIC_QUERY_DOES_NOT_STOP_AFTER_FIRST_CANDIDATE preserva diversidade adquirida relevante",
+  );
+  console.log("GENERIC_QUERY_DOES_NOT_STOP_AFTER_FIRST_CANDIDATE=PASS");
+
+  const ml403Adapters = [
+    fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => {
+      throw new Error("HTTP 403");
+    }),
+  ];
+  const ml403Result = await searchMultistoreV2("JBL Tune 520BT", {
+    persist: false,
+    adapters: ml403Adapters,
+  });
+  assert.equal(ml403Result.acquisitions.length, 1);
+  assert.equal(ml403Result.acquisitions[0]?.status, "BLOCKED");
+  console.log("ML_403_DOES_NOT_RETRY=PASS");
 
   const noneAvailable = await searchMultistoreV2("lapis", {
     persist: false,
@@ -1067,9 +1176,10 @@ async function runAcquisitionContract() {
   );
   assert.equal(
     timeoutResult.views.length,
-    0,
-    "CASO timeout: singleton relevante permanece interno sem fallback publico",
+    1,
+    "CASO timeout: singleton relevante aparece como SINGLE_MARKETPLACE",
   );
+  assert.equal(timeoutResult.views[0]?.kind, "SINGLE_MARKETPLACE");
   assert.equal(timeoutResult.products.length, 0);
   assert.equal(timeoutResult.multiStoreClusters, 0);
   assert.equal(timeoutResult.persistedProductIds.length, 0);
@@ -1357,6 +1467,192 @@ async function runAcquisitionContract() {
   assert.equal(techMl?.affiliateStatus, "ERROR", "CASO 4 fluxo vivo: erro tecnico");
   assert.notEqual(techMl?.affiliateStatus, "INELIGIBLE");
   assert.ok(technicalAffiliate.views.length >= 1);
+
+  const singleChuteira = await searchMultistoreV2("Chuteira society", {
+    persist: false,
+    adapters: [
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
+        marketplace: "MERCADO_LIVRE",
+        query: "Chuteira society",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            brand: "Penalty",
+            externalId: "ml-chuteira-society",
+            title: "Chuteira Society Penalty RX Locker XXI Adulto",
+            price: 129,
+          }),
+        ],
+        error: null,
+      })),
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query: "Chuteira society",
+        success: true,
+        scanned: 0,
+        candidates: [],
+        error: null,
+      })),
+    ],
+  });
+  assert.equal(singleChuteira.products.length, 0, "chuteira single nao cria Product canonico");
+  assert.equal(singleChuteira.singleMarketplaceResults.length, 1, "chuteira relevante de 1 loja aparece como SINGLE");
+  assert.equal(singleChuteira.views[0]?.kind, "SINGLE_MARKETPLACE");
+
+  const singleChaveiro = await searchMultistoreV2("Chaveiro", {
+    persist: false,
+    adapters: [
+      fakeAdapter("SHOPEE", "Shopee", async () => ({
+        marketplace: "SHOPEE",
+        query: "Chaveiro",
+        success: true,
+        scanned: 1,
+        candidates: [
+          foundCandidate({
+            marketplace: "SHOPEE",
+            marketplaceName: "Shopee",
+            brand: null,
+            externalId: "shp-chaveiro",
+            title: "Chaveiro Metal Redondo Personalizado",
+            price: 12.9,
+          }),
+        ],
+        error: null,
+      })),
+    ],
+  });
+  assert.equal(singleChaveiro.products.length, 0, "chaveiro single nao cria Product canonico");
+  assert.equal(singleChaveiro.singleMarketplaceResults.length, 1, "chaveiro relevante de 1 loja aparece como SINGLE");
+  assert.equal(singleChaveiro.views[0]?.kind, "SINGLE_MARKETPLACE");
+
+  let singlePersistWrites = 0;
+  const samsungSingle = await searchMultistoreV2("Samsung WD11M", {
+    persist: true,
+    adapters: [
+      fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
+        marketplace: "MERCADO_LIVRE",
+        query: "Samsung WD11M",
+        success: true,
+        scanned: 3,
+        candidates: [
+          foundCandidate({
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            brand: "Samsung",
+            externalId: "MLB3798032412",
+            title: "Lava e Seca Samsung WD11M 11kg Inox 220V",
+            price: 3499,
+            sourceUrl: "https://produto.mercadolivre.com.br/MLB-3798032412",
+          }),
+          foundCandidate({
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            brand: "Philco",
+            externalId: "ml-philco-wd11m",
+            title: "Lava e Seca Philco 11kg Inox 220V",
+            price: 2999,
+          }),
+          foundCandidate({
+            marketplace: "MERCADO_LIVRE",
+            marketplaceName: "Mercado Livre",
+            brand: "TCL",
+            externalId: "ml-tcl-wd11m",
+            title: "Lava e Seca TCL 11kg Inox 220V",
+            price: 2899,
+          }),
+        ],
+        error: null,
+      })),
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query: "Samsung WD11M",
+        success: true,
+        scanned: 0,
+        candidates: [],
+        error: null,
+      })),
+    ],
+    persistProduct: async () => {
+      singlePersistWrites += 1;
+      return { id: "should-not-persist-single" };
+    },
+  });
+  assert.equal(samsungSingle.products.length, 0, "Samsung single nao vira Product canonico");
+  assert.equal(samsungSingle.singleMarketplaceResults.length, 1, "Samsung WD11M ML aparece como SINGLE");
+  assert.equal(samsungSingle.singleMarketplaceResults[0]?.externalId, "MLB3798032412");
+  assert.equal(singlePersistWrites, 0, "single result nao chama saveProduct/persistProduct");
+  const samsungVisibleTitles = samsungSingle.views.map((view) => view.name.toLowerCase());
+  assert.equal(samsungVisibleTitles.some((title) => title.includes("philco")), false, "Samsung query nao mostra Philco");
+  assert.equal(samsungVisibleTitles.some((title) => title.includes("tcl")), false, "Samsung query nao mostra TCL");
+
+  const comparableOnly = await searchMultistoreV2("Headphone JBL Tune 520BT", {
+    persist: false,
+    adapters: [
+      fakeAdapter("AMAZON", "Amazon", async () => ({
+        marketplace: "AMAZON",
+        query: "Headphone JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [foundCandidate({ marketplace: "AMAZON", marketplaceName: "Amazon", externalId: "amz-520-comparable", title: "Headphone JBL Tune 520BT", price: 199 })],
+        error: null,
+      })),
+      fakeAdapter("SHOPEE", "Shopee", async () => ({
+        marketplace: "SHOPEE",
+        query: "Headphone JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [foundCandidate({ marketplace: "SHOPEE", marketplaceName: "Shopee", externalId: "shp-520-comparable", title: "Fone JBL Tune 520BT", price: 189 })],
+        error: null,
+      })),
+    ],
+  });
+  assert.equal(comparableOnly.products.length, 1, "2 ofertas SAME viram COMPARABLE");
+  assert.equal(comparableOnly.results[0]?.kind, "COMPARABLE");
+  assert.equal(comparableOnly.singleMarketplaceResults.length, 0, "COMPARABLE nao duplica como single");
+
+  const accessorySingle = await searchMultistoreV2("JBL Tune 520BT", {
+    persist: false,
+    adapters: [
+      fakeAdapter("SHOPEE", "Shopee", async () => ({
+        marketplace: "SHOPEE",
+        query: "JBL Tune 520BT",
+        success: true,
+        scanned: 1,
+        candidates: [foundCandidate({ marketplace: "SHOPEE", marketplaceName: "Shopee", externalId: "shp-estojo-520", title: "Estojo para JBL Tune 520BT", price: 29 })],
+        error: null,
+      })),
+    ],
+  });
+  assert.equal(accessorySingle.singleMarketplaceResults.length, 0, "acessorio indevido nao vira SINGLE");
+  assert.equal(accessorySingle.views.length, 0);
+
+  assert.notEqual(
+    compareFingerprints(
+      fingerprintOf("Fone Bluetooth sem modelo"),
+      fingerprintOf("Headphone sem codigo", { marketplace: "SHOPEE", marketplaceName: "Shopee", externalId: "unknown-pair" }),
+    ).relation,
+    "SAME",
+    "UNKNOWN nao vira SAME sem evidencia forte",
+  );
+  assert.equal(
+    compareFingerprints(
+      fingerprintOf("Samsung WD11M", { brand: "Samsung" }),
+      fingerprintOf("Samsung WD12M", { brand: "Samsung", marketplace: "SHOPEE", marketplaceName: "Shopee", externalId: "wd12m" }),
+    ).relation,
+    "DIFFERENT",
+    "DIFFERENT nao vira SAME",
+  );
+  assert.notEqual(
+    compareFingerprints(
+      fingerprintOf("Lava e Seca Samsung WD11M", { brand: "Samsung" }),
+      fingerprintOf("Lava e Seca Philco WD11M", { brand: "Philco", marketplace: "SHOPEE", marketplaceName: "Shopee", externalId: "philco-wd11m" }),
+    ).relation,
+    "SAME",
+    "cross-brand nao vira SAME",
+  );
 }
 
 void runAcquisitionContract()

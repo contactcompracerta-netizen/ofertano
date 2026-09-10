@@ -90,6 +90,13 @@ export type QueryCore = {
   productCoreLabels: string[];
   brand: string | null;
   modelTokens: string[];
+  /**
+   * Codigos de modelo exatamente como vieram na consulta. Estes valores so
+   * existem quando a extracao estrutural de identidade ja os reconheceu;
+   * nao promovemos palavras/numeros arbitrarios a modelo.
+   */
+  rawStrongModelTokens: string[];
+  canonicalModelTokens: string[];
   identityAnchors: IdentityAnchor[];
   identityNumbers: string[];
   attributes: Record<string, string>;
@@ -301,6 +308,33 @@ function extractKnownBrand(text: string, productClass: ProductConceptId): string
   return null;
 }
 
+function extractRawStrongModelTokens(
+  rawQuery: string,
+  identityAnchors: IdentityAnchor[],
+): string[] {
+  const canonicalStrongModels = new Set(
+    identityAnchors
+      .filter(
+        (anchor) =>
+          anchor.kind === "ALPHANUMERIC" || anchor.kind === "SKU",
+      )
+      .map((anchor) => anchor.value),
+  );
+
+  if (canonicalStrongModels.size === 0) {
+    return [];
+  }
+
+  const rawTokens = rawQuery.match(/[^\s]+/g) ?? [];
+  return Array.from(
+    new Set(
+      rawTokens.filter((token) =>
+        canonicalStrongModels.has(compactIdentity(token)),
+      ),
+    ),
+  );
+}
+
 export function buildQueryCore(query: string): QueryCore {
   const rawQuery = query.replace(/\s+/g, " ").trim();
   const split = splitSoldAndHost(rawQuery);
@@ -347,6 +381,20 @@ export function buildQueryCore(query: string): QueryCore {
     const inHost = compactIdentity(split.host).includes(anchor.value);
     return inSold || !inHost;
   });
+  const canonicalModelTokens = Array.from(
+    new Set(
+      identityAnchors
+        .filter(
+          (anchor) =>
+            anchor.kind === "ALPHANUMERIC" || anchor.kind === "SKU",
+        )
+        .map((anchor) => anchor.value),
+    ),
+  );
+  const rawStrongModelTokens = extractRawStrongModelTokens(
+    rawQuery,
+    identityAnchors,
+  );
   const identityNumbers = extractIdentityNumbers(soldTokens).filter(
     (number) => !/^(19|20)\d{2}$/.test(number),
   );
@@ -433,6 +481,8 @@ export function buildQueryCore(query: string): QueryCore {
     productCoreLabels: Array.from(new Set(productCoreLabels)),
     brand,
     modelTokens,
+    rawStrongModelTokens,
+    canonicalModelTokens,
     identityAnchors,
     identityNumbers,
     attributes: {
