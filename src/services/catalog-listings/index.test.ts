@@ -6,6 +6,7 @@ import {
   buildProductSearchDocument,
   evaluateRawListingCanaryReadiness,
   evaluateRawListingRealCanaryProbePrecheck,
+  evaluateRawListingRealIdempotencyCanaryPrecheck,
   getRawListingCanaryMetrics,
   isRawListingDualWriteEnabled,
   linkListingToCanonicalProduct,
@@ -321,6 +322,99 @@ test("real canary precheck returns READY for a single safe probe plan", () => {
   assert.equal(precheck.checks.dualWriteCurrentlyDisabled, true);
   assert.equal(precheck.checks.canaryLimitIsOne, true);
   assert.equal(precheck.checks.readOnly, true);
+});
+
+const idempotencyCanaryConfig = {
+  RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+  RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+  RAW_LISTING_CANARY_MAX_WRITES: "2",
+  RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-IDEMPOTENCY-001",
+};
+
+const idempotencyCanaryOptions = {
+  baselineKnown: true,
+  rollbackDefined: true,
+  abortCriteriaDefined: true,
+};
+
+test("idempotency canary precheck accepts exactly two writes for one target", () => {
+  const precheck = evaluateRawListingRealIdempotencyCanaryPrecheck(
+    idempotencyCanaryConfig,
+    idempotencyCanaryOptions,
+  );
+
+  assert.equal(precheck.status, "READY");
+  assert.deepEqual(precheck.reasons, []);
+  assert.equal(precheck.plan.maxWrites, 2);
+  assert.equal(precheck.checks.readOnly, true);
+});
+
+test("idempotency canary precheck rejects max writes other than two", () => {
+  for (const maxWrites of ["1", "3"]) {
+    const precheck = evaluateRawListingRealIdempotencyCanaryPrecheck(
+      { ...idempotencyCanaryConfig, RAW_LISTING_CANARY_MAX_WRITES: maxWrites },
+      idempotencyCanaryOptions,
+    );
+
+    assert.equal(precheck.status, "NOT_READY");
+    assert.ok(precheck.reasons.includes("CANARY_MAX_WRITES_NOT_TWO"));
+  }
+});
+
+test("idempotency canary precheck requires exactly one valid marketplace", () => {
+  for (const marketplaces of ["", "MERCADO_LIVRE,AMAZON"]) {
+    const precheck = evaluateRawListingRealIdempotencyCanaryPrecheck(
+      { ...idempotencyCanaryConfig, RAW_LISTING_CANARY_MARKETPLACES: marketplaces },
+      idempotencyCanaryOptions,
+    );
+
+    assert.equal(precheck.status, "NOT_READY");
+    assert.ok(precheck.reasons.includes("CANARY_MARKETPLACE_COUNT_NOT_ONE"));
+  }
+});
+
+test("idempotency canary precheck requires exactly one valid external id", () => {
+  for (const externalIds of ["", "ML-FIRST,ML-SECOND", "invalid id"]) {
+    const precheck = evaluateRawListingRealIdempotencyCanaryPrecheck(
+      { ...idempotencyCanaryConfig, RAW_LISTING_CANARY_EXTERNAL_IDS: externalIds },
+      idempotencyCanaryOptions,
+    );
+
+    assert.equal(precheck.status, "NOT_READY");
+  }
+
+  const invalid = evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...idempotencyCanaryConfig, RAW_LISTING_CANARY_EXTERNAL_IDS: "invalid id" },
+    idempotencyCanaryOptions,
+  );
+  assert.ok(invalid.reasons.includes("CANARY_EXTERNAL_ID_INVALID"));
+});
+
+test("idempotency canary precheck requires dual-write off and all safety acknowledgements", () => {
+  const cases = [
+    [{ RAW_LISTING_DUAL_WRITE_ENABLED: "true" }, "DUAL_WRITE_ENABLED"],
+    [{}, "BASELINE_NOT_KNOWN"],
+    [{}, "ROLLBACK_NOT_DEFINED"],
+    [{}, "ABORT_CRITERIA_NOT_DEFINED"],
+  ] as const;
+
+  for (const [overrides, reason] of cases) {
+    const options = {
+      ...idempotencyCanaryOptions,
+      baselineKnown: reason === "BASELINE_NOT_KNOWN" ? false : idempotencyCanaryOptions.baselineKnown,
+      rollbackDefined: reason === "ROLLBACK_NOT_DEFINED" ? false : idempotencyCanaryOptions.rollbackDefined,
+      abortCriteriaDefined: reason === "ABORT_CRITERIA_NOT_DEFINED"
+        ? false
+        : idempotencyCanaryOptions.abortCriteriaDefined,
+    };
+    const precheck = evaluateRawListingRealIdempotencyCanaryPrecheck(
+      { ...idempotencyCanaryConfig, ...overrides },
+      options,
+    );
+
+    assert.equal(precheck.status, "NOT_READY");
+    assert.ok(precheck.reasons.includes(reason));
+  }
 });
 
 test("real canary precheck is not ready when readiness gate is not ready", () => {
