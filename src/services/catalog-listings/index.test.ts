@@ -5,6 +5,7 @@ import {
   buildListingIdentity,
   buildProductSearchDocument,
   evaluateRawListingCanaryReadiness,
+  evaluateRawListingRealCanaryProbePrecheck,
   getRawListingCanaryMetrics,
   isRawListingDualWriteEnabled,
   linkListingToCanonicalProduct,
@@ -300,6 +301,254 @@ test("readiness gate is fail-closed for malformed config", () => {
 
   assert.equal(readiness.status, "NOT_READY");
   assert.ok(readiness.reasons.length > 0);
+});
+
+test("real canary precheck returns READY for a single safe probe plan", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "READY");
+  assert.equal(precheck.plan.maxWrites, 1);
+  assert.equal(precheck.checks.readinessGateReady, true);
+  assert.equal(precheck.checks.dualWriteCurrentlyDisabled, true);
+  assert.equal(precheck.checks.canaryLimitIsOne, true);
+  assert.equal(precheck.checks.readOnly, true);
+});
+
+test("real canary precheck is not ready when readiness gate is not ready", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("READINESS_GATE_NOT_READY"));
+});
+
+test("real canary precheck requires dual-write to remain off", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "true",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("DUAL_WRITE_ALREADY_ENABLED"));
+});
+
+test("real canary precheck requires exactly one marketplace", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE,AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("PROBE_MARKETPLACE_COUNT_INVALID"));
+});
+
+test("real canary precheck rejects missing max writes", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("CANARY_MAX_WRITES_NOT_ONE"));
+});
+
+test("real canary precheck rejects max writes not equal to one", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "2",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("CANARY_MAX_WRITES_NOT_ONE"));
+});
+
+test("real canary precheck requires a single valid external id", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001,ML-REAL-PROBE-002",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("PROBE_EXTERNAL_ID_COUNT_INVALID"));
+});
+
+test("real canary precheck rejects missing external id", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("PROBE_EXTERNAL_ID_MISSING"));
+});
+
+test("real canary precheck rejects invalid external id", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "invalid id",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.includes("PROBE_EXTERNAL_ID_INVALID"));
+});
+
+test("real canary precheck is read-only and does not mutate metrics or write state", () => {
+  const before = getRawListingCanaryMetrics();
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+  const after = getRawListingCanaryMetrics();
+
+  assert.equal(precheck.status, "READY");
+  assert.deepEqual(after, before);
+  assert.equal(precheck.checks.readOnly, true);
+});
+
+test("real canary precheck is deterministic for the same config", () => {
+  const first = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+  const second = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.deepEqual(first, second);
+});
+
+test("real canary precheck snapshot is isolated from caller mutation", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  precheck.checks.canaryLimitIsOne = false;
+  const next = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(next.checks.canaryLimitIsOne, true);
+});
+
+test("real canary precheck is fail-closed for malformed config", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "NOT_READY");
+  assert.ok(precheck.reasons.length > 0);
+});
+
+test("real canary precheck never auto-activates the dual-write flag", () => {
+  const precheck = evaluateRawListingRealCanaryProbePrecheck({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "1",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-REAL-PROBE-001",
+  }, {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+  });
+
+  assert.equal(precheck.status, "READY");
+  assert.equal(precheck.checks.noAutoActivation, true);
 });
 
 test("dry-run overrides the dual-write flag and never persists", async () => {

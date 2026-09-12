@@ -244,6 +244,31 @@ export type RawListingCanaryReadinessResult = {
   checks: RawListingCanaryReadinessChecks;
 };
 
+export type RawListingRealCanaryProbePlan = {
+  maxWrites: number;
+  marketplace: string;
+  externalId: string;
+  rollbackRequired: boolean;
+  abortCriteriaDefined: boolean;
+};
+
+export type RawListingRealCanaryProbeChecks = RawListingCanaryReadinessChecks & {
+  readinessGateReady: boolean;
+  dualWriteCurrentlyDisabled: boolean;
+  rawListingTableBaselineKnown: boolean;
+  canaryLimitIsOne: boolean;
+  singleMarketplaceConfigured: boolean;
+  singleExternalIdConfigured: boolean;
+  noAutoActivation: boolean;
+};
+
+export type RawListingRealCanaryProbePrecheckResult = {
+  status: "READY" | "NOT_READY";
+  reasons: string[];
+  plan: RawListingRealCanaryProbePlan;
+  checks: RawListingRealCanaryProbeChecks;
+};
+
 const rawListingCanaryProcessCounter = { current: 0 };
 const MAX_SAFE_RAW_LISTING_CANARY_MAX_WRITES = 100;
 const VALID_RAW_LISTING_MARKETPLACES = new Set([
@@ -374,6 +399,133 @@ export function evaluateRawListingCanaryReadiness(
       readOnly: true,
     },
   };
+}
+
+export function evaluateRawListingRealCanaryProbePrecheck(
+  env: Record<string, string | undefined> = process.env,
+  options?: {
+    baselineKnown?: boolean;
+    rollbackDefined?: boolean;
+    abortCriteriaDefined?: boolean;
+  },
+): RawListingRealCanaryProbePrecheckResult {
+  const reasons: string[] = [];
+  const readiness = evaluateRawListingCanaryReadiness(env);
+  const resultChecks: RawListingRealCanaryProbeChecks = {
+    dualWriteEnabled: false,
+    marketplaceAllowlistValid: false,
+    maxWritesValid: false,
+    externalIdsValid: true,
+    metricsHealthy: true,
+    readOnly: true,
+    readinessGateReady: readiness.status === "READY",
+    dualWriteCurrentlyDisabled: !isRawListingDualWriteEnabled(env),
+    rawListingTableBaselineKnown: !!options?.baselineKnown,
+    canaryLimitIsOne: false,
+    singleMarketplaceConfigured: false,
+    singleExternalIdConfigured: false,
+    noAutoActivation: true,
+  };
+
+  if (readiness.status !== "READY") {
+    reasons.push("READINESS_GATE_NOT_READY");
+  }
+  resultChecks.readinessGateReady = readiness.status === "READY";
+
+  if (isRawListingDualWriteEnabled(env)) {
+    reasons.push("DUAL_WRITE_ALREADY_ENABLED");
+  }
+  resultChecks.dualWriteCurrentlyDisabled = !isRawListingDualWriteEnabled(env);
+
+  const marketplaces = normalizeCanaryList(
+    (env.RAW_LISTING_CANARY_MARKETPLACES ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  if (marketplaces.length === 0) {
+    reasons.push("PROBE_MARKETPLACE_MISSING");
+  } else if (marketplaces.length !== 1) {
+    reasons.push("PROBE_MARKETPLACE_COUNT_INVALID");
+  } else if (!isValidRawListingMarketplace(marketplaces[0])) {
+    reasons.push("PROBE_MARKETPLACE_INVALID");
+  } else {
+    resultChecks.singleMarketplaceConfigured = true;
+    resultChecks.marketplaceAllowlistValid = true;
+  }
+
+  const rawMaxWrites = env.RAW_LISTING_CANARY_MAX_WRITES ?? "";
+  const parsedMaxWrites = rawMaxWrites.trim() === "" ? NaN : Number(rawMaxWrites);
+  if (!Number.isInteger(parsedMaxWrites) || parsedMaxWrites !== 1) {
+    reasons.push("CANARY_MAX_WRITES_NOT_ONE");
+  } else {
+    resultChecks.maxWritesValid = true;
+    resultChecks.canaryLimitIsOne = true;
+  }
+
+  const externalIdSetting = env.RAW_LISTING_CANARY_EXTERNAL_IDS ?? "";
+  const externalIds = externalIdSetting
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (externalIds.length === 0) {
+    reasons.push("PROBE_EXTERNAL_ID_MISSING");
+  } else if (externalIds.length !== 1) {
+    reasons.push("PROBE_EXTERNAL_ID_COUNT_INVALID");
+  } else if (!isValidRawListingExternalId(externalIds[0])) {
+    reasons.push("PROBE_EXTERNAL_ID_INVALID");
+  } else {
+    resultChecks.singleExternalIdConfigured = true;
+    resultChecks.externalIdsValid = true;
+  }
+
+  if (!options?.baselineKnown) {
+    reasons.push("BASELINE_UNKNOWN");
+  }
+  resultChecks.rawListingTableBaselineKnown = !!options?.baselineKnown;
+
+  if (!options?.rollbackDefined) {
+    reasons.push("ROLLBACK_NOT_DEFINED");
+  }
+
+  if (!options?.abortCriteriaDefined) {
+    reasons.push("ABORT_CRITERIA_NOT_DEFINED");
+  }
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  const status: "READY" | "NOT_READY" = uniqueReasons.length === 0 ? "READY" : "NOT_READY";
+
+  const plan: RawListingRealCanaryProbePlan = {
+    maxWrites: 1,
+    marketplace: marketplaces[0] ?? "UNDECIDED",
+    externalId: externalIds[0] ?? "",
+    rollbackRequired: !!options?.rollbackDefined,
+    abortCriteriaDefined: !!options?.abortCriteriaDefined,
+  };
+
+  return {
+    status,
+    reasons: uniqueReasons,
+    plan,
+    checks: {
+      ...resultChecks,
+      dualWriteEnabled: false,
+      marketplaceAllowlistValid: resultChecks.marketplaceAllowlistValid,
+      maxWritesValid: resultChecks.maxWritesValid,
+      externalIdsValid: resultChecks.externalIdsValid,
+      metricsHealthy: true,
+      readOnly: true,
+      readinessGateReady: resultChecks.readinessGateReady,
+      dualWriteCurrentlyDisabled: resultChecks.dualWriteCurrentlyDisabled,
+      rawListingTableBaselineKnown: resultChecks.rawListingTableBaselineKnown,
+      canaryLimitIsOne: resultChecks.canaryLimitIsOne,
+      singleMarketplaceConfigured: resultChecks.singleMarketplaceConfigured,
+      singleExternalIdConfigured: resultChecks.singleExternalIdConfigured,
+      noAutoActivation: true,
+    },
+  } as RawListingRealCanaryProbePrecheckResult;
 }
 
 
