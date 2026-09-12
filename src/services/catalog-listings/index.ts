@@ -288,6 +288,35 @@ export type RawListingRealIdempotencyCanaryPrecheckResult = {
   };
 };
 
+export type RawListingControlledMultiListingCanaryPrecheckResult = {
+  status: "READY" | "NOT_READY";
+  reasons: string[];
+  plan: {
+    marketplace: string;
+    externalIds: string[];
+    targetCount: number;
+    maxWrites: number;
+    rollbackRequired: boolean;
+    abortCriteriaDefined: boolean;
+    readOnly: boolean;
+  };
+  checks: {
+    dualWriteDisabled: boolean;
+    marketplaceAllowlistValid: boolean;
+    exactlyOneMarketplace: boolean;
+    externalIdsValid: boolean;
+    externalIdsUnique: boolean;
+    targetCountWithinBounds: boolean;
+    maxWritesValid: boolean;
+    maxWritesMatchesTargetCount: boolean;
+    metricsHealthy: boolean;
+    baselineKnown: boolean;
+    rollbackDefined: boolean;
+    abortCriteriaDefined: boolean;
+    readOnly: boolean;
+  };
+};
+
 const rawListingCanaryProcessCounter = { current: 0 };
 const MAX_SAFE_RAW_LISTING_CANARY_MAX_WRITES = 100;
 const VALID_RAW_LISTING_MARKETPLACES = new Set([
@@ -628,6 +657,85 @@ export function evaluateRawListingRealIdempotencyCanaryPrecheck(
       externalIdsValid,
       exactlyOneExternalId,
       maxWritesIsTwo,
+      metricsHealthy,
+      baselineKnown,
+      rollbackDefined,
+      abortCriteriaDefined,
+      readOnly: true,
+    },
+  };
+}
+
+export function evaluateRawListingControlledMultiListingCanaryPrecheck(
+  env: Record<string, string | undefined> = process.env,
+  options?: {
+    baselineKnown?: boolean;
+    rollbackDefined?: boolean;
+    abortCriteriaDefined?: boolean;
+  },
+): RawListingControlledMultiListingCanaryPrecheckResult {
+  const readiness = evaluateRawListingCanaryReadiness(env);
+  const reasons: string[] = [];
+  const marketplaces = (env.RAW_LISTING_CANARY_MARKETPLACES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const externalIds = (env.RAW_LISTING_CANARY_EXTERNAL_IDS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const normalizedExternalIds = externalIds.map((value) => normalizeCanaryValue(value));
+  const targetCount = externalIds.length;
+  const parsedMaxWrites = Number(env.RAW_LISTING_CANARY_MAX_WRITES ?? "");
+  const dualWriteDisabled = !isRawListingDualWriteEnabled(env);
+  const marketplaceAllowlistValid = marketplaces.length > 0 && marketplaces.every(isValidRawListingMarketplace);
+  const exactlyOneMarketplace = marketplaces.length === 1;
+  const externalIdsValid = externalIds.length > 0 && externalIds.every(isValidRawListingExternalId);
+  const externalIdsUnique = new Set(normalizedExternalIds).size === externalIds.length;
+  const targetCountWithinBounds = targetCount >= 2 && targetCount <= 3;
+  const maxWritesValid = Number.isInteger(parsedMaxWrites) && parsedMaxWrites >= 0;
+  const maxWritesMatchesTargetCount = maxWritesValid && parsedMaxWrites === targetCount;
+  const metricsHealthy = readiness.checks.metricsHealthy;
+  const baselineKnown = options?.baselineKnown === true;
+  const rollbackDefined = options?.rollbackDefined === true;
+  const abortCriteriaDefined = options?.abortCriteriaDefined === true;
+
+  if (!dualWriteDisabled) reasons.push("DUAL_WRITE_ENABLED");
+  if (!marketplaceAllowlistValid) reasons.push("CANARY_MARKETPLACE_INVALID");
+  if (!exactlyOneMarketplace) reasons.push("CANARY_MARKETPLACE_COUNT_NOT_ONE");
+  if (!externalIdsValid) reasons.push("CANARY_EXTERNAL_ID_INVALID");
+  if (!targetCountWithinBounds && targetCount < 2) reasons.push("CANARY_EXTERNAL_ID_COUNT_BELOW_MIN");
+  if (!targetCountWithinBounds && targetCount > 3) reasons.push("CANARY_EXTERNAL_ID_COUNT_ABOVE_MAX");
+  if (!externalIdsUnique) reasons.push("CANARY_EXTERNAL_IDS_NOT_UNIQUE");
+  if (!maxWritesValid) reasons.push("CANARY_MAX_WRITES_INVALID");
+  if (!maxWritesMatchesTargetCount) reasons.push("CANARY_MAX_WRITES_TARGET_COUNT_MISMATCH");
+  if (!metricsHealthy) reasons.push("METRICS_NOT_READY");
+  if (!baselineKnown) reasons.push("BASELINE_NOT_KNOWN");
+  if (!rollbackDefined) reasons.push("ROLLBACK_NOT_DEFINED");
+  if (!abortCriteriaDefined) reasons.push("ABORT_CRITERIA_NOT_DEFINED");
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  return {
+    status: uniqueReasons.length === 0 ? "READY" : "NOT_READY",
+    reasons: uniqueReasons,
+    plan: {
+      marketplace: marketplaces[0] ?? "UNDECIDED",
+      externalIds,
+      targetCount,
+      maxWrites: maxWritesValid ? parsedMaxWrites : 0,
+      rollbackRequired: rollbackDefined,
+      abortCriteriaDefined,
+      readOnly: true,
+    },
+    checks: {
+      dualWriteDisabled,
+      marketplaceAllowlistValid,
+      exactlyOneMarketplace,
+      externalIdsValid,
+      externalIdsUnique,
+      targetCountWithinBounds,
+      maxWritesValid,
+      maxWritesMatchesTargetCount,
       metricsHealthy,
       baselineKnown,
       rollbackDefined,

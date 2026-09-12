@@ -5,6 +5,7 @@ import {
   buildListingIdentity,
   buildProductSearchDocument,
   evaluateRawListingCanaryReadiness,
+  evaluateRawListingControlledMultiListingCanaryPrecheck,
   evaluateRawListingRealCanaryProbePrecheck,
   evaluateRawListingRealIdempotencyCanaryPrecheck,
   getRawListingCanaryMetrics,
@@ -415,6 +416,130 @@ test("idempotency canary precheck requires dual-write off and all safety acknowl
     assert.equal(precheck.status, "NOT_READY");
     assert.ok(precheck.reasons.includes(reason));
   }
+});
+
+const multiListingCanaryOptions = {
+  baselineKnown: true,
+  rollbackDefined: true,
+  abortCriteriaDefined: true,
+};
+
+function multiListingConfig(externalIds: string, maxWrites: string, overrides: Record<string, string> = {}) {
+  return {
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: externalIds,
+    RAW_LISTING_CANARY_MAX_WRITES: maxWrites,
+    ...overrides,
+  };
+}
+
+test("controlled multi-listing precheck accepts two and three targets", () => {
+  for (const [externalIds, maxWrites, expectedCount] of [
+    ["ML-001,ML-002", "2", 2],
+    ["ML-001,ML-002,ML-003", "3", 3],
+  ] as const) {
+    const precheck = evaluateRawListingControlledMultiListingCanaryPrecheck(
+      multiListingConfig(externalIds, maxWrites),
+      multiListingCanaryOptions,
+    );
+
+    assert.equal(precheck.status, "READY");
+    assert.deepEqual(precheck.reasons, []);
+    assert.equal(precheck.plan.targetCount, expectedCount);
+    assert.equal(precheck.plan.maxWrites, expectedCount);
+    assert.equal(precheck.checks.readOnly, true);
+  }
+});
+
+test("controlled multi-listing precheck rejects invalid target counts", () => {
+  for (const externalIds of ["", "ML-001", "ML-001,ML-002,ML-003,ML-004"]) {
+    const precheck = evaluateRawListingControlledMultiListingCanaryPrecheck(
+      multiListingConfig(externalIds, externalIds ? externalIds.split(",").length.toString() : "0"),
+      multiListingCanaryOptions,
+    );
+
+    assert.equal(precheck.status, "NOT_READY");
+  }
+
+  assert.ok(evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("", "0"),
+    multiListingCanaryOptions,
+  ).reasons.includes("CANARY_EXTERNAL_ID_COUNT_BELOW_MIN"));
+  assert.ok(evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001,ML-002,ML-003,ML-004", "4"),
+    multiListingCanaryOptions,
+  ).reasons.includes("CANARY_EXTERNAL_ID_COUNT_ABOVE_MAX"));
+});
+
+test("controlled multi-listing precheck rejects invalid, duplicate, or mismatched targets", () => {
+  const invalid = evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001,invalid id", "2"),
+    multiListingCanaryOptions,
+  );
+  assert.equal(invalid.status, "NOT_READY");
+  assert.ok(invalid.reasons.includes("CANARY_EXTERNAL_ID_INVALID"));
+
+  const duplicates = evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001,ML-001", "2"),
+    multiListingCanaryOptions,
+  );
+  assert.equal(duplicates.status, "NOT_READY");
+  assert.ok(duplicates.reasons.includes("CANARY_EXTERNAL_IDS_NOT_UNIQUE"));
+
+  for (const [externalIds, maxWrites] of [["ML-001,ML-002", "1"], ["ML-001,ML-002", "3"], ["ML-001,ML-002,ML-003", "2"]]) {
+    const precheck = evaluateRawListingControlledMultiListingCanaryPrecheck(
+      multiListingConfig(externalIds, maxWrites),
+      multiListingCanaryOptions,
+    );
+    assert.equal(precheck.status, "NOT_READY");
+    assert.ok(precheck.reasons.includes("CANARY_MAX_WRITES_TARGET_COUNT_MISMATCH"));
+  }
+});
+
+test("controlled multi-listing precheck requires one marketplace and all safety gates", () => {
+  const cases = [
+    [multiListingConfig("ML-001,ML-002", "2", { RAW_LISTING_CANARY_MARKETPLACES: "" }), multiListingCanaryOptions, "CANARY_MARKETPLACE_COUNT_NOT_ONE"],
+    [multiListingConfig("ML-001,ML-002", "2", { RAW_LISTING_CANARY_MARKETPLACES: "AMAZON,MERCADO_LIVRE" }), multiListingCanaryOptions, "CANARY_MARKETPLACE_COUNT_NOT_ONE"],
+    [multiListingConfig("ML-001,ML-002", "2", { RAW_LISTING_DUAL_WRITE_ENABLED: "true" }), multiListingCanaryOptions, "DUAL_WRITE_ENABLED"],
+    [multiListingConfig("ML-001,ML-002", "2"), { ...multiListingCanaryOptions, baselineKnown: false }, "BASELINE_NOT_KNOWN"],
+    [multiListingConfig("ML-001,ML-002", "2"), { ...multiListingCanaryOptions, rollbackDefined: false }, "ROLLBACK_NOT_DEFINED"],
+    [multiListingConfig("ML-001,ML-002", "2"), { ...multiListingCanaryOptions, abortCriteriaDefined: false }, "ABORT_CRITERIA_NOT_DEFINED"],
+  ] as const;
+
+  for (const [config, options, reason] of cases) {
+    const precheck = evaluateRawListingControlledMultiListingCanaryPrecheck(config, options);
+    assert.equal(precheck.status, "NOT_READY");
+    assert.ok(precheck.reasons.includes(reason));
+  }
+});
+
+test("existing single and idempotency prechecks retain their write limits", () => {
+  const base = {
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-001",
+  };
+  assert.equal(evaluateRawListingRealCanaryProbePrecheck(
+    { ...base, RAW_LISTING_CANARY_MAX_WRITES: "1" },
+    multiListingCanaryOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingRealCanaryProbePrecheck(
+    { ...base, RAW_LISTING_CANARY_MAX_WRITES: "2" },
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+  assert.equal(evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...base, RAW_LISTING_CANARY_MAX_WRITES: "2" },
+    multiListingCanaryOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...base, RAW_LISTING_CANARY_MAX_WRITES: "1" },
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+  assert.equal(evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...base, RAW_LISTING_CANARY_MAX_WRITES: "3" },
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
 });
 
 test("real canary precheck is not ready when readiness gate is not ready", () => {
