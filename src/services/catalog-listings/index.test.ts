@@ -4,11 +4,13 @@ import test from "node:test";
 import {
   buildListingIdentity,
   buildProductSearchDocument,
+  getRawListingCanaryMetrics,
   isRawListingDualWriteEnabled,
   linkListingToCanonicalProduct,
   listingFingerprint,
   normalizeMarketplaceListing,
   persistRawListingIfEnabled,
+  resetRawListingCanaryMetrics,
   sanitizeRawListingPayload,
 } from "./index";
 
@@ -276,6 +278,8 @@ test("flag on without valid canary config blocks writes", async () => {
 });
 
 test("flag on without any canary configuration blocks writes and preserves legacy flow", async () => {
+  resetRawListingCanaryMetrics();
+
   const repository = {
     findListingByMarketplaceExternalId: async () => null,
     upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-FLAG-ONLY" }),
@@ -291,6 +295,279 @@ test("flag on without any canary configuration blocks writes and preserves legac
 
   assert.equal(result.status, "DISABLED");
   assert.equal(result.reason, "canary-config-invalid");
+
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 1);
+  assert.equal(metrics.skippedDisabled, 1);
+});
+
+test("resetRawListingCanaryMetrics clears all counters", () => {
+  resetRawListingCanaryMetrics();
+
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-RESET" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  return persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-RESET", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-RESET"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  }).then(() => {
+    const metrics = getRawListingCanaryMetrics();
+    assert.equal(metrics.attempted, 1);
+    assert.equal(metrics.writeSuccess, 1);
+
+    const reset = resetRawListingCanaryMetrics();
+    assert.equal(reset.attempted, 1);
+    assert.equal(reset.writeSuccess, 1);
+
+    const cleared = getRawListingCanaryMetrics();
+    assert.equal(cleared.attempted, 0);
+    assert.equal(cleared.writeSuccess, 0);
+    assert.deepEqual(cleared.byMarketplace, {});
+  });
+});
+
+test("dry-run metrics are captured without a repository write", async () => {
+  resetRawListingCanaryMetrics();
+
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DRY-METRIC" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DRY-METRIC", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: true,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-DRY-METRIC"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 1);
+  assert.equal(metrics.skippedDryRun, 1);
+  assert.equal(metrics.writeSuccess, 0);
+});
+
+test("marketplace deny metrics are counted without write", async () => {
+  resetRawListingCanaryMetrics();
+
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "MERCADO_LIVRE", externalId: "ML-DENY-METRIC" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "MERCADO_LIVRE", externalId: "ML-DENY-METRIC", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["ML-DENY-METRIC"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 1);
+  assert.equal(metrics.skippedMarketplace, 1);
+});
+
+test("external id deny metrics are counted without write", async () => {
+  resetRawListingCanaryMetrics();
+
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DENY-METRIC" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DENY-METRIC", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-ALLOW-METRIC"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 1);
+  assert.equal(metrics.skippedExternalId, 1);
+});
+
+test("max writes metric is counted and write does not continue", async () => {
+  resetRawListingCanaryMetrics();
+
+  const counter = { current: 0 };
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-LIMIT-METRIC" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-LIMIT-METRIC", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-LIMIT-METRIC"],
+      maxWrites: 0,
+      counter,
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 1);
+  assert.equal(metrics.skippedLimit, 1);
+});
+
+test("invalid external id metrics are counted before a write attempt", async () => {
+  resetRawListingCanaryMetrics();
+
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "   " }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "   ", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-INVALID-METRIC"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "REJECTED");
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 1);
+  assert.equal(metrics.skippedInvalidExternalId, 1);
+  assert.equal(metrics.writeSuccess, 0);
+});
+
+test("success metric counts a valid write and failure metric counts repository error", async () => {
+  resetRawListingCanaryMetrics();
+
+  const successRepository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-SUCCESS-METRIC" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const success = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-SUCCESS-METRIC", title: "Widget" }),
+    repository: successRepository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-SUCCESS-METRIC"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(success.status, "CREATED");
+
+  const failingRepository = {
+    findListingByMarketplaceExternalId: async () => {
+      throw new Error("metrics-repository-down");
+    },
+    upsertRawMarketplaceListing: async () => {
+      throw new Error("metrics-repository-down");
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  const failure = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-FAIL-METRIC", title: "Widget" }),
+    repository: failingRepository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-FAIL-METRIC"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(failure.status, "ERROR");
+
+  const metrics = getRawListingCanaryMetrics();
+  assert.equal(metrics.attempted, 2);
+  assert.equal(metrics.writeSuccess, 1);
+  assert.equal(metrics.writeFailed, 1);
+});
+
+test("metrics accumulate and snapshot is isolated from internal state", async () => {
+  resetRawListingCanaryMetrics();
+
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-ACCUM-1" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-ACCUM-1", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-ACCUM-1"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  const first = getRawListingCanaryMetrics();
+  first.attempted = 999;
+  first.byMarketplace.amazon.attempted = 999;
+
+  const second = getRawListingCanaryMetrics();
+  assert.equal(second.attempted, 1);
+  assert.equal(second.byMarketplace.amazon.attempted, 1);
+
+  const reset = resetRawListingCanaryMetrics();
+  assert.equal(reset.attempted, 1);
+  assert.equal(reset.writeSuccess, 1);
 });
 
 test("marketplace allowlist enforces explicit permission", async () => {
