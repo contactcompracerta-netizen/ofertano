@@ -13,6 +13,7 @@ import {
 import type {
   AcquisitionStatus,
   CanonicalProduct,
+  ComparableProductResult,
   MarketplaceAcquisition,
   MarketplaceCode,
   MultistoreV2Result,
@@ -21,7 +22,9 @@ import type {
   PublicProductView,
   QueryIntent,
   RawCandidate,
+  SearchResult,
   ScoredCandidate,
+  SingleMarketplaceSearchResult,
 } from "./types";
 import { buildQueryIntent } from "./queryIntent";
 import { scoreQueryRelevance } from "./queryRelevance";
@@ -199,96 +202,12 @@ export function elapsedV2Ms(deadline: SearchDeadline): number {
   return Math.max(0, Date.now() - deadline.startedAt);
 }
 
-function titleHasBrand(title: string, brand: string | null): boolean {
-  if (!brand) {
-    return true;
-  }
-
-  const normalized = normalizeMultistoreText(title);
-  return brand.split(" ").every((token) => normalized.includes(token));
-}
-
 function isAliExpressPermanentConfigurationError(
   error: string | null | undefined,
 ): boolean {
   return /invalidappkey|invalid app key|app key is invalid|authentication|autentica(?:c|ç)(?:a|ã)o/i.test(
     error ?? "",
   );
-}
-
-/*
- * A aquisicao so precisa decidir se vale tentar outra variante de consulta.
- * A relevancia completa cria fingerprint/conceitos e pertence a fase protegida
- * de RELEVANCE; repeti-la aqui bloqueava timers quando varias lojas retornavam
- * lotes grandes ao mesmo tempo.
- */
-function hasLightweightQueryEvidence(
-  title: string,
-  intent: QueryIntent,
-): boolean {
-  if (!titleHasBrand(title, intent.brand)) {
-    return false;
-  }
-
-  const normalized = normalizeMultistoreText(title);
-  const tokens = new Set(normalized.split(" ").filter(Boolean));
-  const compact = normalized.replace(/\s+/g, "");
-  const identityValues = [
-    ...intent.modelTokens,
-    ...intent.identityNumbers,
-    ...intent.identityAnchors.map((anchor) => anchor.value),
-  ]
-    .map((value) => normalizeMultistoreText(value))
-    .filter(Boolean);
-
-  if (intent.importantAttributes.capacity) {
-    const queryCapacity = normalizeMultistoreText(intent.importantAttributes.capacity);
-    const capacityMatch = queryCapacity &&
-      (tokens.has(queryCapacity) || compact.includes(queryCapacity.replace(/\s+/g, "")));
-    if (!capacityMatch) {
-      return false;
-    }
-  }
-
-  if (intent.importantAttributes.voltage) {
-    const queryVoltage = normalizeMultistoreText(intent.importantAttributes.voltage);
-    const voltageMatch = queryVoltage &&
-      (tokens.has(queryVoltage) || compact.includes(queryVoltage.replace(/\s+/g, "")));
-    if (!voltageMatch) {
-      return false;
-    }
-  }
-
-  if (intent.importantAttributes.quantity) {
-    const queryQty = normalizeMultistoreText(intent.importantAttributes.quantity);
-    const quantityMatch = queryQty &&
-      (tokens.has(queryQty) || compact.includes(queryQty.replace(/\s+/g, "")));
-    if (!quantityMatch) {
-      return false;
-    }
-  }
-
-  if (
-    intent.hasStrongIdentity &&
-    identityValues.length > 0 &&
-    !identityValues.some((value) => {
-      const normalizedValue = value.replace(/\s+/g, "");
-      return tokens.has(value) || compact.includes(normalizedValue);
-    })
-  ) {
-    return false;
-  }
-
-  if (intent.distinctiveTokens.length >= 3) {
-    const distinctiveHits = intent.distinctiveTokens.filter((token) =>
-      tokens.has(normalizeMultistoreText(token)),
-    ).length;
-    if (distinctiveHits < 2) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function mapAcquisitionStatus(
@@ -349,6 +268,32 @@ function toRawCandidate(candidate: DiscoveryCandidate): RawCandidate | null {
   };
 }
 
+function hasStrongIdentityVariantMatch(
+  candidate: DiscoveryCandidate,
+  intent: QueryIntent,
+  queryCore: ReturnType<typeof buildQueryCore>,
+): boolean {
+  if (!intent.hasStrongIdentity) {
+    return false;
+  }
+
+  const raw = toRawCandidate(candidate);
+  if (!raw) {
+    return false;
+  }
+
+  const scored = scoreQueryRelevance(intent, normalizeCandidate(raw), queryCore);
+  return (
+    scored.status === "RELEVANT" &&
+    scored.hardConflicts.length === 0 &&
+    scored.evidence.strongIdentityCompatibility === "MATCH" &&
+    scored.evidence.productClassCompatibility !== "CONFLICT" &&
+    scored.evidence.productCoreCoverage !== "CONFLICT" &&
+    scored.evidence.brandCompatibility !== "CONFLICT" &&
+    scored.evidence.attributeConflicts.length === 0
+  );
+}
+
 export function processRawCandidates(
   query: string,
   rawCandidates: RawCandidate[],
@@ -386,6 +331,7 @@ function toViews(
 
     return {
       id: persistedIds[index] || `v2-${product.clusterId}`,
+      kind: "COMPARABLE",
       name: product.title,
       image: product.image,
       price: product.price,
@@ -398,6 +344,123 @@ function toViews(
       })),
     };
   });
+}
+
+function toSingleMarketplaceResult(
+  candidate: ScoredCandidate,
+  intent: QueryIntent,
+): SingleMarketplaceSearchResult | null {
+  const raw = candidate.normalized.raw;
+  const title = raw.title.trim();
+  const image = raw.image?.trim() || "";
+  const url = raw.url.trim();
+  const externalId = raw.externalId.trim();
+  const price = raw.price;
+
+  if (
+    candidate.status !== "RELEVANT" ||
+    candidate.hardConflicts.length > 0 ||
+    (candidate.fingerprint.role.value !== "MAIN" &&
+      intent.requestedRole === "MAIN" &&
+      Boolean(intent.brand || intent.hasStrongIdentity || intent.modelTokens.length > 0)) ||
+    !title ||
+    !image ||
+    !url ||
+    !externalId ||
+    price == null ||
+    !Number.isFinite(price) ||
+    price <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    kind: "SINGLE_MARKETPLACE",
+    marketplace: raw.marketplace,
+    marketplaceName: raw.marketplaceName,
+    externalId,
+    title,
+    price,
+    oldPrice: null,
+    image,
+    url,
+    affiliateLink: raw.affiliateLink,
+    brand: raw.brand,
+    attributes: { ...raw.attributes },
+  };
+}
+
+function buildSingleMarketplaceResults(
+  relevant: ScoredCandidate[],
+  comparableProducts: CanonicalProduct[],
+  intent: QueryIntent,
+  limit: number,
+): SingleMarketplaceSearchResult[] {
+  const comparableKeys = new Set(
+    comparableProducts.flatMap((product) =>
+      product.offers.map((offer) => candidateKey(offer.marketplace, offer.externalId)),
+    ),
+  );
+  const seen = new Set<string>();
+  const singles: SingleMarketplaceSearchResult[] = [];
+
+  for (const candidate of relevant) {
+    const raw = candidate.normalized.raw;
+    const key = candidateKey(raw.marketplace, raw.externalId);
+    if (comparableKeys.has(key) || seen.has(key)) {
+      continue;
+    }
+
+    const single = toSingleMarketplaceResult(candidate, intent);
+    if (!single) {
+      continue;
+    }
+
+    seen.add(key);
+    singles.push(single);
+    if (singles.length >= limit) {
+      break;
+    }
+  }
+
+  return singles;
+}
+
+function toSingleViews(
+  singles: SingleMarketplaceSearchResult[],
+): PublicProductView[] {
+  return singles.map((single) => ({
+    id: `single-${single.marketplace}-${single.externalId}`,
+    kind: "SINGLE_MARKETPLACE",
+    name: single.title,
+    image: single.image,
+    price: single.price,
+    oldPrice: single.oldPrice,
+    discount:
+      single.oldPrice && single.oldPrice > single.price
+        ? Math.round((1 - single.price / single.oldPrice) * 100)
+        : null,
+    store: single.marketplaceName,
+    brand: single.brand,
+    marketplace: single.marketplace,
+    externalId: single.externalId,
+    url: single.url,
+    affiliateLink: single.affiliateLink,
+    attributes: { ...single.attributes },
+    offers: [{ marketplace: single.marketplace }],
+  }));
+}
+
+function toComparableResults(
+  products: CanonicalProduct[],
+  productIds: string[],
+): ComparableProductResult[] {
+  return products.map((product, index) => ({
+    kind: "COMPARABLE",
+    productId: productIds[index] || `v2-${product.clusterId}`,
+    product,
+    offers: product.offers,
+  }));
 }
 
 function candidateKey(marketplace: string, externalId: string): string {
@@ -1350,35 +1413,12 @@ async function acquireOneMarketplace(
         outcomes.push(inferSearchOutcome(result));
         scanned += result.scanned || result.candidates.length;
         mergeDiscoveryCandidates(merged, result.candidates, trace);
-
-        const minRelevant =
-          intent.brand ||
-          intent.hasStrongIdentity ||
-          intent.distinctiveTokens.length >= 3
-            ? 1
-            : Math.min(4, limit);
-        const relevanceProbeLimit = Math.min(12, Math.max(4, limit));
-        let relevantHitCount = 0;
-        let probedCandidates = 0;
-        for (const candidate of merged.values()) {
-          if (
-            probedCandidates >= relevanceProbeLimit ||
-            relevantHitCount >= minRelevant ||
-            isolated.signal.aborted ||
-            globalDeadline.expired() ||
-            globalDeadline.remainingMs() <= MIN_POSTPROCESS_BUDGET_MS
-          ) {
-            break;
-          }
-          probedCandidates += 1;
-          if (hasLightweightQueryEvidence(candidate.title, intent)) {
-            relevantHitCount += 1;
-          }
-        }
-        const enoughHits = relevantHitCount >= minRelevant;
-        if (enoughHits) {
+        if (result.candidates.some((candidate) =>
+          hasStrongIdentityVariantMatch(candidate, intent, queryCore),
+        )) {
           break;
         }
+
       }
     },
   );
@@ -2050,7 +2090,19 @@ export async function searchMultistoreV2(
 
     const persistElapsedMs = Date.now() - persistStartedAt;
     const persistedCount = persistedProductIds.filter(Boolean).length;
-    const views = toViews(selectedProducts, persistedProductIds);
+    const comparableViews = toViews(selectedProducts, persistedProductIds);
+    const singleMarketplaceResults = buildSingleMarketplaceResults(
+      relevant,
+      selectedProducts,
+      intent,
+      Math.max(0, limit - comparableViews.length),
+    );
+    const singleViews = toSingleViews(singleMarketplaceResults);
+    const views = [...comparableViews, ...singleViews];
+    const results: SearchResult[] = [
+      ...toComparableResults(selectedProducts, persistedProductIds),
+      ...singleMarketplaceResults,
+    ];
     const multiStoreClusters = selectedProducts.filter(
       (item) => item.marketplaces.length >= 2,
     ).length;
@@ -2077,6 +2129,7 @@ export async function searchMultistoreV2(
       rawCandidates: rawCandidates.length,
       relevantCandidates: relevant.length,
       clusters: selectedClusters.length,
+      singleMarketplaceResults: singleMarketplaceResults.length,
       singleStoreClusters,
       multiStoreClusters,
       persistElapsedMs,
@@ -2097,6 +2150,8 @@ export async function searchMultistoreV2(
       relevantCandidates: relevant,
       clusters: selectedClusters,
       products: selectedProducts,
+      singleMarketplaceResults,
+      results,
       views,
       persistedProductIds,
       marketplacesAttempted,
@@ -2125,6 +2180,8 @@ export function emptyMultistoreResult(query: string): MultistoreV2Result {
     relevantCandidates: [],
     clusters: [],
     products: [],
+    singleMarketplaceResults: [],
+    results: [],
     views: [],
     persistedProductIds: [],
     marketplacesAttempted: [] as MarketplaceCode[],

@@ -1,4 +1,8 @@
-﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
+﻿import {
+  mercadoLivreAuthenticatedFetch,
+  mercadoLivreFetch,
+  mercadoLivrePublicFetch,
+} from "@/lib/mercadolivre";
 import {
   activeSearchAbort,
   composeAbortSignal,
@@ -69,6 +73,7 @@ import {
   createMlStageBudgetClock,
   resolveMlTotalBudgetMs,
   runMlStage,
+  runMlStageWithBudget,
   type MlListingSource,
   type MlStageKind,
 } from "./mlStageBudget";
@@ -206,6 +211,16 @@ type MultigetItemResponse = {
   };
 };
 
+/*
+ * /sites/MLB/search e um endpoint publico. Em algumas politicas da API ele
+ * responde 403 tanto com OAuth quanto sem OAuth. Quando isso acontece, repetir
+ * a mesma rota a cada hunt nao acrescenta cobertura e consome o prazo global.
+ * O cache e deliberadamente curto: revalidamos a disponibilidade em breve sem
+ * reexecutar uma chamada sabidamente bloqueada durante a mesma busca.
+ */
+const ITEMS_API_403_COOLDOWN_MS = 5 * 60_000;
+let itemsApiBlockedUntil = 0;
+
 export type MercadoLivreAcquisitionSources = {
   discoverDomain: (query: string) => Promise<string | null>;
   searchCatalog: (
@@ -331,6 +346,12 @@ const TERMOS_ACESSORIOS_GERAIS = [
   "borracha",
   "anel de vedacao",
   "pino",
+  "trava",
+  "travas",
+  "amortecedor",
+  "amortecedores",
+  "termostato",
+  "termostatos",
   "peso regulador",
   "regulador",
   "valvula",
@@ -1034,8 +1055,30 @@ function createProductCentralEvidenceAssessor(
         candidateModelTokens?.has(token),
       );
     const compactCandidate = candidateText.replace(/\s+/g, "");
-    const matchesAnchor = (anchor: string): boolean =>
-      compactCandidate.includes(anchor.replace(/\s+/g, ""));
+    const candidateTokens = tokenize(candidateText).map((token) =>
+      normalizeMultistoreText(token),
+    );
+    const matchesAnchor = (anchor: string): boolean => {
+      const compactAnchor = anchor.replace(/\s+/g, "");
+      if (compactCandidate.includes(compactAnchor)) {
+        return true;
+      }
+
+      const split = compactAnchor.match(/^([a-z]{2,})(\d{1,4})$/);
+      if (!split) {
+        return false;
+      }
+
+      const [, letters, digits] = split;
+      const letterIndex = candidateTokens.indexOf(letters);
+      if (letterIndex < 0) {
+        return false;
+      }
+
+      return candidateTokens
+        .slice(letterIndex + 1, letterIndex + 4)
+        .includes(digits);
+    };
     const anchorMatch =
       queryAnchors.length === 0 ||
       queryAnchors.every(matchesAnchor);
@@ -1095,14 +1138,22 @@ function createProductCentralEvidenceAssessor(
       Boolean(queryBrand && brandMatch) ||
       (queryModels.length > 0 && modelMatch) ||
       (queryAnchors.length > 0 && anchorMatch);
-    const hasCentralEvidence = classMatch || hasMatchedIdentity;
+    const lexical = pontuarCoberturaLexicalPonderada(
+      queryCore.normalizedQuery,
+      candidateText,
+    );
+    const strongLexicalEvidence =
+      lexical.score >= 0.65 && lexical.queryCoverage >= 0.55;
+    const hasCentralEvidence = classMatch || hasMatchedIdentity || strongLexicalEvidence;
 
     return result({
       hasCentralEvidence,
       reason: hasCentralEvidence
         ? classMatch
           ? "classe compatível com a consulta"
-          : "identidade forte da consulta foi confirmada"
+          : hasMatchedIdentity
+            ? "identidade forte da consulta foi confirmada"
+            : "cobertura lexical forte da consulta"
         : "sem núcleo de produto nem identidade forte",
       classMatch,
       brandMatch,
@@ -1148,15 +1199,47 @@ function domainDiscoveryMatchesQuery(
   return true;
 }
 
-function buildCatalogSearchQueries(query: string, queryCore: QueryCore): string[] {
+export function buildCatalogSearchQueries(query: string, queryCore: QueryCore): string[] {
   const plan = buildSearchPlan(query, queryCore);
+
+  if (!queryCore.hasStrongIdentity) {
+    const productCore = plan.filter((variant) =>
+      variantHasProductCoreForCatalog(variant, queryCore),
+    );
+    return Array.from(new Set([query, ...productCore, ...plan])).slice(0, 6);
+  }
+
+  /*
+   * Identidade forte: preserva o codigo de modelo canonico (nao destrutivo,
+   * ex.: WD11M -> wd11m) como variante prioritaria. Um codigo alfanumerico
+   * forte so pode existir na forma canonicizada; a forma tokenizada/espacada
+   * (wd 11 m) e a marca parcial (wd11) sao variantes secundarias.
+   */
+  const canonicalModels = queryCore.canonicalModelTokens.filter(
+    (token) => token.length >= 3,
+  );
+  const brandCanonicalQueries = canonicalModels.flatMap((model) =>
+    queryCore.brand ? [`${queryCore.brand} ${model}`] : [],
+  );
+  const expandedCanonicalQueries = canonicalModels.map((model) =>
+    model.replace(/([a-z]+)(\d+)/gi, "$1 $2"),
+  );
   const productCore = plan.filter((variant) =>
     variantHasProductCoreForCatalog(variant, queryCore),
   );
 
-  return Array.from(
-    new Set([query, ...productCore, ...plan]),
-  ).slice(0, 6);
+  const orderedQueries = [
+    ...canonicalModels,
+    ...brandCanonicalQueries,
+    query,
+    ...productCore,
+    ...plan,
+    ...queryCore.identityAnchors.map((anchor) => anchor.value),
+    ...queryCore.modelTokens,
+    ...expandedCanonicalQueries,
+  ];
+
+  return Array.from(new Set(orderedQueries)).slice(0, 6);
 }
 
 function variantHasProductCoreForCatalog(
@@ -1331,7 +1414,7 @@ async function pesquisarCatalogo(
     }
 
     const pesquisa =
-      (await mercadoLivreFetch(
+      (await mercadoLivreAuthenticatedFetch(
         `/products/search?${parametros.toString()}`,
       )) as ProductSearchResponse;
 
@@ -1359,10 +1442,20 @@ async function pesquisarCatalogo(
   }
 }
 
-async function pesquisarItens(
+export async function buscarItensApiMercadoLivre(
   query: string,
   searchLimit: number,
 ): Promise<MercadoLivreSourceFetch<SiteSearchItem[]>> {
+  if (Date.now() < itemsApiBlockedUntil) {
+    return {
+      status: "BLOCKED",
+      httpStatus: 403,
+      data: [],
+      reason:
+        "API publica de anuncios avulsos em cooldown apos 403; nao repetir durante a busca.",
+    };
+  }
+
   try {
     const parametros =
       new URLSearchParams({
@@ -1371,11 +1464,12 @@ async function pesquisarItens(
       });
 
     const pesquisa =
-      (await mercadoLivreFetch(
+      (await mercadoLivrePublicFetch(
         `/sites/MLB/search?${parametros.toString()}`,
       )) as SiteSearchResponse;
 
     const data = pesquisa.results ?? [];
+    itemsApiBlockedUntil = 0;
 
     return {
       status: data.length > 0 ? "SUCCESS" : "EMPTY",
@@ -1387,8 +1481,13 @@ async function pesquisarItens(
           : "API de anuncios avulsos sem resultados.",
     };
   } catch (error) {
+    const classified = classificarErroFonteMercadoLivre(error);
+    if (classified.status === "BLOCKED" && classified.httpStatus === 403) {
+      itemsApiBlockedUntil = Date.now() + ITEMS_API_403_COOLDOWN_MS;
+    }
+
     return {
-      ...classificarErroFonteMercadoLivre(error),
+      ...classified,
       data: [],
     };
   }
@@ -1695,7 +1794,7 @@ async function carregarCandidato(
     }
 
     const produto =
-      (await mercadoLivreFetch(
+      (await mercadoLivreAuthenticatedFetch(
         `/products/${productId}`,
         { signal },
       )) as CatalogProduct;
@@ -1800,7 +1899,7 @@ async function carregarCandidato(
     if (!oferta) {
       try {
         const ofertas =
-          (await mercadoLivreFetch(
+          (await mercadoLivreAuthenticatedFetch(
             `/products/${productId}/items`,
           )) as CatalogItemsResponse;
 
@@ -1968,7 +2067,7 @@ function fontesPadraoMercadoLivre(): MercadoLivreAcquisitionSources {
     discoverDomain: descobrirDominio,
     searchCatalog: pesquisarCatalogo,
     loadCatalogCandidate: carregarCandidato,
-    searchItemsApi: pesquisarItens,
+    searchItemsApi: buscarItensApiMercadoLivre,
     searchPublicListings: pesquisarPaginaPublica,
     searchPublicLista: pesquisarPaginaPublicaLista,
     searchPublicJm: pesquisarPaginaPublicaJm,
@@ -2297,6 +2396,14 @@ export async function buscarMercadoLivreComFontes(
       return false;
     }
 
+    if (
+      queryCore.hasStrongIdentity &&
+      possuiAcessorioNaoSolicitado(candidateTitle, relevanceQuery)
+    ) {
+      minimalEvidenceCache.set(evaluation, false);
+      return false;
+    }
+
     const centralEvidence = assessCentralEvidence(candidateTitle);
     let supported = centralEvidence.hasCentralEvidence;
     if (!supported && !queryHasCentralRequirements) {
@@ -2305,6 +2412,10 @@ export async function buscarMercadoLivreComFontes(
         candidateTitle,
       );
       supported = lexical.score >= 0.18 || lexical.queryCoverage >= 0.2;
+    }
+
+    if (!supported && (evaluation.lexicalScore ?? 0) >= 0.9) {
+      supported = true;
     }
 
     minimalEvidenceCache.set(evaluation, supported);
@@ -2374,6 +2485,8 @@ export async function buscarMercadoLivreComFontes(
       : Math.min(4, limit);
   const hasCoverageGoal = (): boolean =>
     supportedEvaluationCount() >= targetUsable;
+  let publicSearchBlockedForRun = false;
+  let primarySourceHasCandidateForRun = false;
   let resolveCoverageGoalReached: (() => void) | null = null;
   const coverageGoalReached = new Promise<void>((resolve) => {
     resolveCoverageGoalReached = resolve;
@@ -2405,6 +2518,13 @@ export async function buscarMercadoLivreComFontes(
       }
 
       sourceOutcomes.push(mapFetchStatusToOutcome(fetch.status));
+      if (
+        source === "items-api" &&
+        fetch.status === "BLOCKED" &&
+        fetch.httpStatus === 403
+      ) {
+        publicSearchBlockedForRun = true;
+      }
       const before = keptEvaluationCount(evaluations);
       let items = fetch.data ?? [];
 
@@ -2495,6 +2615,9 @@ export async function buscarMercadoLivreComFontes(
         status: fetch.status,
         reason: fetch.reason ?? "",
       });
+      if (after > before) {
+        resolveCoverageGoalIfReached();
+      }
     };
 
     const queryPlan = buildSearchPlan(relevanceQuery, queryCore);
@@ -2516,9 +2639,13 @@ export async function buscarMercadoLivreComFontes(
     const executarFonteComOrcamento = async <T,>(
       stage: MlStageKind,
       run: () => Promise<MercadoLivreSourceFetch<T[]>>,
+      maxBudgetMs?: number,
     ): Promise<MercadoLivreSourceFetch<T[]>> => {
       const stageStartedAt = Date.now();
-      const stageBudget = budgetClock.stageBudgetMs(stage);
+      const stageBudget = Math.min(
+        budgetClock.stageBudgetMs(stage),
+        maxBudgetMs ?? Number.POSITIVE_INFINITY,
+      );
       traceMlSourceStart(stage, {
         query,
         budgetMs: stageBudget,
@@ -2536,9 +2663,8 @@ export async function buscarMercadoLivreComFontes(
           };
         }
 
-        const raced = await runMlStage(
-          stage,
-          budgetClock,
+        const raced = await runMlStageWithBudget(
+          stageBudget,
           acquisitionAbort.signal,
           (stageSignal) =>
             runInStageContext(stageSignal, stageBudget, async () => {
@@ -2628,65 +2754,162 @@ export async function buscarMercadoLivreComFontes(
         return ranked;
       };
 
-      const domainFetch = await executarFonteComOrcamento("domain", async () => {
-        try {
-          const domainId = await sources.discoverDomain(relevanceQuery);
-          return {
-            status: "SUCCESS" as const,
-            httpStatus: 200,
-            data: domainId ? [domainId] : [],
-          };
-        } catch (error) {
-          return {
-            ...classificarErroFonteMercadoLivre(error),
-            data: [] as string[],
-          };
-        }
-      });
-      if (closed) {
-        return [];
-      }
-      const domainId = domainFetch.data[0] ?? null;
-      sourceOutcomes.push(mapFetchStatusToOutcome(domainFetch.status));
-
       const catalogQueries = buildCatalogSearchQueries(
         relevanceQuery,
         queryCore,
       );
       const catalogResults: ProductSearchResult[] = [];
+      const strongIdentityCatalogFirst = queryCore.hasStrongIdentity;
+      const strongIdentityPriorityQueries = new Set([
+        ...queryCore.canonicalModelTokens,
+        ...queryCore.canonicalModelTokens.flatMap((model) =>
+          queryCore.brand ? [`${queryCore.brand} ${model}`] : [],
+        ),
+        relevanceQuery,
+      ]);
 
-      for (const catalogQuery of catalogQueries) {
+      /*
+       * O catalogo de uma identidade forte tem de deixar tempo para a proxima
+       * variante canonica e para hidratar um resultado. A reserva protegida
+       * ja faz parte do relogio; dividimos somente o saldo catalogavel entre
+       * as variantes que ainda nao foram tentadas.
+       */
+      const strongIdentityAttemptBudget = (
+        remainingVariants: number,
+      ): number => {
+        const catalogableMs = Math.max(0, budgetClock.catalogBudgetMs());
+        if (catalogableMs <= 0) {
+          return 0;
+        }
+
+        return Math.max(
+          1,
+          Math.floor(catalogableMs / Math.max(1, remainingVariants)),
+        );
+      };
+
+      const runCatalogSearch = async (
+        catalogQuery: string,
+        domainId: string | null,
+        sourceName: "catalog" | "catalog-no-domain",
+        budgetDivisor = 1,
+      ): Promise<boolean> => {
+        const startedAt = Date.now();
+        const attemptBudgetMs = strongIdentityCatalogFirst
+          ? strongIdentityAttemptBudget(budgetDivisor)
+          : undefined;
+        const fetch = await executarFonteComOrcamento("catalog", () =>
+          sources.searchCatalog(catalogQuery, searchLimit, domainId),
+          attemptBudgetMs,
+        );
+        if (closed) {
+          return false;
+        }
+
+        sourceOutcomes.push(mapFetchStatusToOutcome(fetch.status));
+        registrarFonte(
+          query,
+          sourceName,
+          fetch,
+          0,
+          sourcesTried,
+          blockedSources,
+          unusableSources,
+          rawTotal,
+        );
+        catalogResults.push(...fetch.data);
+        traceMlAcquisition("CATALOG_QUERY", {
+          query,
+          catalogQuery,
+          domainId: domainId ?? "",
+          budgetMs: attemptBudgetMs,
+          httpStatus: fetch.httpStatus,
+          elapsedMs: Date.now() - startedAt,
+          resultCount: fetch.data.length,
+          catalogIds: fetch.data
+            .map((product) => product.id?.trim())
+            .filter(Boolean),
+          status: fetch.status,
+        });
+
+        const rankedCatalogResults = rankCatalogResults(
+          sourceName === "catalog-no-domain" ? "fallback" : "primary",
+          catalogResults,
+        );
+        const partitionedCatalogResults = partitionCatalogResults(
+          rankedCatalogResults,
+        );
+        return partitionedCatalogResults.central.length > 0;
+      };
+
+      if (strongIdentityCatalogFirst) {
+        for (let index = 0; index < catalogQueries.length; index += 1) {
+          const catalogQuery = catalogQueries[index]!;
+          if (shouldStop()) {
+            break;
+          }
+
+          const remainingPriorityVariants = catalogQueries
+            .slice(index)
+            .filter((variant) => strongIdentityPriorityQueries.has(variant))
+            .length;
+          const hasCentralCatalogResult = await runCatalogSearch(
+            catalogQuery,
+            null,
+            "catalog-no-domain",
+            remainingPriorityVariants || catalogQueries.length - index,
+          );
+          if (hasCoverageGoal() || hasCentralCatalogResult) {
+            break;
+          }
+        }
+      }
+
+      let domainId: string | null = null;
+      if (!strongIdentityCatalogFirst) {
+        const domainFetch = await executarFonteComOrcamento("domain", async () => {
+          try {
+            const discoveredDomainId = await sources.discoverDomain(relevanceQuery);
+            return {
+              status: "SUCCESS" as const,
+              httpStatus: 200,
+              data: discoveredDomainId ? [discoveredDomainId] : [],
+            };
+          } catch (error) {
+            return {
+              ...classificarErroFonteMercadoLivre(error),
+              data: [] as string[],
+            };
+          }
+        });
+        if (closed) {
+          return [];
+        }
+        domainId = domainFetch.data[0] ?? null;
+        sourceOutcomes.push(mapFetchStatusToOutcome(domainFetch.status));
+      }
+
+      if (strongIdentityCatalogFirst) {
+        return rankCatalogResults("final", catalogResults);
+      }
+
+      for (let index = 0; index < catalogQueries.length; index += 1) {
+        const catalogQuery = catalogQueries[index]!;
         if (shouldStop()) {
           break;
         }
 
-        const catalogWithDomain = await executarFonteComOrcamento("catalog", () =>
-          sources.searchCatalog(catalogQuery, searchLimit, domainId),
+        const hasPrimaryCentral = await runCatalogSearch(
+          catalogQuery,
+          domainId,
+          domainId ? "catalog" : "catalog-no-domain",
+          catalogQueries.length - index,
         );
-        if (closed) {
-          break;
-        }
-        if (catalogResults.length === 0) {
-          sourceOutcomes.push(mapFetchStatusToOutcome(catalogWithDomain.status));
-          registrarFonte(
-            query,
-            domainId ? "catalog" : "catalog-no-domain",
-            catalogWithDomain,
-            0,
-            sourcesTried,
-            blockedSources,
-            unusableSources,
-            rawTotal,
-          );
-        }
-
-        catalogResults.push(...catalogWithDomain.data);
-
         let rankedCatalogResults = rankCatalogResults("primary", catalogResults);
         let partitionedCatalogResults = partitionCatalogResults(
           rankedCatalogResults,
         );
-        const hasCentralCatalogResult =
+        const hasCentralCatalogResult = hasPrimaryCentral ||
           partitionedCatalogResults.central.length > 0;
         let usedDomainFallback = false;
 
@@ -2695,24 +2918,11 @@ export async function buscarMercadoLivreComFontes(
           catalogQuery === catalogQueries[0] &&
           !hasCentralCatalogResult
         ) {
-          const catalogNoDomain = await executarFonteComOrcamento("catalog", () =>
-            sources.searchCatalog(catalogQuery, searchLimit, null),
-          );
-          if (closed) {
-            break;
-          }
-          sourceOutcomes.push(mapFetchStatusToOutcome(catalogNoDomain.status));
-          catalogResults.push(...catalogNoDomain.data);
-          usedDomainFallback = true;
-          registrarFonte(
-            query,
+          usedDomainFallback = await runCatalogSearch(
+            catalogQuery,
+            null,
             "catalog-no-domain",
-            catalogNoDomain,
-            0,
-            sourcesTried,
-            blockedSources,
-            unusableSources,
-            rawTotal,
+            catalogQueries.length - index,
           );
         }
 
@@ -2808,7 +3018,8 @@ export async function buscarMercadoLivreComFontes(
                   attempt.evaluation &&
                   hasMinimalQueryEvidence(attempt.evaluation),
               ).length >=
-            targetUsable;
+            1;
+          const canShortCircuitHydration = !queryCore.hasStrongIdentity;
           const registerSupportedEvaluation = (
             evaluation: CandidateEvaluation,
           ) => {
@@ -2821,7 +3032,7 @@ export async function buscarMercadoLivreComFontes(
               return;
             }
 
-            if (hasBatchCoverageGoal()) {
+            if (canShortCircuitHydration && hasBatchCoverageGoal()) {
               resolveBatchCoverageGoal?.();
               batchAbort.abort();
             }
@@ -2862,6 +3073,9 @@ export async function buscarMercadoLivreComFontes(
                       hasMinimalQueryEvidence(evaluation);
                     attempt.terminal = hasUsableKept ? "KEPT" : "DROPPED";
                     if (hasUsableKept) {
+                      primarySourceHasCandidateForRun = true;
+                    }
+                    if (hasUsableKept) {
                       registerSupportedEvaluation(evaluation);
                     }
                   } catch (error) {
@@ -2885,8 +3099,10 @@ export async function buscarMercadoLivreComFontes(
                 });
 
                 const allSettled = Promise.allSettled(tasks).then(() => undefined);
-                await Promise.race([allSettled, batchCoverageGoalReached]);
-                if (hasBatchCoverageGoal()) {
+                await (canShortCircuitHydration
+                  ? Promise.race([allSettled, batchCoverageGoalReached])
+                  : allSettled);
+                if (canShortCircuitHydration && hasBatchCoverageGoal()) {
                   batchAbort.abort();
                   return;
                 }
@@ -2949,6 +3165,12 @@ export async function buscarMercadoLivreComFontes(
         (attempt) =>
           attempt.evaluation && hasMinimalQueryEvidence(attempt.evaluation),
       ).length;
+      if (
+        usableFromCatalog > 0 ||
+        completedAttempts.some((attempt) => attempt.terminal === "KEPT")
+      ) {
+        primarySourceHasCandidateForRun = true;
+      }
       const catalogSourceName = sourcesTried.includes("catalog")
         ? "catalog"
         : "catalog-no-domain";
@@ -3048,6 +3270,24 @@ export async function buscarMercadoLivreComFontes(
     };
 
     const runPublicListingFallbacks = async (): Promise<void> => {
+      if (primarySourceHasCandidateForRun || supportedEvaluationCount() > 0) {
+        traceMlAcquisition("CANDIDATES", {
+          query,
+          phase: "skip-public-fallback",
+          reason: "PRIMARY_SOURCE_HAS_CANDIDATE",
+        });
+        return;
+      }
+
+      if (publicSearchBlockedForRun) {
+        traceMlAcquisition("CANDIDATES", {
+          query,
+          phase: "skip-public-fallback",
+          reason: "ITEMS_API_403_COOLDOWN",
+        });
+        return;
+      }
+
       for (const source of stagePlan.listingStages) {
         if (source === "items-api") {
           continue;
@@ -3094,7 +3334,7 @@ export async function buscarMercadoLivreComFontes(
 
       await Promise.race([primaryLanes, coverageGoalReached]);
 
-      if (hasCoverageGoal()) {
+      if (primarySourceHasCandidateForRun || hasCoverageGoal()) {
         traceMlAcquisition("EXIT", {
           query,
           candidates: supportedEvaluationCount(),
@@ -3107,14 +3347,14 @@ export async function buscarMercadoLivreComFontes(
       // cobertura, aguardamos as duas para preservar o fallback publico.
       await primaryLanes;
 
-      if (!shouldStop() && !hasCoverageGoal()) {
+      if (!shouldStop() && !primarySourceHasCandidateForRun && !hasCoverageGoal()) {
         await runPublicListingFallbacks();
       }
     };
 
     await waitForParallelLanes();
 
-    if (hasCoverageGoal()) {
+    if (primarySourceHasCandidateForRun || hasCoverageGoal()) {
       return finalizeDiscovery();
     }
 
@@ -3124,6 +3364,8 @@ export async function buscarMercadoLivreComFontes(
 
     if (!hasCoverageGoal()) {
       const publicBlocked =
+        primarySourceHasCandidateForRun ||
+        publicSearchBlockedForRun ||
         blockedSources.includes("public-search") ||
         (blockedSources.includes("public-search-lista") &&
           blockedSources.includes("public-search-jm"));

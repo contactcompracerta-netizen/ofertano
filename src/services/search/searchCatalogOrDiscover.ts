@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { searchCatalogLocal } from "@/services/catalog-search";
+import { runCatalogShadowSearch } from "@/services/catalog-search/shadow";
 import { descobrirProdutos } from "@/services/discovery";
 import { importarCandidatoDiscovery } from "@/services/discovery/importCandidate";
 import {
@@ -25,6 +27,7 @@ import {
   type PersistProductFn,
 } from "@/services/multistore-v2";
 import type { SearchBudget } from "@/services/multistore-v2/timeBudget";
+import type { PublicProductView } from "@/services/multistore-v2";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
 import { countDistinctNonEmptyMarketplaces, hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
 
@@ -169,41 +172,29 @@ function matchesQuery(
 }
 
 async function searchCatalog(query: string) {
-  const candidates = await prisma.product.findMany({
-    where: catalogFilter(query),
-    include: {
-      offers: {
-        where: {
-          active: true,
-          matchStatus: "EXACT",
-        },
-        select: {
-          marketplace: true,
-        },
-      },
-    },
-    orderBy: [{ updatedAt: "desc" }, { price: "asc" }],
-    take: 120,
+  const local = await searchCatalogLocal(query, {
+    queryLimit: 120,
+    resultLimit: 40,
   });
 
-  return candidates
-    .filter((product) => matchesQuery(product, query))
-    .sort((first, second) => {
-      const storeDifference = storeCount(second) - storeCount(first);
-
-      if (storeDifference !== 0) {
-        return storeDifference;
-      }
-
-      return first.price - second.price;
-    })
-    .slice(0, 40);
+  return local.hits.map((hit) => ({
+    id: hit.product.id,
+    kind: hit.kind,
+    name: hit.product.name,
+    image: hit.product.image ?? "",
+    price: hit.product.price,
+    oldPrice: hit.product.oldPrice ?? null,
+    discount: hit.product.discount ?? null,
+    store: hit.product.store ?? "",
+    brand: hit.product.brand ?? null,
+    offers: hit.product.offers.map((offer) => ({ marketplace: offer.marketplace })),
+  }));
 }
 
 export type SearchCatalogOrDiscoverResult = {
   query: string;
   source: "CATALOG" | "DISCOVERY" | "NOT_FOUND";
-  products: Awaited<ReturnType<typeof searchCatalog>>;
+  products: Awaited<ReturnType<typeof searchCatalog>> | PublicProductView[];
   discovery?: Awaited<ReturnType<typeof descobrirProdutos>>;
 };
 
@@ -414,6 +405,8 @@ export async function searchCatalogOrDiscover(
 
   traceMultiloja("query", { query: search });
 
+  void runCatalogShadowSearch(search);
+
   if (usarMotorMultistoreV2()) {
     try {
       const limit = Math.max(discoveryLimit, 12);
@@ -475,11 +468,16 @@ export async function searchCatalogOrDiscover(
           return [{ ...view, id }];
         });
 
-        if (views.length > 0) {
+        const singleViews = v2.views.filter(
+          (view) => view.kind === "SINGLE_MARKETPLACE",
+        );
+        const publicViews = [...views, ...singleViews].slice(0, limit);
+
+        if (publicViews.length > 0) {
           return {
             query: search,
             source: "DISCOVERY",
-            products: views as Awaited<ReturnType<typeof searchCatalog>>,
+            products: publicViews,
           };
         }
       } else if (v2.views.length > 0 && visibleProducts.length > 0) {
@@ -494,8 +492,16 @@ export async function searchCatalogOrDiscover(
           query: search,
           source: "DISCOVERY",
           products: v2.views.filter((_, index) =>
-            visibleIndexes.has(index),
-          ) as Awaited<ReturnType<typeof searchCatalog>>,
+            visibleIndexes.has(index) || v2.views[index]?.kind === "SINGLE_MARKETPLACE",
+          ),
+        };
+      } else if (v2.singleMarketplaceResults.length > 0) {
+        return {
+          query: search,
+          source: "DISCOVERY",
+          products: v2.views.filter(
+            (view) => view.kind === "SINGLE_MARKETPLACE",
+          ),
         };
       }
 

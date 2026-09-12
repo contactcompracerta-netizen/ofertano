@@ -6,11 +6,13 @@ import {
   type MercadoLivreAcquisitionSources,
 } from "./mercadolivre";
 import type { DiscoveryQuery } from "./core/types";
+import { classifyQueryMode } from "../multistore-v2/queryIdentity";
+import { extractSanitizedIdentity } from "../multistore-v2/sanitizedIdentity";
 
-const ASPIRADOR =
+const STRONG_IDENTITY_ASPIRADOR =
   "Aspirador de Pó e Água Wap GTW Inox 12 1400W com Bocal de Sopro - 220V";
-const NOTEBOOK =
-  "Notebook MarcaX Pro 16GB SSD 512GB Intel Core i7 - 15.6 polegadas";
+const GENERIC_ASPIRADOR = "Aspirador";
+const NOTEBOOK = "Notebook";
 
 function fontes(
   onStage?: (stage: string) => void,
@@ -73,31 +75,80 @@ async function runNoCategoryAcquisitionCases(): Promise<void> {
   assert.ok(stagePlanA.listingStages.includes("items-api"));
 
   const aspiradorStages: string[] = [];
+  const genericAspiradorStages: string[] = [];
   const notebookStages: string[] = [];
 
+  const strongAspiradorIdentity = extractSanitizedIdentity(
+    STRONG_IDENTITY_ASPIRADOR,
+  );
+  assert.equal(classifyQueryMode(strongAspiradorIdentity), "SPECIFIC");
+  assert.equal(strongAspiradorIdentity.queryCore.hasStrongIdentity, true);
+  assert.deepEqual(strongAspiradorIdentity.queryCore.modelTokens, ["gtw12"]);
+  assert.deepEqual(
+    strongAspiradorIdentity.queryCore.identityAnchors.map(
+      (anchor) => anchor.value,
+    ),
+    ["gtw", "gtw12"],
+  );
+
+  const genericAspiradorIdentity = extractSanitizedIdentity(GENERIC_ASPIRADOR);
+  assert.equal(classifyQueryMode(genericAspiradorIdentity), "GENERIC");
+  assert.equal(genericAspiradorIdentity.queryCore.hasStrongIdentity, false);
+  assert.deepEqual(genericAspiradorIdentity.queryCore.modelTokens, []);
+  assert.deepEqual(genericAspiradorIdentity.queryCore.identityAnchors, []);
+
+  const notebookIdentity = extractSanitizedIdentity(NOTEBOOK);
+  assert.equal(classifyQueryMode(notebookIdentity), "GENERIC");
+  assert.equal(notebookIdentity.queryCore.hasStrongIdentity, false);
+  assert.deepEqual(notebookIdentity.queryCore.modelTokens, []);
+  assert.deepEqual(notebookIdentity.queryCore.identityAnchors, []);
+
   await buscarMercadoLivreComFontes(
-    request(ASPIRADOR),
+    request(STRONG_IDENTITY_ASPIRADOR),
     fontes((stage) => aspiradorStages.push(stage)),
+  );
+  await buscarMercadoLivreComFontes(
+    request(GENERIC_ASPIRADOR),
+    fontes((stage) => genericAspiradorStages.push(stage)),
   );
   await buscarMercadoLivreComFontes(
     request(NOTEBOOK),
     fontes((stage) => notebookStages.push(stage)),
   );
 
-  assert.deepEqual(
-    aspiradorStages,
-    notebookStages,
-    "sequencia de etapas executadas deve ser identica entre aspirador e notebook",
+  assert.ok(
+    !aspiradorStages.includes("domain"),
+    "identidade forte pode pular domain discovery",
   );
   assert.ok(
-    aspiradorStages.includes("domain"),
-    "aquisicao padrao continua consultando dominio",
+    aspiradorStages.includes("catalog"),
+    "identidade forte consulta o catalogo autenticado",
   );
   assert.ok(
     aspiradorStages.includes("items-api"),
-    "aquisicao padrao continua consultando items-api",
+    "identidade forte continua consultando items-api",
   );
 
+  assert.ok(
+    genericAspiradorStages.includes("domain"),
+    "consulta generica sem categoria continua consultando domain discovery",
+  );
+  assert.ok(
+    genericAspiradorStages.includes("items-api"),
+    "consulta generica continua consultando items-api",
+  );
+  assert.ok(
+    notebookStages.includes("domain"),
+    "notebook generico continua consultando domain discovery",
+  );
+  assert.ok(
+    notebookStages.includes("items-api"),
+    "notebook generico continua consultando items-api",
+  );
+
+  console.log("STRONG_IDENTITY_CAN_SKIP_DOMAIN=PASS");
+  console.log("STRONG_IDENTITY_USES_AUTH_CATALOG=PASS");
+  console.log("GENERIC_NO_CATEGORY_STILL_USES_DOMAIN=PASS");
   console.log("NO_CATEGORY_ACQUISITION_PATCH=PASS");
 }
 

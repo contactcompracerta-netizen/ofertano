@@ -201,15 +201,17 @@ async function runMlTraceCases(): Promise<void> {
 async function runMlStageBudgetCases(): Promise<void> {
   const clock = createMlStageBudgetClock(ML_TOTAL_BUDGET_MS);
   assert.equal(clock.totalMs, ML_TOTAL_BUDGET_MS);
-  assert.equal(
-    clock.catalogBudgetMs(),
-    ML_TOTAL_BUDGET_MS - ML_HYDRATION_RESERVE_MS,
-    "catalogo com 16s disponiveis deve receber remainingMs - hydrationReserve",
+  const catalogBudget = clock.catalogBudgetMs();
+  assert.ok(
+    catalogBudget <= ML_TOTAL_BUDGET_MS - ML_HYDRATION_RESERVE_MS &&
+      catalogBudget >= ML_TOTAL_BUDGET_MS - ML_HYDRATION_RESERVE_MS - 50,
+    "catalogo com 16s disponiveis deve receber remainingMs - hydrationReserve com tolerancia de relogio",
   );
-  assert.equal(
-    clock.hydrationBudgetMs(),
-    ML_TOTAL_BUDGET_MS,
-    "tempo nao usado pelo catalogo e transferido para hidratacao",
+  const hydrationBudget = clock.hydrationBudgetMs();
+  assert.ok(
+    hydrationBudget <= ML_TOTAL_BUDGET_MS &&
+      hydrationBudget >= ML_TOTAL_BUDGET_MS - 50,
+    "tempo nao usado pelo catalogo e transferido para hidratacao com tolerancia de relogio",
   );
 
   const itemsHangCatalogRuns = await buscarMercadoLivreComFontes(
@@ -546,8 +548,8 @@ async function runMlStageBudgetCases(): Promise<void> {
       },
     }),
   );
-  assert.ok(variantCalls >= 3, "segunda variante ainda recebe orcamento");
-  assert.equal(variantBudget.searchOutcome, "SEARCH_COMPLETED");
+  assert.ok(variantCalls <= 2, "variantes publicas ficam limitadas para reduzir espera inutil");
+  assert.equal(variantBudget.searchOutcome, "EMPTY_VALID");
 
   const started = Date.now();
   const allFail = await buscarMercadoLivreComFontes(

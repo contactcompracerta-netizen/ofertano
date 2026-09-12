@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 
 import {
   assessProductCentralEvidence,
+  buildCatalogSearchQueries,
+  buscarItensApiMercadoLivre,
   buscarMercadoLivreComFontes,
   type MercadoLivreAcquisitionSources,
 } from "./mercadolivre";
@@ -18,6 +20,7 @@ import {
   hidratarItensComPaginaPublica,
 } from "./mercadolivrePublicHydration";
 import { buildQueryCore } from "../multistore-v2/queryCore";
+import { inferRole } from "../multistore-v2/normalizeCandidate";
 
 const QUERY = "Headphone MarcaX Wireless Rosa";
 
@@ -292,7 +295,104 @@ const listingItem = item({
   title: "Headphone MarcaX Wireless Rosa",
 });
 
+const samsungCore = buildQueryCore("Samsung WD11M");
+assert.ok(
+  samsungCore.rawStrongModelTokens.includes("WD11M"),
+  "STRONG_MODEL_RAW_TOKEN_PRESERVED=PASS: WD11M permanece disponivel sem tokenizacao destrutiva",
+);
+assert.ok(
+  samsungCore.canonicalModelTokens.includes("wd11m"),
+  "STRONG_MODEL_RAW_TOKEN_PRESERVED=PASS: WD11M preserva canonical wd11m",
+);
+const samsungCatalogQueries = buildCatalogSearchQueries("Samsung WD11M", samsungCore);
+assert.equal(
+  samsungCatalogQueries[0],
+  "wd11m",
+  "WD11M_MODEL_ONLY_VARIANT=PASS: variante model-only precede as demais",
+);
+assert.ok(
+  samsungCatalogQueries.includes("samsung wd11m"),
+  "catalogo de identidade forte inclui variante marca + modelo canonico",
+);
+const samsungExpandedIndex = samsungCatalogQueries.findIndex(
+  (variant) => variant === "wd 11 m",
+);
+assert.ok(
+  samsungExpandedIndex === -1 || samsungExpandedIndex > 0,
+  "MODEL_ONLY_CATALOG_VARIANT_PRECEDES_EXPANDED=PASS: canonico antes do expandido",
+);
+
+const acerCore = buildQueryCore("Acer ANV15-52-51E4");
+assert.ok(
+  acerCore.canonicalModelTokens.includes("anv155251e4"),
+  "HYPHENATED_MODEL_PRESERVED=PASS: ANV15-52-51E4 -> anv155251e4",
+);
+const acerCatalogQueries = buildCatalogSearchQueries("Acer ANV15-52-51E4", acerCore);
+assert.equal(
+  acerCatalogQueries[0],
+  "anv155251e4",
+  "modelo hifenizado gera variante model-only canonica primeiro",
+);
+
+const jblCore = buildQueryCore("JBL 520BT");
+assert.ok(
+  jblCore.canonicalModelTokens.includes("520bt"),
+  "NUMERIC_PREFIX_MODEL_PRESERVED=PASS: 520BT -> 520bt",
+);
+const jblCatalogQueries = buildCatalogSearchQueries("JBL 520BT", jblCore);
+assert.equal(
+  jblCatalogQueries[0],
+  "520bt",
+  "modelo com prefixo numerico gera variante model-only canonica primeiro",
+);
+
+const wapCore = buildQueryCore("WAP GTW12");
+assert.ok(
+  wapCore.canonicalModelTokens.includes("gtw12"),
+  "WAP_RAW_MODEL_TOKEN=PASS: GTW12 -> gtw12",
+);
+
+console.log("STRONG_MODEL_RAW_TOKEN_PRESERVED=PASS");
+console.log("WD11M_MODEL_ONLY_VARIANT=PASS");
+console.log("HYPHENATED_MODEL_PRESERVED=PASS");
+console.log("NUMERIC_PREFIX_MODEL_PRESERVED=PASS");
+console.log("MODEL_ONLY_CATALOG_VARIANT_PRECEDES_EXPANDED=PASS");
+
+assert.equal(
+  inferRole("Kit 2 Amortecedor Lava E Seca Samsung WD11M"),
+  "REPLACEMENT_PART",
+  "ACCESSORY_DOES_NOT_SHORT_CIRCUIT_MAIN_PRODUCT=PASS: componente generico nao vira produto principal",
+);
+console.log("ACCESSORY_DOES_NOT_SHORT_CIRCUIT_MAIN_PRODUCT=PASS");
+
 async function runAcquisitionCases() {
+  const originalItemsApiFetch = globalThis.fetch;
+  let itemsApiFetchCalls = 0;
+  let itemsApiUsedAuthorization = false;
+  globalThis.fetch = (async (_input, init) => {
+    itemsApiFetchCalls += 1;
+    itemsApiUsedAuthorization = new Headers(init?.headers).has("Authorization");
+    return new Response(
+      JSON.stringify({ message: "forbidden", error: "forbidden", status: 403 }),
+      {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }) as typeof fetch;
+
+  try {
+    const firstItemsApi403 = await buscarItensApiMercadoLivre("Samsung WD11M", 5);
+    const secondItemsApi403 = await buscarItensApiMercadoLivre("Samsung WD11M", 5);
+
+    assert.equal(firstItemsApi403.status, "BLOCKED");
+    assert.equal(secondItemsApi403.status, "BLOCKED");
+    assert.equal(itemsApiFetchCalls, 1, "403 permanente nao recebe retry durante cooldown");
+    assert.equal(itemsApiUsedAuthorization, false, "endpoint publico nao recebe Authorization");
+  } finally {
+    globalThis.fetch = originalItemsApiFetch;
+  }
+
   const originalFetch = globalThis.fetch;
   try {
     const largeChallengeHtml = `${challengeHtml}${"x".repeat(1_500_000)}`;
@@ -386,20 +486,20 @@ async function runAcquisitionCases() {
   );
   assert.equal(
     testC.success,
-    true,
-    "TESTE C: 403 na API nao encerra o Discovery.",
+    false,
+    "TESTE C: 403 na API publica nao chama fallback HTML publico.",
   );
   assert.equal(testC.degraded, true);
   assert.ok(testC.blockedSources?.includes("items-api"));
   assert.equal(
     testC.sourcesTried?.includes("public-search"),
-    true,
-    "TESTE C: items-api bloqueada continua para HTML publico.",
+    false,
+    "TESTE C: items-api bloqueada nao insiste no HTML publico.",
   );
   assert.equal(
     testC.candidates.some((entry) => entry.externalId === "MLB111222333"),
-    true,
-    "TESTE C: card publico vira candidato utilizavel.",
+    false,
+    "TESTE C: candidato de HTML publico nao e usado apos 403.",
   );
 
   const testD = await buscarMercadoLivreComFontes(
@@ -521,8 +621,8 @@ async function runAcquisitionCases() {
     catalogWithoutWinner.candidates.some(
       (entry) => entry.externalId === "MLB111222333",
     ),
-    true,
-    "Catalogo sem winner + busca publica entrega candidato.",
+    false,
+    "Catalogo sem winner + items-api 403 nao chama HTML publico.",
   );
 
   const coverageQuery = "Headphone Wireless Rosa";
@@ -578,15 +678,15 @@ async function runAcquisitionCases() {
     "o candidato do catalogo precisa chegar antes de a lane items-api terminar",
   );
   assert.ok(
-    publicFallbackCalls > 0,
-    "catalogo parcial com targetUsable > 1 precisa chamar o fallback publico",
+    publicFallbackCalls === 0,
+    "items-api 403 impede fallback publico na mesma execucao",
   );
   assert.equal(
     publicFallbackAfterPartialCatalog.candidates.some(
       (entry) => entry.externalId === "MLB444555666",
     ),
-    true,
-    "o candidato publico precisa sobreviver quando o catalogo nao atinge a cobertura",
+    false,
+    "o candidato publico nao entra apos bloqueio 403 da fonte publica",
   );
 
   let publicCallsAfterCatalogCoverage = 0;
@@ -614,8 +714,8 @@ async function runAcquisitionCases() {
     }),
   );
   assert.ok(
-    catalogReachesTarget.candidates.length >= 2,
-    "catalogo precisa hidratar candidatos suficientes para atingir targetUsable > 1",
+    catalogReachesTarget.candidates.length >= 1,
+    "catalogo com um candidato util ja atende resultado efemero sem HTML publico",
   );
   assert.equal(
     publicCallsAfterCatalogCoverage,
@@ -630,11 +730,21 @@ async function runAcquisitionCases() {
     "o cenario fast path usa identidade forte reconhecida pelo QueryCore",
   );
   let publicCallsForStrongIdentity = 0;
+  let strongIdentityDomainCalls = 0;
+  const strongIdentityCatalogDomains: Array<string | null> = [];
+  let strongIdentityHydratedCatalogId: string | null = null;
   const strongIdentityStartedAt = Date.now();
   const strongIdentityFastPath = await buscarMercadoLivreComFontes(
     request(strongIdentityQuery),
     fontes({
-      searchCatalog: async () => ({
+      discoverDomain: async () => {
+        strongIdentityDomainCalls += 1;
+        return "MLB-IRRELEVANT-DOMAIN";
+      },
+      searchItemsApi: blockedItemsApi,
+      searchCatalog: async (_queryText, _limit, domainId) => {
+        strongIdentityCatalogDomains.push(domainId ?? null);
+        return {
         status: "SUCCESS",
         httpStatus: 200,
         data: [
@@ -644,9 +754,12 @@ async function runAcquisitionCases() {
             status: "active",
           },
         ],
-      }),
-      loadCatalogCandidate: async (productId) =>
-        keptCatalogCandidate(productId, "Headphone JBL Tune 520BT Bluetooth"),
+      };
+      },
+      loadCatalogCandidate: async (productId) => {
+        strongIdentityHydratedCatalogId = productId;
+        return keptCatalogCandidate(productId, "Headphone JBL Tune 520BT Bluetooth");
+      },
       searchPublicListings: async () => {
         publicCallsForStrongIdentity += 1;
         return {
@@ -667,12 +780,129 @@ async function runAcquisitionCases() {
     "identidade forte coberta pelo primeiro candidato nao deve chamar fallback publico",
   );
   assert.equal(
+    strongIdentityCatalogDomains[0],
+    null,
+    "STRONG_IDENTITY_USES_AUTHENTICATED_CATALOG_SEARCH=PASS",
+  );
+  assert.equal(
+    strongIdentityDomainCalls,
+    0,
+    "domain_discovery nao deve bloquear products/search de identidade forte",
+  );
+  assert.equal(
+    strongIdentityHydratedCatalogId,
+    "MLB-JBL-520BT",
+    "CATALOG_RESULT_HYDRATES_ITEMS=PASS",
+  );
+  assert.equal(
     strongIdentityFastPath.candidates.some(
       (entry) => entry.externalId === "MLB-JBL-520BT",
     ),
     true,
     "fast path precisa retornar o primeiro candidato forte valido",
   );
+  assert.equal(
+    strongIdentityFastPath.candidates[0]?.marketplace,
+    "MERCADO_LIVRE",
+    "CATALOG_ITEM_BECOMES_DISCOVERY_CANDIDATE=PASS",
+  );
+  assert.equal(
+    strongIdentityFastPath.blockedSources?.includes("items-api"),
+    true,
+    "BLOCKED_PUBLIC_ML_DOES_NOT_PREVENT_AUTHENTICATED_CATALOG=PASS",
+  );
+  console.log("STRONG_IDENTITY_USES_AUTHENTICATED_CATALOG_SEARCH=PASS");
+  console.log("CATALOG_RESULT_HYDRATES_ITEMS=PASS");
+  console.log("CATALOG_ITEM_BECOMES_DISCOVERY_CANDIDATE=PASS");
+  console.log("BLOCKED_PUBLIC_ML_DOES_NOT_PREVENT_AUTHENTICATED_CATALOG=PASS");
+
+  const strongIdentitySkipsAccessoryCatalog = await buscarMercadoLivreComFontes(
+    request("JBL Tune 520BT"),
+    fontes({
+      searchItemsApi: blockedItemsApi,
+      searchCatalog: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          { id: "MLB-JBL-CASE", name: "Capa para JBL Tune 520BT", status: "active" },
+          { id: "MLB-JBL-FONE", name: "Headphone JBL Tune 520BT", status: "active" },
+        ],
+      }),
+      loadCatalogCandidate: async (productId) =>
+        productId === "MLB-JBL-CASE"
+          ? keptCatalogCandidate("MLB-JBL-CASE-LISTING", "Capa para JBL Tune 520BT")
+          : keptCatalogCandidate("MLB-JBL-FONE-LISTING", "Headphone JBL Tune 520BT"),
+    }),
+  );
+  assert.equal(
+    strongIdentitySkipsAccessoryCatalog.candidates.some(
+      (entry) => entry.externalId === "MLB-JBL-FONE-LISTING",
+    ),
+    true,
+    "catalogo forte nao deve parar em acessorio antes do produto principal",
+  );
+  assert.equal(
+    strongIdentitySkipsAccessoryCatalog.candidates.some(
+      (entry) => entry.externalId === "MLB-JBL-CASE-LISTING",
+    ),
+    false,
+    "acessorio nao solicitado nao vira candidato em identidade forte",
+  );
+
+  const catalogVariantsAttempted: string[] = [];
+  const laterStrongVariantWins = await buscarMercadoLivreComFontes(
+    {
+      ...request("Samsung WD11M"),
+      signal: Object.assign(new AbortController().signal, {
+        deadlineMs: 4_100,
+      }),
+    },
+    fontes({
+      searchItemsApi: blockedItemsApi,
+      searchCatalog: async (catalogQuery) => {
+        catalogVariantsAttempted.push(catalogQuery);
+        if (catalogQuery === "wd11m") {
+          await new Promise<void>((resolve) => setTimeout(resolve, 5_000));
+        }
+
+        return catalogQuery === "samsung wd11m"
+          ? {
+              status: "SUCCESS" as const,
+              httpStatus: 200,
+              data: [
+                {
+                  id: "MLB19055869",
+                  name: "Lava e Seca Samsung WD11M",
+                  status: "active",
+                },
+              ],
+            }
+          : {
+              status: "EMPTY" as const,
+              httpStatus: 200,
+              data: [],
+            };
+      },
+      loadCatalogCandidate: async (productId) =>
+        keptCatalogCandidate(
+          productId === "MLB19055869" ? "MLB3798032412" : productId,
+          "Lava e Seca Samsung WD11M",
+        ),
+    }),
+  );
+  assert.deepEqual(
+    catalogVariantsAttempted.slice(0, 2),
+    ["wd11m", "samsung wd11m"],
+    "a tentativa canonica expirada preserva a proxima variante forte",
+  );
+  assert.ok(
+    laterStrongVariantWins.candidates.some(
+      (candidate) => candidate.externalId === "MLB3798032412",
+    ),
+    "SPECIFIC_QUERY_LATER_VARIANT_CAN_WIN=PASS: a segunda variante forte hidrata o item",
+  );
+  console.log("ONE_CATALOG_TIMEOUT_DOES_NOT_EXHAUST_LANE=PASS");
+  console.log("SPECIFIC_QUERY_LATER_VARIANT_CAN_WIN=PASS");
 
   const idsSurviveHydrationFailure = await hidratarItensComPaginaPublica(
     [
@@ -722,7 +952,8 @@ async function runAcquisitionCases() {
   );
   assert.equal(blockedItemPage.success, false);
   assert.equal(blockedItemPage.searchOutcome, "BLOCKED");
-  assert.ok(blockedItemPage.blockedSources?.includes("public-search"));
+  assert.ok(blockedItemPage.blockedSources?.includes("items-api"));
+  assert.equal(blockedItemPage.sourcesTried?.includes("public-search"), false);
 
   const otherBrandStillAcquired = await buscarMercadoLivreComFontes(
     request("Headphone Wireless Rosa"),
@@ -744,8 +975,8 @@ async function runAcquisitionCases() {
     otherBrandStillAcquired.candidates.some(
       (entry) => entry.externalId === "MLB555444333",
     ),
-    true,
-    "Aquisicao ML nao aplica regra de marca; entrega o candidato para o Matcher.",
+    false,
+    "items-api 403 nao consulta HTML publico para candidato de outra marca.",
   );
 
   const oneSourceBlocked = await buscarMercadoLivreComFontes(
@@ -769,8 +1000,8 @@ async function runAcquisitionCases() {
     oneSourceBlocked.candidates.some(
       (entry) => entry.externalId === "MLB111222333",
     ),
-    true,
-    "Uma fonte bloqueada nao impede outra fonte publica de entregar candidato.",
+    false,
+    "items-api 403 impede outras fontes publicas na mesma execucao.",
   );
 
   const thrownItemsApi = await buscarMercadoLivreComFontes(
@@ -788,15 +1019,20 @@ async function runAcquisitionCases() {
   );
   assert.equal(
     thrownItemsApi.candidates.some((entry) => entry.externalId === "MLB111222333"),
-    true,
-    "items-api lancando 403 continua para HTML publico.",
+    false,
+    "items-api lancando 403 nao continua para HTML publico.",
   );
   assert.ok(thrownItemsApi.blockedSources?.includes("items-api"));
 
   const noIdCard = await buscarMercadoLivreComFontes(
     request(),
     fontes({
-      searchItemsApi: blockedItemsApi,
+      searchItemsApi: async () => ({
+        status: "EMPTY",
+        httpStatus: 200,
+        data: [],
+        reason: "items-api sem resultado.",
+      }),
       searchPublicListings: async () => ({
         status: "SUCCESS",
         httpStatus: 200,
@@ -880,12 +1116,12 @@ async function runAcquisitionCases() {
   );
   assert.equal(
     catalogOnlyKeepsGoing.candidates.some((entry) => entry.externalId === "MLB111222333"),
-    true,
-    "catalogo sem listing nao encerra a cadeia; public-search-jm ainda entrega",
+    false,
+    "catalogo sem listing nao chama fontes publicas apos items-api 403",
   );
   assert.equal(
     catalogOnlyKeepsGoing.searchOutcome,
-    "SEARCH_COMPLETED",
+    "BLOCKED",
   );
 
   const partialSurvivesHydration403 = await buscarMercadoLivreComFontes(
@@ -932,8 +1168,8 @@ async function runAcquisitionCases() {
     partialSurvivesHydration403.candidates.some(
       (entry) => entry.externalId === "MLB1967745737",
     ),
-    true,
-    "listing com titulo/preco no HTML sobrevive a hidratacao 403",
+    false,
+    "listing HTML nao e usado apos items-api 403",
   );
 
   const catalogBlockedPublicOk = await buscarMercadoLivreComFontes(
@@ -953,10 +1189,10 @@ async function runAcquisitionCases() {
       }),
     }),
   );
-  assert.equal(catalogBlockedPublicOk.searchOutcome, "SEARCH_COMPLETED");
+  assert.equal(catalogBlockedPublicOk.searchOutcome, "BLOCKED");
   assert.equal(
     catalogBlockedPublicOk.candidates.some((entry) => entry.externalId === "MLB111222333"),
-    true,
+    false,
   );
 
   const slowCatalogFastListing = await buscarMercadoLivreComFontes(
@@ -1444,8 +1680,8 @@ async function runAcquisitionCases() {
     }),
   );
 
-  assert.ok(domainCalls >= 1, "aquisicao padrao consulta discoverDomain");
-  assert.equal(catalogDomainArg, "MLB-MINERAL_WATERS");
+  assert.equal(domainCalls, 0, "identidade forte nao depende de discoverDomain");
+  assert.equal(catalogDomainArg, null);
   assert.equal(vacuumFastPath.searchOutcome, "SEARCH_COMPLETED");
   assert.equal(
     vacuumFastPath.candidates.some((entry) => entry.externalId === "MLB5093933269"),

@@ -29,6 +29,7 @@ import {
   classifyProductConcept,
   compareProductConcepts,
   conceptFirstContentIndex,
+  extractSoldItemNucleus,
   isVehicleBrandToken,
   isWeakModifier,
   lexicalTokenAppears,
@@ -188,6 +189,27 @@ function queryBindingContext(intent: QueryIntent): string[] {
     }
 
     return token.length >= 3;
+  });
+}
+
+function genericQuerySemanticQualifiers(
+  intent: QueryIntent,
+  core: QueryCore,
+): string[] {
+  const optionalTokens = new Set([
+    ...core.weakModifiers,
+    ...intent.variantTokens,
+    ...Object.values(intent.importantAttributes).flatMap((value) =>
+      tokenize(value),
+    ),
+  ]);
+
+  return core.normalizedTokens.filter((token) => {
+    if (token === core.soldHeadToken || optionalTokens.has(token)) {
+      return false;
+    }
+
+    return !isWeakModifier(token) && !/^\d+$/.test(token);
   });
 }
 
@@ -362,6 +384,31 @@ export function scoreQueryRelevance(
     candidateClass.id,
   );
   const coreText = classText;
+  const queryProductHead = core.soldHeadToken;
+  const candidateProductHead = extractSoldItemNucleus(coreText).headToken;
+  const hasReliableProductHead = Boolean(
+    queryProductHead &&
+      /[a-z]/.test(queryProductHead) &&
+      !core.weakModifiers.includes(queryProductHead) &&
+      !isWeakModifier(queryProductHead),
+  );
+  const productHeadConceptMatch =
+    core.productClass !== "UNKNOWN" &&
+    candidateClass.id !== "UNKNOWN" &&
+    compareProductConcepts(core.productClass, candidateClass.id) === "MATCH";
+  const productHeadLexicalMatch = Boolean(
+    queryProductHead &&
+      candidateProductHead &&
+      candidateHasToken(
+        queryProductHead,
+        new Set(tokenize(coreText)),
+        coreText,
+      ),
+  );
+  const productHeadMismatch =
+    hasReliableProductHead &&
+    !productHeadConceptMatch &&
+    !productHeadLexicalMatch;
   const coreCoverage = productCoreCoverage(core, coreText);
   const coreCoverageState: RelevanceEvidenceState =
     coreCoverage === "MATCH" || coreCoverage === "CONFLICT"
@@ -374,6 +421,38 @@ export function scoreQueryRelevance(
     fingerprint.role.value ?? "UNKNOWN",
     hostOk,
   );
+  const hasStrongQueryIdentity =
+    Boolean(intent.brand) ||
+    intent.modelTokens.length > 0 ||
+    intent.hasStrongIdentity ||
+    intent.identityAnchors.length > 0;
+  const genericSemanticQualifiers = genericQuerySemanticQualifiers(intent, core);
+  const matchedGenericSemanticQualifiers = genericSemanticQualifiers.filter(
+    (token) => candidateHasToken(token, candidateTokens, candidateText),
+  );
+  const genericHeadMatches = core.soldHeadToken
+    ? candidateHasToken(core.soldHeadToken, candidateTokens, candidateText)
+    : coreCoverage === "MATCH";
+  const genericQualifierEvidence =
+    genericSemanticQualifiers.length === 0 ||
+    coreCoverage === "MATCH" ||
+    (genericHeadMatches && matchedGenericSemanticQualifiers.length > 0);
+  /*
+   * Consultas genericas sem qualificadores podem usar o core comprovado.
+   * Quando a consulta traz um qualifier semantico alem do head, o fallback
+   * exige o core composto ou o head acompanhado de evidencia do qualifier.
+   * Identidades fortes seguem a validacao estrita abaixo.
+   */
+  const genericQueryFallback =
+    !hasStrongQueryIdentity &&
+    coreCoverage === "MATCH" &&
+    classCompatibility !== "CONFLICT" &&
+    roleState !== "CONFLICT" &&
+    genericQualifierEvidence;
+  const genericQualifierEvidenceMissing =
+    !hasStrongQueryIdentity &&
+    genericSemanticQualifiers.length > 0 &&
+    !genericQualifierEvidence;
 
   const matchedTerms = intent.normalizedTokens.filter((token) =>
     candidateHasToken(token, candidateTokens, candidateText),
@@ -434,6 +513,12 @@ export function scoreQueryRelevance(
   if (classCompatibility === "CONFLICT") {
     hardConflicts.push(
       `productClass:${intent.productClass}!=${candidateClass.id}`,
+    );
+  }
+
+  if (productHeadMismatch) {
+    hardConflicts.push(
+      `productHead:${queryProductHead}!=${candidateProductHead ?? "ausente"}`,
     );
   }
 
@@ -840,12 +925,16 @@ export function scoreQueryRelevance(
   if (hardConflicts.length > 0) {
     status = "REJECTED";
     reason = `Conflito comprovado: ${hardConflicts.join(", ")}.`;
+  } else if (!prefilter && genericQualifierEvidenceMissing) {
+    status = "REJECTED";
+    reason = `Consulta generica sem cobertura do qualifier semantico: ${genericSemanticQualifiers.join(", ")}.`;
   } else if (
     !prefilter &&
     !modelPresentEnough &&
     intent.distinctiveTokens.length > 0 &&
     missingDistinctive.length === intent.distinctiveTokens.length &&
-    coreCoverage !== "MATCH"
+    coreCoverage !== "MATCH" &&
+    !genericQueryFallback
   ) {
     status = "REJECTED";
     reason = `Nenhum termo distintivo da consulta aparece no candidato: ${missingDistinctive.join(", ")}.`;
@@ -854,7 +943,8 @@ export function scoreQueryRelevance(
     queryCoverage < 0.18 &&
     twoSided < 0.12 &&
     !modelPresentEnough &&
-    coreCoverage !== "MATCH"
+    coreCoverage !== "MATCH" &&
+    !genericQueryFallback
   ) {
     status = "REJECTED";
     reason = "Cobertura lexical insuficiente para a consulta.";
@@ -873,6 +963,7 @@ export function scoreQueryRelevance(
     core.productClass === "UNKNOWN" ||
     core.productClassConfidence === "NONE" ||
     (candidateAccessory && hostOk);
+
   const rankTier: RankTier = assignRankTier({
     status,
     role: fingerprint.role.value,

@@ -39,6 +39,191 @@ function relevance(query: string, title: string, extras: Partial<RawCandidate> =
   return scoreQueryRelevance(buildQueryIntent(query), normalizeCandidate(raw(title, extras)));
 }
 
+function assertRelevance(
+  marker: string,
+  query: string,
+  title: string,
+  expected: "RELEVANT" | "REJECTED",
+) {
+  assert.equal(relevance(query, title).status, expected, marker);
+  console.log(`${marker}=PASS`);
+}
+
+function assertRole(
+  marker: string,
+  title: string,
+  expected: "MAIN" | "ACCESSORY" | "REPLACEMENT_PART",
+) {
+  assert.equal(inferRole(title), expected, marker);
+  console.log(`${marker}=${expected}`);
+}
+
+function assertMainAndRelatedTier(
+  marker: string,
+  query: string,
+  mainTitle: string,
+  relatedTitle: string,
+  relatedRole: "ACCESSORY" | "REPLACEMENT_PART",
+) {
+  const main = relevance(query, mainTitle);
+  const related = relevance(query, relatedTitle);
+
+  assert.equal(main.status, "RELEVANT", `${marker}: produto MAIN relevante`);
+  assert.equal(main.fingerprint.role.value, "MAIN", `${marker}: produto MAIN`);
+  assert.ok(main.rankTier <= 1, `${marker}: produto MAIN nao e Tier 2`);
+  assert.equal(related.status, "RELEVANT", `${marker}: peca relacionada relevante`);
+  assert.equal(related.fingerprint.role.value, relatedRole, `${marker}: papel da peca`);
+  assert.equal(related.rankTier, 2, `${marker}: peca relacionada Tier 2`);
+  assert.equal(
+    compareFingerprints(main.fingerprint, related.fingerprint).relation,
+    "DIFFERENT",
+    `${marker}: peca nunca e SAME com MAIN`,
+  );
+  console.log(`${marker}=PASS`);
+}
+
+assertRole("FILTER_BARRO_ROLE", "Filtro de Barro 6L", "MAIN");
+assertRole("FILTER_OIL_ROLE", "Filtro de Oleo Automotivo", "MAIN");
+assertRole(
+  "REPLACEMENT_PART_CASE",
+  "Refil para Purificador de Agua",
+  "REPLACEMENT_PART",
+);
+assertRole(
+  "ACCESSORY_CASE",
+  "Cabo compativel com Headphone JBL Tune 520BT",
+  "ACCESSORY",
+);
+assertRole(
+  "WAP_MAIN_ROLE",
+  "Aspirador de Po e Agua WAP GTW Inox 12 1400W",
+  "MAIN",
+);
+assertRole(
+  "WAP_ACCESSORY_ROLE",
+  "Filtro para Aspirador WAP GTW 12",
+  "REPLACEMENT_PART",
+);
+assertRole("JBL_MAIN_ROLE", "Headphone JBL Tune 520BT", "MAIN");
+assertRole(
+  "JBL_ACCESSORY_ROLE",
+  "Cabo para Headphone JBL Tune 520BT",
+  "ACCESSORY",
+);
+assertRole("SAMSUNG_MAIN_ROLE", "Lava e Seca Samsung WD11M", "MAIN");
+assertRole(
+  "SAMSUNG_ACCESSORY_ROLE",
+  "Cabo compativel com Samsung WD11M",
+  "ACCESSORY",
+);
+
+assertRelevance(
+  "FILTER_OIL_QUERY_VS_ENGINE_OIL",
+  "filtro de oleo para motor 1.6",
+  "Oleo de motor 1.6 4L",
+  "REJECTED",
+);
+assertRelevance(
+  "FILTER_OIL_VALID",
+  "filtro de oleo para motor 1.6",
+  "Filtro de Oleo para Motor 1.6",
+  "RELEVANT",
+);
+
+assertRelevance(
+  "FILTRO_BARRO_VS_OLEO",
+  "filtro de barro",
+  "Filtro de oleo automotivo",
+  "REJECTED",
+);
+assertRelevance(
+  "FILTRO_BARRO_VALID",
+  "filtro de barro",
+  "Filtro de barro tradicional 8 litros",
+  "RELEVANT",
+);
+assertRelevance(
+  "FILTER_BARRO_NON_FILTER",
+  "filtro de barro",
+  "Barro decorativo 8L",
+  "REJECTED",
+);
+assertRelevance(
+  "CHUTEIRA_SOCIETY_VALID",
+  "Chuteira society",
+  "Chuteira Futebol Society Masculina",
+  "RELEVANT",
+);
+assertRelevance(
+  "CHUTEIRA_WRONG_SUBTYPE",
+  "Chuteira society",
+  "Chuteira Campo Masculina",
+  "REJECTED",
+);
+assertRelevance(
+  "CHUTEIRA_NON_CHUTEIRA",
+  "Chuteira society",
+  "Bola Society",
+  "REJECTED",
+);
+assertRelevance(
+  "CHAVEIRO_GENERIC",
+  "Chaveiro",
+  "Chaveiro Metal Mosquetao Reforcado",
+  "RELEVANT",
+);
+assertRelevance(
+  "ASPIRADOR_GENERIC",
+  "Aspirador",
+  "Aspirador de po vertical",
+  "RELEVANT",
+);
+assertRelevance(
+  "SAMSUNG_CROSS_BRAND",
+  "Samsung WD11M",
+  "Lava e Seca Philco 11kg",
+  "REJECTED",
+);
+assertRelevance(
+  "SAMSUNG_REGRESSION",
+  "Samsung WD11M",
+  "Samsung WD11M Lava e Seca",
+  "RELEVANT",
+);
+assertRelevance(
+  "WAP_REGRESSION",
+  "Aspirador WAP GTW 12",
+  "Aspirador WAP GTW 12 1400W",
+  "RELEVANT",
+);
+assertRelevance(
+  "JBL_REGRESSION",
+  "Headphone JBL Tune 520BT",
+  "Fone JBL Tune 520BT Bluetooth",
+  "RELEVANT",
+);
+assertMainAndRelatedTier(
+  "WAP_RELATED_PART_TIER",
+  "Aspirador WAP GTW 12",
+  "Aspirador WAP GTW 12 1400W",
+  "Filtro para Aspirador WAP GTW 12",
+  "REPLACEMENT_PART",
+);
+assertMainAndRelatedTier(
+  "SAMSUNG_RELATED_ACCESSORY_TIER",
+  "Samsung WD11M",
+  "Samsung WD11M Lava e Seca",
+  "Cabo compativel com Samsung WD11M",
+  "ACCESSORY",
+);
+assertMainAndRelatedTier(
+  "JBL_RELATED_ACCESSORY_TIER",
+  "Headphone JBL Tune 520BT",
+  "Fone JBL Tune 520BT Bluetooth",
+  "Cabo para Headphone JBL Tune 520BT",
+  "ACCESSORY",
+);
+
 const suitQuery = "Terno azul";
 const suitCore = buildQueryCore(suitQuery);
 const reuseCoreSeed = normalizeCandidate(raw("Terno azul clássico", { brand: "None" }));
@@ -943,6 +1128,26 @@ assert.ok(
     valvulaPanela.fingerprint.role.value === "ACCESSORY",
 );
 
+const anelPanela = relevance(
+  panelaQuery,
+  "Anel de vedação panela de pressão",
+);
+assert.equal(anelPanela.status, "RELEVANT");
+assert.equal(anelPanela.fingerprint.role.value, "REPLACEMENT_PART");
+assert.equal(anelPanela.rankTier, 2);
+assert.ok(
+  (anelPanela.fingerprint.hostItem.value ?? "").includes("panela"),
+  "anel de vedação deve manter a panela como host",
+);
+
+const anelTorneira = relevance(
+  panelaQuery,
+  "Anel de vedação para torneira",
+);
+assert.equal(anelTorneira.status, "REJECTED");
+assert.notEqual(anelTorneira.rankTier, 2);
+console.log("UNRELATED_PART_REJECTED=PASS");
+
 assert.equal(
   compareFingerprints(panela5.fingerprint, pesoPanela.fingerprint).relation,
   "DIFFERENT",
@@ -978,6 +1183,34 @@ assert.equal(
 for (const partId of ["peso-1", "valv-1", "anel-1", "cuba-1", "tigela-1", "forro-1"]) {
   assert.equal(panelaTiers[partId], 2, `${partId} e peca TIER 2`);
 }
+assert.equal(
+  panelaRanked.relevant.some((item) => item.normalized.raw.externalId === "anel-1"),
+  true,
+  "anel relacionado deve sobreviver ao filtro de relevância",
+);
+const panelaMainCluster = panelaRanked.clusters.find((cluster) =>
+  cluster.members.some(
+    (member) => member.candidate.normalized.raw.externalId === "pan-5",
+  ),
+);
+const anelCluster = panelaRanked.clusters.find((cluster) =>
+  cluster.members.some(
+    (member) => member.candidate.normalized.raw.externalId === "anel-1",
+  ),
+);
+assert.ok(panelaMainCluster);
+assert.ok(anelCluster);
+assert.notEqual(
+  anelCluster.clusterId,
+  panelaMainCluster.clusterId,
+  "peca Tier 2 nao pode compartilhar o cluster canonico da panela MAIN",
+);
+assert.equal(
+  compareFingerprints(panela5.fingerprint, anelPanela.fingerprint).relation,
+  "DIFFERENT",
+  "peca Tier 2 nunca e SAME com o produto MAIN",
+);
+console.log("ANEL_TIER2_TEST=PASS");
 assert.ok(
   (panelaIds.indexOf("pan-5") ?? 99) <
     Math.min(

@@ -4,6 +4,7 @@ import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation
 type ProductCardProps = {
   produto: {
     id: string;
+    kind?: "COMPARABLE" | "SINGLE_MARKETPLACE";
     name: string;
     image: string;
     price: number;
@@ -17,6 +18,8 @@ type ProductCardProps = {
     sales?: number | null;
     stock?: number | null;
     featured?: boolean;
+    url?: string;
+    affiliateLink?: string | null;
     offers?: Array<{
       marketplace: string;
     }>;
@@ -36,6 +39,10 @@ function formatarQuantidade(valor: number) {
 
 export default function ProductCard({ produto }: ProductCardProps) {
   const displayName = sanitizeProductNameForDisplay(produto.name);
+  const singleMarketplace = produto.kind === "SINGLE_MARKETPLACE";
+  const destination = singleMarketplace
+    ? produto.affiliateLink?.trim() || produto.url?.trim() || "#"
+    : `/produto/${produto.id}`;
 
   const lojasComparadas = Array.from(
     new Set(
@@ -75,7 +82,9 @@ export default function ProductCard({ produto }: ProductCardProps) {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent opacity-0 transition group-hover:opacity-100" />
 
       <Link
-        href={`/produto/${produto.id}`}
+        href={destination}
+        target={singleMarketplace ? "_blank" : undefined}
+        rel={singleMarketplace ? "nofollow sponsored noopener noreferrer" : undefined}
         className="relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-b from-white to-slate-50 p-2 sm:h-48 sm:p-4 lg:h-52"
       >
         <div className="absolute left-1.5 top-1.5 z-10 flex flex-col items-start gap-1 sm:left-3 sm:top-3 sm:gap-1.5">
@@ -94,6 +103,12 @@ export default function ProductCard({ produto }: ProductCardProps) {
           {possuiMultiLoja && (
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700 shadow-sm sm:px-3 sm:text-[11px]">
               Compare em {lojasComparadas.length} lojas
+            </span>
+          )}
+
+          {singleMarketplace && (
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[9px] font-black text-sky-700 shadow-sm sm:px-3 sm:text-[11px]">
+              Encontrado em 1 loja
             </span>
           )}
         </div>
@@ -125,7 +140,12 @@ export default function ProductCard({ produto }: ProductCardProps) {
           )}
         </div>
 
-        <Link href={`/produto/${produto.id}`} className="block">
+        <Link
+          href={destination}
+          target={singleMarketplace ? "_blank" : undefined}
+          rel={singleMarketplace ? "nofollow sponsored noopener noreferrer" : undefined}
+          className="block"
+        >
           <h2 className="mt-1.5 line-clamp-2 min-h-[34px] text-[12px] font-extrabold leading-[1.35] text-slate-950 transition group-hover:text-emerald-700 sm:mt-2 sm:min-h-11 sm:text-[15px] sm:leading-[1.4]">
             {displayName}
           </h2>
@@ -200,10 +220,12 @@ export default function ProductCard({ produto }: ProductCardProps) {
           )}
 
           <Link
-            href={`/produto/${produto.id}`}
+            href={destination}
+            target={singleMarketplace ? "_blank" : undefined}
+            rel={singleMarketplace ? "nofollow sponsored noopener noreferrer" : undefined}
             className="mt-2 flex h-9 items-center justify-center gap-1 rounded-lg bg-[#087A55] px-2 text-[11px] font-black text-white shadow-sm shadow-emerald-900/10 transition hover:bg-[#066747] focus:outline-none focus:ring-4 focus:ring-emerald-200 sm:mt-3 sm:h-11 sm:gap-2 sm:rounded-xl sm:px-4 sm:text-sm"
           >
-            <span>Ver preços</span>
+            <span>{singleMarketplace ? "Ver na loja" : "Ver preços"}</span>
 
             <svg
               viewBox="0 0 24 24"

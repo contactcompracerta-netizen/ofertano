@@ -110,6 +110,8 @@ const REPLACEMENT_HEADS = new Set([
   "pesos",
   "valvula",
   "valvulas",
+  "trava",
+  "travas",
   "vela",
   "velas",
   "torneira",
@@ -120,6 +122,10 @@ const REPLACEMENT_HEADS = new Set([
   "borrachas",
   "recipiente",
   "recipientes",
+  "amortecedor",
+  "amortecedores",
+  "termostato",
+  "termostatos",
   "cuba",
   "cubas",
   "forro",
@@ -653,6 +659,16 @@ function followingPrimaryProduct(words: string[], fromIndex: number): boolean {
   return false;
 }
 
+function hasTrailingPrimaryProduct(words: string[], fromIndex: number): boolean {
+  for (let index = fromIndex; index < words.length; index += 1) {
+    if (primaryProductStartsAt(words, index)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function firstPrimaryProductIndex(
   words: string[],
   end = words.length,
@@ -709,15 +725,35 @@ function firstUnabsorbedPartHead(
 
     const head = partHeadAt(words, index);
     if (head && primaryProductStartsAt(words, index)) {
-      if (!seenPrimary) {
-        return null;
-      }
+      /*
+       * Cabecas de peca tambem registram classe de produto primario
+       * ("amortecedor" e token de automotive_part). Sem outro produto
+       * primario adiante, a cabeca e o proprio produto. Com um produto
+       * primario independente depois dela, o titulo e peca + hospedeiro.
+       */
+      const partWithIndependentHost =
+        !seenPrimary && hasTrailingPrimaryProduct(words, index + head.span);
 
-      continue;
+      if (!partWithIndependentHost) {
+        if (!seenPrimary) {
+          return null;
+        }
+
+        continue;
+      }
     }
 
     if (!seenPrimary) {
       if (head) {
+        if (
+          head.role === "REPLACEMENT_PART" &&
+          !hasReplacementSemantics &&
+          !followingPrimaryProduct(words, index + head.span) &&
+          !hasTrailingPrimaryProduct(words, index + head.span)
+        ) {
+          continue;
+        }
+
         return { ...head, index };
       }
 

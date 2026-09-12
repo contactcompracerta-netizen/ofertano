@@ -63,6 +63,16 @@ enum SearchRequestStatus {
   ERROR
 }
 
+enum RawListingStatus {
+  DISCOVERED
+  NORMALIZED
+  MATCHED
+  UNMATCHED
+  STALE
+  ARCHIVED
+  ERROR
+}
+
 model Product {
   id String @id @default(uuid())
 
@@ -110,16 +120,68 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  offers         MarketplaceOffer[]
-  priceHistory   PriceHistory[]     @relation("ProductPriceHistory")
-  searchRequests SearchRequest[]
-  priceAlerts    PriceAlert[]
-  socialPosts    SocialPost[]
+  offers                 MarketplaceOffer[]
+  rawMarketplaceListings RawMarketplaceListing[] @relation("ProductRawMarketplaceListings")
+  priceHistory           PriceHistory[]          @relation("ProductPriceHistory")
+  searchRequests         SearchRequest[]
+  priceAlerts            PriceAlert[]
+  socialPosts            SocialPost[]
 
   @@index([active, updatedAt])
   @@index([category, active])
   @@index([brand, modelNumber])
   @@index([publicationStatus, updatedAt])
+}
+
+model RawMarketplaceListing {
+  id String @id @default(cuid())
+
+  marketplace Marketplace
+  externalId  String
+
+  sellerId   String?
+  sellerName String?
+
+  sourceUrl     String? @db.Text
+  affiliateLink String? @db.Text
+
+  title           String?
+  normalizedTitle String?
+  brand           String?
+  modelNumber     String?
+  ean             String?
+  gtin            String?
+  mpn             String?
+  category        String?
+
+  attributes Json?
+  rawPayload Json?
+
+  image    String?
+  price    Float?
+  oldPrice Float?
+  stock    Int?
+
+  available   Boolean          @default(true)
+  active      Boolean          @default(true)
+  status      RawListingStatus @default(DISCOVERED)
+  fingerprint String?
+
+  canonicalProductId String?
+  canonicalProduct   Product? @relation("ProductRawMarketplaceListings", fields: [canonicalProductId], references: [id], onDelete: SetNull)
+
+  firstSeenAt   DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([marketplace, externalId])
+  @@index([canonicalProductId, updatedAt])
+  @@index([marketplace, active])
+  @@index([lastCheckedAt])
+  @@index([brand, modelNumber])
+  @@index([fingerprint])
 }
 
 model MarketplaceOffer {
@@ -426,13 +488,13 @@ model SocialPost {
   productId String?
   product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
-  caption  String @db.Text
+  caption  String   @db.Text
   hashtags String[]
   data     Json
 
   fingerprint String
 
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   publishedAt DateTime?
 
   @@unique([dayKey, slot])
@@ -450,8 +512,8 @@ model BlogPost {
   category String
   author   String @default("Ofertano")
 
-  readingTime String @default("5 min de leitura")
-  theme       String @default("emerald")
+  readingTime String  @default("5 min de leitura")
+  theme       String  @default("emerald")
   coverImage  String? @db.Text
 
   sections Json
@@ -566,8 +628,8 @@ model AnalyticsSessionDay {
 
 // Subscriptions Web Push do Admin. A chave VAPID privada nunca entra aqui.
 model AdminPushSubscription {
-  id        String @id @default(cuid())
-  endpoint  String @unique @db.Text
+  id        String  @id @default(cuid())
+  endpoint  String  @unique @db.Text
   p256dh    String
   auth      String
   userAgent String? @db.Text

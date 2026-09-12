@@ -218,6 +218,38 @@ export async function mercadoLivreFetch(
 }
 
 
+/*
+ * Endpoints de catalogo sao uma lane autenticada. Nao podem cair no retry
+ * publico generico: alem de perder a semantica OAuth, um 403 publico pode
+ * consumir o orcamento reservado para a proxima variante ou hidratacao.
+ */
+export async function mercadoLivreAuthenticatedFetch(
+  endpoint: string,
+  init?: RequestInit,
+) {
+  const token = await getAccessToken();
+  const headers = new Headers(init?.headers);
+
+  headers.set("Authorization", `Bearer ${token}`);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+
+  const response = await abortableFetch(`${BASE_URL}${endpoint}`, {
+    ...init,
+    headers,
+  });
+
+  if (response.ok) {
+    return response.json();
+  }
+
+  const error = await response.text();
+  throw new Error(
+    `Mercado Livre autenticado ${endpoint} retornou ${response.status}: ${error}`,
+  );
+}
+
 export async function mercadoLivrePublicFetch(
   endpoint: string,
   init?: RequestInit

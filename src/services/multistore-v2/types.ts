@@ -234,6 +234,7 @@ export type CanonicalOffer = {
 
 export type PublicProductView = {
   id: string;
+  kind?: "COMPARABLE" | "SINGLE_MARKETPLACE";
   name: string;
   image: string;
   price: number;
@@ -241,8 +242,37 @@ export type PublicProductView = {
   discount: number | null;
   store: string;
   brand: string | null;
+  marketplace?: MarketplaceCode;
+  externalId?: string;
+  url?: string;
+  affiliateLink?: string | null;
+  attributes?: Record<string, string>;
   offers: Array<{ marketplace: string }>;
 };
+
+export type ComparableProductResult = {
+  kind: "COMPARABLE";
+  productId: string;
+  product: CanonicalProduct;
+  offers: CanonicalOffer[];
+};
+
+export type SingleMarketplaceSearchResult = {
+  kind: "SINGLE_MARKETPLACE";
+  marketplace: MarketplaceCode;
+  marketplaceName: string;
+  externalId: string;
+  title: string;
+  price: number;
+  oldPrice: number | null;
+  image: string;
+  url: string;
+  affiliateLink: string | null;
+  brand: string | null;
+  attributes: Record<string, string>;
+};
+
+export type SearchResult = ComparableProductResult | SingleMarketplaceSearchResult;
 
 export type MultistoreV2Result = {
   query: string;
@@ -253,6 +283,8 @@ export type MultistoreV2Result = {
   relevantCandidates: ScoredCandidate[];
   clusters: ProductCluster[];
   products: CanonicalProduct[];
+  singleMarketplaceResults: SingleMarketplaceSearchResult[];
+  results: SearchResult[];
   views: PublicProductView[];
   persistedProductIds: string[];
   marketplacesAttempted: MarketplaceCode[];

@@ -6,6 +6,7 @@ import SearchAnalytics from "@/components/analytics/SearchAnalytics";
 
 type Produto = {
   id: string;
+  kind?: "COMPARABLE" | "SINGLE_MARKETPLACE";
   name: string;
   image: string;
   price: number;
@@ -18,10 +19,12 @@ type Produto = {
   reviews?: number | null;
   sales?: number | null;
   stock?: number | null;
-    offers?: Array<{
-      marketplace: string;
-    }>;
-  };
+  url?: string;
+  affiliateLink?: string | null;
+  offers?: Array<{
+    marketplace: string;
+  }>;
+};
 
 type OffersSectionProps = {
   produtos: Produto[];
