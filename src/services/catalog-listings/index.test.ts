@@ -153,6 +153,76 @@ test("dry-run overrides the dual-write flag and never persists", async () => {
   assert.equal(calls.length, 0);
 });
 
+test("enabled dual-write persists sanitized payload fields without leaking secrets", async () => {
+  const seen: Record<string, unknown> = {};
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async (listing: ReturnType<typeof normalizeMarketplaceListing>) => {
+      seen.marketplace = listing.marketplace;
+      seen.externalId = listing.externalId;
+      seen.sourceUrl = listing.sourceUrl;
+      seen.affiliateLink = listing.affiliateLink;
+      seen.price = listing.price;
+      seen.title = listing.title;
+      return listing;
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({
+      marketplace: "MERCADO_LIVRE",
+      externalId: "ML-ALLOWED",
+      title: "Fone JBL Tune 520BT",
+      brand: "JBL",
+      category: "Áudio",
+      sourceUrl: "https://example.com/listing?token=secret&source=ml",
+      affiliateLink: "https://example.com/afiliado?auth=abc&campaign=promo",
+      price: 499,
+      canonicalProductId: "product-123",
+    }),
+    repository,
+    enabled: true,
+    dryRun: false,
+  });
+
+  assert.equal(result.status, "CREATED");
+  assert.equal(seen.marketplace, "MERCADO_LIVRE");
+  assert.equal(seen.externalId, "ML-ALLOWED");
+  assert.equal(seen.title, "Fone JBL Tune 520BT");
+  assert.equal(seen.price, 499);
+  assert.equal(String(seen.sourceUrl ?? "").includes("token"), false);
+  assert.equal(String(seen.affiliateLink ?? "").includes("auth"), false);
+});
+
+test("repository failure is isolated and returns an error result instead of breaking legacy flow", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => {
+      throw new Error("repository-down");
+    },
+    upsertRawMarketplaceListing: async () => {
+      throw new Error("repository-down");
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  await assert.doesNotReject(async () => {
+    const result = await persistRawListingIfEnabled({
+      listing: normalizeMarketplaceListing({
+        marketplace: "AMAZON",
+        externalId: "A-FAIL",
+        title: "Kindle",
+      }),
+      repository,
+      enabled: true,
+      dryRun: false,
+    });
+
+    assert.equal(result.status, "ERROR");
+    assert.equal(result.reason, "repository-down");
+  });
+});
+
 test("enabled dual-write persists idempotently for the same marketplace and external id", async () => {
   const calls: Array<{ marketplace: string; externalId: string }> = [];
   const repository = {
