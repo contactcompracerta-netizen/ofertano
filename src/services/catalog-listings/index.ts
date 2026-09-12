@@ -190,3 +190,138 @@ export type RawListingRepository = {
   linkListingToProduct: (listingId: string, canonicalProductId: string) => Promise<void>;
   markListingStale: (listingId: string) => Promise<void>;
 };
+
+export type RawListingWriteStatus =
+  | "DISABLED"
+  | "CREATED"
+  | "UPDATED"
+  | "REJECTED"
+  | "ERROR";
+
+export type RawListingWriteResult = {
+  status: RawListingWriteStatus;
+  marketplace: MarketplaceListingMarket;
+  externalId?: string;
+  listingId?: string;
+  reason?: string;
+};
+
+export function isRawListingDualWriteEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const value = env.RAW_LISTING_DUAL_WRITE_ENABLED?.trim().toLowerCase();
+
+  if (!value) {
+    return false;
+  }
+
+  return value === "1" || value === "true" || value === "yes";
+}
+
+export function sanitizeRawListingPayload(
+  listing: NormalizedMarketplaceListing,
+): Partial<NormalizedMarketplaceListing> {
+  const sanitized: Partial<NormalizedMarketplaceListing> = {
+    marketplace: listing.marketplace,
+    externalId: listing.externalId,
+    sellerId: listing.sellerId ?? null,
+    sellerName: listing.sellerName ?? null,
+    sourceUrl: listing.sourceUrl ?? null,
+    affiliateLink: listing.affiliateLink ?? null,
+    title: listing.title ?? null,
+    normalizedTitle: listing.normalizedTitle ?? null,
+    brand: listing.brand ?? null,
+    modelNumber: listing.modelNumber ?? null,
+    ean: listing.ean ?? null,
+    gtin: listing.gtin ?? null,
+    mpn: listing.mpn ?? null,
+    category: listing.category ?? null,
+    attributes: listing.attributes ?? null,
+    image: listing.image ?? null,
+    price: listing.price ?? null,
+    oldPrice: listing.oldPrice ?? null,
+    stock: listing.stock ?? null,
+    available: listing.available ?? true,
+    status: listing.status ?? "DISCOVERED",
+    fingerprint: listing.fingerprint ?? listingFingerprint(listing),
+    canonicalProductId: listing.canonicalProductId ?? null,
+  };
+
+  if (sanitized.sourceUrl) {
+    sanitized.sourceUrl = sanitized.sourceUrl.replace(/([?&])(token|key|auth|secret|password)=[^&\s]+/gi, "$1redacted");
+  }
+
+  if (sanitized.affiliateLink) {
+    sanitized.affiliateLink = sanitized.affiliateLink.replace(/([?&])(token|key|auth|secret|password)=[^&\s]+/gi, "$1redacted");
+  }
+
+  return sanitized;
+}
+
+export async function persistRawListingIfEnabled(params: {
+  listing: NormalizedMarketplaceListing;
+  repository?: Pick<RawListingRepository, "findListingByMarketplaceExternalId" | "upsertRawMarketplaceListing" | "linkListingToProduct">;
+  enabled?: boolean;
+  dryRun?: boolean;
+}): Promise<RawListingWriteResult> {
+  const listing = normalizeMarketplaceListing(params.listing);
+  const isEnabled = params.enabled ?? isRawListingDualWriteEnabled();
+
+  if (params.dryRun || !isEnabled) {
+    return {
+      status: "DISABLED",
+      marketplace: listing.marketplace,
+      externalId: listing.externalId,
+      reason: params.dryRun ? "dry-run" : "dual-write-disabled",
+    };
+  }
+
+  if (!listing.marketplace || !listing.externalId) {
+    return {
+      status: "REJECTED",
+      marketplace: listing.marketplace,
+      externalId: listing.externalId,
+      reason: "missing-marketplace-or-external-id",
+    };
+  }
+
+  if (!params.repository) {
+    return {
+      status: "ERROR",
+      marketplace: listing.marketplace,
+      externalId: listing.externalId,
+      reason: "repository-not-configured",
+    };
+  }
+
+  try {
+    const sanitized = sanitizeRawListingPayload(listing);
+    const existing = await params.repository.findListingByMarketplaceExternalId(
+      listing.marketplace,
+      listing.externalId,
+    );
+
+    const saved = await params.repository.upsertRawMarketplaceListing({
+      ...normalizeMarketplaceListing(existing ?? sanitized),
+      ...normalizeMarketplaceListing({ ...existing, ...sanitized }),
+    });
+
+    if (listing.canonicalProductId && saved?.externalId) {
+      await params.repository.linkListingToProduct(saved.externalId, listing.canonicalProductId);
+    }
+
+    return {
+      status: existing ? "UPDATED" : "CREATED",
+      marketplace: saved.marketplace,
+      externalId: saved.externalId,
+      listingId: saved?.externalId,
+    };
+  } catch (error) {
+    return {
+      status: "ERROR",
+      marketplace: listing.marketplace,
+      externalId: listing.externalId,
+      reason: error instanceof Error ? error.message : "raw-listing-write-failed",
+    };
+  }
+}
