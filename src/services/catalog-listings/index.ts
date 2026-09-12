@@ -229,7 +229,153 @@ export type RawListingCanaryMetrics = RawListingCanaryMetricCounters & {
   byMarketplace: Record<string, RawListingCanaryMetricCounters>;
 };
 
+export type RawListingCanaryReadinessChecks = {
+  dualWriteEnabled: boolean;
+  marketplaceAllowlistValid: boolean;
+  maxWritesValid: boolean;
+  externalIdsValid: boolean;
+  metricsHealthy: boolean;
+  readOnly: boolean;
+};
+
+export type RawListingCanaryReadinessResult = {
+  status: "READY" | "NOT_READY";
+  reasons: string[];
+  checks: RawListingCanaryReadinessChecks;
+};
+
 const rawListingCanaryProcessCounter = { current: 0 };
+const MAX_SAFE_RAW_LISTING_CANARY_MAX_WRITES = 100;
+const VALID_RAW_LISTING_MARKETPLACES = new Set([
+  "MERCADO_LIVRE",
+  "AMAZON",
+  "SHOPEE",
+  "MAGAZINE_LUIZA",
+  "ALIEXPRESS",
+]);
+
+function isValidRawListingMarketplace(value?: string | null): boolean {
+  return !!value && VALID_RAW_LISTING_MARKETPLACES.has(normalizeCanaryValue(value));
+}
+
+function isValidRawListingExternalId(value?: string | null): boolean {
+  const token = (value ?? "").trim();
+  if (!token) {
+    return false;
+  }
+
+  return /^[A-Za-z0-9._:-]+$/.test(token);
+}
+
+export function evaluateRawListingCanaryReadiness(
+  env: Record<string, string | undefined> = process.env,
+): RawListingCanaryReadinessResult {
+  const reasons: string[] = [];
+
+  const dualWriteEnabled = isRawListingDualWriteEnabled(env);
+  const checks: RawListingCanaryReadinessChecks = {
+    dualWriteEnabled: dualWriteEnabled,
+    marketplaceAllowlistValid: false,
+    maxWritesValid: false,
+    externalIdsValid: true,
+    metricsHealthy: false,
+    readOnly: true,
+  };
+
+  if (dualWriteEnabled) {
+    reasons.push("DUAL_WRITE_ALREADY_ENABLED");
+  }
+
+  const marketplaceSetting = env.RAW_LISTING_CANARY_MARKETPLACES ?? "";
+  const marketplaceAllowlist = normalizeCanaryList(
+    (marketplaceSetting || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  if (marketplaceAllowlist.length === 0) {
+    reasons.push("MARKETPLACE_ALLOWLIST_MISSING");
+  } else {
+    const invalidMarketplace = marketplaceAllowlist.find((marketplace) => !isValidRawListingMarketplace(marketplace));
+    if (invalidMarketplace) {
+      reasons.push("MARKETPLACE_ALLOWLIST_INVALID");
+    } else {
+      checks.marketplaceAllowlistValid = true;
+    }
+  }
+
+  const rawMaxWrites = env.RAW_LISTING_CANARY_MAX_WRITES ?? "";
+  if (rawMaxWrites.trim() === "") {
+    reasons.push("MAX_WRITES_MISSING");
+  } else {
+    const parsed = Number(rawMaxWrites);
+    const isValid =
+      Number.isFinite(parsed) &&
+      Number.isInteger(parsed) &&
+      parsed > 0 &&
+      parsed <= MAX_SAFE_RAW_LISTING_CANARY_MAX_WRITES;
+
+    if (!isValid) {
+      reasons.push("MAX_WRITES_INVALID");
+    } else {
+      checks.maxWritesValid = true;
+    }
+  }
+
+  const externalIdSetting = env.RAW_LISTING_CANARY_EXTERNAL_IDS ?? "";
+  if (externalIdSetting.trim() !== "") {
+    const externalIds = externalIdSetting
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (externalIds.length === 0 || externalIds.some((value) => !isValidRawListingExternalId(value))) {
+      reasons.push("EXTERNAL_ID_ALLOWLIST_INVALID");
+      checks.externalIdsValid = false;
+    }
+  }
+
+  try {
+    const metrics = getRawListingCanaryMetrics();
+    checks.metricsHealthy =
+      !!metrics &&
+      typeof metrics.attempted === "number" &&
+      typeof metrics.skippedDisabled === "number" &&
+      typeof metrics.skippedDryRun === "number" &&
+      typeof metrics.skippedMarketplace === "number" &&
+      typeof metrics.skippedExternalId === "number" &&
+      typeof metrics.skippedLimit === "number" &&
+      typeof metrics.skippedInvalidExternalId === "number" &&
+      typeof metrics.writeSuccess === "number" &&
+      typeof metrics.writeFailed === "number" &&
+      typeof metrics.byMarketplace === "object";
+  } catch {
+    checks.metricsHealthy = false;
+  }
+
+  if (!checks.metricsHealthy) {
+    reasons.push("METRICS_UNAVAILABLE");
+  }
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  const status: "READY" | "NOT_READY" = uniqueReasons.length === 0 ? "READY" : "NOT_READY";
+
+  return {
+    status,
+    reasons: uniqueReasons,
+    checks: {
+      ...checks,
+      dualWriteEnabled: false,
+      marketplaceAllowlistValid: checks.marketplaceAllowlistValid,
+      maxWritesValid: checks.maxWritesValid,
+      externalIdsValid: checks.externalIdsValid,
+      metricsHealthy: checks.metricsHealthy,
+      readOnly: true,
+    },
+  };
+}
+
 
 const emptyRawListingCanaryMetricCounters = (): RawListingCanaryMetricCounters => ({
   attempted: 0,

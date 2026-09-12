@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildListingIdentity,
   buildProductSearchDocument,
+  evaluateRawListingCanaryReadiness,
   getRawListingCanaryMetrics,
   isRawListingDualWriteEnabled,
   linkListingToCanonicalProduct,
@@ -125,6 +126,180 @@ test("raw listing dual-write flag is fail-closed and accepts explicit truthy val
   assert.equal(isRawListingDualWriteEnabled({ RAW_LISTING_DUAL_WRITE_ENABLED: "1" }), true);
   assert.equal(isRawListingDualWriteEnabled({ RAW_LISTING_DUAL_WRITE_ENABLED: "yes" }), true);
   assert.equal(isRawListingDualWriteEnabled({ RAW_LISTING_DUAL_WRITE_ENABLED: "maybe" }), false);
+});
+
+test("readiness gate returns READY for a safe config without changing system state", () => {
+  const safeConfig = {
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON,MERCADO_LIVRE",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "A-ALLOWED,ML-ALLOWED",
+  };
+
+  const readiness = evaluateRawListingCanaryReadiness(safeConfig);
+  assert.equal(readiness.status, "READY");
+  assert.deepEqual(readiness.reasons, []);
+  assert.equal(readiness.checks.dualWriteEnabled, false);
+  assert.equal(readiness.checks.marketplaceAllowlistValid, true);
+  assert.equal(readiness.checks.maxWritesValid, true);
+  assert.equal(readiness.checks.metricsHealthy, true);
+  assert.equal(readiness.checks.readOnly, true);
+});
+
+test("readiness gate blocks dual-write if already enabled", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "true",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("DUAL_WRITE_ALREADY_ENABLED"));
+});
+
+test("readiness gate blocks missing marketplace allowlist", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("MARKETPLACE_ALLOWLIST_MISSING"));
+});
+
+test("readiness gate blocks invalid marketplace allowlist", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "ALL_MARKETS",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("MARKETPLACE_ALLOWLIST_INVALID"));
+});
+
+test("readiness gate blocks missing max writes", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("MAX_WRITES_MISSING"));
+});
+
+test("readiness gate blocks zero max writes", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "0",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("MAX_WRITES_INVALID"));
+});
+
+test("readiness gate blocks negative max writes", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "-2",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("MAX_WRITES_INVALID"));
+});
+
+test("readiness gate blocks non-numeric max writes", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "abc",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("MAX_WRITES_INVALID"));
+});
+
+test("readiness gate accepts valid external allowlist and remains READY", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "A-ALLOWED, A-SECOND",
+  });
+
+  assert.equal(readiness.status, "READY");
+  assert.equal(readiness.checks.externalIdsValid, true);
+});
+
+test("readiness gate blocks invalid external ids", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "A-VALID, invalid id",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.includes("EXTERNAL_ID_ALLOWLIST_INVALID"));
+});
+
+test("readiness gate is read-only and does not touch metrics or repository state", () => {
+  const before = getRawListingCanaryMetrics();
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+  const after = getRawListingCanaryMetrics();
+
+  assert.equal(readiness.status, "READY");
+  assert.deepEqual(after, before);
+  assert.equal(readiness.checks.readOnly, true);
+});
+
+test("readiness gate is deterministic for the same config", () => {
+  const first = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+  const second = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+
+  assert.deepEqual(first, second);
+});
+
+test("readiness gate snapshot is isolated from caller mutation", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+
+  readiness.checks.marketplaceAllowlistValid = false;
+  const next = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "AMAZON",
+    RAW_LISTING_CANARY_MAX_WRITES: "5",
+  });
+
+  assert.equal(next.checks.marketplaceAllowlistValid, true);
+});
+
+test("readiness gate is fail-closed for malformed config", () => {
+  const readiness = evaluateRawListingCanaryReadiness({
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "",
+    RAW_LISTING_CANARY_MAX_WRITES: "Infinity",
+  });
+
+  assert.equal(readiness.status, "NOT_READY");
+  assert.ok(readiness.reasons.length > 0);
 });
 
 test("dry-run overrides the dual-write flag and never persists", async () => {
