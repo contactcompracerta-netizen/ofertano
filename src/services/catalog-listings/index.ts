@@ -198,6 +198,13 @@ export type RawListingWriteStatus =
   | "REJECTED"
   | "ERROR";
 
+export type RawListingCanaryConfig = {
+  allowedMarketplaces?: string[] | null;
+  allowedExternalIds?: string[] | null;
+  maxWrites?: number | null;
+  counter?: { current: number };
+};
+
 export type RawListingWriteResult = {
   status: RawListingWriteStatus;
   marketplace: MarketplaceListingMarket;
@@ -205,6 +212,106 @@ export type RawListingWriteResult = {
   listingId?: string;
   reason?: string;
 };
+
+const rawListingCanaryProcessCounter = { current: 0 };
+
+function normalizeCanaryValue(value?: string | null): string {
+  return (value ?? "").trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function normalizeCanaryList(values?: string[] | null): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return [...new Set(values.map((value) => normalizeCanaryValue(value)).filter(Boolean))];
+}
+
+function readRawListingCanaryFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): RawListingCanaryConfig {
+  return {
+    allowedMarketplaces: normalizeCanaryList((env.RAW_LISTING_CANARY_MARKETPLACES ?? "")
+      .split(",")
+      .map((item) => item.trim())),
+    allowedExternalIds: normalizeCanaryList((env.RAW_LISTING_CANARY_EXTERNAL_IDS ?? "")
+      .split(",")
+      .map((item) => item.trim())),
+    maxWrites: (() => {
+      const rawValue = env.RAW_LISTING_CANARY_MAX_WRITES ?? "";
+      const parsed = Number(rawValue);
+      return Number.isFinite(parsed) ? parsed : null;
+    })(),
+  };
+}
+
+function isCanaryConfigValid(canary?: RawListingCanaryConfig | null): boolean {
+  if (!canary) {
+    return false;
+  }
+
+  const hasAllowlists = (canary.allowedMarketplaces?.length ?? 0) > 0 || (canary.allowedExternalIds?.length ?? 0) > 0;
+  const hasMaxWrites = typeof canary.maxWrites === "number" && Number.isFinite(canary.maxWrites) && canary.maxWrites > 0;
+
+  return hasAllowlists || hasMaxWrites;
+}
+
+export function isRawListingCanaryAllowed(params: {
+  listing: NormalizedMarketplaceListing;
+  enabled?: boolean;
+  dryRun?: boolean;
+  canary?: RawListingCanaryConfig | null;
+}): { allowed: boolean; reason?: string; } {
+  const listing = normalizeMarketplaceListing(params.listing);
+  const isEnabled = params.enabled ?? isRawListingDualWriteEnabled();
+
+  if (!isEnabled) {
+    return { allowed: false, reason: "dual-write-disabled" };
+  }
+
+  if (params.dryRun) {
+    return { allowed: false, reason: "dry-run" };
+  }
+
+  const hasExplicitCanary = params.canary !== undefined;
+  const envCanary = readRawListingCanaryFromEnv();
+  const canary = hasExplicitCanary ? (params.canary ?? {}) : envCanary;
+  const configuredFromEnv = envCanary.allowedMarketplaces.length > 0 || envCanary.allowedExternalIds.length > 0 || envCanary.maxWrites !== null;
+
+  if (!hasExplicitCanary && !configuredFromEnv) {
+    return { allowed: false, reason: "canary-config-invalid" };
+  }
+
+  const allowedMarketplaces = normalizeCanaryList(canary.allowedMarketplaces);
+  const allowedExternalIds = normalizeCanaryList(canary.allowedExternalIds);
+  const maxWrites = typeof canary.maxWrites === "number" ? canary.maxWrites : null;
+
+  if (!isCanaryConfigValid(canary)) {
+    return { allowed: false, reason: "canary-config-invalid" };
+  }
+
+  if (allowedMarketplaces.length > 0 && !allowedMarketplaces.includes(normalizeCanaryValue(listing.marketplace))) {
+    return { allowed: false, reason: "canary-marketplace-denied" };
+  }
+
+  if (allowedExternalIds.length > 0 && !allowedExternalIds.includes(normalizeCanaryValue(listing.externalId))) {
+    return { allowed: false, reason: "canary-external-id-denied" };
+  }
+
+  if (typeof maxWrites === "number" && (!Number.isFinite(maxWrites) || maxWrites <= 0)) {
+    return { allowed: false, reason: "canary-max-writes-invalid" };
+  }
+
+  if (typeof maxWrites === "number") {
+    const counter = canary.counter ?? rawListingCanaryProcessCounter;
+    if (counter.current >= maxWrites) {
+      return { allowed: false, reason: "canary-max-writes-reached" };
+    }
+    counter.current += 1;
+  }
+
+  return { allowed: true };
+}
 
 export function isRawListingDualWriteEnabled(
   env: Record<string, string | undefined> = process.env,
@@ -263,16 +370,26 @@ export async function persistRawListingIfEnabled(params: {
   repository?: Pick<RawListingRepository, "findListingByMarketplaceExternalId" | "upsertRawMarketplaceListing" | "linkListingToProduct">;
   enabled?: boolean;
   dryRun?: boolean;
+  canary?: RawListingCanaryConfig | null;
 }): Promise<RawListingWriteResult> {
   const listing = normalizeMarketplaceListing(params.listing);
   const isEnabled = params.enabled ?? isRawListingDualWriteEnabled();
 
-  if (params.dryRun || !isEnabled) {
+  if (params.dryRun) {
     return {
       status: "DISABLED",
       marketplace: listing.marketplace,
       externalId: listing.externalId,
-      reason: params.dryRun ? "dry-run" : "dual-write-disabled",
+      reason: "dry-run",
+    };
+  }
+
+  if (!isEnabled) {
+    return {
+      status: "DISABLED",
+      marketplace: listing.marketplace,
+      externalId: listing.externalId,
+      reason: "dual-write-disabled",
     };
   }
 
@@ -282,6 +399,22 @@ export async function persistRawListingIfEnabled(params: {
       marketplace: listing.marketplace,
       externalId: listing.externalId,
       reason: "missing-marketplace-or-external-id",
+    };
+  }
+
+  const canaryResult = isRawListingCanaryAllowed({
+    listing,
+    enabled: isEnabled,
+    dryRun: params.dryRun,
+    canary: params.canary,
+  });
+
+  if (!canaryResult.allowed) {
+    return {
+      status: "DISABLED",
+      marketplace: listing.marketplace,
+      externalId: listing.externalId,
+      reason: canaryResult.reason,
     };
   }
 

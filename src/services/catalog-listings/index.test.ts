@@ -184,6 +184,12 @@ test("enabled dual-write persists sanitized payload fields without leaking secre
     repository,
     enabled: true,
     dryRun: false,
+    canary: {
+      allowedMarketplaces: ["MERCADO_LIVRE"],
+      allowedExternalIds: ["ML-ALLOWED"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
   });
 
   assert.equal(result.status, "CREATED");
@@ -216,11 +222,351 @@ test("repository failure is isolated and returns an error result instead of brea
       repository,
       enabled: true,
       dryRun: false,
+      canary: {
+        allowedMarketplaces: ["AMAZON"],
+        allowedExternalIds: ["A-FAIL"],
+        maxWrites: 10,
+        counter: { current: 0 },
+      },
     });
 
     assert.equal(result.status, "ERROR");
-    assert.equal(result.reason, "repository-down");
   });
+});
+
+test("global off blocks writes even when the shadow path is otherwise configured", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-GLOBAL-OFF" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-GLOBAL-OFF", title: "Widget" }),
+    repository,
+    enabled: false,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-GLOBAL-OFF"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+});
+
+test("flag on without valid canary config blocks writes", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-NO-CANARY" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-NO-CANARY", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: { counter: { current: 0 } },
+  });
+
+  assert.equal(result.status, "DISABLED");
+});
+
+test("flag on without any canary configuration blocks writes and preserves legacy flow", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-FLAG-ONLY" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-FLAG-ONLY", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+  });
+
+  assert.equal(result.status, "DISABLED");
+  assert.equal(result.reason, "canary-config-invalid");
+});
+
+test("marketplace allowlist enforces explicit permission", async () => {
+  const calls: string[] = [];
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async (listing: ReturnType<typeof normalizeMarketplaceListing>) => {
+      calls.push(`${listing.marketplace}:${listing.externalId}`);
+      return listing;
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-ALLOW", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-ALLOW"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "CREATED");
+  assert.equal(calls.length, 1);
+});
+
+test("marketplace deny blocks writes outside the allowlist", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "MERCADO_LIVRE", externalId: "ML-DENY" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "MERCADO_LIVRE", externalId: "ML-DENY", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["ML-DENY"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  assert.equal(result.reason, "canary-marketplace-denied");
+});
+
+test("external id allowlist enforces exact match", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-EXACT" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-EXACT", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-EXACT"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "CREATED");
+});
+
+test("external id deny blocks unlisted IDs", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DENY" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DENY", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-ALLOW"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  assert.equal(result.reason, "canary-external-id-denied");
+});
+
+test("max writes limit caps canary writes within a process", async () => {
+  const calls: string[] = [];
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async (listing: ReturnType<typeof normalizeMarketplaceListing>) => {
+      calls.push(listing.externalId);
+      return listing;
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  const counter = { current: 0 };
+
+  const first = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-LIMIT-1", title: "Widget A" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-LIMIT-1", "A-LIMIT-2"],
+      maxWrites: 1,
+      counter,
+    },
+  });
+
+  const second = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-LIMIT-2", title: "Widget B" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-LIMIT-1", "A-LIMIT-2"],
+      maxWrites: 1,
+      counter,
+    },
+  });
+
+  assert.equal(first.status, "CREATED");
+  assert.equal(second.status, "DISABLED");
+  assert.equal(second.reason, "canary-max-writes-reached");
+  assert.equal(calls.length, 1);
+});
+
+test("dry run keeps precedence over every canary permit", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DRY" }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-DRY", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: true,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-DRY"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "DISABLED");
+  assert.equal(result.reason, "dry-run");
+});
+
+test("repository failure stays isolated and the legacy flow continues", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => {
+      throw new Error("canary-repository-down");
+    },
+    upsertRawMarketplaceListing: async () => {
+      throw new Error("canary-repository-down");
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  await assert.doesNotReject(async () => {
+    const result = await persistRawListingIfEnabled({
+      listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "A-FAIL", title: "Widget" }),
+      repository,
+      enabled: true,
+      dryRun: false,
+      canary: {
+        allowedMarketplaces: ["AMAZON"],
+        allowedExternalIds: ["A-FAIL"],
+        maxWrites: 10,
+        counter: { current: 0 },
+      },
+    });
+
+    assert.equal(result.status, "ERROR");
+  });
+});
+
+test("invalid external ids are rejected before persisting", async () => {
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async () => normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "   " }),
+    linkListingToProduct: async () => undefined,
+  };
+
+  const result = await persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({ marketplace: "AMAZON", externalId: "   ", title: "Widget" }),
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-INVALID"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(result.status, "REJECTED");
+});
+
+test("same marketplace and external id remains idempotent under canary controls", async () => {
+  const calls: Array<{ marketplace: string; externalId: string }> = [];
+  const repository = {
+    findListingByMarketplaceExternalId: async (marketplace: string, externalId: string) => {
+      const match = calls.find((entry) => entry.marketplace === marketplace && entry.externalId === externalId);
+      return match ? normalizeMarketplaceListing({ marketplace: marketplace as any, externalId, title: "Existing", brand: "BrandX" }) : null;
+    },
+    upsertRawMarketplaceListing: async (listing: ReturnType<typeof normalizeMarketplaceListing>) => {
+      calls.push({ marketplace: listing.marketplace, externalId: listing.externalId });
+      return listing;
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  const listing = normalizeMarketplaceListing({
+    marketplace: "MERCADO_LIVRE",
+    externalId: "ML-CANARY-1",
+    title: "Fone JBL Tune 520BT",
+    brand: "JBL",
+    category: "Áudio",
+    sourceUrl: "https://example.com/listing?token=secret",
+    affiliateLink: "https://example.com/afiliado?auth=abc",
+    canonicalProductId: "product-1",
+  });
+
+  const first = await persistRawListingIfEnabled({
+    listing,
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["MERCADO_LIVRE"],
+      allowedExternalIds: ["ML-CANARY-1"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  const second = await persistRawListingIfEnabled({
+    listing,
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["MERCADO_LIVRE"],
+      allowedExternalIds: ["ML-CANARY-1"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+
+  assert.equal(first.status, "CREATED");
+  assert.equal(second.status, "UPDATED");
+  assert.equal(calls.length, 2);
 });
 
 test("enabled dual-write persists idempotently for the same marketplace and external id", async () => {
@@ -248,8 +594,30 @@ test("enabled dual-write persists idempotently for the same marketplace and exte
     canonicalProductId: "product-1",
   });
 
-  const first = await persistRawListingIfEnabled({ listing, repository, enabled: true, dryRun: false });
-  const second = await persistRawListingIfEnabled({ listing, repository, enabled: true, dryRun: false });
+  const first = await persistRawListingIfEnabled({
+    listing,
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["MERCADO_LIVRE"],
+      allowedExternalIds: ["ML-123"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
+  const second = await persistRawListingIfEnabled({
+    listing,
+    repository,
+    enabled: true,
+    dryRun: false,
+    canary: {
+      allowedMarketplaces: ["MERCADO_LIVRE"],
+      allowedExternalIds: ["ML-123"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
+  });
 
   assert.equal(first.status, "CREATED");
   assert.equal(second.status, "UPDATED");
@@ -270,6 +638,12 @@ test("invalid listing is rejected before write attempt", async () => {
     repository,
     enabled: true,
     dryRun: false,
+    canary: {
+      allowedMarketplaces: ["AMAZON"],
+      allowedExternalIds: ["A-INVALID"],
+      maxWrites: 10,
+      counter: { current: 0 },
+    },
   });
 
   assert.equal(result.status, "REJECTED");
