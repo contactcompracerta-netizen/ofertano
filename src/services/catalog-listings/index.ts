@@ -388,6 +388,71 @@ export type RawListingBoundedBatchFailurePolicyResult = {
   readOnly: true;
 };
 
+export type RawListingPartialFailureCanaryPrecheckOptions = {
+  baselineKnown?: boolean;
+  rollbackDefined?: boolean;
+  abortCriteriaDefined?: boolean;
+  cleanupRequired?: boolean;
+  cleanupScopeExplicit?: boolean;
+  failureInjectionDefined?: boolean;
+  failureTarget?: string;
+  failureStage?: string;
+  failureIsSynthetic?: boolean;
+  stopAfterFirstFailure?: boolean;
+  executionMode?: string;
+  concurrency?: number;
+  parallelWrites?: number;
+  expectedInitialRawCount?: number;
+};
+
+export type RawListingPartialFailureCanaryPrecheckResult = {
+  status: "READY" | "NOT_READY";
+  reasons: string[];
+  plan: {
+    marketplace: string;
+    externalIds: string[];
+    targetCount: number;
+    maxWrites: number;
+    failureTarget: string;
+    failureTargetIndex: number;
+    failureStage: string;
+    failureIsSynthetic: boolean;
+    executionMode: string;
+    concurrency: number;
+    stopAfterFirstFailure: boolean;
+    cleanupRequired: boolean;
+    cleanupScopeExplicit: boolean;
+    rollbackRequired: boolean;
+    abortCriteriaDefined: boolean;
+    baselineKnown: boolean;
+    readOnly: true;
+  };
+  checks: {
+    dualWriteDisabled: boolean;
+    exactlyOneMarketplace: boolean;
+    marketplaceValid: boolean;
+    targetCountIsThree: boolean;
+    externalIdsValid: boolean;
+    externalIdsUnique: boolean;
+    maxWritesMatchesTargetCount: boolean;
+    sequentialExecution: boolean;
+    concurrencyIsOne: boolean;
+    parallelWritesDisabled: boolean;
+    stopAfterFirstFailure: boolean;
+    baselineKnown: boolean;
+    rollbackDefined: boolean;
+    abortCriteriaDefined: boolean;
+    cleanupRequired: boolean;
+    cleanupScopeExplicit: boolean;
+    failureInjectionDefined: boolean;
+    failureTargetIsB: boolean;
+    failureStageIsBeforePersist: boolean;
+    failureIsSynthetic: boolean;
+    metricsHealthy: boolean;
+    readOnly: true;
+  };
+};
+
 export type RawListingBoundedBatchExecutionPrecheckOptions = {
   baselineKnown?: boolean;
   rollbackDefined?: boolean;
@@ -944,6 +1009,96 @@ export function evaluateRawListingBoundedBatchExecutionPrecheck(
       metricsHealthy,
       readOnly: true,
     },
+  };
+}
+
+export function evaluateRawListingPartialFailureCanaryPrecheck(
+  env: Record<string, string | undefined> = process.env,
+  options: RawListingPartialFailureCanaryPrecheckOptions = {},
+): RawListingPartialFailureCanaryPrecheckResult {
+  const readiness = evaluateRawListingCanaryReadiness(env);
+  const marketplaces = (env.RAW_LISTING_CANARY_MARKETPLACES ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  const externalIds = (env.RAW_LISTING_CANARY_EXTERNAL_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  const targetCount = externalIds.length;
+  const parsedMaxWrites = Number(env.RAW_LISTING_CANARY_MAX_WRITES ?? "");
+  const failureTarget = (options.failureTarget ?? "").trim();
+  const failureTargetIndex = externalIds.indexOf(failureTarget);
+  const executionMode = (options.executionMode ?? "sequential").trim().toLowerCase();
+  const concurrency = options.concurrency ?? 1;
+  const parallelWrites = options.parallelWrites ?? 0;
+  const expectedInitialRawCount = options.expectedInitialRawCount ?? 0;
+  const checks = {
+    dualWriteDisabled: !isRawListingDualWriteEnabled(env),
+    exactlyOneMarketplace: marketplaces.length === 1,
+    marketplaceValid: marketplaces.length === 1 && isValidRawListingMarketplace(marketplaces[0]),
+    targetCountIsThree: targetCount === 3,
+    externalIdsValid: targetCount > 0 && externalIds.every(isValidRawListingExternalId),
+    externalIdsUnique: new Set(externalIds.map(normalizeCanaryValue)).size === targetCount,
+    maxWritesMatchesTargetCount: Number.isInteger(parsedMaxWrites) && parsedMaxWrites === targetCount,
+    sequentialExecution: executionMode === "sequential",
+    concurrencyIsOne: concurrency === 1,
+    parallelWritesDisabled: parallelWrites === 0,
+    stopAfterFirstFailure: options.stopAfterFirstFailure === true,
+    baselineKnown: options.baselineKnown === true && expectedInitialRawCount === 0,
+    rollbackDefined: options.rollbackDefined === true,
+    abortCriteriaDefined: options.abortCriteriaDefined === true,
+    cleanupRequired: options.cleanupRequired === true,
+    cleanupScopeExplicit: options.cleanupScopeExplicit === true,
+    failureInjectionDefined: options.failureInjectionDefined === true,
+    failureTargetIsB: failureTargetIndex === 1,
+    failureStageIsBeforePersist: options.failureStage === "BEFORE_RAW_PERSIST",
+    failureIsSynthetic: options.failureIsSynthetic === true,
+    metricsHealthy: readiness.checks.metricsHealthy,
+    readOnly: true as const,
+  };
+  const reasons: string[] = [];
+  if (!checks.dualWriteDisabled) reasons.push("DUAL_WRITE_ENABLED");
+  if (!checks.exactlyOneMarketplace) reasons.push("MARKETPLACE_COUNT_NOT_ONE");
+  if (!checks.marketplaceValid) reasons.push("MARKETPLACE_INVALID");
+  if (!checks.targetCountIsThree) reasons.push("TARGET_COUNT_MUST_BE_THREE");
+  if (!checks.externalIdsValid) reasons.push("EXTERNAL_ID_INVALID");
+  if (!checks.externalIdsUnique) reasons.push("EXTERNAL_IDS_NOT_UNIQUE");
+  if (!checks.maxWritesMatchesTargetCount) reasons.push("MAX_WRITES_TARGET_COUNT_MISMATCH");
+  if (!checks.sequentialExecution) reasons.push("EXECUTION_MODE_NOT_SEQUENTIAL");
+  if (!checks.concurrencyIsOne) reasons.push("CONCURRENCY_NOT_ALLOWED");
+  if (!checks.parallelWritesDisabled) reasons.push("PARALLEL_WRITES_NOT_ALLOWED");
+  if (!checks.stopAfterFirstFailure) reasons.push("STOP_AFTER_FIRST_FAILURE_REQUIRED");
+  if (!checks.baselineKnown) reasons.push("BASELINE_NOT_KNOWN");
+  if (!checks.rollbackDefined) reasons.push("ROLLBACK_NOT_DEFINED");
+  if (!checks.abortCriteriaDefined) reasons.push("ABORT_CRITERIA_NOT_DEFINED");
+  if (!checks.cleanupRequired) reasons.push("CLEANUP_NOT_REQUIRED");
+  if (!checks.cleanupScopeExplicit) reasons.push("CLEANUP_SCOPE_NOT_EXPLICIT");
+  if (!checks.failureInjectionDefined) reasons.push("FAILURE_INJECTION_NOT_DEFINED");
+  if (failureTargetIndex < 0) reasons.push("FAILURE_TARGET_NOT_IN_BATCH");
+  else if (!checks.failureTargetIsB) reasons.push("FAILURE_TARGET_MUST_BE_B");
+  if (!checks.failureStageIsBeforePersist) reasons.push("FAILURE_STAGE_MUST_BEFORE_RAW_PERSIST");
+  if (!checks.failureIsSynthetic) reasons.push("FAILURE_MUST_BE_SYNTHETIC");
+  if (!checks.metricsHealthy) reasons.push("METRICS_NOT_READY");
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  return {
+    status: uniqueReasons.length === 0 ? "READY" : "NOT_READY",
+    reasons: uniqueReasons,
+    plan: {
+      marketplace: marketplaces[0] ?? "UNDECIDED",
+      externalIds,
+      targetCount,
+      maxWrites: Number.isInteger(parsedMaxWrites) ? parsedMaxWrites : 0,
+      failureTarget,
+      failureTargetIndex,
+      failureStage: options.failureStage ?? "UNDECIDED",
+      failureIsSynthetic: options.failureIsSynthetic === true,
+      executionMode,
+      concurrency,
+      stopAfterFirstFailure: options.stopAfterFirstFailure === true,
+      cleanupRequired: options.cleanupRequired === true,
+      cleanupScopeExplicit: options.cleanupScopeExplicit === true,
+      rollbackRequired: options.rollbackDefined === true,
+      abortCriteriaDefined: options.abortCriteriaDefined === true,
+      baselineKnown: options.baselineKnown === true,
+      readOnly: true,
+    },
+    checks,
   };
 }
 

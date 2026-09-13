@@ -6,6 +6,7 @@ import {
   buildProductSearchDocument,
   evaluateRawListingBoundedBatchExecutionPrecheck,
   evaluateRawListingBoundedBatchFailurePolicy,
+  evaluateRawListingPartialFailureCanaryPrecheck,
   evaluateRawListingCanaryReadiness,
   evaluateRawListingControlledMultiListingCanaryPrecheck,
   evaluateRawListingRealCanaryProbePrecheck,
@@ -664,6 +665,89 @@ test("bounded batch failure policy rejects invalid target state", () => {
   const result = evaluateRawListingBoundedBatchFailurePolicy({
     targets: duplicateTarget,
     execution: duplicateExecution,
+  });
+
+  const partialFailureConfig = {
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "MLB7184373436,MLB4935612308,MLB6996698648",
+    RAW_LISTING_CANARY_MAX_WRITES: "3",
+  };
+  const partialFailureOptions = {
+    baselineKnown: true,
+    rollbackDefined: true,
+    abortCriteriaDefined: true,
+    cleanupRequired: true,
+    cleanupScopeExplicit: true,
+    failureInjectionDefined: true,
+    failureTarget: "MLB4935612308",
+    failureStage: "BEFORE_RAW_PERSIST",
+    failureIsSynthetic: true,
+    stopAfterFirstFailure: true,
+    executionMode: "sequential",
+    concurrency: 1,
+    parallelWrites: 0,
+    expectedInitialRawCount: 0,
+  };
+
+  test("partial-failure precheck is READY only for synthetic B failure before persistence", () => {
+    const result = evaluateRawListingPartialFailureCanaryPrecheck(partialFailureConfig, partialFailureOptions);
+    assert.equal(result.status, "READY");
+    assert.deepEqual(result.reasons, []);
+    assert.equal(result.plan.failureTarget, "MLB4935612308");
+    assert.equal(result.plan.failureTargetIndex, 1);
+    assert.equal(result.plan.failureStage, "BEFORE_RAW_PERSIST");
+    assert.equal(result.plan.failureIsSynthetic, true);
+    assert.equal(result.plan.readOnly, true);
+  });
+
+  test("partial-failure policy integrates A success, B failure, C not-run", () => {
+    const policy = evaluateRawListingBoundedBatchFailurePolicy({
+      targets: failurePolicyTargets,
+      execution: failurePolicyState(["SUCCESS", "FAILED", "NOT_RUN"]),
+    });
+    assert.equal(policy.valid, true);
+    assert.deepEqual(policy.cleanupTargets.map((target) => target.targetId), ["A"]);
+  });
+
+  test("partial-failure precheck rejects unsafe injection plans", () => {
+    const cases = [
+      { failureTarget: "UNKNOWN", reason: "FAILURE_TARGET_NOT_IN_BATCH" },
+      { failureTarget: "MLB7184373436", reason: "FAILURE_TARGET_MUST_BE_B" },
+      { failureTarget: "MLB6996698648", reason: "FAILURE_TARGET_MUST_BE_B" },
+      { failureStage: "AFTER_RAW_PERSIST", reason: "FAILURE_STAGE_MUST_BEFORE_RAW_PERSIST" },
+      { failureIsSynthetic: false, reason: "FAILURE_MUST_BE_SYNTHETIC" },
+      { stopAfterFirstFailure: false, reason: "STOP_AFTER_FIRST_FAILURE_REQUIRED" },
+      { cleanupScopeExplicit: false, reason: "CLEANUP_SCOPE_NOT_EXPLICIT" },
+      { rollbackDefined: false, reason: "ROLLBACK_NOT_DEFINED" },
+      { abortCriteriaDefined: false, reason: "ABORT_CRITERIA_NOT_DEFINED" },
+      { baselineKnown: false, reason: "BASELINE_NOT_KNOWN" },
+      { concurrency: 2, reason: "CONCURRENCY_NOT_ALLOWED" },
+      { parallelWrites: 1, reason: "PARALLEL_WRITES_NOT_ALLOWED" },
+      { executionMode: "parallel", reason: "EXECUTION_MODE_NOT_SEQUENTIAL" },
+    ];
+    for (const override of cases) {
+      const result = evaluateRawListingPartialFailureCanaryPrecheck(
+        partialFailureConfig,
+        { ...partialFailureOptions, ...override },
+      );
+      assert.equal(result.status, "NOT_READY", override.reason);
+      assert.ok(result.reasons.includes(override.reason), `${override.reason} missing`);
+    }
+  });
+
+  test("partial-failure precheck rejects malformed batches and disabled dual-write", () => {
+    const cases = [
+      { config: { ...partialFailureConfig, RAW_LISTING_CANARY_EXTERNAL_IDS: "MLB7184373436,MLB7184373436,MLB6996698648" }, reason: "EXTERNAL_IDS_NOT_UNIQUE" },
+      { config: { ...partialFailureConfig, RAW_LISTING_CANARY_EXTERNAL_IDS: "MLB7184373436,invalid id,MLB6996698648" }, reason: "EXTERNAL_ID_INVALID" },
+      { config: { ...partialFailureConfig, RAW_LISTING_CANARY_EXTERNAL_IDS: "MLB7184373436,MLB4935612308" }, reason: "TARGET_COUNT_MUST_BE_THREE" },
+      { config: { ...partialFailureConfig, RAW_LISTING_DUAL_WRITE_ENABLED: "true" }, reason: "DUAL_WRITE_ENABLED" },
+    ];
+    for (const testCase of cases) {
+      const result = evaluateRawListingPartialFailureCanaryPrecheck(testCase.config, partialFailureOptions);
+      assert.equal(result.status, "NOT_READY", testCase.reason);
+      assert.ok(result.reasons.includes(testCase.reason), `${testCase.reason} missing`);
+    }
   });
 
   assert.equal(result.valid, false);
