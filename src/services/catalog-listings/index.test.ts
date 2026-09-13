@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildListingIdentity,
   buildProductSearchDocument,
+  evaluateRawListingBoundedBatchExecutionPrecheck,
   evaluateRawListingCanaryReadiness,
   evaluateRawListingControlledMultiListingCanaryPrecheck,
   evaluateRawListingRealCanaryProbePrecheck,
@@ -540,6 +541,168 @@ test("existing single and idempotency prechecks retain their write limits", () =
     { ...base, RAW_LISTING_CANARY_MAX_WRITES: "3" },
     multiListingCanaryOptions,
   ).status, "NOT_READY");
+});
+
+const boundedBatchOptions = {
+  baselineKnown: true,
+  rollbackDefined: true,
+  abortCriteriaDefined: true,
+  cleanupRequired: true,
+  cleanupScopeExplicit: true,
+  stopAfterFirstFailure: true,
+  executionMode: "sequential",
+  concurrency: 1,
+  parallelWrites: 0,
+  expectedInitialRawCount: 0,
+};
+
+function boundedBatchConfig(externalIds: string, maxWrites: string, overrides: Record<string, string> = {}) {
+  return {
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: externalIds,
+    RAW_LISTING_CANARY_MAX_WRITES: maxWrites,
+    ...overrides,
+  };
+}
+
+test("bounded batch precheck returns READY for two sequential targets", () => {
+  const metricsBefore = getRawListingCanaryMetrics();
+  const dualWriteBefore = process.env.RAW_LISTING_DUAL_WRITE_ENABLED;
+  const precheck = evaluateRawListingBoundedBatchExecutionPrecheck(
+    boundedBatchConfig("ML-001,ML-002", "2"),
+    boundedBatchOptions,
+  );
+
+  assert.equal(precheck.status, "READY");
+  assert.deepEqual(precheck.reasons, []);
+  assert.equal(precheck.plan.targetCount, 2);
+  assert.equal(precheck.plan.maxWrites, 2);
+  assert.equal(precheck.plan.executionMode, "sequential");
+  assert.equal(precheck.plan.concurrency, 1);
+  assert.equal(precheck.plan.stopAfterFirstFailure, true);
+  assert.equal(precheck.plan.cleanupRequired, true);
+  assert.equal(precheck.plan.cleanupScopeExplicit, true);
+  assert.equal(precheck.plan.rollbackRequired, true);
+  assert.equal(precheck.plan.abortCriteriaDefined, true);
+  assert.equal(precheck.plan.baselineKnown, true);
+  assert.equal(precheck.plan.readOnly, true);
+  assert.deepEqual(getRawListingCanaryMetrics(), metricsBefore);
+  assert.equal(process.env.RAW_LISTING_DUAL_WRITE_ENABLED, dualWriteBefore);
+});
+
+test("bounded batch precheck returns READY for three sequential targets", () => {
+  const metricsBefore = getRawListingCanaryMetrics();
+  const precheck = evaluateRawListingBoundedBatchExecutionPrecheck(
+    boundedBatchConfig("ML-001,ML-002,ML-003", "3"),
+    boundedBatchOptions,
+  );
+
+  assert.equal(precheck.status, "READY");
+  assert.deepEqual(precheck.reasons, []);
+  assert.equal(precheck.plan.targetCount, 3);
+  assert.equal(precheck.plan.maxWrites, 3);
+  assert.equal(precheck.plan.executionMode, "sequential");
+  assert.deepEqual(getRawListingCanaryMetrics(), metricsBefore);
+});
+
+test("bounded batch precheck fail-closed matrix rejects unsafe plans", () => {
+  const cases: Array<{
+    config?: Record<string, string>;
+    options?: Partial<typeof boundedBatchOptions> & { parallel?: boolean };
+    reason?: string;
+  }> = [
+    { config: boundedBatchConfig("", "0"), reason: "BATCH_TARGET_COUNT_BELOW_MIN" },
+    { config: boundedBatchConfig("ML-001", "1"), reason: "BATCH_TARGET_COUNT_BELOW_MIN" },
+    { config: boundedBatchConfig("ML-001,ML-002,ML-003,ML-004", "4"), reason: "BATCH_TARGET_LIMIT_EXCEEDED" },
+    { config: boundedBatchConfig("ML-001,ML-002", "2", { RAW_LISTING_CANARY_MARKETPLACES: "" }), reason: "BATCH_MARKETPLACE_COUNT_NOT_ONE" },
+    { config: boundedBatchConfig("ML-001,ML-002", "2", { RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE,AMAZON" }), reason: "BATCH_MARKETPLACE_COUNT_NOT_ONE" },
+    { config: boundedBatchConfig("ML-001,ML-002", "2", { RAW_LISTING_CANARY_MARKETPLACES: "NOT_A_MARKET" }), reason: "BATCH_MARKETPLACE_INVALID" },
+    { config: boundedBatchConfig("ML-001,invalid id", "2"), reason: "BATCH_EXTERNAL_ID_INVALID" },
+    { config: boundedBatchConfig("ML-001,ML-001", "2"), reason: "BATCH_EXTERNAL_IDS_NOT_UNIQUE" },
+    { config: boundedBatchConfig("ML-001,ML-002", "1"), reason: "BATCH_MAX_WRITES_TARGET_COUNT_MISMATCH" },
+    { config: boundedBatchConfig("ML-001,ML-002", "3"), reason: "BATCH_MAX_WRITES_TARGET_COUNT_MISMATCH" },
+    { config: boundedBatchConfig("ML-001,ML-002,ML-003", "2"), reason: "BATCH_MAX_WRITES_TARGET_COUNT_MISMATCH" },
+    { config: boundedBatchConfig("ML-001,ML-002", "4"), reason: "BATCH_MAX_WRITES_LIMIT_EXCEEDED" },
+    { config: boundedBatchConfig("ML-001,ML-002", "2", { RAW_LISTING_DUAL_WRITE_ENABLED: "true" }), reason: "DUAL_WRITE_ENABLED" },
+    { options: { baselineKnown: false }, reason: "BASELINE_NOT_KNOWN" },
+    { options: { rollbackDefined: false }, reason: "ROLLBACK_NOT_DEFINED" },
+    { options: { abortCriteriaDefined: false }, reason: "ABORT_CRITERIA_NOT_DEFINED" },
+    { options: { cleanupRequired: false }, reason: "CLEANUP_NOT_REQUIRED" },
+    { options: { cleanupScopeExplicit: false }, reason: "CLEANUP_SCOPE_NOT_EXPLICIT" },
+    { options: { stopAfterFirstFailure: false }, reason: "STOP_AFTER_FIRST_FAILURE_REQUIRED" },
+    { options: { concurrency: 2 }, reason: "BATCH_CONCURRENCY_NOT_ALLOWED" },
+    { options: { parallelWrites: 1 }, reason: "BATCH_CONCURRENCY_NOT_ALLOWED" },
+    { options: { executionMode: "parallel" }, reason: "BATCH_EXECUTION_MODE_NOT_SEQUENTIAL" },
+    { options: { parallel: true }, reason: "BATCH_CONCURRENCY_NOT_ALLOWED" },
+  ];
+
+  for (const testCase of cases) {
+    const precheck = evaluateRawListingBoundedBatchExecutionPrecheck(
+      testCase.config ?? boundedBatchConfig("ML-001,ML-002", "2"),
+      { ...boundedBatchOptions, ...testCase.options },
+    );
+    assert.equal(precheck.status, "NOT_READY", testCase.reason);
+    if (testCase.reason) {
+      assert.ok(precheck.reasons.includes(testCase.reason), `${testCase.reason} in ${precheck.reasons.join(",")}`);
+    }
+  }
+});
+
+test("legacy prechecks and bounded batch keep their independent limits", () => {
+  const singleBase = {
+    RAW_LISTING_DUAL_WRITE_ENABLED: "false",
+    RAW_LISTING_CANARY_MARKETPLACES: "MERCADO_LIVRE",
+    RAW_LISTING_CANARY_EXTERNAL_IDS: "ML-001",
+  };
+
+  assert.equal(evaluateRawListingRealCanaryProbePrecheck(
+    { ...singleBase, RAW_LISTING_CANARY_MAX_WRITES: "1" },
+    multiListingCanaryOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingRealCanaryProbePrecheck(
+    { ...singleBase, RAW_LISTING_CANARY_MAX_WRITES: "2" },
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+
+  assert.equal(evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...singleBase, RAW_LISTING_CANARY_MAX_WRITES: "2" },
+    multiListingCanaryOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...singleBase, RAW_LISTING_CANARY_MAX_WRITES: "1" },
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+  assert.equal(evaluateRawListingRealIdempotencyCanaryPrecheck(
+    { ...singleBase, RAW_LISTING_CANARY_MAX_WRITES: "3" },
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+
+  assert.equal(evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001,ML-002", "2"),
+    multiListingCanaryOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001,ML-002,ML-003", "3"),
+    multiListingCanaryOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001", "1"),
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+  assert.equal(evaluateRawListingControlledMultiListingCanaryPrecheck(
+    multiListingConfig("ML-001,ML-002,ML-003,ML-004", "4"),
+    multiListingCanaryOptions,
+  ).status, "NOT_READY");
+
+  assert.equal(evaluateRawListingBoundedBatchExecutionPrecheck(
+    boundedBatchConfig("ML-001,ML-002", "2"),
+    boundedBatchOptions,
+  ).status, "READY");
+  assert.equal(evaluateRawListingBoundedBatchExecutionPrecheck(
+    boundedBatchConfig("ML-001,ML-002,ML-003", "3"),
+    boundedBatchOptions,
+  ).status, "READY");
 });
 
 test("real canary precheck is not ready when readiness gate is not ready", () => {

@@ -317,6 +317,70 @@ export type RawListingControlledMultiListingCanaryPrecheckResult = {
   };
 };
 
+export type RawListingBoundedBatchExecutionMode = "sequential" | "parallel";
+
+export type RawListingBoundedBatchExecutionPlan = {
+  marketplace: string;
+  externalIds: string[];
+  targetCount: number;
+  maxWrites: number;
+  executionMode: RawListingBoundedBatchExecutionMode | "undecided";
+  concurrency: number;
+  stopAfterFirstFailure: boolean;
+  cleanupRequired: boolean;
+  cleanupScopeExplicit: boolean;
+  rollbackRequired: boolean;
+  abortCriteriaDefined: boolean;
+  baselineKnown: boolean;
+  expectedInitialRawCount: number;
+  readOnly: boolean;
+};
+
+export type RawListingBoundedBatchExecutionChecks = {
+  dualWriteDisabled: boolean;
+  marketplaceAllowlistValid: boolean;
+  exactlyOneMarketplace: boolean;
+  externalIdsValid: boolean;
+  externalIdsUnique: boolean;
+  targetCountWithinBounds: boolean;
+  maxWritesValid: boolean;
+  maxWritesMatchesTargetCount: boolean;
+  maxWritesWithinAbsoluteLimit: boolean;
+  sequentialExecution: boolean;
+  concurrencyIsOne: boolean;
+  parallelWritesDisabled: boolean;
+  stopAfterFirstFailure: boolean;
+  cleanupRequired: boolean;
+  cleanupScopeExplicit: boolean;
+  rollbackDefined: boolean;
+  abortCriteriaDefined: boolean;
+  baselineKnown: boolean;
+  expectedInitialRawCountIsZero: boolean;
+  metricsHealthy: boolean;
+  readOnly: boolean;
+};
+
+export type RawListingBoundedBatchExecutionPrecheckResult = {
+  status: "READY" | "NOT_READY";
+  reasons: string[];
+  plan: RawListingBoundedBatchExecutionPlan;
+  checks: RawListingBoundedBatchExecutionChecks;
+};
+
+export type RawListingBoundedBatchExecutionPrecheckOptions = {
+  baselineKnown?: boolean;
+  rollbackDefined?: boolean;
+  abortCriteriaDefined?: boolean;
+  cleanupRequired?: boolean;
+  cleanupScopeExplicit?: boolean;
+  stopAfterFirstFailure?: boolean;
+  executionMode?: string;
+  concurrency?: number;
+  parallelWrites?: number;
+  parallel?: boolean;
+  expectedInitialRawCount?: number;
+};
+
 const rawListingCanaryProcessCounter = { current: 0 };
 const MAX_SAFE_RAW_LISTING_CANARY_MAX_WRITES = 100;
 const VALID_RAW_LISTING_MARKETPLACES = new Set([
@@ -745,6 +809,122 @@ export function evaluateRawListingControlledMultiListingCanaryPrecheck(
   };
 }
 
+const MAX_SAFE_BOUNDED_BATCH_TARGETS = 3;
+const MAX_SAFE_BOUNDED_BATCH_WRITES = 3;
+
+export function evaluateRawListingBoundedBatchExecutionPrecheck(
+  env: Record<string, string | undefined> = process.env,
+  options?: RawListingBoundedBatchExecutionPrecheckOptions,
+): RawListingBoundedBatchExecutionPrecheckResult {
+  const readiness = evaluateRawListingCanaryReadiness(env);
+  const reasons: string[] = [];
+  const marketplaces = (env.RAW_LISTING_CANARY_MARKETPLACES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const externalIds = (env.RAW_LISTING_CANARY_EXTERNAL_IDS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const normalizedExternalIds = externalIds.map((value) => normalizeCanaryValue(value));
+  const targetCount = externalIds.length;
+  const parsedMaxWrites = Number(env.RAW_LISTING_CANARY_MAX_WRITES ?? "");
+  const executionMode = (options?.executionMode ?? "sequential").trim().toLowerCase();
+  const concurrency = options?.concurrency ?? 1;
+  const parallelWrites = options?.parallelWrites ?? 0;
+  const parallelRequested = options?.parallel === true || executionMode === "parallel";
+  const expectedInitialRawCount = options?.expectedInitialRawCount ?? 0;
+
+  const dualWriteDisabled = !isRawListingDualWriteEnabled(env);
+  const marketplaceAllowlistValid = marketplaces.length > 0 && marketplaces.every(isValidRawListingMarketplace);
+  const exactlyOneMarketplace = marketplaces.length === 1;
+  const externalIdsValid = externalIds.length > 0 && externalIds.every(isValidRawListingExternalId);
+  const externalIdsUnique = new Set(normalizedExternalIds).size === externalIds.length;
+  const targetCountWithinBounds = targetCount >= 2 && targetCount <= MAX_SAFE_BOUNDED_BATCH_TARGETS;
+  const maxWritesValid = Number.isInteger(parsedMaxWrites) && parsedMaxWrites >= 0;
+  const maxWritesWithinAbsoluteLimit = maxWritesValid && parsedMaxWrites <= MAX_SAFE_BOUNDED_BATCH_WRITES;
+  const maxWritesMatchesTargetCount = maxWritesValid && parsedMaxWrites === targetCount;
+  const sequentialExecution = executionMode === "sequential" && !parallelRequested;
+  const concurrencyIsOne = concurrency === 1;
+  const parallelWritesDisabled = parallelWrites === 0;
+  const stopAfterFirstFailure = options?.stopAfterFirstFailure === true;
+  const cleanupRequired = options?.cleanupRequired === true;
+  const cleanupScopeExplicit = options?.cleanupScopeExplicit === true;
+  const rollbackDefined = options?.rollbackDefined === true;
+  const abortCriteriaDefined = options?.abortCriteriaDefined === true;
+  const baselineKnown = options?.baselineKnown === true;
+  const expectedInitialRawCountIsZero = expectedInitialRawCount === 0;
+  const metricsHealthy = readiness.checks.metricsHealthy;
+
+  if (!dualWriteDisabled) reasons.push("DUAL_WRITE_ENABLED");
+  if (marketplaces.length === 0) reasons.push("BATCH_MARKETPLACE_COUNT_NOT_ONE");
+  else if (!exactlyOneMarketplace) reasons.push("BATCH_MARKETPLACE_COUNT_NOT_ONE");
+  if (!marketplaceAllowlistValid && marketplaces.length > 0) reasons.push("BATCH_MARKETPLACE_INVALID");
+  if (!externalIdsValid) reasons.push("BATCH_EXTERNAL_ID_INVALID");
+  if (!externalIdsUnique) reasons.push("BATCH_EXTERNAL_IDS_NOT_UNIQUE");
+  if (targetCount < 2) reasons.push("BATCH_TARGET_COUNT_BELOW_MIN");
+  if (targetCount > MAX_SAFE_BOUNDED_BATCH_TARGETS) reasons.push("BATCH_TARGET_LIMIT_EXCEEDED");
+  if (!maxWritesValid) reasons.push("BATCH_MAX_WRITES_INVALID");
+  if (!maxWritesMatchesTargetCount) reasons.push("BATCH_MAX_WRITES_TARGET_COUNT_MISMATCH");
+  if (!maxWritesWithinAbsoluteLimit) reasons.push("BATCH_MAX_WRITES_LIMIT_EXCEEDED");
+  if (!sequentialExecution) reasons.push("BATCH_EXECUTION_MODE_NOT_SEQUENTIAL");
+  if (!concurrencyIsOne || !parallelWritesDisabled || parallelRequested) {
+    reasons.push("BATCH_CONCURRENCY_NOT_ALLOWED");
+  }
+  if (!stopAfterFirstFailure) reasons.push("STOP_AFTER_FIRST_FAILURE_REQUIRED");
+  if (!cleanupRequired) reasons.push("CLEANUP_NOT_REQUIRED");
+  if (!cleanupScopeExplicit) reasons.push("CLEANUP_SCOPE_NOT_EXPLICIT");
+  if (!rollbackDefined) reasons.push("ROLLBACK_NOT_DEFINED");
+  if (!abortCriteriaDefined) reasons.push("ABORT_CRITERIA_NOT_DEFINED");
+  if (!baselineKnown) reasons.push("BASELINE_NOT_KNOWN");
+  if (!expectedInitialRawCountIsZero) reasons.push("EXPECTED_INITIAL_RAW_COUNT_NOT_ZERO");
+  if (!metricsHealthy) reasons.push("METRICS_NOT_READY");
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  return {
+    status: uniqueReasons.length === 0 ? "READY" : "NOT_READY",
+    reasons: uniqueReasons,
+    plan: {
+      marketplace: marketplaces[0] ?? "UNDECIDED",
+      externalIds,
+      targetCount,
+      maxWrites: maxWritesValid ? parsedMaxWrites : 0,
+      executionMode: sequentialExecution ? "sequential" : executionMode === "parallel" ? "parallel" : "undecided",
+      concurrency,
+      stopAfterFirstFailure,
+      cleanupRequired,
+      cleanupScopeExplicit,
+      rollbackRequired: rollbackDefined,
+      abortCriteriaDefined,
+      baselineKnown,
+      expectedInitialRawCount,
+      readOnly: true,
+    },
+    checks: {
+      dualWriteDisabled,
+      marketplaceAllowlistValid,
+      exactlyOneMarketplace,
+      externalIdsValid,
+      externalIdsUnique,
+      targetCountWithinBounds,
+      maxWritesValid,
+      maxWritesMatchesTargetCount,
+      maxWritesWithinAbsoluteLimit,
+      sequentialExecution,
+      concurrencyIsOne,
+      parallelWritesDisabled,
+      stopAfterFirstFailure,
+      cleanupRequired,
+      cleanupScopeExplicit,
+      rollbackDefined,
+      abortCriteriaDefined,
+      baselineKnown,
+      expectedInitialRawCountIsZero,
+      metricsHealthy,
+      readOnly: true,
+    },
+  };
+}
 
 const emptyRawListingCanaryMetricCounters = (): RawListingCanaryMetricCounters => ({
   attempted: 0,
