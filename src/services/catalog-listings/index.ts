@@ -453,6 +453,52 @@ export type RawListingPartialFailureCanaryPrecheckResult = {
   };
 };
 
+export type RawListingRetryErrorClass = "SYNTHETIC_CONTROLLED" | "TRANSIENT" | "PERMANENT" | "TIMEOUT" | "UNKNOWN";
+
+export type RawListingRetryPolicyOptions = {
+  errorClass?: RawListingRetryErrorClass;
+  retryCount?: number;
+  maxRetries?: number;
+  retryBudgetDefined?: boolean;
+  timeoutDefined?: boolean;
+  timeoutMs?: number;
+  backoffDefined?: boolean;
+  backoffStrategy?: "fixed";
+  backoffMs?: number;
+  idempotencyCheckRequired?: boolean;
+  retryUpsertSafe?: boolean;
+  stopOnSuccess?: boolean;
+  stopOnPermanentFailure?: boolean;
+  stopWhenRetryBudgetExhausted?: boolean;
+  stopAfterFinalRetryFailure?: boolean;
+};
+
+export type RawListingRetryPolicyResult = {
+  status: "READY" | "NOT_READY";
+  reasons: string[];
+  errorClass: RawListingRetryErrorClass;
+  retryAllowed: boolean;
+  maxRetries: number;
+  retryCount: number;
+  retryBudgetRemaining: number;
+  timeoutDefined: boolean;
+  timeoutMs: number;
+  backoffDefined: boolean;
+  backoffStrategy: "fixed" | "undecided";
+  backoffMs: number;
+  idempotencyCheckRequired: boolean;
+  stopAfterFinalRetryFailure: boolean;
+  readOnly: true;
+};
+
+export type RawListingRetryPlan = {
+  retry: boolean;
+  nextAttempt: number;
+  delayMs: number;
+  recheckIdentity: boolean;
+  readOnly: true;
+};
+
 export type RawListingBoundedBatchExecutionPrecheckOptions = {
   baselineKnown?: boolean;
   rollbackDefined?: boolean;
@@ -1099,6 +1145,91 @@ export function evaluateRawListingPartialFailureCanaryPrecheck(
       readOnly: true,
     },
     checks,
+  };
+}
+
+const MAX_RAW_LISTING_RETRY_TIMEOUT_MS = 15_000;
+const MIN_RAW_LISTING_RETRY_BACKOFF_MS = 1;
+const MAX_RAW_LISTING_RETRY_BACKOFF_MS = 5_000;
+
+export function evaluateRawListingRetryPolicy(
+  options: RawListingRetryPolicyOptions = {},
+): RawListingRetryPolicyResult {
+  const errorClass = options.errorClass ?? "UNKNOWN";
+  const retryCount = options.retryCount ?? -1;
+  const maxRetries = options.maxRetries ?? 0;
+  const timeoutDefined = options.timeoutDefined === true;
+  const timeoutMs = options.timeoutMs ?? 0;
+  const backoffDefined = options.backoffDefined === true;
+  const backoffStrategy = options.backoffStrategy ?? "fixed";
+  const backoffMs = options.backoffMs ?? 0;
+  const retryBudgetDefined = options.retryBudgetDefined === true;
+  const idempotencyCheckRequired = options.idempotencyCheckRequired === true;
+  const retryUpsertSafe = options.retryUpsertSafe === true;
+  const stopOnSuccess = options.stopOnSuccess === true;
+  const stopOnPermanentFailure = options.stopOnPermanentFailure === true;
+  const stopWhenRetryBudgetExhausted = options.stopWhenRetryBudgetExhausted === true;
+  const stopAfterFinalRetryFailure = options.stopAfterFinalRetryFailure === true;
+  const reasons: string[] = [];
+
+  if (!retryBudgetDefined) reasons.push("RETRY_BUDGET_NOT_DEFINED");
+  if (maxRetries !== 1) reasons.push("MAX_RETRIES_MUST_BE_ONE");
+  if (!Number.isInteger(retryCount) || retryCount < 0) reasons.push("RETRY_COUNT_INVALID");
+  if (Number.isInteger(retryCount) && retryCount > maxRetries) reasons.push("RETRY_BUDGET_EXCEEDED");
+  if (!timeoutDefined) reasons.push("TIMEOUT_NOT_DEFINED");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_RAW_LISTING_RETRY_TIMEOUT_MS) {
+    reasons.push("TIMEOUT_OUT_OF_BOUNDS");
+  }
+  if (!backoffDefined) reasons.push("BACKOFF_NOT_DEFINED");
+  if (backoffStrategy !== "fixed") reasons.push("BACKOFF_STRATEGY_INVALID");
+  if (!Number.isFinite(backoffMs) || backoffMs < MIN_RAW_LISTING_RETRY_BACKOFF_MS || backoffMs > MAX_RAW_LISTING_RETRY_BACKOFF_MS) {
+    reasons.push("BACKOFF_OUT_OF_BOUNDS");
+  }
+  if (!idempotencyCheckRequired || !retryUpsertSafe) reasons.push("IDEMPOTENCY_CHECK_REQUIRED");
+  if (!stopOnSuccess) reasons.push("STOP_ON_SUCCESS_REQUIRED");
+  if (!stopOnPermanentFailure) reasons.push("STOP_ON_PERMANENT_FAILURE_REQUIRED");
+  if (!stopWhenRetryBudgetExhausted) reasons.push("STOP_ON_RETRY_BUDGET_REQUIRED");
+  if (!stopAfterFinalRetryFailure) reasons.push("STOP_AFTER_FINAL_RETRY_FAILURE_REQUIRED");
+
+  const validConfiguration = reasons.length === 0;
+  const retryableClass = errorClass === "TRANSIENT" || errorClass === "TIMEOUT";
+  const retryAllowed = validConfiguration && retryableClass && retryCount < maxRetries;
+  if (!retryableClass && validConfiguration) {
+    reasons.push("ERROR_CLASS_NOT_RETRYABLE");
+  }
+  if (retryCount >= maxRetries && validConfiguration) {
+    reasons.push("RETRY_BUDGET_EXHAUSTED");
+  }
+
+  const uniqueReasons = Array.from(new Set(reasons));
+  return {
+    status: validConfiguration ? "READY" : "NOT_READY",
+    reasons: uniqueReasons,
+    errorClass,
+    retryAllowed,
+    maxRetries,
+    retryCount,
+    retryBudgetRemaining: Math.max(0, maxRetries - Math.max(0, retryCount)),
+    timeoutDefined,
+    timeoutMs,
+    backoffDefined,
+    backoffStrategy: backoffDefined && backoffStrategy === "fixed" ? "fixed" : "undecided",
+    backoffMs,
+    idempotencyCheckRequired: idempotencyCheckRequired && retryUpsertSafe,
+    stopAfterFinalRetryFailure,
+    readOnly: true,
+  };
+}
+
+export function planRawListingRetry(input: {
+  policy: RawListingRetryPolicyResult;
+}): RawListingRetryPlan {
+  return {
+    retry: input.policy.retryAllowed,
+    nextAttempt: input.policy.retryCount + 2,
+    delayMs: input.policy.retryAllowed ? input.policy.backoffMs : 0,
+    recheckIdentity: input.policy.retryAllowed && input.policy.idempotencyCheckRequired,
+    readOnly: true,
   };
 }
 

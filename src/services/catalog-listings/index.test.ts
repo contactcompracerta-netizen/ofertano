@@ -7,6 +7,7 @@ import {
   evaluateRawListingBoundedBatchExecutionPrecheck,
   evaluateRawListingBoundedBatchFailurePolicy,
   evaluateRawListingPartialFailureCanaryPrecheck,
+  evaluateRawListingRetryPolicy,
   evaluateRawListingCanaryReadiness,
   evaluateRawListingControlledMultiListingCanaryPrecheck,
   evaluateRawListingRealCanaryProbePrecheck,
@@ -19,6 +20,7 @@ import {
   persistRawListingIfEnabled,
   resetRawListingCanaryMetrics,
   sanitizeRawListingPayload,
+  planRawListingRetry,
 } from "./index";
 
 test("same marketplace and external id share listing identity", () => {
@@ -1745,6 +1747,79 @@ test("invalid external ids are rejected before persisting", async () => {
   });
 
   assert.equal(result.status, "REJECTED");
+});
+
+const retryPolicyOptions = {
+  retryBudgetDefined: true,
+  maxRetries: 1,
+  retryCount: 0,
+  timeoutDefined: true,
+  timeoutMs: 5_000,
+  backoffDefined: true,
+  backoffStrategy: "fixed" as const,
+  backoffMs: 100,
+  idempotencyCheckRequired: true,
+  retryUpsertSafe: true,
+  stopOnSuccess: true,
+  stopOnPermanentFailure: true,
+  stopWhenRetryBudgetExhausted: true,
+  stopAfterFinalRetryFailure: true,
+};
+
+test("retry policy allows one transient or timeout retry", () => {
+  for (const errorClass of ["TRANSIENT", "TIMEOUT"] as const) {
+    const policy = evaluateRawListingRetryPolicy({ ...retryPolicyOptions, errorClass });
+    assert.equal(policy.status, "READY");
+    assert.equal(policy.retryAllowed, true);
+    assert.equal(policy.maxRetries, 1);
+    assert.equal(policy.retryBudgetRemaining, 1);
+    assert.equal(policy.timeoutMs, 5_000);
+    assert.equal(policy.backoffStrategy, "fixed");
+    assert.equal(policy.idempotencyCheckRequired, true);
+    const plan = planRawListingRetry({ policy });
+    assert.deepEqual(plan, { retry: true, nextAttempt: 2, delayMs: 100, recheckIdentity: true, readOnly: true });
+  }
+});
+
+test("retry policy denies synthetic, permanent, and unknown errors", () => {
+  for (const errorClass of ["SYNTHETIC_CONTROLLED", "PERMANENT", "UNKNOWN"] as const) {
+    const policy = evaluateRawListingRetryPolicy({ ...retryPolicyOptions, errorClass });
+    assert.equal(policy.status, "READY");
+    assert.equal(policy.retryAllowed, false);
+    assert.ok(policy.reasons.includes("ERROR_CLASS_NOT_RETRYABLE"));
+  }
+});
+
+test("retry policy denies an exhausted budget", () => {
+  const policy = evaluateRawListingRetryPolicy({
+    ...retryPolicyOptions,
+    errorClass: "TRANSIENT",
+    retryCount: 1,
+  });
+  assert.equal(policy.status, "READY");
+  assert.equal(policy.retryAllowed, false);
+  assert.equal(policy.retryBudgetRemaining, 0);
+  assert.ok(policy.reasons.includes("RETRY_BUDGET_EXHAUSTED"));
+});
+
+test("retry policy fails closed for unsafe retry and timeout configuration", () => {
+  const cases = [
+    { maxRetries: 2, reason: "MAX_RETRIES_MUST_BE_ONE" },
+    { retryCount: -1, reason: "RETRY_COUNT_INVALID" },
+    { timeoutDefined: false, reason: "TIMEOUT_NOT_DEFINED" },
+    { timeoutMs: 0, reason: "TIMEOUT_OUT_OF_BOUNDS" },
+    { timeoutMs: 15_001, reason: "TIMEOUT_OUT_OF_BOUNDS" },
+    { backoffDefined: false, reason: "BACKOFF_NOT_DEFINED" },
+    { backoffMs: 0, reason: "BACKOFF_OUT_OF_BOUNDS" },
+    { idempotencyCheckRequired: false, reason: "IDEMPOTENCY_CHECK_REQUIRED" },
+    { stopAfterFinalRetryFailure: false, reason: "STOP_AFTER_FINAL_RETRY_FAILURE_REQUIRED" },
+  ];
+  for (const override of cases) {
+    const policy = evaluateRawListingRetryPolicy({ ...retryPolicyOptions, errorClass: "TRANSIENT", ...override });
+    assert.equal(policy.status, "NOT_READY", override.reason);
+    assert.ok(policy.reasons.includes(override.reason), `${override.reason} missing`);
+    assert.equal(policy.retryAllowed, false);
+  }
 });
 
 test("same marketplace and external id remains idempotent under canary controls", async () => {
