@@ -3,6 +3,14 @@ import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 import type { ProductImport } from "@/services/importers/core/types";
+import {
+  isRawListingDualWriteEnabled,
+  normalizeMarketplaceListing,
+  persistRawListingIfEnabled,
+  type RawListingCanaryConfig,
+  type RawListingRepository,
+} from "@/services/catalog-listings";
+import { createDefaultPrismaRawListingRepository } from "@/services/catalog-listings/repository";
 
 import {
   avaliarCompatibilidadeExataEntreImports,
@@ -30,6 +38,56 @@ type DiscoverySourceDatabase =
   | "PRICE_MONITOR"
   | "API";
 
+export type RawListingPersistenceContext = {
+  marketplace: MarketplaceDatabase;
+  externalId: string;
+  sourceUrl: string;
+  title?: string | null;
+  price?: number | null;
+  canonicalProductId?: string | null;
+};
+
+export type RawListingHookDependencies = {
+  enabled?: boolean;
+  repository?: RawListingRepository;
+  canary?: RawListingCanaryConfig | null;
+};
+
+export async function persistRawListingContextIfEnabled(
+  context: RawListingPersistenceContext | undefined,
+  canonicalProductId: string,
+  dependencies: RawListingHookDependencies = {},
+) {
+  if (!context) {
+    return null;
+  }
+
+  const enabled =
+    dependencies.enabled ?? isRawListingDualWriteEnabled();
+
+  if (!enabled) {
+    return null;
+  }
+
+  const repository =
+    dependencies.repository ??
+    createDefaultPrismaRawListingRepository();
+
+  return persistRawListingIfEnabled({
+    listing: normalizeMarketplaceListing({
+      marketplace: context.marketplace,
+      externalId: context.externalId,
+      sourceUrl: context.sourceUrl,
+      title: context.title,
+      price: context.price,
+      canonicalProductId,
+    }),
+    repository,
+    enabled,
+    canary: dependencies.canary,
+  });
+}
+
 export type SaveProductOptions = {
   targetProductId?: string | null;
   /*
@@ -52,6 +110,7 @@ export type SaveProductOptions = {
   sourceQuery?: string | null;
   deferPublication?: boolean;
   suppressPublicationSync?: boolean;
+  rawListingContext?: RawListingPersistenceContext;
 };
 
 export type DecisaoAlvoDaOferta = {
@@ -2407,7 +2466,7 @@ export async function saveProduct(
 
   const agora = new Date();
 
-  return prisma.$transaction(async (tx) => {
+  const savedProduct = await prisma.$transaction(async (tx) => {
     let ofertaPeloCodigo =
       await tx.marketplaceOffer.findUnique({
         where: {
@@ -3190,4 +3249,20 @@ export async function saveProduct(
       },
     );
   });
+
+  if (options.rawListingContext) {
+    try {
+      await persistRawListingContextIfEnabled(
+        options.rawListingContext,
+        savedProduct.id,
+      );
+    } catch (error) {
+      console.error(
+        "[SAVE_PRODUCT] persistencia Raw Listing falhou; Product preservado",
+        error,
+      );
+    }
+  }
+
+  return savedProduct;
 }
