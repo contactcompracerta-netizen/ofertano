@@ -8,6 +8,7 @@ import {
   type CatalogIngestionCandidate,
   type CatalogIngestionSeed,
 } from "./index";
+import type { NormalizedMarketplaceListing } from "../catalog-listings";
 
 test("buildSeedPlan collects miss and single-marketplace sources", () => {
   const seeds: CatalogIngestionSeed[] = [
@@ -91,6 +92,103 @@ test("dry run produces metrics without writes", async () => {
   assert.equal(result.candidatesFound, 1);
   assert.equal(result.offersCreated, 0);
   assert.equal(result.productsUpdated, 0);
+});
+
+test("dual-write disabled does not call the injected repository", async () => {
+  const adapter = async () => [{
+    marketplace: "AMAZON" as const,
+    marketplaceName: "Amazon",
+    externalId: "CANARY-OFF-1",
+    sourceUrl: "https://example.com/off",
+    title: "BrandX X1 premium",
+    image: null,
+    price: 123,
+    oldPrice: null,
+    affiliateLink: null,
+    brand: "BrandX",
+    category: "Eletrônicos",
+    attributes: null,
+    status: "FOUND" as const,
+  }];
+  const repository = {
+    findListingByMarketplaceExternalId: async () => {
+      throw new Error("repository must not be called");
+    },
+    upsertRawMarketplaceListing: async () => {
+      throw new Error("repository must not be called");
+    },
+    linkListingToProduct: async () => {
+      throw new Error("repository must not be called");
+    },
+  };
+
+  const result = await runCatalogIngestionBatch({
+    seeds: [{ source: "searchRequest", query: "brandx x1" }],
+    adapters: [{ key: "amazon", searcher: adapter }],
+    dryRun: false,
+    rawListingEnabled: false,
+    rawListingRepository: repository,
+  });
+
+  assert.equal(result.candidatesFound, 1);
+  assert.equal(result.rawListingCreated, 0);
+  assert.equal(result.rawListingDisabled, 1);
+});
+
+test("enabled gated ingestion reaches the injected official repository", async () => {
+  const calls: string[] = [];
+  const adapter = async () => [{
+    marketplace: "AMAZON" as const,
+    marketplaceName: "Amazon",
+    externalId: "CANARY-ON-1",
+    sourceUrl: "https://example.com/on",
+    title: "BrandX X1 premium",
+    image: null,
+    price: 123,
+    oldPrice: null,
+    affiliateLink: null,
+    brand: "BrandX",
+    category: "Eletrônicos",
+    attributes: null,
+    status: "FOUND" as const,
+  }];
+  const repository = {
+    findListingByMarketplaceExternalId: async () => null,
+    upsertRawMarketplaceListing: async (listing: NormalizedMarketplaceListing) => {
+      calls.push(`${listing.marketplace}:${listing.externalId}`);
+      return listing;
+    },
+    linkListingToProduct: async () => undefined,
+  };
+
+  const previousEnv = {
+    marketplaces: process.env.RAW_LISTING_CANARY_MARKETPLACES,
+    externalIds: process.env.RAW_LISTING_CANARY_EXTERNAL_IDS,
+    maxWrites: process.env.RAW_LISTING_CANARY_MAX_WRITES,
+  };
+  process.env.RAW_LISTING_CANARY_MARKETPLACES = "AMAZON";
+  process.env.RAW_LISTING_CANARY_EXTERNAL_IDS = "CANARY-ON-1";
+  process.env.RAW_LISTING_CANARY_MAX_WRITES = "1";
+
+  try {
+    const result = await runCatalogIngestionBatch({
+      seeds: [{ source: "searchRequest", query: "brandx x1" }],
+      adapters: [{ key: "amazon", searcher: adapter }],
+      dryRun: false,
+      rawListingEnabled: true,
+      rawListingRepository: repository,
+    });
+
+    assert.deepEqual(calls, ["AMAZON:CANARY-ON-1"]);
+    assert.equal(result.rawListingCreated, 1);
+  } finally {
+    if (previousEnv.marketplaces === undefined) delete process.env.RAW_LISTING_CANARY_MARKETPLACES;
+    else process.env.RAW_LISTING_CANARY_MARKETPLACES = previousEnv.marketplaces;
+    if (previousEnv.externalIds === undefined) delete process.env.RAW_LISTING_CANARY_EXTERNAL_IDS;
+    else process.env.RAW_LISTING_CANARY_EXTERNAL_IDS = previousEnv.externalIds;
+    if (previousEnv.maxWrites === undefined) delete process.env.RAW_LISTING_CANARY_MAX_WRITES;
+    else process.env.RAW_LISTING_CANARY_MAX_WRITES = previousEnv.maxWrites;
+  }
 });
 
 test("adapter timeout is counted without aborting other seeds", async () => {

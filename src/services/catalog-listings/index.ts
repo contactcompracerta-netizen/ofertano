@@ -187,7 +187,11 @@ export function linkListingToCanonicalProduct(input: {
 export type RawListingRepository = {
   upsertRawMarketplaceListing: (listing: NormalizedMarketplaceListing) => Promise<NormalizedMarketplaceListing>;
   findListingByMarketplaceExternalId: (marketplace: MarketplaceListingMarket, externalId: string) => Promise<NormalizedMarketplaceListing | null>;
-  linkListingToProduct: (listingId: string, canonicalProductId: string) => Promise<void>;
+  linkListingToProduct: (
+    listingId: string,
+    canonicalProductId: string,
+    marketplace?: MarketplaceListingMarket,
+  ) => Promise<void>;
   markListingStale: (listingId: string) => Promise<void>;
 };
 
@@ -1674,7 +1678,11 @@ export async function persistRawListingIfEnabled(params: {
     });
 
     if (listing.canonicalProductId && saved?.externalId) {
-      await params.repository.linkListingToProduct(saved.externalId, listing.canonicalProductId);
+      await params.repository.linkListingToProduct(
+        saved.externalId,
+        listing.canonicalProductId,
+        saved.marketplace,
+      );
     }
 
     incrementRawListingCanaryMetric("writeSuccess", listing.marketplace);
