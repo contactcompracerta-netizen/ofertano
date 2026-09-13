@@ -1,6 +1,7 @@
 import type { ProductImport } from "@/services/importers/core/types";
 import {
   saveProduct,
+  type RawListingPersistenceContext,
   type SaveProductOptions,
 } from "@/services/database/saveProduct";
 
@@ -147,6 +148,36 @@ function buildPersistOptions(query: string, publishable: boolean) {
   };
 }
 
+function buildRawListingContext(
+  offer: CanonicalOffer,
+  canonicalProductId?: string,
+): RawListingPersistenceContext | undefined {
+  const externalId = offer.externalId.trim();
+  const sourceUrl = offer.url.trim();
+
+  if (!externalId || !sourceUrl) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(sourceUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return {
+    marketplace: offer.marketplace,
+    externalId,
+    sourceUrl,
+    title: offer.title,
+    price: offer.price,
+    canonicalProductId: canonicalProductId || undefined,
+  };
+}
+
 async function promoteClusterProduct(
   persistProduct: PersistProductFn,
   query: string,
@@ -155,12 +186,14 @@ async function promoteClusterProduct(
   head: ProductImport,
   affiliateLink: string | null | undefined,
   allowAffiliateOpportunity: boolean,
+  rawListingContext: RawListingPersistenceContext | undefined,
 ): Promise<void> {
   await persistProduct(head, affiliateLink, {
     ...buildPersistOptions(query, true),
     targetProductId: savedId,
     verifiedExactMatch: true,
     deferPublication: false,
+    rawListingContext,
   });
 
   if (
@@ -226,6 +259,7 @@ export async function persistCanonicalProducts(
     let recorded = false;
     try {
       const [first, ...rest] = imports;
+      const firstOffer = equivalentOffers[0];
       if (!first) {
         ids.push("");
         recorded = true;
@@ -251,6 +285,9 @@ export async function persistCanonicalProducts(
         const saved = await persistProduct(first, first.affiliateLink, {
           ...persistOptions,
           deferPublication: multiStore ? true : !publishable,
+          rawListingContext: firstOffer
+            ? buildRawListingContext(firstOffer)
+            : undefined,
         });
         savedId = saved.id;
       } else if (!fromThisRequest && (!headsOnly || publishable)) {
@@ -261,6 +298,9 @@ export async function persistCanonicalProducts(
             verifiedExactMatch: true,
             suppressPublicationSync: attachOnly,
             deferPublication: multiStore ? true : !publishable,
+            rawListingContext: firstOffer
+              ? buildRawListingContext(firstOffer, savedId)
+              : undefined,
           });
         }
       }
@@ -271,17 +311,21 @@ export async function persistCanonicalProducts(
         continue;
       }
 
-      for (const offer of rest) {
+      for (const [index, offer] of rest.entries()) {
         if (!canStartPersistWrite(options.deadline)) {
           break;
         }
 
+        const offerContext = equivalentOffers[index + 1];
         await persistProduct(offer, offer.affiliateLink, {
           ...persistOptions,
           targetProductId: savedId,
           verifiedExactMatch: true,
           suppressPublicationSync: true,
           deferPublication: true,
+          rawListingContext: offerContext
+            ? buildRawListingContext(offerContext, savedId)
+            : undefined,
         });
       }
 
@@ -301,6 +345,9 @@ export async function persistCanonicalProducts(
             first,
             first.affiliateLink,
             !options.persistProduct,
+            firstOffer
+              ? buildRawListingContext(firstOffer, savedId)
+              : undefined,
           );
         }
         ids.push(savedId);

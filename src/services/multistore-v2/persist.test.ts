@@ -1864,11 +1864,120 @@ async function runMlUnknownAffiliateCase() {
   );
 }
 
+async function runRawListingContextCase() {
+  const captured: Array<{
+    marketplace: string;
+    externalId: string;
+    sourceUrl: string;
+    title: string | null | undefined;
+    price: number | null | undefined;
+    canonicalProductId: string | null | undefined;
+  }> = [];
+
+  const product = canonicalProduct("Contexto Raw Listing", {
+    clusterId: "raw-context",
+    marketplaces: ["AMAZON", "SHOPEE"],
+    offers: [
+      {
+        marketplace: "AMAZON",
+        marketplaceName: "Amazon",
+        externalId: "ASIN-CONTEXT-01",
+        title: "Contexto Raw Listing",
+        url: "https://amazon.example/context",
+        image: "https://loja.example/context.jpg",
+        price: 149.9,
+        oldPrice: null,
+        brand: "MarcaX",
+        affiliateLink: "https://aff.example/context",
+        attributes: {},
+        seller: null,
+      },
+      {
+        marketplace: "SHOPEE",
+        marketplaceName: "Shopee",
+        externalId: "SHOPEE-CONTEXT-01",
+        title: "Contexto Raw Listing Shopee",
+        url: "https://shopee.example/context",
+        image: "https://loja.example/context.jpg",
+        price: 139.9,
+        oldPrice: null,
+        brand: "MarcaX",
+        affiliateLink: "https://aff.example/context-shopee",
+        attributes: {},
+        seller: null,
+      },
+    ],
+  });
+
+  const ids = await persistCanonicalProducts("contexto", [product], {
+    persistProduct: async (savedProduct, affiliateLink, options) => {
+      assert.ok(options?.rawListingContext);
+      captured.push({
+        marketplace: options.rawListingContext.marketplace,
+        externalId: options.rawListingContext.externalId,
+        sourceUrl: options.rawListingContext.sourceUrl,
+        title: options.rawListingContext.title,
+        price: options.rawListingContext.price,
+        canonicalProductId: options.rawListingContext.canonicalProductId,
+      });
+      assert.equal(savedProduct.externalId, options.rawListingContext.externalId);
+      assert.equal(savedProduct.url, options.rawListingContext.sourceUrl);
+      assert.equal(savedProduct.title, options.rawListingContext.title);
+      assert.equal(savedProduct.price, options.rawListingContext.price);
+      void affiliateLink;
+      return { id: "prod-raw-context" };
+    },
+  });
+
+  assert.deepEqual(captured[0], {
+    marketplace: "AMAZON",
+    externalId: "ASIN-CONTEXT-01",
+    sourceUrl: "https://amazon.example/context",
+    title: "Contexto Raw Listing",
+    price: 149.9,
+    canonicalProductId: undefined,
+  });
+  assert.ok(
+    captured.some((context) => context.marketplace === "SHOPEE"),
+    "marketplace estruturado da oferta adicional e preservado",
+  );
+  assert.equal(ids[0], "prod-raw-context");
+
+  let invalidContext: SaveProductOptions | undefined;
+  await persistCanonicalProducts(
+    "contexto invalido",
+    [
+      canonicalProduct("Contexto invalido", {
+        clusterId: "raw-context-invalid",
+        offers: [
+          {
+            ...product.offers[0],
+            externalId: " ",
+            url: "not-a-url",
+          },
+        ],
+      }),
+    ],
+    {
+      persistProduct: async (_savedProduct, _affiliateLink, options) => {
+        invalidContext = options;
+        return { id: "prod-raw-context-invalid" };
+      },
+    },
+  );
+  assert.equal(
+    invalidContext?.rawListingContext,
+    undefined,
+    "contexto invalido nao bloqueia o fluxo legado",
+  );
+}
+
 const PERSIST_TEST_WATCHDOG_MS = 20_000;
 
 void withTestTimeout(runPersistContract(), PERSIST_TEST_WATCHDOG_MS, "persist.test")
   .then(async () => {
     await runMlUnknownAffiliateCase();
+    await runRawListingContextCase();
     console.log("multistore-v2 persist: invariantes estruturais passaram");
   })
   .catch((error) => {
