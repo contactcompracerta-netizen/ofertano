@@ -5,6 +5,7 @@ import {
   buildListingIdentity,
   buildProductSearchDocument,
   evaluateRawListingBoundedBatchExecutionPrecheck,
+  evaluateRawListingBoundedBatchFailurePolicy,
   evaluateRawListingCanaryReadiness,
   evaluateRawListingControlledMultiListingCanaryPrecheck,
   evaluateRawListingRealCanaryProbePrecheck,
@@ -604,6 +605,72 @@ test("bounded batch precheck returns READY for three sequential targets", () => 
   assert.equal(precheck.plan.maxWrites, 3);
   assert.equal(precheck.plan.executionMode, "sequential");
   assert.deepEqual(getRawListingCanaryMetrics(), metricsBefore);
+});
+
+const failurePolicyTargets = [
+  { targetId: "A", marketplace: "MERCADO_LIVRE" as const, externalId: "ML-001", expectedCount: 1 as const },
+  { targetId: "B", marketplace: "MERCADO_LIVRE" as const, externalId: "ML-002", expectedCount: 1 as const },
+  { targetId: "C", marketplace: "MERCADO_LIVRE" as const, externalId: "ML-003", expectedCount: 1 as const },
+];
+
+function failurePolicyState(statuses: Array<"PENDING" | "SUCCESS" | "FAILED" | "NOT_RUN">) {
+  return statuses.map((status, index) => ({ targetId: failurePolicyTargets[index].targetId, status }));
+}
+
+test("bounded batch failure policy accepts first failure and plans only prior cleanup", () => {
+  const cases = [
+    { statuses: ["FAILED", "NOT_RUN", "NOT_RUN"] as const, cleanup: [] },
+    { statuses: ["SUCCESS", "FAILED", "NOT_RUN"] as const, cleanup: ["A"] },
+    { statuses: ["SUCCESS", "SUCCESS", "FAILED"] as const, cleanup: ["A", "B"] },
+    { statuses: ["SUCCESS", "SUCCESS", "SUCCESS"] as const, cleanup: ["A", "B", "C"] },
+  ];
+
+  for (const testCase of cases) {
+    const result = evaluateRawListingBoundedBatchFailurePolicy({
+      targets: failurePolicyTargets,
+      execution: failurePolicyState([...testCase.statuses]),
+    });
+    assert.equal(result.valid, true);
+    assert.deepEqual(result.cleanupTargets.map((target) => target.targetId), testCase.cleanup);
+    assert.equal(result.readOnly, true);
+  }
+});
+
+test("bounded batch failure policy rejects execution after a failure", () => {
+  const cases = [
+    ["FAILED", "SUCCESS", "NOT_RUN"],
+    ["FAILED", "NOT_RUN", "SUCCESS"],
+    ["SUCCESS", "FAILED", "SUCCESS"],
+  ] as const;
+
+  for (const statuses of cases) {
+    const result = evaluateRawListingBoundedBatchFailurePolicy({
+      targets: failurePolicyTargets,
+      execution: failurePolicyState([...statuses]),
+    });
+    assert.equal(result.valid, false);
+    assert.ok(result.reasons.includes("EXECUTION_CONTINUED_AFTER_FAILURE"));
+  }
+});
+
+test("bounded batch failure policy rejects invalid target state", () => {
+  const duplicateTarget = [...failurePolicyTargets, failurePolicyTargets[0]];
+  const duplicateExecution = [
+    { targetId: "A", status: "FAILED" as const },
+    { targetId: "A", status: "NOT_RUN" as const },
+    { targetId: "C", status: "NOT_RUN" as const },
+    { targetId: "UNKNOWN", status: "NOT_RUN" as const },
+  ];
+  const result = evaluateRawListingBoundedBatchFailurePolicy({
+    targets: duplicateTarget,
+    execution: duplicateExecution,
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(result.reasons.includes("DUPLICATE_TARGET"));
+  assert.ok(result.reasons.includes("DUPLICATE_EXECUTION_TARGET"));
+  assert.ok(result.reasons.includes("UNKNOWN_TARGET"));
+  assert.ok(result.reasons.includes("EXECUTION_ORDER_INVALID"));
 });
 
 test("bounded batch precheck fail-closed matrix rejects unsafe plans", () => {

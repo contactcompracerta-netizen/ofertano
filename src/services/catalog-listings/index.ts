@@ -367,6 +367,27 @@ export type RawListingBoundedBatchExecutionPrecheckResult = {
   checks: RawListingBoundedBatchExecutionChecks;
 };
 
+export type RawListingBoundedBatchTarget = {
+  targetId: string;
+  marketplace: MarketplaceListingMarket;
+  externalId: string;
+  expectedCount: 1;
+};
+
+export type RawListingBoundedBatchTargetStatus = "PENDING" | "SUCCESS" | "FAILED" | "NOT_RUN";
+
+export type RawListingBoundedBatchExecutionState = {
+  targetId: string;
+  status: RawListingBoundedBatchTargetStatus;
+};
+
+export type RawListingBoundedBatchFailurePolicyResult = {
+  valid: boolean;
+  reasons: string[];
+  cleanupTargets: RawListingBoundedBatchTarget[];
+  readOnly: true;
+};
+
 export type RawListingBoundedBatchExecutionPrecheckOptions = {
   baselineKnown?: boolean;
   rollbackDefined?: boolean;
@@ -923,6 +944,106 @@ export function evaluateRawListingBoundedBatchExecutionPrecheck(
       metricsHealthy,
       readOnly: true,
     },
+  };
+}
+
+export function evaluateRawListingBoundedBatchFailurePolicy(input: {
+  targets: RawListingBoundedBatchTarget[];
+  execution: RawListingBoundedBatchExecutionState[];
+}): RawListingBoundedBatchFailurePolicyResult {
+  const reasons: string[] = [];
+  const cleanupTargets: RawListingBoundedBatchTarget[] = [];
+  const targetById = new Map<string, RawListingBoundedBatchTarget>();
+  const executionById = new Map<string, RawListingBoundedBatchExecutionState>();
+
+  for (const target of input.targets) {
+    if (targetById.has(target.targetId)) {
+      reasons.push("DUPLICATE_TARGET");
+    } else {
+      targetById.set(target.targetId, target);
+    }
+    if (target.expectedCount !== 1) {
+      reasons.push("EXPECTED_COUNT_MUST_BE_ONE");
+    }
+    if (!target.marketplace || !target.externalId.trim()) {
+      reasons.push("TARGET_KEY_REQUIRED");
+    }
+  }
+
+  for (const state of input.execution) {
+    if (executionById.has(state.targetId)) {
+      reasons.push("DUPLICATE_EXECUTION_TARGET");
+    } else {
+      executionById.set(state.targetId, state);
+    }
+    if (!targetById.has(state.targetId)) {
+      reasons.push("UNKNOWN_TARGET");
+    }
+  }
+
+  if (input.execution.length !== input.targets.length) {
+    reasons.push("EXECUTION_STATE_INCOMPLETE");
+  }
+
+  let failureIndex = -1;
+  let hasFailure = false;
+  let hasPending = false;
+  for (let index = 0; index < input.targets.length; index += 1) {
+    const target = input.targets[index];
+    const state = input.execution[index];
+    if (!state || state.targetId !== target.targetId) {
+      reasons.push("EXECUTION_ORDER_INVALID");
+      continue;
+    }
+
+    if (state.status === "PENDING") {
+      hasPending = true;
+      reasons.push("EXECUTION_NOT_FINISHED");
+    }
+    if (state.status === "FAILED") {
+      if (hasFailure) {
+        reasons.push("MULTIPLE_FAILURES");
+      } else {
+        failureIndex = index;
+        hasFailure = true;
+      }
+    } else if (hasFailure && state.status === "SUCCESS") {
+      reasons.push("EXECUTION_CONTINUED_AFTER_FAILURE");
+    }
+  }
+
+  if (hasPending) {
+    reasons.push("EXECUTION_NOT_FINISHED");
+  }
+
+  if (hasFailure) {
+    for (let index = failureIndex + 1; index < input.targets.length; index += 1) {
+      if (input.execution[index]?.status !== "NOT_RUN") {
+        reasons.push("EXECUTION_CONTINUED_AFTER_FAILURE");
+      }
+    }
+    for (let index = 0; index < failureIndex; index += 1) {
+      if (input.execution[index]?.status === "SUCCESS") {
+        cleanupTargets.push(input.targets[index]);
+      } else {
+        reasons.push("FAILED_BEFORE_PRIOR_TARGET_SUCCESS");
+      }
+    }
+  } else {
+    for (let index = 0; index < input.targets.length; index += 1) {
+      if (input.execution[index]?.status === "SUCCESS") {
+        cleanupTargets.push(input.targets[index]);
+      } else {
+        reasons.push("SUCCESSFUL_BATCH_REQUIRED");
+      }
+    }
+  }
+
+  return {
+    valid: Array.from(new Set(reasons)).length === 0,
+    reasons: Array.from(new Set(reasons)),
+    cleanupTargets,
+    readOnly: true,
   };
 }
 
