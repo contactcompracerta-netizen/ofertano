@@ -38,6 +38,13 @@ export type CatalogIngestionAdapter = {
   searcher: (query: string) => Promise<CatalogIngestionCandidate[]>;
 };
 
+import {
+  isRawListingDualWriteEnabled,
+  normalizeMarketplaceListing,
+  persistRawListingIfEnabled,
+  type RawListingRepository,
+} from "../catalog-listings";
+
 export type CatalogIngestionBatchResult = {
   seedsProcessed: number;
   candidatesFound: number;
@@ -47,6 +54,11 @@ export type CatalogIngestionBatchResult = {
   offersCreated: number;
   offersUpdated: number;
   upgradedSingleToComparable: number;
+  rawListingCreated: number;
+  rawListingUpdated: number;
+  rawListingRejected: number;
+  rawListingErrors: number;
+  rawListingDisabled: number;
   marketplaceErrors: string[];
   elapsedMs: number;
   dryRun: boolean;
@@ -206,12 +218,16 @@ export async function runCatalogIngestionBatch({
   dryRun = true,
   batchLimit = 10,
   clock = Date.now,
+  rawListingRepository,
+  rawListingEnabled,
 }: {
   seeds: CatalogIngestionSeed[];
   adapters: CatalogIngestionAdapter[];
   dryRun?: boolean;
   batchLimit?: number;
   clock?: () => number;
+  rawListingRepository?: Pick<RawListingRepository, "findListingByMarketplaceExternalId" | "upsertRawMarketplaceListing" | "linkListingToProduct">;
+  rawListingEnabled?: boolean;
 }): Promise<CatalogIngestionBatchResult> {
   const startedAt = clock();
   const plan = buildSeedPlan(seeds, { seedLimit: batchLimit });
@@ -223,6 +239,12 @@ export async function runCatalogIngestionBatch({
   let offersCreated = 0;
   let offersUpdated = 0;
   let upgradedSingleToComparable = 0;
+  let rawListingCreated = 0;
+  let rawListingUpdated = 0;
+  let rawListingRejected = 0;
+  let rawListingErrors = 0;
+  let rawListingDisabled = 0;
+  const rawListingDualWriteEnabled = rawListingEnabled ?? isRawListingDualWriteEnabled();
 
   for (const seed of plan) {
     const query = seed.normalizedQuery ?? seed.query ?? seed.productName ?? "";
@@ -236,6 +258,43 @@ export async function runCatalogIngestionBatch({
         for (const candidate of results) {
           if (isCandidateEligible(candidate, query)) {
             candidatesFound += 1;
+            if (rawListingRepository && !dryRun && rawListingDualWriteEnabled) {
+              const result = await persistRawListingIfEnabled({
+                listing: normalizeMarketplaceListing({
+                  marketplace: candidate.marketplace,
+                  externalId: candidate.externalId,
+                  sourceUrl: candidate.sourceUrl,
+                  affiliateLink: candidate.affiliateLink ?? null,
+                  title: candidate.title,
+                  brand: candidate.brand ?? null,
+                  category: candidate.category ?? null,
+                  attributes: candidate.attributes ?? null,
+                  image: candidate.image ?? null,
+                  price: candidate.price ?? null,
+                  oldPrice: candidate.oldPrice ?? null,
+                  sellerName: candidate.seller ?? null,
+                  status: "DISCOVERED",
+                  canonicalProductId: null,
+                }),
+                repository: rawListingRepository,
+                enabled: rawListingDualWriteEnabled,
+                dryRun,
+              });
+
+              if (result.status === "CREATED") {
+                rawListingCreated += 1;
+              } else if (result.status === "UPDATED") {
+                rawListingUpdated += 1;
+              } else if (result.status === "REJECTED") {
+                rawListingRejected += 1;
+              } else if (result.status === "ERROR") {
+                rawListingErrors += 1;
+              } else if (result.status === "DISABLED") {
+                rawListingDisabled += 1;
+              }
+            } else if (dryRun || !rawListingDualWriteEnabled) {
+              rawListingDisabled += 1;
+            }
           } else {
             candidatesRejected += 1;
           }
@@ -263,6 +322,11 @@ export async function runCatalogIngestionBatch({
     offersCreated,
     offersUpdated,
     upgradedSingleToComparable,
+    rawListingCreated,
+    rawListingUpdated,
+    rawListingRejected,
+    rawListingErrors,
+    rawListingDisabled,
     marketplaceErrors,
     elapsedMs: Math.max(0, clock() - startedAt),
     dryRun,
