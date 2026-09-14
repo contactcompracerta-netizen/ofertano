@@ -1077,9 +1077,15 @@ function createProductCentralEvidenceAssessor(
       });
     }
 
+    const hasMatchedIdentity =
+      Boolean(queryBrand && brandMatch) ||
+      (queryModels.length > 0 && modelMatch) ||
+      (queryAnchors.length > 0 && anchorMatch);
+
     if (
       requiredAnchors.length > 0 &&
-      !requiredAnchors.every(matchesAnchor)
+      !requiredAnchors.every(matchesAnchor) &&
+      !hasMatchedIdentity
     ) {
       return result({
         hasCentralEvidence: false,
@@ -1087,14 +1093,9 @@ function createProductCentralEvidenceAssessor(
         classMatch,
         brandMatch,
         modelMatch,
-        anchorMatch: false,
+        anchorMatch,
       });
     }
-
-    const hasMatchedIdentity =
-      Boolean(queryBrand && brandMatch) ||
-      (queryModels.length > 0 && modelMatch) ||
-      (queryAnchors.length > 0 && anchorMatch);
     const hasCentralEvidence = classMatch || hasMatchedIdentity;
 
     return result({
@@ -1194,6 +1195,18 @@ function evaluationCompleteness(item: CandidateEvaluation): number {
   );
 }
 
+function evaluationStrength(item: CandidateEvaluation): number {
+  const candidateRelevance = item.kept?.relevance ?? item.lexicalScore ?? 0;
+
+  return (
+    Number(Boolean(item.kept)) * 1_000 +
+    Number(Boolean(item.kept && item.kept.relevance > 0.5)) * 500 +
+    candidateRelevance * 100 +
+    evaluationCompleteness(item) * 10 +
+    (item.lexicalScore ?? 0) * 20
+  );
+}
+
 function consolidateEvaluations(
   items: CandidateEvaluation[],
 ): CandidateEvaluation[] {
@@ -1210,7 +1223,10 @@ function consolidateEvaluations(
     }
 
     const current = byId.get(listingId);
-    if (!current || evaluationCompleteness(item) > evaluationCompleteness(current)) {
+    if (
+      !current ||
+      evaluationStrength(item) > evaluationStrength(current)
+    ) {
       byId.set(listingId, {
         ...item,
         externalId: listingId,
@@ -2299,12 +2315,16 @@ export async function buscarMercadoLivreComFontes(
 
     const centralEvidence = assessCentralEvidence(candidateTitle);
     let supported = centralEvidence.hasCentralEvidence;
-    if (!supported && !queryHasCentralRequirements) {
+    if (!supported) {
       const lexical = pontuarCoberturaLexicalPonderada(
         relevanceQuery,
         candidateTitle,
       );
-      supported = lexical.score >= 0.18 || lexical.queryCoverage >= 0.2;
+      const fallbackThreshold = queryHasCentralRequirements ? 0.5 : 0.18;
+      const fallbackCoverage = queryHasCentralRequirements ? 0.35 : 0.2;
+      supported =
+        lexical.score >= fallbackThreshold ||
+        lexical.queryCoverage >= fallbackCoverage;
     }
 
     minimalEvidenceCache.set(evaluation, supported);
