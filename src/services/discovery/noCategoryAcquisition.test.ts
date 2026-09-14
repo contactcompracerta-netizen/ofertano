@@ -84,19 +84,21 @@ async function runNoCategoryAcquisitionCases(): Promise<void> {
     fontes((stage) => notebookStages.push(stage)),
   );
 
-  assert.deepEqual(
-    aspiradorStages,
-    notebookStages,
-    "sequencia de etapas executadas deve ser identica entre aspirador e notebook",
-  );
-  assert.ok(
-    aspiradorStages.includes("domain"),
-    "aquisicao padrao continua consultando dominio",
-  );
-  assert.ok(
-    aspiradorStages.includes("items-api"),
-    "aquisicao padrao continua consultando items-api",
-  );
+  for (const stages of [aspiradorStages, notebookStages]) {
+    assert.equal(stages[0], "items-api");
+    assert.equal(stages[1], "domain");
+    assert.ok(stages.includes("catalog"));
+    assert.ok(stages.includes("public-search"));
+    assert.ok(
+      stages.indexOf("catalog") < stages.indexOf("public-search"),
+      "fallback publico somente ocorre depois das etapas de catalogo",
+    );
+    assert.equal(
+      stages.includes("hydration"),
+      false,
+      "catalogo vazio nao deve hidratar candidato inexistente",
+    );
+  }
 
   console.log("NO_CATEGORY_ACQUISITION_PATCH=PASS");
 }
