@@ -63,7 +63,11 @@ async function runOfflineMlMagaluClusterCase(): Promise<void> {
   };
 
   let magaluReturnedAt = 0;
-  let mlReturnedAt = 0;
+  const mlCalls: Array<{
+    query: string;
+    startedAt: number;
+    returnedAt: number;
+  }> = [];
   const started = Date.now();
   let postReturnMutation = false;
 
@@ -97,8 +101,14 @@ async function runOfflineMlMagaluClusterCase(): Promise<void> {
         } satisfies MarketplaceDiscoveryResult;
       }),
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async (request) => {
+        const call = {
+          query: request.query,
+          startedAt: Date.now() - started,
+          returnedAt: 0,
+        };
+        mlCalls.push(call);
         await new Promise((resolve) => setTimeout(resolve, 5_500));
-        mlReturnedAt = Date.now() - started;
+        call.returnedAt = Date.now() - started;
         return {
           marketplace: "MERCADO_LIVRE",
           query: request.query,
@@ -175,7 +185,15 @@ async function runOfflineMlMagaluClusterCase(): Promise<void> {
 
   assert.ok(elapsed <= budget.globalMs + 500, `V2 retornou em ${elapsed}ms`);
   assert.ok(magaluReturnedAt >= 3_500 && magaluReturnedAt <= 5_500);
-  assert.ok(mlReturnedAt >= 5_000 && mlReturnedAt <= 7_500);
+  assert.ok(mlCalls.length >= 1, "Mercado Livre foi chamado");
+  assert.ok(
+    mlCalls[0]!.returnedAt >= 5_000 && mlCalls[0]!.returnedAt <= 7_500,
+    `primeira chamada ML retornou em ${mlCalls[0]!.returnedAt}ms`,
+  );
+  assert.ok(
+    mlCalls.every((call) => call.returnedAt >= call.startedAt),
+    "cada chamada ML deve registrar retorno após o início",
+  );
 
   const publishable = result.products.filter((item) => item.publishable);
   assert.equal(publishable.length, 1, "cluster publicavel unico");
