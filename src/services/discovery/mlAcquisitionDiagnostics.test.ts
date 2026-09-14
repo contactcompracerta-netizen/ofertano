@@ -199,7 +199,7 @@ async function runMlTraceCases(): Promise<void> {
 }
 
 async function runMlStageBudgetCases(): Promise<void> {
-  const clock = createMlStageBudgetClock(ML_TOTAL_BUDGET_MS);
+  const clock = createMlStageBudgetClock(ML_TOTAL_BUDGET_MS, 0, ML_HYDRATION_RESERVE_MS, () => 0);
   assert.equal(clock.totalMs, ML_TOTAL_BUDGET_MS);
   assert.equal(
     clock.catalogBudgetMs(),

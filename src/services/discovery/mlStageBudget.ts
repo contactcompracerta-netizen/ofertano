@@ -66,12 +66,13 @@ export function createMlStageBudgetClock(
   totalMs: number,
   startedAt = Date.now(),
   hydrationReserveMs: number = ML_HYDRATION_RESERVE_MS,
+  now: () => number = Date.now,
 ): MlDynamicBudgetClock {
   const bounded = Math.max(1_000, Math.min(ML_TOTAL_BUDGET_MS, totalMs));
   const deadlineAt = startedAt + bounded;
 
-  const elapsedMs = () => Math.max(0, Date.now() - startedAt);
-  const remainingMs = () => Math.max(0, deadlineAt - Date.now());
+  const elapsedMs = () => Math.max(0, now() - startedAt);
+  const remainingMs = () => Math.max(0, deadlineAt - now());
   const catalogBudgetMs = () => Math.max(0, remainingMs() - hydrationReserveMs);
   /*
    * A reserva e um piso protegido contra catalog/listings, nao um teto.
