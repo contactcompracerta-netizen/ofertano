@@ -2335,6 +2335,7 @@ export async function buscarMercadoLivreComFontes(
     "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE"
   > = [];
   const listingSourcesTried: string[] = [];
+  let catalogFoundUsableCandidate = false;
   const parentAbort = activeSearchAbort();
   const contextualBudgetMs = remainingBudgetMs();
   const requestedBudgetMs = resolveMlTotalBudgetMs(request.signal);
@@ -2841,7 +2842,13 @@ export async function buscarMercadoLivreComFontes(
               return;
             }
 
-            if (hasBatchCoverageGoal()) {
+            const attemptForEvaluation = attempts.find(
+              (attempt) => attempt.evaluation === evaluation,
+            );
+            const hasStrongOutOfOrderCandidate =
+              attemptForEvaluation !== undefined &&
+              attemptForEvaluation.rank > 1;
+            if (hasBatchCoverageGoal() || hasStrongOutOfOrderCandidate) {
               resolveBatchCoverageGoal?.();
               batchAbort.abort();
             }
@@ -3127,6 +3134,19 @@ export async function buscarMercadoLivreComFontes(
       // cobertura, aguardamos as duas para preservar o fallback publico.
       await primaryLanes;
 
+      if (
+        supportedEvaluationCount() > 0 &&
+        !blockedSources.includes("items-api")
+      ) {
+        catalogFoundUsableCandidate = true;
+        traceMlAcquisition("EXIT", {
+          query,
+          candidates: supportedEvaluationCount(),
+          elapsedMs: budgetClock.elapsedMs(),
+        });
+        return;
+      }
+
       if (!shouldStop() && !hasCoverageGoal()) {
         await runPublicListingFallbacks();
       }
@@ -3134,7 +3154,7 @@ export async function buscarMercadoLivreComFontes(
 
     await waitForParallelLanes();
 
-    if (hasCoverageGoal()) {
+    if (hasCoverageGoal() || catalogFoundUsableCandidate) {
       return finalizeDiscovery();
     }
 
@@ -3142,7 +3162,7 @@ export async function buscarMercadoLivreComFontes(
       return finalizeDiscovery();
     }
 
-    if (!hasCoverageGoal()) {
+    if (!hasCoverageGoal() && !catalogFoundUsableCandidate) {
       const publicBlocked =
         blockedSources.includes("public-search") ||
         (blockedSources.includes("public-search-lista") &&

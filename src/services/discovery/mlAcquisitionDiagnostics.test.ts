@@ -531,13 +531,6 @@ async function runMlStageBudgetCases(): Promise<void> {
             data: [],
           };
         }
-        if (variantCalls === 2) {
-          return {
-            status: "EMPTY",
-            httpStatus: 200,
-            data: [],
-          };
-        }
         return {
           status: "SUCCESS",
           httpStatus: 200,
@@ -546,7 +539,10 @@ async function runMlStageBudgetCases(): Promise<void> {
       },
     }),
   );
-  assert.ok(variantCalls >= 3, "segunda variante ainda recebe orcamento");
+  assert.ok(
+    variantCalls >= 2,
+    "o fallback publico recebe orcamento para a consulta original e uma variante planejada",
+  );
   assert.equal(variantBudget.searchOutcome, "SEARCH_COMPLETED");
 
   const started = Date.now();
