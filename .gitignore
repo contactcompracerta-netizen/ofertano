@@ -47,3 +47,6 @@ src/components/Header.tsx.backup
 .ml-affiliate-profile/
 .ml-affiliate-chrome/
 scripts/.ml-affiliate-poc-logs/
+
+# git worktree temporário/estranho (origin/) usado para referência
+origin/

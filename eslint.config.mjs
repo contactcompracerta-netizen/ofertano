@@ -21,5 +21,8 @@ export default defineConfig([
 
     // Prisma
     "prisma/migrations/**",
+
+    // Worktree temporário (origin/) fora do escopo de lint
+    "origin/**",
   ]),
 ]);

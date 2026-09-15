@@ -27,6 +27,7 @@ const SKIP_DIRS = new Set([
   ".claude",
   ".windsurf",
   "backups",
+  "origin",
 ]);
 
 const SKIP_EXT = new Set([
