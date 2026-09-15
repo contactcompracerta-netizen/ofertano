@@ -255,7 +255,8 @@ async function main(): Promise<void> {
   );
   const offerIds = new Set(product.offers.map((offer) => offer.externalId));
   assert.ok(offerIds.has("amazon-seed"));
-  assert.ok(offerIds.has("shopee-hunt"));
+  assert.ok(offerIds.has("shopee-initial"), "candidato ja adquirido sobrevive ao lote Amazon");
+  assert.equal(shopeeCalls, 1, "Hunt nao repete loja ja representada no cluster");
   if (magaluCalls > initialMagaluCalls) {
     assert.ok(offerIds.has("magalu-same"));
   }

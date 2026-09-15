@@ -139,11 +139,7 @@ function canRunPostprocess(
   deadline: SearchDeadline,
   candidateCount = 0,
 ): boolean {
-  if (deadline.expired()) {
-    return false;
-  }
-
-  return deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS;
+  return !deadline.expired() && deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS;
 }
 
 function hasPhaseBudget(
@@ -728,8 +724,8 @@ async function huntMissingStoreOffers(
     Math.max(
       0,
       deadline.remainingMs() -
-        deadline.responseReserveMs -
-        (persist ? deadline.budget.persistReserveMs : 0),
+        (persist ? deadline.budget.persistReserveMs : 0) -
+        MIN_POSTPROCESS_BUDGET_MS,
     ),
   );
   if (huntMs < MIN_HUNT_ATTEMPT_MS) {
@@ -1800,11 +1796,12 @@ export async function searchMultistoreV2(
     const processedAcquiredKeys = new Set<string>();
     let prefilterDropped = 0;
     for (const raw of rawCandidates) {
-      if (!hasPhaseBudget(deadline, normalizationStopMs)) {
+      // Reservas de fases opcionais nao devem descartar candidatos ja adquiridos.
+      if (!canRunPostprocess(deadline)) {
         traceV2("phase-budget-stop", {
           phase: "NORMALIZATION",
           remainingMs: deadline.remainingMs(),
-          reservedMs: normalizationStopMs,
+          reservedMs: MIN_POSTPROCESS_BUDGET_MS,
         });
         break;
       }
@@ -1856,16 +1853,42 @@ export async function searchMultistoreV2(
     traceV2Phase("RELEVANCE", "start", relevanceStarted, deadline);
     const scored: ScoredCandidate[] = [];
     const relevanceStopMs = preHuntReserveMs;
+    const byMarketplace = new Map<string, typeof normalized>();
     for (const item of normalized) {
-      if (!hasPhaseBudget(deadline, relevanceStopMs)) {
+      const marketplace = item.raw.marketplace;
+      const group = byMarketplace.get(marketplace) ?? [];
+      group.push(item);
+      byMarketplace.set(marketplace, group);
+    }
+    const relevanceOrder: typeof normalized = [];
+    for (let index = 0; relevanceOrder.length < normalized.length; index += 1) {
+      for (const group of byMarketplace.values()) {
+        if (group[index]) relevanceOrder.push(group[index]);
+      }
+    }
+    const relevantMarketplaces = new Set<string>();
+    for (const item of relevanceOrder) {
+      if (!canRunPostprocess(deadline)) {
         traceV2("phase-budget-stop", {
           phase: "RELEVANCE",
           remainingMs: deadline.remainingMs(),
-          reservedMs: relevanceStopMs,
+          reservedMs: Math.min(relevanceStopMs, MIN_POSTPROCESS_BUDGET_MS),
         });
         break;
       }
-      scored.push(scoreQueryRelevance(intent, item, queryCore));
+      const candidate = scoreQueryRelevance(intent, item, queryCore);
+      scored.push(candidate);
+      if (candidate.status === "RELEVANT") {
+        relevantMarketplaces.add(candidate.normalized.raw.marketplace);
+      }
+      const hasCrossMarketplaceSignal = relevantMarketplaces.size >= 2;
+      if (
+        options.hunt === true &&
+        hasCrossMarketplaceSignal &&
+        !hasPhaseBudget(deadline, relevanceStopMs)
+      ) {
+        break;
+      }
     }
     const relevant = scored.filter((item) => item.status === "RELEVANT");
     traceV2Phase("RELEVANCE", "end", relevanceStarted, deadline, {
@@ -1880,17 +1903,15 @@ export async function searchMultistoreV2(
     traceV2Phase("CLUSTERING", "start", clusteringStarted, deadline);
     let clusters: ProductCluster[] = [];
     let processedProducts: CanonicalProduct[] = [];
-    const clusteringStopMs =
-      deadline.responseReserveMs +
-      (persistEnabled ? budget.persistReserveMs : 0) +
-      huntReserveMs;
-    if (hasPhaseBudget(deadline, clusteringStopMs)) {
+    const canContinueClustering = () =>
+      !deadline.expired() && deadline.remainingMs() > MIN_POSTPROCESS_BUDGET_MS;
+    if (canContinueClustering()) {
       clusters = clusterCandidates(relevant, {
-        shouldContinue: () => hasPhaseBudget(deadline, clusteringStopMs),
+        shouldContinue: canContinueClustering,
       });
       const canonicalProducts: CanonicalProduct[] = [];
       for (const cluster of clusters) {
-        if (!hasPhaseBudget(deadline, clusteringStopMs)) {
+        if (!canContinueClustering()) {
           break;
         }
         const canonical = canonicalizeCluster(cluster);
@@ -1937,8 +1958,7 @@ export async function searchMultistoreV2(
     const knownKeys = new Set(processedAcquiredKeys);
     const shouldHunt =
       options.hunt === true &&
-      !deadline.expired() &&
-      deadline.remainingMs() > deadline.responseReserveMs &&
+      canRunPostprocess(deadline) &&
       clusters.length > 0;
     const huntedClusters = shouldHunt
       ? await huntMissingStoreOffers(
@@ -1955,7 +1975,7 @@ export async function searchMultistoreV2(
         )
       : clusters;
     markExpiredAtStage("HUNT");
-    if (!deadline.expired() && deadline.remainingMs() > deadline.responseReserveMs) {
+    if (canRunPostprocess(deadline)) {
       await applyAffiliateLayer(
         huntedClusters,
         deadline,

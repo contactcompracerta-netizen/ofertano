@@ -285,12 +285,12 @@ async function main(): Promise<void> {
 
   await runRealGate("REAL_SOURCE_PRESERVATION", async () => {
     const sourceUrl = "https://example.com/item/ALI-REAL-GATE-1";
-    const result = await searchMultistoreV2("Cabo USB-C 100W Baseus 2m", {
+    const result = await searchMultistoreV2("Headphone JBL Tune 520BT", {
       persist: false,
       adapters: [
         fakeAdapter("ALIEXPRESS", "AliExpress", async () => ({
           marketplace: "ALIEXPRESS",
-          query: "Cabo USB-C 100W Baseus 2m",
+          query: "Headphone JBL Tune 520BT",
           success: true,
           scanned: 1,
           candidates: [
@@ -299,11 +299,25 @@ async function main(): Promise<void> {
               marketplaceName: "AliExpress",
               externalId: "ALI-REAL-GATE-1",
               sourceUrl,
-              title: "Cabo USB-C 100W Baseus 2m",
+              title: "Headphone JBL Tune 520BT",
               price: 99,
-              brand: "Baseus",
+              brand: "JBL",
             }),
           ],
+          error: null,
+        } satisfies MarketplaceDiscoveryResult)),
+        fakeAdapter("AMAZON", "Amazon", async (request) => ({
+          marketplace: "AMAZON",
+          query: request.query,
+          success: true,
+          scanned: 1,
+          candidates: [foundCandidate({
+            marketplace: "AMAZON",
+            externalId: "AMAZON-SOURCE-PAIR",
+            title: "Headphone JBL Tune 520BT",
+            price: 109,
+            brand: "JBL",
+          })],
           error: null,
         } satisfies MarketplaceDiscoveryResult)),
       ],
@@ -327,7 +341,7 @@ async function main(): Promise<void> {
     assert.equal(clusteredCandidate.externalId, "ALI-REAL-GATE-1");
     assert.equal(clusteredCandidate.url, sourceUrl);
 
-    const finalOffer = result.products[0]?.offers[0];
+    const finalOffer = result.products[0]?.offers.find((offer) => offer.marketplace === "ALIEXPRESS");
     assert.ok(finalOffer, "cluster deve gerar resultado canônico");
     assert.equal(finalOffer.marketplace, "ALIEXPRESS");
     assert.equal(finalOffer.externalId, "ALI-REAL-GATE-1");

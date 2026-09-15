@@ -22,7 +22,7 @@ const NOISE_PATTERNS = [
   // Rating/review patterns
   /\b\d+(?:[.,]\d+)?\s+(?=(?:avalia(?:c|ç)(?:a|ã)o|rating|nota)\b)/gi,
   /\b(?:avalia(?:c|ç)(?:a|ã)o|rating|nota)\s*[:=-]?\s*\d+(?:[.,]\d+)?(?:\s*de\s*5(?:\s*estrelas?)?)?\b/gi,
-  /\b\d+(?:[.,]\d+)?\s*de\s*5\s*estrelas?\b/gi, // "4,5 de 5 estrelas"
+  /\b\d+(?:[.,]\d+)?\s*de\s*5\s*estrelas?\b(?:\s*\(\s*\d+\s*\))?/gi, // "4,5 de 5 estrelas"
   /\b\d+\.\d+\s*de\s*5\b/gi, // "4.5 de 5"
   /\(\s*\d+(?:\s*avaliações?|\s*classificações?|\s*reviews?|\s*opiniões?)\s*\)/gi, // "(5 avaliações)"
   /\b\d+\s*(?:avaliações?|classificações?|reviews?|opiniões?)\b/gi, // "5 avaliações" standalone
