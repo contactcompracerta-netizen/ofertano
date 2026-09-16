@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { isPublicSearchPersistenceEnabled } from "@/lib/featureFlags";
 import { descobrirProdutos } from "@/services/discovery";
 import { importarCandidatoDiscovery } from "@/services/discovery/importCandidate";
 import {
@@ -431,7 +432,13 @@ export async function searchCatalogOrDiscover(
           (product) =>
             countDistinctNonEmptyMarketplaces(product.offers) >= 2,
         );
-      if (visibleProducts.length > 0 && (options.schedulePersist || options.persistProduct)) {
+      const persistenceEnabled = isPublicSearchPersistenceEnabled();
+
+      if (
+        persistenceEnabled &&
+        visibleProducts.length > 0 &&
+        (options.schedulePersist || options.persistProduct)
+      ) {
         const persistedIds = options.schedulePersist
           ? await persistCanonicalProducts(search, visibleProducts, {
               limit,
@@ -556,57 +563,59 @@ export async function searchCatalogOrDiscover(
     };
   }
 
-  const ranked = rankDiscoveryCandidates(search, discovery.candidates);
-  const toImport = pickCandidatesForImport(ranked);
-  const offers = await importExactOffers(search, toImport);
-  const coverage = {
-    enabledMarketplaces: listarDiscoveryAdaptersAtivos().map(
-      (adapter) => adapter.marketplace,
-    ),
-    results: discovery.results,
-  };
+  if (isPublicSearchPersistenceEnabled()) {
+    const ranked = rankDiscoveryCandidates(search, discovery.candidates);
+    const toImport = pickCandidatesForImport(ranked);
+    const offers = await importExactOffers(search, toImport);
+    const coverage = {
+      enabledMarketplaces: listarDiscoveryAdaptersAtivos().map(
+        (adapter) => adapter.marketplace,
+      ),
+      results: discovery.results,
+    };
 
-  try {
-    const persisted = await persistPublicSearchCluster(
-      search,
-      offers,
-      existingMultiStore[0]?.id ?? existing[0]?.id ?? null,
-      coverage,
-    );
+    try {
+      const persisted = await persistPublicSearchCluster(
+        search,
+        offers,
+        existingMultiStore[0]?.id ?? existing[0]?.id ?? null,
+        coverage,
+      );
 
-    if (persisted) {
-      const publishedProduct = await prisma.product.findUnique({
-        where: { id: persisted.productId },
-        include: {
-          offers: {
-            where: {
-              active: true,
-              matchStatus: "EXACT",
-            },
-            select: {
-              marketplace: true,
-              available: true,
-              status: true,
-              price: true,
+      if (persisted) {
+        const publishedProduct = await prisma.product.findUnique({
+          where: { id: persisted.productId },
+          include: {
+            offers: {
+              where: {
+                active: true,
+                matchStatus: "EXACT",
+              },
+              select: {
+                marketplace: true,
+                available: true,
+                status: true,
+                price: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      if (publishedProduct?.active && hasPublicMultiStore(publishedProduct)) {
-        return {
-          query: search,
-          source: existing.length > 0 ? "CATALOG" : "DISCOVERY",
-          products: [publishedProduct],
-          discovery,
-        };
+        if (publishedProduct?.active && hasPublicMultiStore(publishedProduct)) {
+          return {
+            query: search,
+            source: existing.length > 0 ? "CATALOG" : "DISCOVERY",
+            products: [publishedProduct],
+            discovery,
+          };
+        }
       }
+    } catch (error) {
+      console.error(
+        "[Search Multi Loja] Falha ao persistir cluster EXACT:",
+        error,
+      );
     }
-  } catch (error) {
-    console.error(
-      "[Search Multi Loja] Falha ao persistir cluster EXACT:",
-      error,
-    );
   }
 
   if (existingMultiStore.length > 0) {

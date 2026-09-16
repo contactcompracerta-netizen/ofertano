@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server";
 
+import { isCatalogPopulateEnabled } from "@/lib/featureFlags";
 import { populateMercadoLivre } from "@/services/automation/populateMercadoLivre";
 
 export const runtime = "nodejs";
@@ -32,6 +33,22 @@ export async function GET(
         status: 401,
       },
     );
+  }
+
+  if (!isCatalogPopulateEnabled()) {
+    console.info("AUTO_CATALOG_CRON", {
+      enabled: false,
+      action: "skipped",
+      writer: "catalog-populate",
+    });
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      automated: true,
+      reason: "CATALOG_POPULATE_ENABLED is not explicitly true.",
+      executedAt: new Date().toISOString(),
+    });
   }
 
   try {

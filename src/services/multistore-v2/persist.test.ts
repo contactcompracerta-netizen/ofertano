@@ -7,6 +7,8 @@ import { coverageStatusOf, searchMultistoreV2 } from "./search";
 import { searchCatalogOrDiscover } from "../search/searchCatalogOrDiscover";
 import type { CanonicalProduct, MarketplaceAcquisition, MarketplaceCode } from "./types";
 
+process.env.PUBLIC_SEARCH_PERSISTENCE_ENABLED = "true";
+
 function canonicalProduct(
   title: string,
   extras: Partial<CanonicalProduct> = {},

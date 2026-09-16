@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isImportQueueProcessEnabled } from "@/lib/featureFlags";
 import { processImportQueue } from "@/services/importQueue/processQueue";
 
 export const runtime = "nodejs";
@@ -30,6 +31,22 @@ export async function GET(request: Request) {
         status: 401,
       },
     );
+  }
+
+  if (!isImportQueueProcessEnabled()) {
+    console.info("AUTO_IMPORT_QUEUE_CRON", {
+      enabled: false,
+      action: "skipped",
+      writer: "import-queue",
+    });
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      automated: true,
+      reason: "IMPORT_QUEUE_PROCESS_ENABLED is not explicitly true.",
+      executedAt: new Date().toISOString(),
+    });
   }
 
   try {
