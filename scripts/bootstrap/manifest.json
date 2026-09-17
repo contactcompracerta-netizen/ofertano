@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "sourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
+  "schemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
+  "ddlSHA256": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
+  "migrations": {
+    "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+    "20260824120000_analytics_intelligence": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
+    "20260828220000_admin_push_subscription": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+    "20260905120000_price_alerts": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+    "20260907000000_social_automation": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+    "20260907220000_social_three_slots": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+    "20260912000000_add_raw_marketplace_listing": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c"
+  },
+  "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain"
+}
