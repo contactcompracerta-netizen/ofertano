@@ -1,0 +1,168 @@
+{
+  "base": "388223c2cdac670148eaf3a5bd5edd06c04dfbcf",
+  "nativeCommand": "npm test",
+  "nativeExitCode": 0,
+  "nativeMatrixCount": 34,
+  "nativeMatrix": [
+    {
+      "command": "npx tsx src/services/priceHistory/priceHistory.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/priceAlerts/priceAlerts.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/priceAlerts/api.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/priceAlerts/email.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/lib/searchAbort.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/identity/exactMatcher.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/search/publicSearchMultiloja.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/search/searchCompletionBarrier.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/discovery/mercadolivre.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/discovery/mercadolivreIds.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/discovery/marketplaceAcquisition.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/discovery/noCategoryAcquisition.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/discovery/mlAcquisitionDiagnostics.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/discovery/mlVoltageRegression.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/globalHardDeadline.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/trueEndToEndDeadline.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/offlineMlMagaluCluster.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/hydrationDeadlineRegression.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/publicationBarrier.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/multistore-v2.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/queryRelevance.regression.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/multistore-v2/persist.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/analytics/analytics.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/lib/favorites/favorites.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/lib/affiliates/publicPurchase.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/opportunities/lowestPriceAffiliateOpportunity.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/admin-push/admin-push.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/imageSearch/imageSearch.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/opportunities/convergence.integration.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/affiliates/mercadolivre/generator.test.mts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/affiliates/mercadolivre/worker.test.mts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/affiliates/mercadolivre/daemon.test.mts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/lib/seo/seo.test.ts",
+      "status": "PASS"
+    },
+    {
+      "command": "npx tsx src/services/socialAutomation/socialAutomation.test.ts",
+      "status": "PASS"
+    }
+  ],
+  "nativeScriptUnchanged": true,
+  "firstAttempt": "mlAcquisitionDiagnostics timing assertion failed at 3160ms during concurrent build; isolated native retry passed",
+  "encoding": "PASS",
+  "prismaValidate": "PASS",
+  "prismaGenerate": "PASS",
+  "build": "PASS",
+  "initialBuild": "missing worktree public Supabase env; retry with public values and local DB passed",
+  "pureFunctions": "PASS",
+  "realRepositoryTests": "PASS",
+  "repositoryZeroWriteOff": "PASS",
+  "productionCountsBefore": {
+    "Product": 0,
+    "MarketplaceOffer": 0,
+    "PriceHistory": 0,
+    "ProductOpportunity": 0,
+    "ImportQueue": 0,
+    "RawMarketplaceListing": 0
+  },
+  "productionNewTablesBefore": [],
+  "productionSourceSHA": "388223c2cdac670148eaf3a5bd5edd06c04dfbcf",
+  "legacyPublicSourcesIdentical": true,
+  "postgresTestVersion": "18.4",
+  "localHost": "127.0.0.1",
+  "localPort": 55433
+}

@@ -3,8 +3,8 @@
  *
  * Problema: a cadeia histórica de migrations não roda em um banco vazio
  * (20260905120000_price_alerts assume objetos legados). A solução é aplicar
- * o DDL canônico pinado (initial-schema.sql), marcar as 7 migrations como
- * aplicadas e validar equivalência de schema.
+ * o DDL canônico pinado (initial-schema.sql), resolver APENAS as 7 migrations baseline como
+ * aplicadas; executar migrations forward com migrate deploy e validar equivalência de schema.
  *
  * Contrato de classificação (fail-closed):
  *   A FRESH     -> banco vazio: aplica DDL + resolve + deploy + valida.
@@ -42,6 +42,7 @@ const sha256 = (buffer) => crypto.createHash("sha256").update(buffer).digest("he
 const ALLOWED_DATABASE_PATTERNS = [
   /^ofertano_bootstrap_probe_n1[abc]$/,
   /^ofertano_4e_[a-z0-9_]+$/,
+  /^ofertano_50ag1_(foundation|forward|partial|unknown)$/,
 ];
 
 function result(verdict, category, detail) {
@@ -55,9 +56,15 @@ function abort(code, extra = {}) {
 }
 
 function verifyManifest() {
-  if (sha256(DDL) !== MANIFEST.ddlSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "initial-schema.sql" });
-  if (sha256(fs.readFileSync(SCHEMA_PATH)) !== MANIFEST.schemaSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "schema.prisma" });
-  for (const [name, sum] of Object.entries(MANIFEST.migrations)) {
+  if (Object.keys(MANIFEST.baselineMigrations ?? {}).length !== 7) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact:"immutable baseline inventory"});
+  if (MANIFEST.version !== 2) abort("BOOTSTRAP_MANIFEST_DIVERGED");
+  const tracked = Object.keys({...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations}).sort();
+  const actual = fs.readdirSync(path.join(ROOT, "prisma/migrations")).filter(n => fs.existsSync(path.join(ROOT, "prisma/migrations", n, "migration.sql"))).sort();
+  if (JSON.stringify(tracked) !== JSON.stringify(actual)) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "migration inventory" });
+  if (Object.keys(MANIFEST.forwardMigrations).some(n => n <= Object.keys(MANIFEST.baselineMigrations).sort().at(-1))) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact: "migration order"});
+  if (sha256(DDL) !== MANIFEST.baselineDDLHash) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "initial-schema.sql" });
+  if (sha256(fs.readFileSync(SCHEMA_PATH)) !== MANIFEST.currentSchemaSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "schema.prisma" });
+  for (const [name, sum] of Object.entries({...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations})) {
     const file = path.join(ROOT, "prisma/migrations", name, "migration.sql");
     if (!fs.existsSync(file) || sha256(fs.readFileSync(file)) !== sum) {
       abort("HISTORICAL_CHECKSUM_DIVERGED", { migration: name });
@@ -121,7 +128,7 @@ async function classify(client) {
       )
     ).rows;
   }
-  const expected = MANIFEST.migrations;
+  const expected = {...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations};
   const expectedNames = Object.keys(expected);
   const emptySchema = relations.rowCount === 0 && types.rowCount === 0;
   if (emptySchema && rows.length === 0) {
@@ -157,7 +164,7 @@ async function bootstrapFresh(client, target) {
     await client.query("ROLLBACK");
     abort("DDL_APPLY_FAILED", { category: "A", reason: String(error.message).slice(0, 400) });
   }
-  for (const name of Object.keys(MANIFEST.migrations)) {
+  for (const name of Object.keys(MANIFEST.baselineMigrations)) {
     requirePrisma(["migrate", "resolve", "--applied", name], target);
   }
 }
@@ -212,6 +219,7 @@ async function main() {
 }
 
 main().catch((error) => {
+  process.exitCode = 1;
   if (!/^(BOOTSTRAP_MANIFEST_DIVERGED|HISTORICAL_CHECKSUM_DIVERGED|CONNECTION_ENV_ABSENT|CONNECTION_URL_INVALID|LOCAL_TRIPWIRE_VIOLATED|TARGET_NOT_DISPOSABLE|LOCAL_SOCKET_DIVERGED|DDL_APPLY_FAILED|PRISMA_STEP_FAILED_|SCHEMA_DIVERGENCE_DETECTED|SCHEMA_DIFF_ERROR|TARGET_SCHEMA_NOT_BOOTSTRAPPABLE)/.test(error.message)) {
     console.error("VERSIONED_FRESH_BOOTSTRAP=UNEXPECTED_ERROR", error);
   }

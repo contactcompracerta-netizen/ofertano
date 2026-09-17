@@ -19,7 +19,7 @@ O bootstrap **não** é ligado a `build`, `postinstall` ou runtime. Ele é sempr
 | Categoria | Estado do banco | Ação |
 |-----------|-----------------|------|
 | A FRESH   | sem objetos e sem `_prisma_migrations` | aplica DDL canônico + resolve ×7 + deploy + valida |
-| B MIGRATED| as 7 migrations canônicas aplicadas, checksums batem | NO-OP seguro |
+| B MIGRATED| todas as migrations baseline + forward aplicadas, checksums batem | NO-OP seguro |
 | C PARTIAL | migrations parciais, checksums divergentes ou rollback | ABORTA |
 | D UNKNOWN | schema não reconhecido ou alvo não descartável | RECUSA |
 
@@ -29,7 +29,7 @@ O bootstrap **não** é ligado a `build`, `postinstall` ou runtime. Ele é sempr
 - O nome do banco precisa estar na allowlist descartável
   (`ofertano_4e_*`, `ofertano_bootstrap_probe_n1[abc]`) ou em
   `BOOTSTRAP_ALLOWED_DATABASES` (lista separada por vírgula).
-- `manifest.json` fixa `sourceSHA`, `schemaSHA256`, `ddlSHA256` e o checksum de
+- `manifest.json` fixa `baselineSourceSHA`, `baselineSchemaSHA256`, `currentSchemaSHA256`, `baselineDDLHash` e o checksum de
   cada migration. Qualquer divergência bloqueia a execução.
 - A conexão é verificada no nível de socket (`remoteAddress`/`remotePort`).
 - Um advisory lock (`ofertano-versioned-fresh-bootstrap-v1`) serializa execuções.
@@ -41,13 +41,10 @@ O bootstrap **não** é ligado a `build`, `postinstall` ou runtime. Ele é sempr
   mais o invariante histórico `SocialPost.hashtags NOT NULL`.
 - `fresh-bootstrap.mjs` — CLI de classificação e bootstrap.
 
-## Regerar os artefatos
+## Evolução do contrato v2
 
-Se `prisma/schema.prisma` ou as migrations históricas mudarem intencionalmente,
-regenere o DDL e o manifest, e abra um PR revisando o diff:
+Não regenerar `initial-schema.sql` ao adicionar migrations forward. Os sete checksums em `baselineMigrations` e o DDL legado permanecem fixos. Adicionar o checksum da nova migration em `forwardMigrations` e atualizar somente `currentSchemaSHA256` para o schema atual. O inventário completo precisa corresponder ao repositório.
 
-```bash
-npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > /tmp/canonical.sql
-# acrescente o invariante de SocialPost.hashtags e atualize scripts/bootstrap/initial-schema.sql
-node scripts/bootstrap/fresh-bootstrap.mjs --check
-```
+Fresh aplica o DDL legado, resolve somente baseline e executa forward com `prisma migrate deploy`. Um banco existente baseline-only deve usar `prisma migrate deploy` diretamente. B requer a ledger completa e schema equivalente; C/D são recusados. Unexpected errors retornam código não zero.
+
+Ver detalhes em [commerce-intelligence-foundation](../../docs/commerce-intelligence-foundation.md).

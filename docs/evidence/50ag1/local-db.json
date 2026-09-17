@@ -1,0 +1,5831 @@
+{
+  "freshLedger": [
+    {
+      "migration_name": "20260824000000_postgresql_baseline",
+      "finished_at": "2026-09-17T22:20:07.086Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260824120000_analytics_intelligence",
+      "finished_at": "2026-09-17T22:20:11.297Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260828220000_admin_push_subscription",
+      "finished_at": "2026-09-17T22:20:14.565Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260905120000_price_alerts",
+      "finished_at": "2026-09-17T22:20:17.488Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260907000000_social_automation",
+      "finished_at": "2026-09-17T22:20:20.776Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260907220000_social_three_slots",
+      "finished_at": "2026-09-17T22:20:29.398Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260912000000_add_raw_marketplace_listing",
+      "finished_at": "2026-09-17T22:20:34.192Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260917120000_commerce_intelligence_foundation",
+      "finished_at": "2026-09-17T22:20:38.178Z",
+      "applied_steps_count": 1
+    }
+  ],
+  "forwardLedger": [
+    {
+      "migration_name": "20260824000000_postgresql_baseline",
+      "checksum": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+      "started_at": "2026-09-17T22:21:43.289Z",
+      "finished_at": "2026-09-17T22:21:43.289Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260824120000_analytics_intelligence",
+      "checksum": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
+      "started_at": "2026-09-17T22:21:46.654Z",
+      "finished_at": "2026-09-17T22:21:46.654Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260828220000_admin_push_subscription",
+      "checksum": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+      "started_at": "2026-09-17T22:21:53.206Z",
+      "finished_at": "2026-09-17T22:21:53.206Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260905120000_price_alerts",
+      "checksum": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+      "started_at": "2026-09-17T22:21:57.683Z",
+      "finished_at": "2026-09-17T22:21:57.683Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260907000000_social_automation",
+      "checksum": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+      "started_at": "2026-09-17T22:22:00.620Z",
+      "finished_at": "2026-09-17T22:22:00.620Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260907220000_social_three_slots",
+      "checksum": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+      "started_at": "2026-09-17T22:22:03.879Z",
+      "finished_at": "2026-09-17T22:22:03.879Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260912000000_add_raw_marketplace_listing",
+      "checksum": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
+      "started_at": "2026-09-17T22:22:06.655Z",
+      "finished_at": "2026-09-17T22:22:06.655Z",
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260917120000_commerce_intelligence_foundation",
+      "checksum": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
+      "started_at": "2026-09-17T22:22:09.671Z",
+      "finished_at": "2026-09-17T22:22:09.800Z",
+      "applied_steps_count": 1
+    }
+  ],
+  "baselineUnchanged": true,
+  "schemaEquivalent": true,
+  "schema": {
+    "objects": [
+      {
+        "name": "AdminPushDispatch",
+        "kind": "r"
+      },
+      {
+        "name": "AdminPushSubscription",
+        "kind": "r"
+      },
+      {
+        "name": "AnalyticsDailyAgg",
+        "kind": "r"
+      },
+      {
+        "name": "AnalyticsEvent",
+        "kind": "r"
+      },
+      {
+        "name": "AnalyticsSessionDay",
+        "kind": "r"
+      },
+      {
+        "name": "BlogPost",
+        "kind": "r"
+      },
+      {
+        "name": "IdentityConflict",
+        "kind": "r"
+      },
+      {
+        "name": "IdentityEvidence",
+        "kind": "r"
+      },
+      {
+        "name": "ImportQueue",
+        "kind": "r"
+      },
+      {
+        "name": "MarketplaceConnection",
+        "kind": "r"
+      },
+      {
+        "name": "MarketplaceOffer",
+        "kind": "r"
+      },
+      {
+        "name": "OfferObservation",
+        "kind": "r"
+      },
+      {
+        "name": "OfferPriceComponent",
+        "kind": "r"
+      },
+      {
+        "name": "PriceAlert",
+        "kind": "r"
+      },
+      {
+        "name": "PriceHistory",
+        "kind": "r"
+      },
+      {
+        "name": "Product",
+        "kind": "r"
+      },
+      {
+        "name": "ProductIdentifier",
+        "kind": "r"
+      },
+      {
+        "name": "ProductOpportunity",
+        "kind": "r"
+      },
+      {
+        "name": "ProductRelation",
+        "kind": "r"
+      },
+      {
+        "name": "ProductVariant",
+        "kind": "r"
+      },
+      {
+        "name": "RawMarketplaceListing",
+        "kind": "r"
+      },
+      {
+        "name": "SearchRequest",
+        "kind": "r"
+      },
+      {
+        "name": "SocialPost",
+        "kind": "r"
+      },
+      {
+        "name": "TrustSignal",
+        "kind": "r"
+      }
+    ],
+    "columns": [
+      {
+        "table_name": "AdminPushDispatch",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushDispatch",
+        "column_name": "opportunityKey",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushDispatch",
+        "column_name": "sentAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "auth",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "endpoint",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "lastSeenAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "p256dh",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AdminPushSubscription",
+        "column_name": "userAgent",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "day",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "deviceType",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "dimensionKey",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "eventCount",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "eventType",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "grain",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "lastEventAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "marketplace",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "query",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "resultCountSum",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "utmCampaign",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "utmMedium",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsDailyAgg",
+        "column_name": "utmSource",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "deviceType",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "eventHash",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "eventType",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "marketplace",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "position",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "query",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "referrer",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "resultCount",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "sessionId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "utmCampaign",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "utmContent",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "utmMedium",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsEvent",
+        "column_name": "utmSource",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "day",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "deviceType",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "referrer",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "sessionId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "utmCampaign",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "utmMedium",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "AnalyticsSessionDay",
+        "column_name": "utmSource",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "author",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'Ofertano'::text"
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "category",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "coverImage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "excerpt",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "featured",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "publishedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "readingTime",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'5 min de leitura'::text"
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "scheduledAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "sections",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "seoDescription",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "seoTitle",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "slug",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "socialCaption",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "BlogPostStatus",
+        "is_nullable": "NO",
+        "column_default": "'DRAFT'::\"BlogPostStatus\""
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "theme",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'emerald'::text"
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "title",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "BlogPost",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "details",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "evidenceId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "identifierId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "productAId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "productBId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "reason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "resolvedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityConflict",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "IdentityConflictStatus",
+        "is_nullable": "NO",
+        "column_default": "'OPEN'::\"IdentityConflictStatus\""
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "confidence",
+        "data_type": "USER-DEFINED",
+        "udt_name": "IdentityConfidence",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "kind",
+        "data_type": "USER-DEFINED",
+        "udt_name": "IdentityEvidenceKind",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "rawEvidence",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "rawListingId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "IdentityEvidence",
+        "column_name": "variantId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "affiliateLink",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "attempts",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "errorMessage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "opportunityId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "processedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "ImportQueueStatus",
+        "is_nullable": "NO",
+        "column_default": "'PENDING'::\"ImportQueueStatus\""
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ImportQueue",
+        "column_name": "url",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "accessToken",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "expiresAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "refreshToken",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "sellerId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceConnection",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "affiliateLink",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "affiliateValidatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "available",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "consecutiveErrors",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "discoverySource",
+        "data_type": "USER-DEFINED",
+        "udt_name": "DiscoverySource",
+        "is_nullable": "NO",
+        "column_default": "'MANUAL'::\"DiscoverySource\""
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "errorMessage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "externalId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "image",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "installments",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "isBest",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "lastCheckedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "lastPriceChangeAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "matchScore",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "matchStatus",
+        "data_type": "USER-DEFINED",
+        "udt_name": "ProductMatchStatus",
+        "is_nullable": "NO",
+        "column_default": "'HIGH'::\"ProductMatchStatus\""
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "nextCheckAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "oldPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "price",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "reviewReason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "reviewedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "seller",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "sourceUrl",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "MarketplaceOfferStatus",
+        "is_nullable": "NO",
+        "column_default": "'ACTIVE'::\"MarketplaceOfferStatus\""
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "stock",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "title",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "MarketplaceOffer",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "affiliateLink",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "available",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "capturedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "currency",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'BRL'::text"
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "externalId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "fingerprint",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "marketplaceOfferId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "oldPrice",
+        "data_type": "numeric",
+        "udt_name": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "price",
+        "data_type": "numeric",
+        "udt_name": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "provenance",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "rawListingId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "sellerId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "sellerName",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "sourceUrl",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "stock",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "title",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferObservation",
+        "column_name": "variantId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "amount",
+        "data_type": "numeric",
+        "udt_name": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "conditions",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "currency",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "observationId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "truthState",
+        "data_type": "USER-DEFINED",
+        "udt_name": "PriceTruthState",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "OfferPriceComponent",
+        "column_name": "type",
+        "data_type": "USER-DEFINED",
+        "udt_name": "PriceComponentType",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "alertType",
+        "data_type": "USER-DEFINED",
+        "udt_name": "PriceAlertType",
+        "is_nullable": "NO",
+        "column_default": "'ANY_DROP'::\"PriceAlertType\""
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "lastEmailNotifiedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "lastEmailNotifiedPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "lastWhatsAppNotifiedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "lastWhatsAppNotifiedPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "lowestSeenPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "notifyEmail",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "notifyWhatsApp",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "percentageDrop",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "referencePrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "targetPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceAlert",
+        "column_name": "userId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "offerId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "oldPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "price",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "recordedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "PriceHistory",
+        "column_name": "source",
+        "data_type": "USER-DEFINED",
+        "udt_name": "DiscoverySource",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "Product",
+        "column_name": "affiliateLink",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "autoCreated",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+      },
+      {
+        "table_name": "Product",
+        "column_name": "brand",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "canonicalKey",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "canonicalName",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "category",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "color",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "Product",
+        "column_name": "description",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "discount",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "ean",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "featured",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+      },
+      {
+        "table_name": "Product",
+        "column_name": "gtin",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "image",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "images",
+        "data_type": "ARRAY",
+        "udt_name": "_text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "installments",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "lastSearchedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "mlId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "modelNumber",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "mpn",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "oldPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "price",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "publicationStatus",
+        "data_type": "USER-DEFINED",
+        "udt_name": "ProductPublicationStatus",
+        "is_nullable": "NO",
+        "column_default": "'LIVE_COMPLETE'::\"ProductPublicationStatus\""
+      },
+      {
+        "table_name": "Product",
+        "column_name": "rating",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "reviews",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "sales",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "size",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "slug",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "sourceQuery",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "specifications",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "stock",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "store",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "video",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "Product",
+        "column_name": "voltage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "brandScope",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "confidence",
+        "data_type": "USER-DEFINED",
+        "udt_name": "IdentityConfidence",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "normalizedValue",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "type",
+        "data_type": "USER-DEFINED",
+        "udt_name": "ProductIdentifierType",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "value",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductIdentifier",
+        "column_name": "variantId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "affiliateLink",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "attempts",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "categoryId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "categoryName",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "discount",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "discoveredAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "errorMessage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "externalId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "image",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "NO",
+        "column_default": "'MERCADO_LIVRE'::\"Marketplace\""
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "matchScore",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "matchStatus",
+        "data_type": "USER-DEFINED",
+        "udt_name": "ProductMatchStatus",
+        "is_nullable": "NO",
+        "column_default": "'HIGH'::\"ProductMatchStatus\""
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "oldPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "price",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "publishedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "queuedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "reviewReason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "searchRequestId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "sourceType",
+        "data_type": "USER-DEFINED",
+        "udt_name": "OpportunitySourceType",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "sourceUrl",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "OpportunityStatus",
+        "is_nullable": "NO",
+        "column_default": "'WAITING_AFFILIATE'::\"OpportunityStatus\""
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "title",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductOpportunity",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "confidence",
+        "data_type": "USER-DEFINED",
+        "udt_name": "IdentityConfidence",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "evidence",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "fromProductId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "relationType",
+        "data_type": "USER-DEFINED",
+        "udt_name": "ProductRelationType",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductRelation",
+        "column_name": "toProductId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "attributes",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "capacity",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "color",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "memory",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "modelNumber",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "size",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "storage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "variantKey",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "ProductVariant",
+        "column_name": "voltage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "affiliateLink",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "attributes",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "available",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "brand",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "canonicalProductId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "category",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "ean",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "externalId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "fingerprint",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "firstSeenAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "gtin",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "image",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "lastCheckedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "lastSeenAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "marketplace",
+        "data_type": "USER-DEFINED",
+        "udt_name": "Marketplace",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "modelNumber",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "mpn",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "normalizedTitle",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "oldPrice",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "price",
+        "data_type": "double precision",
+        "udt_name": "float8",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "rawPayload",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "sellerId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "sellerName",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "sourceUrl",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "RawListingStatus",
+        "is_nullable": "NO",
+        "column_default": "'DISCOVERED'::\"RawListingStatus\""
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "stock",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "title",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "RawMarketplaceListing",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "attempts",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "completedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "errorMessage",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "normalizedQuery",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "query",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "requesterKey",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "resultCount",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "startedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "SearchRequestStatus",
+        "is_nullable": "NO",
+        "column_default": "'PENDING'::\"SearchRequestStatus\""
+      },
+      {
+        "table_name": "SearchRequest",
+        "column_name": "updatedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "caption",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "data",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "dayKey",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "fingerprint",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "hashtags",
+        "data_type": "ARRAY",
+        "udt_name": "_text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "publishedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "slot",
+        "data_type": "USER-DEFINED",
+        "udt_name": "SocialPostSlot",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "status",
+        "data_type": "USER-DEFINED",
+        "udt_name": "SocialPostStatus",
+        "is_nullable": "NO",
+        "column_default": "'READY'::\"SocialPostStatus\""
+      },
+      {
+        "table_name": "SocialPost",
+        "column_name": "type",
+        "data_type": "USER-DEFINED",
+        "udt_name": "SocialPostType",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "createdAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "evidence",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "marketplaceOfferId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "observationId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "observedAt",
+        "data_type": "timestamp without time zone",
+        "udt_name": "timestamp",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "productId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "rawListingId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "scopeId",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "scopeType",
+        "data_type": "USER-DEFINED",
+        "udt_name": "TrustScopeType",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "signalType",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "source",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "state",
+        "data_type": "USER-DEFINED",
+        "udt_name": "TrustSignalState",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "TrustSignal",
+        "column_name": "value",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "enums": [
+      {
+        "typname": "BlogPostStatus",
+        "enumlabel": "DRAFT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "BlogPostStatus",
+        "enumlabel": "SCHEDULED",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "BlogPostStatus",
+        "enumlabel": "PUBLISHED",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "BlogPostStatus",
+        "enumlabel": "ARCHIVED",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "DiscoverySource",
+        "enumlabel": "MANUAL",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "DiscoverySource",
+        "enumlabel": "OPPORTUNITY",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "DiscoverySource",
+        "enumlabel": "ON_DEMAND_SEARCH",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "DiscoverySource",
+        "enumlabel": "PRICE_MONITOR",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "DiscoverySource",
+        "enumlabel": "API",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "IdentityConfidence",
+        "enumlabel": "EXACT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "IdentityConfidence",
+        "enumlabel": "HIGH",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "IdentityConfidence",
+        "enumlabel": "MEDIUM",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "IdentityConfidence",
+        "enumlabel": "LOW",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "IdentityConfidence",
+        "enumlabel": "MANUAL",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "IdentityConflictStatus",
+        "enumlabel": "OPEN",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "IdentityConflictStatus",
+        "enumlabel": "RESOLVED",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "IdentityConflictStatus",
+        "enumlabel": "DISMISSED",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "IDENTIFIER_MATCH",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "BRAND_MATCH",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "MODEL_MATCH",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "TITLE_MATCH",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "ATTRIBUTE_MATCH",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "MARKETPLACE_LINK",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "IdentityEvidenceKind",
+        "enumlabel": "MANUAL_ASSERTION",
+        "enumsortorder": 7
+      },
+      {
+        "typname": "ImportQueueStatus",
+        "enumlabel": "PENDING",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "ImportQueueStatus",
+        "enumlabel": "PROCESSING",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "ImportQueueStatus",
+        "enumlabel": "SUCCESS",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "ImportQueueStatus",
+        "enumlabel": "ERROR",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "MERCADO_LIVRE",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "AMAZON",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "SHOPEE",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "MAGAZINE_LUIZA",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "CASAS_BAHIA",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "KABUM",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "TERABYTE",
+        "enumsortorder": 7
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "ALIEXPRESS",
+        "enumsortorder": 8
+      },
+      {
+        "typname": "Marketplace",
+        "enumlabel": "CARREFOUR",
+        "enumsortorder": 9
+      },
+      {
+        "typname": "MarketplaceOfferStatus",
+        "enumlabel": "DISCOVERED",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "MarketplaceOfferStatus",
+        "enumlabel": "PENDING_AFFILIATE",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "MarketplaceOfferStatus",
+        "enumlabel": "UNDER_REVIEW",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "MarketplaceOfferStatus",
+        "enumlabel": "ACTIVE",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "MarketplaceOfferStatus",
+        "enumlabel": "UNAVAILABLE",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "MarketplaceOfferStatus",
+        "enumlabel": "ERROR",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "OpportunitySourceType",
+        "enumlabel": "PRODUCT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "OpportunitySourceType",
+        "enumlabel": "ITEM",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "OpportunitySourceType",
+        "enumlabel": "USER_PRODUCT",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "OpportunitySourceType",
+        "enumlabel": "SEARCH_RESULT",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "OpportunityStatus",
+        "enumlabel": "WAITING_AFFILIATE",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "OpportunityStatus",
+        "enumlabel": "READY_TO_QUEUE",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "OpportunityStatus",
+        "enumlabel": "QUEUED",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "OpportunityStatus",
+        "enumlabel": "PUBLISHED",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "OpportunityStatus",
+        "enumlabel": "DISMISSED",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "OpportunityStatus",
+        "enumlabel": "ERROR",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "PriceAlertType",
+        "enumlabel": "ANY_DROP",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "PriceAlertType",
+        "enumlabel": "TARGET",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "LIST_PRICE",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "SALE_PRICE",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "SHIPPING",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "COUPON",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "PIX_DISCOUNT",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "MEMBERSHIP_PRICE",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "INSTALLMENT_TOTAL",
+        "enumsortorder": 7
+      },
+      {
+        "typname": "PriceComponentType",
+        "enumlabel": "FINAL_EFFECTIVE_PRICE",
+        "enumsortorder": 8
+      },
+      {
+        "typname": "PriceTruthState",
+        "enumlabel": "EXACT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "PriceTruthState",
+        "enumlabel": "ESTIMATED",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "PriceTruthState",
+        "enumlabel": "PARTIAL",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "PriceTruthState",
+        "enumlabel": "UNKNOWN",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "GTIN",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "EAN",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "UPC",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "ISBN",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "MPN",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "MODEL",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "BRAND_SKU",
+        "enumsortorder": 7
+      },
+      {
+        "typname": "ProductIdentifierType",
+        "enumlabel": "MARKETPLACE_EXTERNAL_ID",
+        "enumsortorder": 8
+      },
+      {
+        "typname": "ProductMatchStatus",
+        "enumlabel": "EXACT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "ProductMatchStatus",
+        "enumlabel": "HIGH",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "ProductMatchStatus",
+        "enumlabel": "REVIEW",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "ProductMatchStatus",
+        "enumlabel": "REJECTED",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "ProductPublicationStatus",
+        "enumlabel": "DRAFT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "ProductPublicationStatus",
+        "enumlabel": "LIVE_PARTIAL",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "ProductPublicationStatus",
+        "enumlabel": "LIVE_COMPLETE",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "ProductPublicationStatus",
+        "enumlabel": "ARCHIVED",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "COMPATIBLE",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "SUBSTITUTE",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "ACCESSORY",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "BUNDLE",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "SAME_FAMILY",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "SUCCESSOR",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "ProductRelationType",
+        "enumlabel": "PREDECESSOR",
+        "enumsortorder": 7
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "DISCOVERED",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "NORMALIZED",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "MATCHED",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "UNMATCHED",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "STALE",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "ARCHIVED",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "RawListingStatus",
+        "enumlabel": "ERROR",
+        "enumsortorder": 7
+      },
+      {
+        "typname": "SearchRequestStatus",
+        "enumlabel": "PENDING",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "SearchRequestStatus",
+        "enumlabel": "SEARCHING",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "SearchRequestStatus",
+        "enumlabel": "PARTIAL",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "SearchRequestStatus",
+        "enumlabel": "COMPLETED",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "SearchRequestStatus",
+        "enumlabel": "NOT_FOUND",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "SearchRequestStatus",
+        "enumlabel": "ERROR",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "SocialPostSlot",
+        "enumlabel": "MORNING",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "SocialPostSlot",
+        "enumlabel": "AFTERNOON",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "SocialPostSlot",
+        "enumlabel": "EVENING",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "SocialPostStatus",
+        "enumlabel": "READY",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "SocialPostStatus",
+        "enumlabel": "PUBLISHED",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "SocialPostStatus",
+        "enumlabel": "ARCHIVED",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "SocialPostType",
+        "enumlabel": "DUEL_PRICE",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "SocialPostType",
+        "enumlabel": "FOUND_DEAL",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "SocialPostType",
+        "enumlabel": "PRICE_COMPARISON",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "SocialPostType",
+        "enumlabel": "SAVING_TIP",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "SocialPostType",
+        "enumlabel": "ENGAGEMENT_QUESTION",
+        "enumsortorder": 5
+      },
+      {
+        "typname": "SocialPostType",
+        "enumlabel": "SHOPPING_CURIOSITY",
+        "enumsortorder": 6
+      },
+      {
+        "typname": "TrustScopeType",
+        "enumlabel": "PRODUCT",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "TrustScopeType",
+        "enumlabel": "RAW_LISTING",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "TrustScopeType",
+        "enumlabel": "OFFER_OBSERVATION",
+        "enumsortorder": 3
+      },
+      {
+        "typname": "TrustScopeType",
+        "enumlabel": "MARKETPLACE_OFFER",
+        "enumsortorder": 4
+      },
+      {
+        "typname": "TrustSignalState",
+        "enumlabel": "CONFIRMED",
+        "enumsortorder": 1
+      },
+      {
+        "typname": "TrustSignalState",
+        "enumlabel": "REJECTED",
+        "enumsortorder": 2
+      },
+      {
+        "typname": "TrustSignalState",
+        "enumlabel": "UNKNOWN",
+        "enumsortorder": 3
+      }
+    ],
+    "indexes": [
+      {
+        "tablename": "AdminPushDispatch",
+        "indexname": "AdminPushDispatch_opportunityKey_key",
+        "indexdef": "CREATE UNIQUE INDEX \"AdminPushDispatch_opportunityKey_key\" ON public.\"AdminPushDispatch\" USING btree (\"opportunityKey\")"
+      },
+      {
+        "tablename": "AdminPushDispatch",
+        "indexname": "AdminPushDispatch_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"AdminPushDispatch_pkey\" ON public.\"AdminPushDispatch\" USING btree (id)"
+      },
+      {
+        "tablename": "AdminPushDispatch",
+        "indexname": "AdminPushDispatch_sentAt_idx",
+        "indexdef": "CREATE INDEX \"AdminPushDispatch_sentAt_idx\" ON public.\"AdminPushDispatch\" USING btree (\"sentAt\")"
+      },
+      {
+        "tablename": "AdminPushSubscription",
+        "indexname": "AdminPushSubscription_endpoint_key",
+        "indexdef": "CREATE UNIQUE INDEX \"AdminPushSubscription_endpoint_key\" ON public.\"AdminPushSubscription\" USING btree (endpoint)"
+      },
+      {
+        "tablename": "AdminPushSubscription",
+        "indexname": "AdminPushSubscription_lastSeenAt_idx",
+        "indexdef": "CREATE INDEX \"AdminPushSubscription_lastSeenAt_idx\" ON public.\"AdminPushSubscription\" USING btree (\"lastSeenAt\")"
+      },
+      {
+        "tablename": "AdminPushSubscription",
+        "indexname": "AdminPushSubscription_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"AdminPushSubscription_pkey\" ON public.\"AdminPushSubscription\" USING btree (id)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_day_grain_eventType_dimensionKey_key",
+        "indexdef": "CREATE UNIQUE INDEX \"AnalyticsDailyAgg_day_grain_eventType_dimensionKey_key\" ON public.\"AnalyticsDailyAgg\" USING btree (day, grain, \"eventType\", \"dimensionKey\")"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_deviceType_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsDailyAgg_deviceType_day_idx\" ON public.\"AnalyticsDailyAgg\" USING btree (\"deviceType\", day)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_grain_eventType_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsDailyAgg_grain_eventType_day_idx\" ON public.\"AnalyticsDailyAgg\" USING btree (grain, \"eventType\", day)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_marketplace_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsDailyAgg_marketplace_day_idx\" ON public.\"AnalyticsDailyAgg\" USING btree (marketplace, day)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"AnalyticsDailyAgg_pkey\" ON public.\"AnalyticsDailyAgg\" USING btree (id)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_productId_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsDailyAgg_productId_day_idx\" ON public.\"AnalyticsDailyAgg\" USING btree (\"productId\", day)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_query_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsDailyAgg_query_day_idx\" ON public.\"AnalyticsDailyAgg\" USING btree (query, day)"
+      },
+      {
+        "tablename": "AnalyticsDailyAgg",
+        "indexname": "AnalyticsDailyAgg_source_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsDailyAgg_source_day_idx\" ON public.\"AnalyticsDailyAgg\" USING btree (source, day)"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_createdAt_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsEvent_createdAt_idx\" ON public.\"AnalyticsEvent\" USING btree (\"createdAt\")"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_eventHash_key",
+        "indexdef": "CREATE UNIQUE INDEX \"AnalyticsEvent_eventHash_key\" ON public.\"AnalyticsEvent\" USING btree (\"eventHash\")"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_eventType_createdAt_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsEvent_eventType_createdAt_idx\" ON public.\"AnalyticsEvent\" USING btree (\"eventType\", \"createdAt\")"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_marketplace_createdAt_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsEvent_marketplace_createdAt_idx\" ON public.\"AnalyticsEvent\" USING btree (marketplace, \"createdAt\")"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"AnalyticsEvent_pkey\" ON public.\"AnalyticsEvent\" USING btree (id)"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_productId_createdAt_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsEvent_productId_createdAt_idx\" ON public.\"AnalyticsEvent\" USING btree (\"productId\", \"createdAt\")"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_query_createdAt_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsEvent_query_createdAt_idx\" ON public.\"AnalyticsEvent\" USING btree (query, \"createdAt\")"
+      },
+      {
+        "tablename": "AnalyticsEvent",
+        "indexname": "AnalyticsEvent_sessionId_createdAt_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsEvent_sessionId_createdAt_idx\" ON public.\"AnalyticsEvent\" USING btree (\"sessionId\", \"createdAt\")"
+      },
+      {
+        "tablename": "AnalyticsSessionDay",
+        "indexname": "AnalyticsSessionDay_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsSessionDay_day_idx\" ON public.\"AnalyticsSessionDay\" USING btree (day)"
+      },
+      {
+        "tablename": "AnalyticsSessionDay",
+        "indexname": "AnalyticsSessionDay_deviceType_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsSessionDay_deviceType_day_idx\" ON public.\"AnalyticsSessionDay\" USING btree (\"deviceType\", day)"
+      },
+      {
+        "tablename": "AnalyticsSessionDay",
+        "indexname": "AnalyticsSessionDay_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"AnalyticsSessionDay_pkey\" ON public.\"AnalyticsSessionDay\" USING btree (id)"
+      },
+      {
+        "tablename": "AnalyticsSessionDay",
+        "indexname": "AnalyticsSessionDay_sessionId_day_key",
+        "indexdef": "CREATE UNIQUE INDEX \"AnalyticsSessionDay_sessionId_day_key\" ON public.\"AnalyticsSessionDay\" USING btree (\"sessionId\", day)"
+      },
+      {
+        "tablename": "AnalyticsSessionDay",
+        "indexname": "AnalyticsSessionDay_source_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsSessionDay_source_day_idx\" ON public.\"AnalyticsSessionDay\" USING btree (source, day)"
+      },
+      {
+        "tablename": "AnalyticsSessionDay",
+        "indexname": "AnalyticsSessionDay_utmSource_utmMedium_utmCampaign_day_idx",
+        "indexdef": "CREATE INDEX \"AnalyticsSessionDay_utmSource_utmMedium_utmCampaign_day_idx\" ON public.\"AnalyticsSessionDay\" USING btree (\"utmSource\", \"utmMedium\", \"utmCampaign\", day)"
+      },
+      {
+        "tablename": "BlogPost",
+        "indexname": "BlogPost_featured_status_idx",
+        "indexdef": "CREATE INDEX \"BlogPost_featured_status_idx\" ON public.\"BlogPost\" USING btree (featured, status)"
+      },
+      {
+        "tablename": "BlogPost",
+        "indexname": "BlogPost_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"BlogPost_pkey\" ON public.\"BlogPost\" USING btree (id)"
+      },
+      {
+        "tablename": "BlogPost",
+        "indexname": "BlogPost_slug_key",
+        "indexdef": "CREATE UNIQUE INDEX \"BlogPost_slug_key\" ON public.\"BlogPost\" USING btree (slug)"
+      },
+      {
+        "tablename": "BlogPost",
+        "indexname": "BlogPost_status_publishedAt_idx",
+        "indexdef": "CREATE INDEX \"BlogPost_status_publishedAt_idx\" ON public.\"BlogPost\" USING btree (status, \"publishedAt\")"
+      },
+      {
+        "tablename": "BlogPost",
+        "indexname": "BlogPost_status_scheduledAt_idx",
+        "indexdef": "CREATE INDEX \"BlogPost_status_scheduledAt_idx\" ON public.\"BlogPost\" USING btree (status, \"scheduledAt\")"
+      },
+      {
+        "tablename": "IdentityConflict",
+        "indexname": "IdentityConflict_evidenceId_idx",
+        "indexdef": "CREATE INDEX \"IdentityConflict_evidenceId_idx\" ON public.\"IdentityConflict\" USING btree (\"evidenceId\")"
+      },
+      {
+        "tablename": "IdentityConflict",
+        "indexname": "IdentityConflict_identifierId_idx",
+        "indexdef": "CREATE INDEX \"IdentityConflict_identifierId_idx\" ON public.\"IdentityConflict\" USING btree (\"identifierId\")"
+      },
+      {
+        "tablename": "IdentityConflict",
+        "indexname": "IdentityConflict_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"IdentityConflict_pkey\" ON public.\"IdentityConflict\" USING btree (id)"
+      },
+      {
+        "tablename": "IdentityConflict",
+        "indexname": "IdentityConflict_productAId_idx",
+        "indexdef": "CREATE INDEX \"IdentityConflict_productAId_idx\" ON public.\"IdentityConflict\" USING btree (\"productAId\")"
+      },
+      {
+        "tablename": "IdentityConflict",
+        "indexname": "IdentityConflict_productBId_idx",
+        "indexdef": "CREATE INDEX \"IdentityConflict_productBId_idx\" ON public.\"IdentityConflict\" USING btree (\"productBId\")"
+      },
+      {
+        "tablename": "IdentityConflict",
+        "indexname": "IdentityConflict_status_createdAt_idx",
+        "indexdef": "CREATE INDEX \"IdentityConflict_status_createdAt_idx\" ON public.\"IdentityConflict\" USING btree (status, \"createdAt\")"
+      },
+      {
+        "tablename": "IdentityEvidence",
+        "indexname": "IdentityEvidence_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"IdentityEvidence_pkey\" ON public.\"IdentityEvidence\" USING btree (id)"
+      },
+      {
+        "tablename": "IdentityEvidence",
+        "indexname": "IdentityEvidence_productId_createdAt_idx",
+        "indexdef": "CREATE INDEX \"IdentityEvidence_productId_createdAt_idx\" ON public.\"IdentityEvidence\" USING btree (\"productId\", \"createdAt\")"
+      },
+      {
+        "tablename": "IdentityEvidence",
+        "indexname": "IdentityEvidence_rawListingId_createdAt_idx",
+        "indexdef": "CREATE INDEX \"IdentityEvidence_rawListingId_createdAt_idx\" ON public.\"IdentityEvidence\" USING btree (\"rawListingId\", \"createdAt\")"
+      },
+      {
+        "tablename": "IdentityEvidence",
+        "indexname": "IdentityEvidence_variantId_idx",
+        "indexdef": "CREATE INDEX \"IdentityEvidence_variantId_idx\" ON public.\"IdentityEvidence\" USING btree (\"variantId\")"
+      },
+      {
+        "tablename": "ImportQueue",
+        "indexname": "ImportQueue_marketplace_status_idx",
+        "indexdef": "CREATE INDEX \"ImportQueue_marketplace_status_idx\" ON public.\"ImportQueue\" USING btree (marketplace, status)"
+      },
+      {
+        "tablename": "ImportQueue",
+        "indexname": "ImportQueue_opportunityId_key",
+        "indexdef": "CREATE UNIQUE INDEX \"ImportQueue_opportunityId_key\" ON public.\"ImportQueue\" USING btree (\"opportunityId\")"
+      },
+      {
+        "tablename": "ImportQueue",
+        "indexname": "ImportQueue_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"ImportQueue_pkey\" ON public.\"ImportQueue\" USING btree (id)"
+      },
+      {
+        "tablename": "ImportQueue",
+        "indexname": "ImportQueue_status_createdAt_idx",
+        "indexdef": "CREATE INDEX \"ImportQueue_status_createdAt_idx\" ON public.\"ImportQueue\" USING btree (status, \"createdAt\")"
+      },
+      {
+        "tablename": "ImportQueue",
+        "indexname": "ImportQueue_url_key",
+        "indexdef": "CREATE UNIQUE INDEX \"ImportQueue_url_key\" ON public.\"ImportQueue\" USING btree (url)"
+      },
+      {
+        "tablename": "MarketplaceConnection",
+        "indexname": "MarketplaceConnection_marketplace_key",
+        "indexdef": "CREATE UNIQUE INDEX \"MarketplaceConnection_marketplace_key\" ON public.\"MarketplaceConnection\" USING btree (marketplace)"
+      },
+      {
+        "tablename": "MarketplaceConnection",
+        "indexname": "MarketplaceConnection_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"MarketplaceConnection_pkey\" ON public.\"MarketplaceConnection\" USING btree (id)"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_marketplace_externalId_key",
+        "indexdef": "CREATE UNIQUE INDEX \"MarketplaceOffer_marketplace_externalId_key\" ON public.\"MarketplaceOffer\" USING btree (marketplace, \"externalId\")"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_matchStatus_updatedAt_idx",
+        "indexdef": "CREATE INDEX \"MarketplaceOffer_matchStatus_updatedAt_idx\" ON public.\"MarketplaceOffer\" USING btree (\"matchStatus\", \"updatedAt\")"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_nextCheckAt_active_idx",
+        "indexdef": "CREATE INDEX \"MarketplaceOffer_nextCheckAt_active_idx\" ON public.\"MarketplaceOffer\" USING btree (\"nextCheckAt\", active)"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"MarketplaceOffer_pkey\" ON public.\"MarketplaceOffer\" USING btree (id)"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_productId_marketplace_key",
+        "indexdef": "CREATE UNIQUE INDEX \"MarketplaceOffer_productId_marketplace_key\" ON public.\"MarketplaceOffer\" USING btree (\"productId\", marketplace)"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_productId_price_idx",
+        "indexdef": "CREATE INDEX \"MarketplaceOffer_productId_price_idx\" ON public.\"MarketplaceOffer\" USING btree (\"productId\", price)"
+      },
+      {
+        "tablename": "MarketplaceOffer",
+        "indexname": "MarketplaceOffer_status_updatedAt_idx",
+        "indexdef": "CREATE INDEX \"MarketplaceOffer_status_updatedAt_idx\" ON public.\"MarketplaceOffer\" USING btree (status, \"updatedAt\")"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_marketplaceOfferId_capturedAt_idx",
+        "indexdef": "CREATE INDEX \"OfferObservation_marketplaceOfferId_capturedAt_idx\" ON public.\"OfferObservation\" USING btree (\"marketplaceOfferId\", \"capturedAt\")"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_marketplace_externalId_capturedAt_idx",
+        "indexdef": "CREATE INDEX \"OfferObservation_marketplace_externalId_capturedAt_idx\" ON public.\"OfferObservation\" USING btree (marketplace, \"externalId\", \"capturedAt\")"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_marketplace_externalId_fingerprint_key",
+        "indexdef": "CREATE UNIQUE INDEX \"OfferObservation_marketplace_externalId_fingerprint_key\" ON public.\"OfferObservation\" USING btree (marketplace, \"externalId\", fingerprint)"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"OfferObservation_pkey\" ON public.\"OfferObservation\" USING btree (id)"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_productId_capturedAt_idx",
+        "indexdef": "CREATE INDEX \"OfferObservation_productId_capturedAt_idx\" ON public.\"OfferObservation\" USING btree (\"productId\", \"capturedAt\")"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_rawListingId_capturedAt_idx",
+        "indexdef": "CREATE INDEX \"OfferObservation_rawListingId_capturedAt_idx\" ON public.\"OfferObservation\" USING btree (\"rawListingId\", \"capturedAt\")"
+      },
+      {
+        "tablename": "OfferObservation",
+        "indexname": "OfferObservation_variantId_capturedAt_idx",
+        "indexdef": "CREATE INDEX \"OfferObservation_variantId_capturedAt_idx\" ON public.\"OfferObservation\" USING btree (\"variantId\", \"capturedAt\")"
+      },
+      {
+        "tablename": "OfferPriceComponent",
+        "indexname": "OfferPriceComponent_observationId_idx",
+        "indexdef": "CREATE INDEX \"OfferPriceComponent_observationId_idx\" ON public.\"OfferPriceComponent\" USING btree (\"observationId\")"
+      },
+      {
+        "tablename": "OfferPriceComponent",
+        "indexname": "OfferPriceComponent_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"OfferPriceComponent_pkey\" ON public.\"OfferPriceComponent\" USING btree (id)"
+      },
+      {
+        "tablename": "PriceAlert",
+        "indexname": "PriceAlert_active_updatedAt_idx",
+        "indexdef": "CREATE INDEX \"PriceAlert_active_updatedAt_idx\" ON public.\"PriceAlert\" USING btree (active, \"updatedAt\")"
+      },
+      {
+        "tablename": "PriceAlert",
+        "indexname": "PriceAlert_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"PriceAlert_pkey\" ON public.\"PriceAlert\" USING btree (id)"
+      },
+      {
+        "tablename": "PriceAlert",
+        "indexname": "PriceAlert_productId_active_idx",
+        "indexdef": "CREATE INDEX \"PriceAlert_productId_active_idx\" ON public.\"PriceAlert\" USING btree (\"productId\", active)"
+      },
+      {
+        "tablename": "PriceAlert",
+        "indexname": "PriceAlert_userId_productId_key",
+        "indexdef": "CREATE UNIQUE INDEX \"PriceAlert_userId_productId_key\" ON public.\"PriceAlert\" USING btree (\"userId\", \"productId\")"
+      },
+      {
+        "tablename": "PriceHistory",
+        "indexname": "PriceHistory_marketplace_recordedAt_idx",
+        "indexdef": "CREATE INDEX \"PriceHistory_marketplace_recordedAt_idx\" ON public.\"PriceHistory\" USING btree (marketplace, \"recordedAt\")"
+      },
+      {
+        "tablename": "PriceHistory",
+        "indexname": "PriceHistory_offerId_recordedAt_idx",
+        "indexdef": "CREATE INDEX \"PriceHistory_offerId_recordedAt_idx\" ON public.\"PriceHistory\" USING btree (\"offerId\", \"recordedAt\")"
+      },
+      {
+        "tablename": "PriceHistory",
+        "indexname": "PriceHistory_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"PriceHistory_pkey\" ON public.\"PriceHistory\" USING btree (id)"
+      },
+      {
+        "tablename": "PriceHistory",
+        "indexname": "PriceHistory_productId_recordedAt_idx",
+        "indexdef": "CREATE INDEX \"PriceHistory_productId_recordedAt_idx\" ON public.\"PriceHistory\" USING btree (\"productId\", \"recordedAt\")"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_active_updatedAt_idx",
+        "indexdef": "CREATE INDEX \"Product_active_updatedAt_idx\" ON public.\"Product\" USING btree (active, \"updatedAt\")"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_brand_modelNumber_idx",
+        "indexdef": "CREATE INDEX \"Product_brand_modelNumber_idx\" ON public.\"Product\" USING btree (brand, \"modelNumber\")"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_canonicalKey_key",
+        "indexdef": "CREATE UNIQUE INDEX \"Product_canonicalKey_key\" ON public.\"Product\" USING btree (\"canonicalKey\")"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_category_active_idx",
+        "indexdef": "CREATE INDEX \"Product_category_active_idx\" ON public.\"Product\" USING btree (category, active)"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_mlId_key",
+        "indexdef": "CREATE UNIQUE INDEX \"Product_mlId_key\" ON public.\"Product\" USING btree (\"mlId\")"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"Product_pkey\" ON public.\"Product\" USING btree (id)"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_publicationStatus_updatedAt_idx",
+        "indexdef": "CREATE INDEX \"Product_publicationStatus_updatedAt_idx\" ON public.\"Product\" USING btree (\"publicationStatus\", \"updatedAt\")"
+      },
+      {
+        "tablename": "Product",
+        "indexname": "Product_slug_key",
+        "indexdef": "CREATE UNIQUE INDEX \"Product_slug_key\" ON public.\"Product\" USING btree (slug)"
+      },
+      {
+        "tablename": "ProductIdentifier",
+        "indexname": "ProductIdentifier_marketplace_normalizedValue_idx",
+        "indexdef": "CREATE INDEX \"ProductIdentifier_marketplace_normalizedValue_idx\" ON public.\"ProductIdentifier\" USING btree (marketplace, \"normalizedValue\")"
+      },
+      {
+        "tablename": "ProductIdentifier",
+        "indexname": "ProductIdentifier_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"ProductIdentifier_pkey\" ON public.\"ProductIdentifier\" USING btree (id)"
+      },
+      {
+        "tablename": "ProductIdentifier",
+        "indexname": "ProductIdentifier_productId_idx",
+        "indexdef": "CREATE INDEX \"ProductIdentifier_productId_idx\" ON public.\"ProductIdentifier\" USING btree (\"productId\")"
+      },
+      {
+        "tablename": "ProductIdentifier",
+        "indexname": "ProductIdentifier_type_normalizedValue_brandScope_idx",
+        "indexdef": "CREATE INDEX \"ProductIdentifier_type_normalizedValue_brandScope_idx\" ON public.\"ProductIdentifier\" USING btree (type, \"normalizedValue\", \"brandScope\")"
+      },
+      {
+        "tablename": "ProductIdentifier",
+        "indexname": "ProductIdentifier_variantId_idx",
+        "indexdef": "CREATE INDEX \"ProductIdentifier_variantId_idx\" ON public.\"ProductIdentifier\" USING btree (\"variantId\")"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_categoryId_discoveredAt_idx",
+        "indexdef": "CREATE INDEX \"ProductOpportunity_categoryId_discoveredAt_idx\" ON public.\"ProductOpportunity\" USING btree (\"categoryId\", \"discoveredAt\")"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_marketplace_externalId_key",
+        "indexdef": "CREATE UNIQUE INDEX \"ProductOpportunity_marketplace_externalId_key\" ON public.\"ProductOpportunity\" USING btree (marketplace, \"externalId\")"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_marketplace_status_discoveredAt_idx",
+        "indexdef": "CREATE INDEX \"ProductOpportunity_marketplace_status_discoveredAt_idx\" ON public.\"ProductOpportunity\" USING btree (marketplace, status, \"discoveredAt\")"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_matchStatus_discoveredAt_idx",
+        "indexdef": "CREATE INDEX \"ProductOpportunity_matchStatus_discoveredAt_idx\" ON public.\"ProductOpportunity\" USING btree (\"matchStatus\", \"discoveredAt\")"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"ProductOpportunity_pkey\" ON public.\"ProductOpportunity\" USING btree (id)"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_searchRequestId_discoveredAt_idx",
+        "indexdef": "CREATE INDEX \"ProductOpportunity_searchRequestId_discoveredAt_idx\" ON public.\"ProductOpportunity\" USING btree (\"searchRequestId\", \"discoveredAt\")"
+      },
+      {
+        "tablename": "ProductOpportunity",
+        "indexname": "ProductOpportunity_status_discoveredAt_idx",
+        "indexdef": "CREATE INDEX \"ProductOpportunity_status_discoveredAt_idx\" ON public.\"ProductOpportunity\" USING btree (status, \"discoveredAt\")"
+      },
+      {
+        "tablename": "ProductRelation",
+        "indexname": "ProductRelation_fromProductId_relationType_idx",
+        "indexdef": "CREATE INDEX \"ProductRelation_fromProductId_relationType_idx\" ON public.\"ProductRelation\" USING btree (\"fromProductId\", \"relationType\")"
+      },
+      {
+        "tablename": "ProductRelation",
+        "indexname": "ProductRelation_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"ProductRelation_pkey\" ON public.\"ProductRelation\" USING btree (id)"
+      },
+      {
+        "tablename": "ProductRelation",
+        "indexname": "ProductRelation_toProductId_relationType_idx",
+        "indexdef": "CREATE INDEX \"ProductRelation_toProductId_relationType_idx\" ON public.\"ProductRelation\" USING btree (\"toProductId\", \"relationType\")"
+      },
+      {
+        "tablename": "ProductVariant",
+        "indexname": "ProductVariant_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"ProductVariant_pkey\" ON public.\"ProductVariant\" USING btree (id)"
+      },
+      {
+        "tablename": "ProductVariant",
+        "indexname": "ProductVariant_productId_variantKey_key",
+        "indexdef": "CREATE UNIQUE INDEX \"ProductVariant_productId_variantKey_key\" ON public.\"ProductVariant\" USING btree (\"productId\", \"variantKey\")"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_brand_modelNumber_idx",
+        "indexdef": "CREATE INDEX \"RawMarketplaceListing_brand_modelNumber_idx\" ON public.\"RawMarketplaceListing\" USING btree (brand, \"modelNumber\")"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_canonicalProductId_updatedAt_idx",
+        "indexdef": "CREATE INDEX \"RawMarketplaceListing_canonicalProductId_updatedAt_idx\" ON public.\"RawMarketplaceListing\" USING btree (\"canonicalProductId\", \"updatedAt\")"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_fingerprint_idx",
+        "indexdef": "CREATE INDEX \"RawMarketplaceListing_fingerprint_idx\" ON public.\"RawMarketplaceListing\" USING btree (fingerprint)"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_lastCheckedAt_idx",
+        "indexdef": "CREATE INDEX \"RawMarketplaceListing_lastCheckedAt_idx\" ON public.\"RawMarketplaceListing\" USING btree (\"lastCheckedAt\")"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_marketplace_active_idx",
+        "indexdef": "CREATE INDEX \"RawMarketplaceListing_marketplace_active_idx\" ON public.\"RawMarketplaceListing\" USING btree (marketplace, active)"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_marketplace_externalId_key",
+        "indexdef": "CREATE UNIQUE INDEX \"RawMarketplaceListing_marketplace_externalId_key\" ON public.\"RawMarketplaceListing\" USING btree (marketplace, \"externalId\")"
+      },
+      {
+        "tablename": "RawMarketplaceListing",
+        "indexname": "RawMarketplaceListing_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"RawMarketplaceListing_pkey\" ON public.\"RawMarketplaceListing\" USING btree (id)"
+      },
+      {
+        "tablename": "SearchRequest",
+        "indexname": "SearchRequest_normalizedQuery_status_idx",
+        "indexdef": "CREATE INDEX \"SearchRequest_normalizedQuery_status_idx\" ON public.\"SearchRequest\" USING btree (\"normalizedQuery\", status)"
+      },
+      {
+        "tablename": "SearchRequest",
+        "indexname": "SearchRequest_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"SearchRequest_pkey\" ON public.\"SearchRequest\" USING btree (id)"
+      },
+      {
+        "tablename": "SearchRequest",
+        "indexname": "SearchRequest_productId_createdAt_idx",
+        "indexdef": "CREATE INDEX \"SearchRequest_productId_createdAt_idx\" ON public.\"SearchRequest\" USING btree (\"productId\", \"createdAt\")"
+      },
+      {
+        "tablename": "SearchRequest",
+        "indexname": "SearchRequest_status_createdAt_idx",
+        "indexdef": "CREATE INDEX \"SearchRequest_status_createdAt_idx\" ON public.\"SearchRequest\" USING btree (status, \"createdAt\")"
+      },
+      {
+        "tablename": "SocialPost",
+        "indexname": "SocialPost_dayKey_slot_key",
+        "indexdef": "CREATE UNIQUE INDEX \"SocialPost_dayKey_slot_key\" ON public.\"SocialPost\" USING btree (\"dayKey\", slot)"
+      },
+      {
+        "tablename": "SocialPost",
+        "indexname": "SocialPost_fingerprint_idx",
+        "indexdef": "CREATE INDEX \"SocialPost_fingerprint_idx\" ON public.\"SocialPost\" USING btree (fingerprint)"
+      },
+      {
+        "tablename": "SocialPost",
+        "indexname": "SocialPost_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"SocialPost_pkey\" ON public.\"SocialPost\" USING btree (id)"
+      },
+      {
+        "tablename": "SocialPost",
+        "indexname": "SocialPost_productId_createdAt_idx",
+        "indexdef": "CREATE INDEX \"SocialPost_productId_createdAt_idx\" ON public.\"SocialPost\" USING btree (\"productId\", \"createdAt\")"
+      },
+      {
+        "tablename": "SocialPost",
+        "indexname": "SocialPost_status_createdAt_idx",
+        "indexdef": "CREATE INDEX \"SocialPost_status_createdAt_idx\" ON public.\"SocialPost\" USING btree (status, \"createdAt\")"
+      },
+      {
+        "tablename": "TrustSignal",
+        "indexname": "TrustSignal_marketplaceOfferId_idx",
+        "indexdef": "CREATE INDEX \"TrustSignal_marketplaceOfferId_idx\" ON public.\"TrustSignal\" USING btree (\"marketplaceOfferId\")"
+      },
+      {
+        "tablename": "TrustSignal",
+        "indexname": "TrustSignal_observationId_idx",
+        "indexdef": "CREATE INDEX \"TrustSignal_observationId_idx\" ON public.\"TrustSignal\" USING btree (\"observationId\")"
+      },
+      {
+        "tablename": "TrustSignal",
+        "indexname": "TrustSignal_pkey",
+        "indexdef": "CREATE UNIQUE INDEX \"TrustSignal_pkey\" ON public.\"TrustSignal\" USING btree (id)"
+      },
+      {
+        "tablename": "TrustSignal",
+        "indexname": "TrustSignal_productId_idx",
+        "indexdef": "CREATE INDEX \"TrustSignal_productId_idx\" ON public.\"TrustSignal\" USING btree (\"productId\")"
+      },
+      {
+        "tablename": "TrustSignal",
+        "indexname": "TrustSignal_rawListingId_idx",
+        "indexdef": "CREATE INDEX \"TrustSignal_rawListingId_idx\" ON public.\"TrustSignal\" USING btree (\"rawListingId\")"
+      },
+      {
+        "tablename": "TrustSignal",
+        "indexname": "TrustSignal_scopeType_scopeId_signalType_observedAt_idx",
+        "indexdef": "CREATE INDEX \"TrustSignal_scopeType_scopeId_signalType_observedAt_idx\" ON public.\"TrustSignal\" USING btree (\"scopeType\", \"scopeId\", \"signalType\", \"observedAt\")"
+      }
+    ],
+    "constraints": [
+      {
+        "relation": "\"AdminPushDispatch\"",
+        "conname": "AdminPushDispatch_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"AdminPushDispatch\"",
+        "conname": "AdminPushDispatch_opportunityKey_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"opportunityKey\""
+      },
+      {
+        "relation": "\"AdminPushDispatch\"",
+        "conname": "AdminPushDispatch_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"AdminPushDispatch\"",
+        "conname": "AdminPushDispatch_sentAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"sentAt\""
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_auth_not_null",
+        "contype": "n",
+        "definition": "NOT NULL auth"
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_endpoint_not_null",
+        "contype": "n",
+        "definition": "NOT NULL endpoint"
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_lastSeenAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"lastSeenAt\""
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_p256dh_not_null",
+        "contype": "n",
+        "definition": "NOT NULL p256dh"
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"AdminPushSubscription\"",
+        "conname": "AdminPushSubscription_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_day_not_null",
+        "contype": "n",
+        "definition": "NOT NULL day"
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_dimensionKey_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"dimensionKey\""
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_eventCount_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"eventCount\""
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_eventType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"eventType\""
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_grain_not_null",
+        "contype": "n",
+        "definition": "NOT NULL grain"
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_lastEventAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"lastEventAt\""
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"AnalyticsDailyAgg\"",
+        "conname": "AnalyticsDailyAgg_resultCountSum_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"resultCountSum\""
+      },
+      {
+        "relation": "\"AnalyticsEvent\"",
+        "conname": "AnalyticsEvent_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"AnalyticsEvent\"",
+        "conname": "AnalyticsEvent_eventHash_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"eventHash\""
+      },
+      {
+        "relation": "\"AnalyticsEvent\"",
+        "conname": "AnalyticsEvent_eventType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"eventType\""
+      },
+      {
+        "relation": "\"AnalyticsEvent\"",
+        "conname": "AnalyticsEvent_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"AnalyticsEvent\"",
+        "conname": "AnalyticsEvent_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"AnalyticsEvent\"",
+        "conname": "AnalyticsEvent_sessionId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"sessionId\""
+      },
+      {
+        "relation": "\"AnalyticsSessionDay\"",
+        "conname": "AnalyticsSessionDay_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"AnalyticsSessionDay\"",
+        "conname": "AnalyticsSessionDay_day_not_null",
+        "contype": "n",
+        "definition": "NOT NULL day"
+      },
+      {
+        "relation": "\"AnalyticsSessionDay\"",
+        "conname": "AnalyticsSessionDay_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"AnalyticsSessionDay\"",
+        "conname": "AnalyticsSessionDay_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"AnalyticsSessionDay\"",
+        "conname": "AnalyticsSessionDay_sessionId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"sessionId\""
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_author_not_null",
+        "contype": "n",
+        "definition": "NOT NULL author"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_category_not_null",
+        "contype": "n",
+        "definition": "NOT NULL category"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_excerpt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL excerpt"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_featured_not_null",
+        "contype": "n",
+        "definition": "NOT NULL featured"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_readingTime_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"readingTime\""
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_sections_not_null",
+        "contype": "n",
+        "definition": "NOT NULL sections"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_slug_not_null",
+        "contype": "n",
+        "definition": "NOT NULL slug"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_theme_not_null",
+        "contype": "n",
+        "definition": "NOT NULL theme"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_title_not_null",
+        "contype": "n",
+        "definition": "NOT NULL title"
+      },
+      {
+        "relation": "\"BlogPost\"",
+        "conname": "BlogPost_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_details_not_null",
+        "contype": "n",
+        "definition": "NOT NULL details"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_evidenceId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"evidenceId\") REFERENCES \"IdentityEvidence\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_identifierId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"identifierId\") REFERENCES \"ProductIdentifier\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_productAId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productAId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_productBId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productBId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_reason_not_null",
+        "contype": "n",
+        "definition": "NOT NULL reason"
+      },
+      {
+        "relation": "\"IdentityConflict\"",
+        "conname": "IdentityConflict_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_confidence_not_null",
+        "contype": "n",
+        "definition": "NOT NULL confidence"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_kind_not_null",
+        "contype": "n",
+        "definition": "NOT NULL kind"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_rawEvidence_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"rawEvidence\""
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_rawListingId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"rawListingId\") REFERENCES \"RawMarketplaceListing\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_source_not_null",
+        "contype": "n",
+        "definition": "NOT NULL source"
+      },
+      {
+        "relation": "\"IdentityEvidence\"",
+        "conname": "IdentityEvidence_variantId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"variantId\") REFERENCES \"ProductVariant\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_attempts_not_null",
+        "contype": "n",
+        "definition": "NOT NULL attempts"
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_marketplace_not_null",
+        "contype": "n",
+        "definition": "NOT NULL marketplace"
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"ImportQueue\"",
+        "conname": "ImportQueue_url_not_null",
+        "contype": "n",
+        "definition": "NOT NULL url"
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_accessToken_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"accessToken\""
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_expiresAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"expiresAt\""
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_marketplace_not_null",
+        "contype": "n",
+        "definition": "NOT NULL marketplace"
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_refreshToken_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"refreshToken\""
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_sellerId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"sellerId\""
+      },
+      {
+        "relation": "\"MarketplaceConnection\"",
+        "conname": "MarketplaceConnection_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_active_not_null",
+        "contype": "n",
+        "definition": "NOT NULL active"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_available_not_null",
+        "contype": "n",
+        "definition": "NOT NULL available"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_consecutiveErrors_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"consecutiveErrors\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_discoverySource_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"discoverySource\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_isBest_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"isBest\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_marketplace_not_null",
+        "contype": "n",
+        "definition": "NOT NULL marketplace"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_matchStatus_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"matchStatus\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_price_not_null",
+        "contype": "n",
+        "definition": "NOT NULL price"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE CASCADE"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_productId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"productId\""
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"MarketplaceOffer\"",
+        "conname": "MarketplaceOffer_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_capturedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"capturedAt\""
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_currency_not_null",
+        "contype": "n",
+        "definition": "NOT NULL currency"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_externalId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"externalId\""
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_fingerprint_not_null",
+        "contype": "n",
+        "definition": "NOT NULL fingerprint"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_marketplaceOfferId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"marketplaceOfferId\") REFERENCES \"MarketplaceOffer\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_marketplace_not_null",
+        "contype": "n",
+        "definition": "NOT NULL marketplace"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_provenance_not_null",
+        "contype": "n",
+        "definition": "NOT NULL provenance"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_rawListingId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"rawListingId\") REFERENCES \"RawMarketplaceListing\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"OfferObservation\"",
+        "conname": "OfferObservation_variantId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"variantId\") REFERENCES \"ProductVariant\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_currency_not_null",
+        "contype": "n",
+        "definition": "NOT NULL currency"
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_observationId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"observationId\") REFERENCES \"OfferObservation\"(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_observationId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"observationId\""
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_source_not_null",
+        "contype": "n",
+        "definition": "NOT NULL source"
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_truthState_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"truthState\""
+      },
+      {
+        "relation": "\"OfferPriceComponent\"",
+        "conname": "OfferPriceComponent_type_not_null",
+        "contype": "n",
+        "definition": "NOT NULL type"
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_active_not_null",
+        "contype": "n",
+        "definition": "NOT NULL active"
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_alertType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"alertType\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_notifyEmail_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"notifyEmail\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_notifyWhatsApp_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"notifyWhatsApp\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE CASCADE"
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_productId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"productId\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_referencePrice_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"referencePrice\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"PriceAlert\"",
+        "conname": "PriceAlert_userId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"userId\""
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_offerId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"offerId\") REFERENCES \"MarketplaceOffer\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_price_not_null",
+        "contype": "n",
+        "definition": "NOT NULL price"
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE CASCADE"
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_productId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"productId\""
+      },
+      {
+        "relation": "\"PriceHistory\"",
+        "conname": "PriceHistory_recordedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"recordedAt\""
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_active_not_null",
+        "contype": "n",
+        "definition": "NOT NULL active"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_affiliateLink_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"affiliateLink\""
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_autoCreated_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"autoCreated\""
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_category_not_null",
+        "contype": "n",
+        "definition": "NOT NULL category"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_featured_not_null",
+        "contype": "n",
+        "definition": "NOT NULL featured"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_image_not_null",
+        "contype": "n",
+        "definition": "NOT NULL image"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_name_not_null",
+        "contype": "n",
+        "definition": "NOT NULL name"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_price_not_null",
+        "contype": "n",
+        "definition": "NOT NULL price"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_publicationStatus_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"publicationStatus\""
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_store_not_null",
+        "contype": "n",
+        "definition": "NOT NULL store"
+      },
+      {
+        "relation": "\"Product\"",
+        "conname": "Product_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_confidence_not_null",
+        "contype": "n",
+        "definition": "NOT NULL confidence"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_normalizedValue_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"normalizedValue\""
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_productId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"productId\""
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_source_not_null",
+        "contype": "n",
+        "definition": "NOT NULL source"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_type_not_null",
+        "contype": "n",
+        "definition": "NOT NULL type"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_value_not_null",
+        "contype": "n",
+        "definition": "NOT NULL value"
+      },
+      {
+        "relation": "\"ProductIdentifier\"",
+        "conname": "ProductIdentifier_variantId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"variantId\") REFERENCES \"ProductVariant\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_attempts_not_null",
+        "contype": "n",
+        "definition": "NOT NULL attempts"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_discoveredAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"discoveredAt\""
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_externalId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"externalId\""
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_marketplace_not_null",
+        "contype": "n",
+        "definition": "NOT NULL marketplace"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_matchStatus_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"matchStatus\""
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_searchRequestId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"searchRequestId\") REFERENCES \"SearchRequest\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_sourceType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"sourceType\""
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_sourceUrl_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"sourceUrl\""
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_title_not_null",
+        "contype": "n",
+        "definition": "NOT NULL title"
+      },
+      {
+        "relation": "\"ProductOpportunity\"",
+        "conname": "ProductOpportunity_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_confidence_not_null",
+        "contype": "n",
+        "definition": "NOT NULL confidence"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_evidence_not_null",
+        "contype": "n",
+        "definition": "NOT NULL evidence"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_fromProductId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"fromProductId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_fromProductId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"fromProductId\""
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_relationType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"relationType\""
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_source_not_null",
+        "contype": "n",
+        "definition": "NOT NULL source"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_toProductId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"toProductId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+      },
+      {
+        "relation": "\"ProductRelation\"",
+        "conname": "ProductRelation_toProductId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"toProductId\""
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_active_not_null",
+        "contype": "n",
+        "definition": "NOT NULL active"
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_attributes_not_null",
+        "contype": "n",
+        "definition": "NOT NULL attributes"
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_productId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"productId\""
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"ProductVariant\"",
+        "conname": "ProductVariant_variantKey_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"variantKey\""
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_active_not_null",
+        "contype": "n",
+        "definition": "NOT NULL active"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_available_not_null",
+        "contype": "n",
+        "definition": "NOT NULL available"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_canonicalProductId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"canonicalProductId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_externalId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"externalId\""
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_firstSeenAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"firstSeenAt\""
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_lastSeenAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"lastSeenAt\""
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_marketplace_not_null",
+        "contype": "n",
+        "definition": "NOT NULL marketplace"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"RawMarketplaceListing\"",
+        "conname": "RawMarketplaceListing_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_attempts_not_null",
+        "contype": "n",
+        "definition": "NOT NULL attempts"
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_normalizedQuery_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"normalizedQuery\""
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_query_not_null",
+        "contype": "n",
+        "definition": "NOT NULL query"
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_resultCount_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"resultCount\""
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"SearchRequest\"",
+        "conname": "SearchRequest_updatedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"updatedAt\""
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_caption_not_null",
+        "contype": "n",
+        "definition": "NOT NULL caption"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_data_not_null",
+        "contype": "n",
+        "definition": "NOT NULL data"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_dayKey_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"dayKey\""
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_fingerprint_not_null",
+        "contype": "n",
+        "definition": "NOT NULL fingerprint"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_hashtags_not_null",
+        "contype": "n",
+        "definition": "NOT NULL hashtags"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_slot_not_null",
+        "contype": "n",
+        "definition": "NOT NULL slot"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_status_not_null",
+        "contype": "n",
+        "definition": "NOT NULL status"
+      },
+      {
+        "relation": "\"SocialPost\"",
+        "conname": "SocialPost_type_not_null",
+        "contype": "n",
+        "definition": "NOT NULL type"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_createdAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"createdAt\""
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_evidence_not_null",
+        "contype": "n",
+        "definition": "NOT NULL evidence"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_id_not_null",
+        "contype": "n",
+        "definition": "NOT NULL id"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_marketplaceOfferId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"marketplaceOfferId\") REFERENCES \"MarketplaceOffer\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_observationId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"observationId\") REFERENCES \"OfferObservation\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_observedAt_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"observedAt\""
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_pkey",
+        "contype": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_productId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"productId\") REFERENCES \"Product\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_rawListingId_fkey",
+        "contype": "f",
+        "definition": "FOREIGN KEY (\"rawListingId\") REFERENCES \"RawMarketplaceListing\"(id) ON UPDATE CASCADE ON DELETE SET NULL"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_scopeId_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"scopeId\""
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_scopeType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"scopeType\""
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_signalType_not_null",
+        "contype": "n",
+        "definition": "NOT NULL \"signalType\""
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_source_not_null",
+        "contype": "n",
+        "definition": "NOT NULL source"
+      },
+      {
+        "relation": "\"TrustSignal\"",
+        "conname": "TrustSignal_state_not_null",
+        "contype": "n",
+        "definition": "NOT NULL state"
+      }
+    ]
+  }
+}

@@ -74,6 +74,15 @@ enum RawListingStatus {
 }
 
 model Product {
+  productIdentifiers ProductIdentifier[]
+  productVariants ProductVariant[]
+  identityEvidences IdentityEvidence[]
+  identityConflictAsProductA IdentityConflict[] @relation("ConflictProductA")
+  identityConflictAsProductB IdentityConflict[] @relation("ConflictProductB")
+  offerObservations OfferObservation[]
+  trustSignals TrustSignal[]
+  productRelationAsFromProduct ProductRelation[] @relation("RelationFrom")
+  productRelationAsToProduct ProductRelation[] @relation("RelationTo")
   id String @id @default(uuid())
 
   // Campos atuais mantidos para não quebrar o site.
@@ -134,6 +143,9 @@ model Product {
 }
 
 model RawMarketplaceListing {
+  identityEvidences IdentityEvidence[]
+  offerObservations OfferObservation[]
+  trustSignals TrustSignal[]
   id String @id @default(cuid())
 
   marketplace Marketplace
@@ -185,6 +197,8 @@ model RawMarketplaceListing {
 }
 
 model MarketplaceOffer {
+  offerObservations OfferObservation[]
+  trustSignals TrustSignal[]
   id String @id @default(cuid())
 
   productId String
@@ -648,4 +662,257 @@ model AdminPushDispatch {
   sentAt         DateTime @default(now())
 
   @@index([sentAt])
+}
+
+enum ProductIdentifierType {
+  GTIN
+  EAN
+  UPC
+  ISBN
+  MPN
+  MODEL
+  BRAND_SKU
+  MARKETPLACE_EXTERNAL_ID
+}
+
+enum IdentityConfidence {
+  EXACT
+  HIGH
+  MEDIUM
+  LOW
+  MANUAL
+}
+
+enum IdentityEvidenceKind {
+  IDENTIFIER_MATCH
+  BRAND_MATCH
+  MODEL_MATCH
+  TITLE_MATCH
+  ATTRIBUTE_MATCH
+  MARKETPLACE_LINK
+  MANUAL_ASSERTION
+}
+
+enum PriceComponentType {
+  LIST_PRICE
+  SALE_PRICE
+  SHIPPING
+  COUPON
+  PIX_DISCOUNT
+  MEMBERSHIP_PRICE
+  INSTALLMENT_TOTAL
+  FINAL_EFFECTIVE_PRICE
+}
+
+enum PriceTruthState {
+  EXACT
+  ESTIMATED
+  PARTIAL
+  UNKNOWN
+}
+
+enum IdentityConflictStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum TrustScopeType {
+  PRODUCT
+  RAW_LISTING
+  OFFER_OBSERVATION
+  MARKETPLACE_OFFER
+}
+
+enum TrustSignalState {
+  CONFIRMED
+  REJECTED
+  UNKNOWN
+}
+
+enum ProductRelationType {
+  COMPATIBLE
+  SUBSTITUTE
+  ACCESSORY
+  BUNDLE
+  SAME_FAMILY
+  SUCCESSOR
+  PREDECESSOR
+}
+
+model ProductIdentifier {
+  conflicts IdentityConflict[]
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  variantId String?
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  type ProductIdentifierType
+  value String
+  normalizedValue String
+  marketplace Marketplace?
+  brandScope String?
+  source String
+  confidence IdentityConfidence
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([type, normalizedValue, brandScope])
+  @@index([productId])
+  @@index([variantId])
+  @@index([marketplace, normalizedValue])
+}
+
+model ProductVariant {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  variantKey String
+  name String?
+  color String?
+  size String?
+  voltage String?
+  capacity String?
+  storage String?
+  memory String?
+  modelNumber String?
+  attributes Json
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  identifiers ProductIdentifier[]
+  evidence IdentityEvidence[]
+  observations OfferObservation[]
+  @@unique([productId, variantKey])
+}
+
+model IdentityEvidence {
+  id String @id @default(cuid())
+  productId String?
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  variantId String?
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  rawListingId String?
+  rawListing RawMarketplaceListing? @relation(fields: [rawListingId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  kind IdentityEvidenceKind
+  rawEvidence Json
+  confidence IdentityConfidence
+  source String
+  createdAt DateTime @default(now())
+  conflicts IdentityConflict[]
+  @@index([productId, createdAt])
+  @@index([variantId])
+  @@index([rawListingId, createdAt])
+}
+
+model IdentityConflict {
+  id String @id @default(cuid())
+  productAId String?
+  productA Product? @relation("ConflictProductA", fields: [productAId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productBId String?
+  productB Product? @relation("ConflictProductB", fields: [productBId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  identifierId String?
+  identifier ProductIdentifier? @relation(fields: [identifierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  evidenceId String?
+  evidence IdentityEvidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reason String
+  status IdentityConflictStatus @default(OPEN)
+  details Json
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  @@index([status, createdAt])
+  @@index([productAId])
+  @@index([productBId])
+  @@index([identifierId])
+  @@index([evidenceId])
+}
+
+model OfferObservation {
+  id String @id @default(cuid())
+  productId String?
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  variantId String?
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  rawListingId String?
+  rawListing RawMarketplaceListing? @relation(fields: [rawListingId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  marketplaceOfferId String?
+  marketplaceOffer MarketplaceOffer? @relation(fields: [marketplaceOfferId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  marketplace Marketplace
+  externalId String
+  sellerId String?
+  sellerName String?
+  sourceUrl String? @db.Text
+  affiliateLink String? @db.Text
+  title String?
+  price Decimal? @db.Decimal(20, 6)
+  oldPrice Decimal? @db.Decimal(20, 6)
+  currency String @default("BRL")
+  stock Int?
+  available Boolean?
+  capturedAt DateTime
+  fingerprint String
+  provenance Json
+  createdAt DateTime @default(now())
+  components OfferPriceComponent[]
+  trustSignals TrustSignal[]
+  @@unique([marketplace, externalId, fingerprint])
+  @@index([productId, capturedAt])
+  @@index([variantId, capturedAt])
+  @@index([rawListingId, capturedAt])
+  @@index([marketplaceOfferId, capturedAt])
+  @@index([marketplace, externalId, capturedAt])
+}
+
+model OfferPriceComponent {
+  id String @id @default(cuid())
+  observationId String
+  observation OfferObservation @relation(fields: [observationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  type PriceComponentType
+  amount Decimal? @db.Decimal(20, 6)
+  currency String
+  truthState PriceTruthState
+  conditions Json?
+  source String
+  createdAt DateTime @default(now())
+  @@index([observationId])
+}
+
+model TrustSignal {
+  id String @id @default(cuid())
+  productId String?
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  rawListingId String?
+  rawListing RawMarketplaceListing? @relation(fields: [rawListingId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  observationId String?
+  observation OfferObservation? @relation(fields: [observationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  marketplaceOfferId String?
+  marketplaceOffer MarketplaceOffer? @relation(fields: [marketplaceOfferId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  scopeType TrustScopeType
+  scopeId String
+  signalType String
+  state TrustSignalState
+  value Json?
+  source String
+  evidence Json
+  observedAt DateTime
+  createdAt DateTime @default(now())
+  @@index([scopeType, scopeId, signalType, observedAt])
+  @@index([productId])
+  @@index([rawListingId])
+  @@index([observationId])
+  @@index([marketplaceOfferId])
+}
+
+model ProductRelation {
+  id String @id @default(cuid())
+  fromProductId String
+  fromProduct Product @relation("RelationFrom", fields: [fromProductId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  toProductId String
+  toProduct Product @relation("RelationTo", fields: [toProductId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  relationType ProductRelationType
+  confidence IdentityConfidence
+  source String
+  evidence Json
+  createdAt DateTime @default(now())
+  @@index([fromProductId, relationType])
+  @@index([toProductId, relationType])
 }
