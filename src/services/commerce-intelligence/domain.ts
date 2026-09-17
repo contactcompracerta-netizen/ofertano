@@ -72,10 +72,12 @@ export function identifiersConflict(a: ObservedIdentifier, b: ObservedIdentifier
 }
 export type ComponentType = 'LIST_PRICE' | 'SALE_PRICE' | 'SHIPPING' | 'COUPON' | 'PIX_DISCOUNT' | 'MEMBERSHIP_PRICE' | 'INSTALLMENT_TOTAL' | 'FINAL_EFFECTIVE_PRICE';
 export interface PriceComponent {
+  source?: string;
   type: ComponentType; amount?: string | number | null; currency: string; truthState: TruthState;
   conditions?: { eligible?: boolean; [key: string]: unknown } | null;
 }
 export interface ObservationState {
+  attributes?: Attributes;
   marketplace: string; externalId: string; sellerId?: string | null; sellerName?: string | null;
   title?: string | null; sourceUrl?: string | null; affiliateLink?: string | null;
   price?: string | number | null; oldPrice?: string | number | null; currency: string;
@@ -87,9 +89,10 @@ function money(value: string | number | null | undefined): string | null {
   const [integer, fractional = ''] = s.split('.'); return BigInt(integer).toString() + '.' + fractional.padEnd(6, '0');
 }
 export function buildObservationFingerprint(input: ObservationState): string {
-  const components = (input.components ?? []).map(c => ({...c, amount:money(c.amount), currency:c.currency.toUpperCase(), conditions:c.conditions ?? null}));
+  const components = (input.components ?? []).map(c => ({type:c.type, amount:money(c.amount), currency:c.currency.toUpperCase(), truthState:c.truthState, conditions:c.conditions ?? null}));
   components.sort((a,b) => JSON.stringify(stable(a)).localeCompare(JSON.stringify(stable(b)),'en'));
-  return 'v1:' + hash({marketplace:input.marketplace, externalId:input.externalId, sellerId:input.sellerId ?? null, sellerName:input.sellerName ?? null, title:input.title ?? null, sourceUrl:input.sourceUrl ?? null, affiliateLink:input.affiliateLink ?? null, price:money(input.price), oldPrice:money(input.oldPrice), currency:input.currency.toUpperCase(), stock:input.stock ?? null, available:input.available ?? null, components});
+  const state = {marketplace:input.marketplace, externalId:input.externalId, sellerId:input.sellerId ?? null, sellerName:input.sellerName ?? null, title:input.title ?? null, sourceUrl:input.sourceUrl ?? null, affiliateLink:input.affiliateLink ?? null, price:money(input.price), oldPrice:money(input.oldPrice), currency:input.currency.toUpperCase(), stock:input.stock ?? null, available:input.available ?? null, components};
+  return (input.attributes === undefined ? 'v1:' : 'v2:') + hash(input.attributes === undefined ? state : {...state,attributes:normalizeAttributes(input.attributes)});
 }
 export function computeEffectivePrice(components: PriceComponent[]): {value?: string; state: TruthState; explanation: {used: ComponentType[]; missing: string[]; conditional: ComponentType[]}} {
   const explanation: {used: ComponentType[]; missing: string[]; conditional: ComponentType[]} = {used:[],missing:[],conditional:[]};

@@ -1,4 +1,5 @@
-﻿import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
+﻿import { scheduleCommerceShadowAfterBarrier } from "../commerce-intelligence/shadow/integration";
+import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
@@ -1656,7 +1657,7 @@ async function applyAffiliateLayer(
 
 /*
  * persist: true aguarda saveProduct no caminho da busca (scripts/batch).
- * persist: false (ou omitido) nao toca Prisma; a Home agenda persistencia
+ * persist: false (ou omitido) nao persiste o legado; a Home agenda persistencia
  * pos-resposta via after() + persistSelectedSearchClusters.
  */
 export async function searchMultistoreV2(
@@ -1669,6 +1670,7 @@ export async function searchMultistoreV2(
     budget?: SearchBudget;
     affiliateResolver?: AffiliateResolver;
     persistProduct?: PersistProductFn;
+    shadow?: Parameters<typeof scheduleCommerceShadowAfterBarrier>[1];
   } = {},
 ): Promise<MultistoreV2Result> {
   const rawQuery = query.replace(/\s+/g, " ").trim();
@@ -2107,6 +2109,8 @@ export async function searchMultistoreV2(
       views: views.length,
       products: selectedProducts.length,
     });
+
+    scheduleCommerceShadowAfterBarrier(rawCandidates, options.shadow);
 
     return {
       query: search,

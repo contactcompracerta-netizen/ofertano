@@ -52,9 +52,12 @@ export function createCommerceRepositories(getClient: () => Models, enabled: (fl
         await validateVariant(data.productId, data.variantId);
         // Hash persisted state, never trust a caller-supplied fingerprint.
         const fingerprint=buildObservationFingerprint({...state,marketplace:data.marketplace,externalId:data.externalId,price:data.price == null ? null : String(data.price),oldPrice:data.oldPrice == null ? null : String(data.oldPrice),currency:data.currency ?? 'BRL',stock:data.stock,available:data.available,sellerId:data.sellerId,sellerName:data.sellerName,title:data.title,sourceUrl:data.sourceUrl,affiliateLink:data.affiliateLink});
-        const components=state.components?.map(c=>({...c,conditions:c.conditions ? c.conditions as Prisma.InputJsonObject : undefined,source:'observed'}));
+        const components=state.components?.map(c=>({...c,conditions:c.conditions ? c.conditions as Prisma.InputJsonObject : undefined,source:c.source ?? 'observed'}));
         if ('trustSignals' in data || 'components' in data) throw new Error('NESTED_WRITE_FORBIDDEN');
         const create={...data,fingerprint,components:components?.length ? {create:components} : undefined};
+        const where={marketplace_externalId_fingerprint:{marketplace:data.marketplace,externalId:data.externalId,fingerprint}};
+        const existing=await getClient().offerObservation.findUnique({where});
+        if(existing)return existing;
         try { return await getClient().offerObservation.create({data:create}); }
         catch(e) {
           if ((e as {code?:string}).code !== 'P2002') throw e;

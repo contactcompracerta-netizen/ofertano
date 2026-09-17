@@ -1,0 +1,3013 @@
+{
+  "before": {
+    "product": 2,
+    "offer": 0,
+    "history": 0,
+    "raw": 0,
+    "observation": 0,
+    "component": 0,
+    "variant": 0,
+    "identifier": 2,
+    "evidence": 0,
+    "signal": 0,
+    "conflict": 0
+  },
+  "afterFirst": {
+    "product": 2,
+    "offer": 0,
+    "history": 0,
+    "raw": 0,
+    "observation": 1,
+    "component": 6,
+    "variant": 1,
+    "identifier": 3,
+    "evidence": 1,
+    "signal": 8,
+    "conflict": 0
+  },
+  "final": {
+    "product": 2,
+    "offer": 0,
+    "history": 0,
+    "raw": 0,
+    "observation": 4,
+    "component": 20,
+    "variant": 2,
+    "identifier": 4,
+    "evidence": 4,
+    "signal": 32,
+    "conflict": 1
+  },
+  "legacyDelta": {
+    "product": 0,
+    "offer": 0,
+    "history": 0,
+    "raw": 0
+  },
+  "dry": {
+    "status": "DRY_RUN",
+    "eligible": true,
+    "reason": "DRY_RUN",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+      "attributes": {
+        "color": "preto",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      }
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": false,
+    "conflict": false,
+    "durationMs": 136.88463000000002,
+    "timings": {
+      "identityMs": 122.15791300000001,
+      "purePipelineMs": 13.846230000000105,
+      "dbWriteMs": 0
+    }
+  },
+  "first": {
+    "status": "CREATED",
+    "eligible": true,
+    "reason": "READY",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+      "attributes": {
+        "color": "preto",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      },
+      "id": "1601c05a-fcd3-49dd-830b-fbecc6deda55"
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 1,
+    "deduped": false,
+    "conflict": false,
+    "durationMs": 279.73573199999964,
+    "timings": {
+      "identityMs": 21.3059089999997,
+      "purePipelineMs": 1.8181509999999435,
+      "dbWriteMs": 255.5534950000001
+    }
+  },
+  "dedupe": {
+    "status": "DEDUPED",
+    "eligible": true,
+    "reason": "READY",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+      "attributes": {
+        "color": "preto",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      },
+      "id": "1601c05a-fcd3-49dd-830b-fbecc6deda55"
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": true,
+    "conflict": false,
+    "durationMs": 46.59927300000027,
+    "timings": {
+      "identityMs": 16.248481000000083,
+      "purePipelineMs": 2.768145999999888,
+      "dbWriteMs": 26.63489699999991
+    }
+  },
+  "irrelevant": {
+    "status": "DEDUPED",
+    "eligible": true,
+    "reason": "READY",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+      "attributes": {
+        "color": "preto",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      },
+      "id": "1601c05a-fcd3-49dd-830b-fbecc6deda55"
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": true,
+    "conflict": false,
+    "durationMs": 46.762917000000016,
+    "timings": {
+      "identityMs": 18.094390999999632,
+      "purePipelineMs": 3.131894999999986,
+      "dbWriteMs": 24.85965400000032
+    }
+  },
+  "exhausted": {
+    "status": "BLOCKED",
+    "eligible": false,
+    "reason": "BUDGET_EXHAUSTED",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+      "attributes": {
+        "color": "preto",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:fa3ab7195c763f61acf5a9ead9d3700f500563b3c6707817ee4f6d6c3beb53c2",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "90",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "90.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:fa3ab7195c763f61acf5a9ead9d3700f500563b3c6707817ee4f6d6c3beb53c2"
+      }
+    },
+    "priceTruth": {
+      "value": "90.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": false,
+    "conflict": false,
+    "durationMs": 34.94137300000011,
+    "timings": {
+      "identityMs": 14.18064400000003,
+      "purePipelineMs": 2.191128999999819,
+      "dbWriteMs": 18.05643999999984
+    }
+  },
+  "changed": {
+    "status": "CREATED",
+    "eligible": true,
+    "reason": "READY",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+      "attributes": {
+        "color": "preto",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:fa3ab7195c763f61acf5a9ead9d3700f500563b3c6707817ee4f6d6c3beb53c2",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "90",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "90.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:fa3ab7195c763f61acf5a9ead9d3700f500563b3c6707817ee4f6d6c3beb53c2"
+      },
+      "id": "1d6454b8-7d7e-4b13-9c68-852cb7af84c9"
+    },
+    "priceTruth": {
+      "value": "90.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 1,
+    "deduped": false,
+    "conflict": false,
+    "durationMs": 113.59795899999972,
+    "timings": {
+      "identityMs": 11.939742999999908,
+      "purePipelineMs": 1.5756540000002133,
+      "dbWriteMs": 99.56122500000038
+    }
+  },
+  "races": [
+    {
+      "status": "CREATED",
+      "eligible": true,
+      "reason": "READY",
+      "identity": {
+        "status": "EXACT",
+        "confidence": "EXACT",
+        "productId": "50ag2-primary",
+        "candidateIds": [
+          "50ag2-primary"
+        ],
+        "method": "validated-gtin"
+      },
+      "variant": {
+        "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+        "attributes": {
+          "color": "preto",
+          "memory": "16gb"
+        }
+      },
+      "observation": {
+        "fingerprint": "v2:be39a5c73e7f36484646086d786c494cb09c2400abd27e99035d3b6b422a9296",
+        "productId": "50ag2-primary",
+        "rawListingId": null,
+        "components": [
+          {
+            "type": "SALE_PRICE",
+            "amount": "82",
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "LIST_PRICE",
+            "amount": "120",
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "SHIPPING",
+            "amount": 10,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "COUPON",
+            "amount": 5,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1",
+            "conditions": {
+              "eligible": true
+            }
+          },
+          {
+            "type": "PIX_DISCOUNT",
+            "amount": 5,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1",
+            "conditions": {
+              "eligible": true
+            }
+          },
+          {
+            "type": "FINAL_EFFECTIVE_PRICE",
+            "amount": "82.000000",
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-derived-v1",
+            "conditions": {
+              "eligible": true,
+              "explanation": {
+                "used": [
+                  "SALE_PRICE",
+                  "SHIPPING",
+                  "COUPON",
+                  "PIX_DISCOUNT"
+                ],
+                "missing": [],
+                "conditional": []
+              }
+            }
+          }
+        ],
+        "provenance": {
+          "sourceFlow": "offline-fixture",
+          "shadowVersion": "50ag2-v1",
+          "capturedAt": "2026-09-17T12:00:00.000Z",
+          "marketplace": "AMAZON",
+          "externalId": "SHADOW-ASIN1",
+          "identityMethod": "validated-gtin",
+          "inputFingerprintVersion": "v2",
+          "inputFingerprint": "v2:be39a5c73e7f36484646086d786c494cb09c2400abd27e99035d3b6b422a9296"
+        },
+        "id": "7fd85572-1a97-4c40-aaff-62077c44cc4d"
+      },
+      "priceTruth": {
+        "value": "82.000000",
+        "state": "EXACT",
+        "explanation": {
+          "used": [
+            "SALE_PRICE",
+            "SHIPPING",
+            "COUPON",
+            "PIX_DISCOUNT"
+          ],
+          "missing": [],
+          "conditional": []
+        }
+      },
+      "trustSignals": [
+        {
+          "signalType": "IDENTITY_EXACT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "IDENTIFIER_VALID",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SELLER_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_OBSERVED",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AVAILABILITY_OBSERVED",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SOURCE_URL_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AFFILIATE_LINK_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_COMPONENT_COMPLETE",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        }
+      ],
+      "writesPlanned": 1,
+      "writesPerformed": 1,
+      "deduped": false,
+      "conflict": false,
+      "durationMs": 107.8437700000004,
+      "timings": {
+        "identityMs": 14.748254000000088,
+        "purePipelineMs": 1.4085030000001098,
+        "dbWriteMs": 90.97595300000057
+      }
+    },
+    {
+      "status": "DEDUPED",
+      "eligible": true,
+      "reason": "READY",
+      "identity": {
+        "status": "EXACT",
+        "confidence": "EXACT",
+        "productId": "50ag2-primary",
+        "candidateIds": [
+          "50ag2-primary"
+        ],
+        "method": "validated-gtin"
+      },
+      "variant": {
+        "variantKey": "v1:3352274f1ee4e5ed9f270b5b53fa3c7725ad43b7102ea90935c01087ba8d0d6a",
+        "attributes": {
+          "color": "preto",
+          "memory": "16gb"
+        }
+      },
+      "observation": {
+        "fingerprint": "v2:be39a5c73e7f36484646086d786c494cb09c2400abd27e99035d3b6b422a9296",
+        "productId": "50ag2-primary",
+        "rawListingId": null,
+        "components": [
+          {
+            "type": "SALE_PRICE",
+            "amount": "82",
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "LIST_PRICE",
+            "amount": "120",
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "SHIPPING",
+            "amount": 10,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "COUPON",
+            "amount": 5,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1",
+            "conditions": {
+              "eligible": true
+            }
+          },
+          {
+            "type": "PIX_DISCOUNT",
+            "amount": 5,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1",
+            "conditions": {
+              "eligible": true
+            }
+          },
+          {
+            "type": "FINAL_EFFECTIVE_PRICE",
+            "amount": "82.000000",
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-derived-v1",
+            "conditions": {
+              "eligible": true,
+              "explanation": {
+                "used": [
+                  "SALE_PRICE",
+                  "SHIPPING",
+                  "COUPON",
+                  "PIX_DISCOUNT"
+                ],
+                "missing": [],
+                "conditional": []
+              }
+            }
+          }
+        ],
+        "provenance": {
+          "sourceFlow": "offline-fixture",
+          "shadowVersion": "50ag2-v1",
+          "capturedAt": "2026-09-17T12:00:00.000Z",
+          "marketplace": "AMAZON",
+          "externalId": "SHADOW-ASIN1",
+          "identityMethod": "validated-gtin",
+          "inputFingerprintVersion": "v2",
+          "inputFingerprint": "v2:be39a5c73e7f36484646086d786c494cb09c2400abd27e99035d3b6b422a9296"
+        },
+        "id": "7fd85572-1a97-4c40-aaff-62077c44cc4d"
+      },
+      "priceTruth": {
+        "value": "82.000000",
+        "state": "EXACT",
+        "explanation": {
+          "used": [
+            "SALE_PRICE",
+            "SHIPPING",
+            "COUPON",
+            "PIX_DISCOUNT"
+          ],
+          "missing": [],
+          "conditional": []
+        }
+      },
+      "trustSignals": [
+        {
+          "signalType": "IDENTITY_EXACT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "IDENTIFIER_VALID",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SELLER_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_OBSERVED",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AVAILABILITY_OBSERVED",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SOURCE_URL_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AFFILIATE_LINK_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_COMPONENT_COMPLETE",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        }
+      ],
+      "writesPlanned": 1,
+      "writesPerformed": 0,
+      "deduped": true,
+      "conflict": false,
+      "durationMs": 123.15789099999984,
+      "timings": {
+        "identityMs": 64.08880499999987,
+        "purePipelineMs": 1.6429619999998977,
+        "dbWriteMs": 57.05485099999987
+      }
+    }
+  ],
+  "failure": {
+    "status": "FAILED",
+    "eligible": false,
+    "reason": "P2039",
+    "identity": {
+      "status": "EXACT",
+      "confidence": "EXACT",
+      "productId": "50ag2-primary",
+      "candidateIds": [
+        "50ag2-primary"
+      ],
+      "method": "validated-gtin"
+    },
+    "variant": {
+      "variantKey": "v1:8b63af6200c4bf13b26860d5854a3a372c45628367d8016206b5c2659a14015a",
+      "attributes": {
+        "color": "azul",
+        "memory": "16gb"
+      }
+    },
+    "observation": {
+      "fingerprint": "v2:2924122b32c9ca7b6256f23d3f1e31b5a80bef3051766cbaa4944bc86f1edb2e",
+      "productId": "50ag2-primary",
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "81",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "81.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "validated-gtin",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:2924122b32c9ca7b6256f23d3f1e31b5a80bef3051766cbaa4944bc86f1edb2e"
+      }
+    },
+    "priceTruth": {
+      "value": "81.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": false,
+    "conflict": false,
+    "durationMs": 162.6963880000003,
+    "timings": {
+      "identityMs": 10.865681000000222,
+      "purePipelineMs": 1.4771719999998822,
+      "dbWriteMs": 149.90147199999956
+    }
+  },
+  "conflictDry": {
+    "status": "DRY_RUN",
+    "eligible": true,
+    "reason": "DRY_RUN",
+    "identity": {
+      "status": "CONFLICT",
+      "confidence": "LOW",
+      "productId": null,
+      "candidateIds": [
+        "50ag2-conflict",
+        "50ag2-primary"
+      ],
+      "method": "conflicting-strong-identifiers",
+      "conflictReason": "MULTIPLE_STRONG_IDENTITIES"
+    },
+    "variant": null,
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": null,
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "conflicting-strong-identifiers",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      }
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "UNKNOWN",
+        "evidence": {
+          "observed": false,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": false,
+    "conflict": true,
+    "durationMs": 18.903432999999495,
+    "timings": {
+      "identityMs": 16.69456699999955,
+      "purePipelineMs": 1.759328000000096,
+      "dbWriteMs": 0
+    }
+  },
+  "conflictBlocked": {
+    "status": "BLOCKED",
+    "eligible": false,
+    "reason": "IDENTITY_NOT_EXACT",
+    "identity": {
+      "status": "CONFLICT",
+      "confidence": "LOW",
+      "productId": null,
+      "candidateIds": [
+        "50ag2-conflict",
+        "50ag2-primary"
+      ],
+      "method": "conflicting-strong-identifiers",
+      "conflictReason": "MULTIPLE_STRONG_IDENTITIES"
+    },
+    "variant": null,
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": null,
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "conflicting-strong-identifiers",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      }
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "UNKNOWN",
+        "evidence": {
+          "observed": false,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 0,
+    "deduped": false,
+    "conflict": true,
+    "durationMs": 17.833152999999584,
+    "timings": {
+      "identityMs": 15.634356999999909,
+      "purePipelineMs": 1.6523989999996047,
+      "dbWriteMs": 0
+    }
+  },
+  "conflictRecorded": {
+    "status": "BLOCKED",
+    "eligible": false,
+    "reason": "IDENTITY_NOT_EXACT",
+    "identity": {
+      "status": "CONFLICT",
+      "confidence": "LOW",
+      "productId": null,
+      "candidateIds": [
+        "50ag2-conflict",
+        "50ag2-primary"
+      ],
+      "method": "conflicting-strong-identifiers",
+      "conflictReason": "MULTIPLE_STRONG_IDENTITIES"
+    },
+    "variant": null,
+    "observation": {
+      "fingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846",
+      "productId": null,
+      "rawListingId": null,
+      "components": [
+        {
+          "type": "SALE_PRICE",
+          "amount": "100",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "LIST_PRICE",
+          "amount": "120",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "SHIPPING",
+          "amount": 10,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1"
+        },
+        {
+          "type": "COUPON",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "PIX_DISCOUNT",
+          "amount": 5,
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-observed-v1",
+          "conditions": {
+            "eligible": true
+          }
+        },
+        {
+          "type": "FINAL_EFFECTIVE_PRICE",
+          "amount": "100.000000",
+          "currency": "BRL",
+          "truthState": "EXACT",
+          "source": "shadow-derived-v1",
+          "conditions": {
+            "eligible": true,
+            "explanation": {
+              "used": [
+                "SALE_PRICE",
+                "SHIPPING",
+                "COUPON",
+                "PIX_DISCOUNT"
+              ],
+              "missing": [],
+              "conditional": []
+            }
+          }
+        }
+      ],
+      "provenance": {
+        "sourceFlow": "offline-fixture",
+        "shadowVersion": "50ag2-v1",
+        "capturedAt": "2026-09-17T12:00:00.000Z",
+        "marketplace": "AMAZON",
+        "externalId": "SHADOW-ASIN1",
+        "identityMethod": "conflicting-strong-identifiers",
+        "inputFingerprintVersion": "v2",
+        "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
+      }
+    },
+    "priceTruth": {
+      "value": "100.000000",
+      "state": "EXACT",
+      "explanation": {
+        "used": [
+          "SALE_PRICE",
+          "SHIPPING",
+          "COUPON",
+          "PIX_DISCOUNT"
+        ],
+        "missing": [],
+        "conditional": []
+      }
+    },
+    "trustSignals": [
+      {
+        "signalType": "IDENTITY_EXACT",
+        "state": "UNKNOWN",
+        "evidence": {
+          "observed": false,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "IDENTIFIER_VALID",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SELLER_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AVAILABILITY_OBSERVED",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "SOURCE_URL_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "AFFILIATE_LINK_PRESENT",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      },
+      {
+        "signalType": "PRICE_COMPONENT_COMPLETE",
+        "state": "CONFIRMED",
+        "evidence": {
+          "observed": true,
+          "shadowVersion": "50ag2-v1"
+        }
+      }
+    ],
+    "writesPlanned": 1,
+    "writesPerformed": 1,
+    "deduped": false,
+    "conflict": true,
+    "durationMs": 35.51396600000044,
+    "timings": {
+      "identityMs": 9.169708999999784,
+      "purePipelineMs": 1.4753189999992173,
+      "dbWriteMs": 24.33286699999917
+    }
+  },
+  "legacyOutputDeepEqual": true,
+  "boundaryResults": [
+    {
+      "status": "DRY_RUN",
+      "eligible": true,
+      "reason": "DRY_RUN",
+      "identity": {
+        "status": "EXACT",
+        "confidence": "EXACT",
+        "productId": "50ag2-primary",
+        "candidateIds": [
+          "50ag2-primary"
+        ],
+        "method": "validated-gtin"
+      },
+      "variant": {
+        "variantKey": "v1:111a59c90407186a7773b36266925b7173369208a07d1794f59993f465896a99",
+        "attributes": {
+          "color": "preto"
+        }
+      },
+      "observation": {
+        "fingerprint": "v2:d8ee089565509b0db2a4da08d75d5780c153769018727111c2b2270eacfaab18",
+        "productId": "50ag2-primary",
+        "rawListingId": null,
+        "components": [
+          {
+            "type": "SALE_PRICE",
+            "amount": 100,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "FINAL_EFFECTIVE_PRICE",
+            "amount": "100.000000",
+            "currency": "BRL",
+            "truthState": "PARTIAL",
+            "source": "shadow-derived-v1",
+            "conditions": {
+              "eligible": true,
+              "explanation": {
+                "used": [
+                  "SALE_PRICE"
+                ],
+                "missing": [
+                  "shipping"
+                ],
+                "conditional": []
+              }
+            }
+          }
+        ],
+        "provenance": {
+          "sourceFlow": "multistore-v2-post-barrier",
+          "shadowVersion": "50ag2-v1",
+          "capturedAt": "2026-09-17T23:14:48.472Z",
+          "marketplace": "AMAZON",
+          "externalId": "SHADOW-ASIN1",
+          "identityMethod": "validated-gtin",
+          "inputFingerprintVersion": "v2",
+          "inputFingerprint": "v2:d8ee089565509b0db2a4da08d75d5780c153769018727111c2b2270eacfaab18"
+        }
+      },
+      "priceTruth": {
+        "value": "100.000000",
+        "state": "PARTIAL",
+        "explanation": {
+          "used": [
+            "SALE_PRICE"
+          ],
+          "missing": [
+            "shipping"
+          ],
+          "conditional": []
+        }
+      },
+      "trustSignals": [
+        {
+          "signalType": "IDENTITY_EXACT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "IDENTIFIER_VALID",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SELLER_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_OBSERVED",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AVAILABILITY_OBSERVED",
+          "state": "UNKNOWN",
+          "evidence": {
+            "observed": false,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SOURCE_URL_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AFFILIATE_LINK_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_COMPONENT_COMPLETE",
+          "state": "UNKNOWN",
+          "evidence": {
+            "observed": false,
+            "shadowVersion": "50ag2-v1"
+          }
+        }
+      ],
+      "writesPlanned": 1,
+      "writesPerformed": 0,
+      "deduped": false,
+      "conflict": false,
+      "durationMs": 18.609243999999308,
+      "timings": {
+        "identityMs": 17.21056099999987,
+        "purePipelineMs": 1.0348319999993691,
+        "dbWriteMs": 0
+      }
+    },
+    {
+      "status": "CREATED",
+      "eligible": true,
+      "reason": "READY",
+      "identity": {
+        "status": "EXACT",
+        "confidence": "EXACT",
+        "productId": "50ag2-primary",
+        "candidateIds": [
+          "50ag2-primary"
+        ],
+        "method": "validated-gtin"
+      },
+      "variant": {
+        "variantKey": "v1:111a59c90407186a7773b36266925b7173369208a07d1794f59993f465896a99",
+        "attributes": {
+          "color": "preto"
+        }
+      },
+      "observation": {
+        "fingerprint": "v2:d8ee089565509b0db2a4da08d75d5780c153769018727111c2b2270eacfaab18",
+        "productId": "50ag2-primary",
+        "rawListingId": null,
+        "components": [
+          {
+            "type": "SALE_PRICE",
+            "amount": 100,
+            "currency": "BRL",
+            "truthState": "EXACT",
+            "source": "shadow-observed-v1"
+          },
+          {
+            "type": "FINAL_EFFECTIVE_PRICE",
+            "amount": "100.000000",
+            "currency": "BRL",
+            "truthState": "PARTIAL",
+            "source": "shadow-derived-v1",
+            "conditions": {
+              "eligible": true,
+              "explanation": {
+                "used": [
+                  "SALE_PRICE"
+                ],
+                "missing": [
+                  "shipping"
+                ],
+                "conditional": []
+              }
+            }
+          }
+        ],
+        "provenance": {
+          "sourceFlow": "multistore-v2-post-barrier",
+          "shadowVersion": "50ag2-v1",
+          "capturedAt": "2026-09-17T23:14:49.510Z",
+          "marketplace": "AMAZON",
+          "externalId": "SHADOW-ASIN1",
+          "identityMethod": "validated-gtin",
+          "inputFingerprintVersion": "v2",
+          "inputFingerprint": "v2:d8ee089565509b0db2a4da08d75d5780c153769018727111c2b2270eacfaab18"
+        },
+        "id": "c23e0695-a325-4374-85ac-e1ec8d262879"
+      },
+      "priceTruth": {
+        "value": "100.000000",
+        "state": "PARTIAL",
+        "explanation": {
+          "used": [
+            "SALE_PRICE"
+          ],
+          "missing": [
+            "shipping"
+          ],
+          "conditional": []
+        }
+      },
+      "trustSignals": [
+        {
+          "signalType": "IDENTITY_EXACT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "IDENTIFIER_VALID",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SELLER_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_OBSERVED",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AVAILABILITY_OBSERVED",
+          "state": "UNKNOWN",
+          "evidence": {
+            "observed": false,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "SOURCE_URL_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "AFFILIATE_LINK_PRESENT",
+          "state": "CONFIRMED",
+          "evidence": {
+            "observed": true,
+            "shadowVersion": "50ag2-v1"
+          }
+        },
+        {
+          "signalType": "PRICE_COMPONENT_COMPLETE",
+          "state": "UNKNOWN",
+          "evidence": {
+            "observed": false,
+            "shadowVersion": "50ag2-v1"
+          }
+        }
+      ],
+      "writesPlanned": 1,
+      "writesPerformed": 1,
+      "deduped": false,
+      "conflict": false,
+      "durationMs": 133.75537299999996,
+      "timings": {
+        "identityMs": 10.366400999999314,
+        "purePipelineMs": 0.7943269999996119,
+        "dbWriteMs": 122.06992600000012
+      }
+    }
+  ],
+  "telemetryExcluded": [
+    "acquisitions.elapsedMs"
+  ],
+  "performance": {
+    "purePipelineSamples": 200,
+    "p50Ms": 1.0115679999998974,
+    "p95Ms": 1.877306999999746,
+    "dbWriteMs": 255.5534950000001,
+    "dedupeMs": 26.63489699999991
+  },
+  "events": [
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 1.047088000000258,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "SHADOW_DISABLED",
+      "durationMs": 1.380399000000125,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.38321799999994255,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "MARKETPLACE_NOT_ALLOWED",
+      "durationMs": 1.1453559999999925,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.09185999999999694,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "EXTERNAL_ID_NOT_ALLOWED",
+      "durationMs": 0.2716099999997823,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.07007999999996173,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "WRITE_BUDGET_ZERO",
+      "durationMs": 0.12237699999968754,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.0828639999999723,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_DRY_RUN",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "DRY_RUN",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 136.81973900000003,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.1609889999999723,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "IDENTITY_NOT_EXACT",
+      "identityConfidence": "HIGH",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 26.617428999999902,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.14320600000019112,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "IDENTITY_NOT_EXACT",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:ba66a3371d42",
+      "durationMs": 19.51669400000037,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.2393609999999171,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CREATED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 279.66436099999964,
+      "writeCount": 1
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.2254370000000563,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_DEDUPED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 46.54240800000025,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.23158799999964685,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_DEDUPED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 46.677156999999625,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.17708200000015495,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "BUDGET_EXHAUSTED",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:fa3ab7195c76",
+      "durationMs": 34.91433099999995,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.13561099999969883,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CREATED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:fa3ab7195c76",
+      "durationMs": 113.57660999999962,
+      "writeCount": 1
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.1338500000001659,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.08532700000023397,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CREATED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:be39a5c73e7f",
+      "durationMs": 107.8241710000002,
+      "writeCount": 1
+    },
+    {
+      "event": "COMMERCE_SHADOW_DEDUPED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:be39a5c73e7f",
+      "durationMs": 123.14516100000037,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.10152500000003783,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_FAILED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "P2039",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:2924122b32c9",
+      "durationMs": 162.68502400000034,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.1389339999996082,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_DRY_RUN",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "DRY_RUN",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:d8ee08956550",
+      "durationMs": 18.59740199999942,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.1342030000005252,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CREATED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "READY",
+      "identityConfidence": "EXACT",
+      "observationFingerprintPrefix": "v2:d8ee08956550",
+      "durationMs": 133.7253410000003,
+      "writeCount": 1
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.14299599999958446,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CONFLICT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "MULTIPLE_STRONG_IDENTITIES",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 18.852116999999453,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_DRY_RUN",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "DRY_RUN",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 18.888680000000022,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.11587199999939912,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CONFLICT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "MULTIPLE_STRONG_IDENTITIES",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 17.706293999999616,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "IDENTITY_NOT_EXACT",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 17.822156999999606,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_ATTEMPT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "ATTEMPT",
+      "durationMs": 0.12263400000028923,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_CONFLICT",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "MULTIPLE_STRONG_IDENTITIES",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 10.976290000000517,
+      "writeCount": 0
+    },
+    {
+      "event": "COMMERCE_SHADOW_BLOCKED",
+      "marketplace": "AMAZON",
+      "externalIdSafe": "b4fe13379f4c",
+      "reason": "IDENTITY_NOT_EXACT",
+      "identityConfidence": "LOW",
+      "observationFingerprintPrefix": "v2:862eaec6f552",
+      "durationMs": 35.48648400000002,
+      "writeCount": 1
+    }
+  ]
+}

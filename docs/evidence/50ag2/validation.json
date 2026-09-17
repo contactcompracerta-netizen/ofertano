@@ -1,0 +1,92 @@
+{
+  "missionStatus": "H — NATIVE_TEST_FAILURE",
+  "baseSHA": "2cce80cfadcf14fc71884134b701a4d73595b5e2",
+  "readyFor50AG3": false,
+  "officialNativeMatrix": {
+    "result": "FAIL",
+    "exitCode": 1,
+    "officialScriptCount": 34,
+    "fullRunCompletedBeforeFailure": 21,
+    "failedScript": "src/services/multistore-v2/persist.test.ts",
+    "failure": "persist.test exceeded20000ms",
+    "sameFailureOnImmutableBase": true,
+    "sameFailureOnFinalLazyBoundary": true,
+    "processAffinityDidNotResolveFailure": true,
+    "remaining12RunSeparately": [
+      {
+        "command": "npx tsx src/services/analytics/analytics.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/lib/favorites/favorites.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/lib/affiliates/publicPurchase.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/opportunities/lowestPriceAffiliateOpportunity.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/admin-push/admin-push.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/imageSearch/imageSearch.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/opportunities/convergence.integration.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/affiliates/mercadolivre/generator.test.mts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/affiliates/mercadolivre/worker.test.mts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/affiliates/mercadolivre/daemon.test.mts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/lib/seo/seo.test.ts",
+        "exitCode": 0
+      },
+      {
+        "command": "npx tsx src/services/socialAutomation/socialAutomation.test.ts",
+        "exitCode": 0
+      }
+    ],
+    "official34of34Pass": false
+  },
+  "foundation": "PASS",
+  "shadowPure": "PASS",
+  "offlineSQLCanaryMatrix": "PASS",
+  "defaultDedicatedClient": "PASS",
+  "realDefaultLocalBackgroundFallback": "PASS",
+  "bootstrapFreshForwardLedger": "PASS",
+  "postCanarySchemaEquivalent": "PASS",
+  "encoding": "PASS",
+  "prismaValidate": "PASS",
+  "prismaGenerate": "PASS",
+  "build": "PASS",
+  "officialTestBuildPostinstallUnchanged": true,
+  "productionBefore": {
+    "counts": {
+      "Product": 0,
+      "MarketplaceOffer": 0,
+      "PriceHistory": 0,
+      "ProductOpportunity": 0,
+      "ImportQueue": 0,
+      "RawMarketplaceListing": 0
+    },
+    "newTables": []
+  },
+  "previewActivation": "OFF only, no DDL",
+  "notes": "No test assertions, timeouts, clocks or public search algorithms were changed. Separate suffix is not an official34/34 substitute."
+}
