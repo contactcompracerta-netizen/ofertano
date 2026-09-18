@@ -42,9 +42,12 @@ export function evaluateShadowEligibility(input:CommerceShadowInput,config:Shado
   if(config.dryRun)return result(true,'DRY_RUN');
   return result(true,input.rawListingId?'READY':'RAW_NOT_REQUIRED');
 }
-export function localShadowTarget(connectionString:string|undefined,deploymentEnv:string|undefined):EligibilityReason|null {
+export function localShadowTarget(connectionString:string|undefined,deploymentEnv:string|undefined,extraAllowed:string[]=[]):EligibilityReason|null {
   if(deploymentEnv==='production')return 'PRODUCTION_FORBIDDEN';
-  try {const u=new URL(connectionString??'');if(!['postgres:','postgresql:'].includes(u.protocol)||u.hostname!=='127.0.0.1'||u.port!=='55433'||u.pathname!=='/ofertano_50ag2_shadow'||u.search||u.hash)return 'LOCAL_TARGET_REQUIRED';}
-  catch{return 'LOCAL_TARGET_REQUIRED';}
+  try {
+    const u=new URL(connectionString??'');
+    const allowed=new Set(['ofertano_50ag2_shadow',...extraAllowed]);
+    if(!['postgres:','postgresql:'].includes(u.protocol)||u.hostname!=='127.0.0.1'||u.port!=='55433'||!allowed.has(u.pathname.replace(/^\//,''))||u.search||u.hash)return 'LOCAL_TARGET_REQUIRED';
+  } catch{return 'LOCAL_TARGET_REQUIRED';}
   return null;
 }

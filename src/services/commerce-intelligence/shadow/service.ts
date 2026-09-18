@@ -43,7 +43,7 @@ export async function runCommerceShadowCanary(input:CommerceShadowInput,deps:Sha
     const eligibility=evaluateShadowEligibility(input,config);
     if(!eligibility.eligible)return blocked(eligibility.reason);
     const connectionString=deps.connectionString??process.env.DATABASE_URL;
-    const targetError=localShadowTarget(connectionString,deps.deploymentEnv??process.env.VERCEL_ENV);
+    const targetError=localShadowTarget(connectionString,deps.deploymentEnv??process.env.VERCEL_ENV,deps.localDbNames);
     if(targetError)return blocked(targetError);
     const enabled=(flag:Parameters<typeof commerceEnabled>[0])=>commerceEnabled(flag,env);
     if(!config.dryRun&&['COMMERCE_IDENTITY_GRAPH_ENABLED','OFFER_LEDGER_ENABLED','PRICE_TRUTH_ENABLED','TRUST_SIGNALS_ENABLED'].some(f=>!enabled(f as Parameters<typeof commerceEnabled>[0])))return blocked('FOUNDATION_FLAG_OFF');

@@ -916,3 +916,69 @@ model ProductRelation {
   @@index([fromProductId, relationType])
   @@index([toProductId, relationType])
 }
+
+enum CommerceCanaryGrantStatus {
+  ARMED
+  CLAIMED
+  CONSUMED
+  FAILED
+  EXPIRED
+  DISABLED
+}
+
+enum CommerceCanaryAttemptKind {
+  CLAIM
+  BLOCKED
+  CONSUMED
+  FAILED
+  EXPIRE
+  DISABLE
+}
+
+// Distributed canary ONE-SHOT authorization (50AG.3 control plane).
+// The database is the global authority: at most one authorized canary attempt
+// across processes/instances. tokenHash is SHA-256 of the runtime token; the
+// plaintext token is never persisted and never leaves the runtime environment.
+model CommerceCanaryGrant {
+  id                   String                    @id @default(cuid())
+  tokenHash            String                    @unique
+  status               CommerceCanaryGrantStatus @default(ARMED)
+  marketplace          Marketplace
+  externalId           String
+  maxAttempts          Int                       @default(1)
+  attemptsClaimed      Int                       @default(0)
+  dryRunOnly           Boolean                   @default(false)
+  requireExactIdentity Boolean                   @default(true)
+  expiresAt            DateTime
+  claimedAt            DateTime?
+  claimedBy            String?
+  consumedAt           DateTime?
+  failedAt             DateTime?
+  failureCode          String?
+  resultObservationId  String?
+  resultStatus         String?
+  metadata             Json?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  attempts             CommerceCanaryAttempt[]
+
+  @@index([status, expiresAt])
+  @@index([marketplace, externalId])
+}
+
+// Append-only audit trail bound to the grant (control plane internal FK only).
+// Bounded because maxAttempts=1 in Production design. Never stores secrets.
+model CommerceCanaryAttempt {
+  id          String                     @id @default(cuid())
+  grantId     String
+  grant       CommerceCanaryGrant        @relation(fields: [grantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  kind        CommerceCanaryAttemptKind
+  reason      String?
+  executionId String?
+  latencyMs   Int?
+  metadata    Json?
+  createdAt   DateTime                   @default(now())
+
+  @@index([grantId, createdAt])
+  @@index([kind, createdAt])
+}

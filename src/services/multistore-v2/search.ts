@@ -1,4 +1,4 @@
-﻿import { scheduleCommerceShadowAfterBarrier } from "../commerce-intelligence/shadow/integration";
+﻿import { scheduleCommerceDistributedCanaryAfterBarrier } from "../commerce-intelligence/control-plane/integration";
 import { listarDiscoveryAdaptersAtivos } from "@/services/discovery/core/registry";
 import type {
   DiscoveryAdapter,
@@ -1687,7 +1687,7 @@ export async function searchMultistoreV2(
     budget?: SearchBudget;
     affiliateResolver?: AffiliateResolver;
     persistProduct?: PersistProductFn;
-    shadow?: Parameters<typeof scheduleCommerceShadowAfterBarrier>[1];
+    shadow?: Parameters<typeof scheduleCommerceDistributedCanaryAfterBarrier>[1];
   } = {},
 ): Promise<MultistoreV2Result> {
   const rawQuery = query.replace(/\s+/g, " ").trim();
@@ -2127,7 +2127,7 @@ export async function searchMultistoreV2(
       products: selectedProducts.length,
     });
 
-    scheduleCommerceShadowAfterBarrier(rawCandidates, options.shadow);
+    scheduleCommerceDistributedCanaryAfterBarrier(rawCandidates, options.shadow);
 
     return {
       query: search,

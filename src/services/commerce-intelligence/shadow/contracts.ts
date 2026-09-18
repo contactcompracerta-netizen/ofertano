@@ -58,6 +58,8 @@ export interface ShadowDependencies {
   getClient?:()=>Promise<PrismaClient>; env?:Record<string,string|undefined>;
   connectionString?:string; deploymentEnv?:string; log?:(event:ShadowEvent)=>void;
   budget?:WriteBudget;
+  /** Extra local-only DB names allowed by the distributed control plane (fail-closed opt-in). */
+  localDbNames?: string[];
 }
 /** Counts committed canary transactions, not SQL rows. Reservations include in-flight attempts. */
 export class WriteBudget {

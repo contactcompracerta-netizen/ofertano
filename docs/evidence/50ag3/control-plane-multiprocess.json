@@ -1,0 +1,57 @@
+{
+  "races": [
+    {
+      "round": 1,
+      "grantId": "662866a7-c4a6-4372-8f43-eb45dc29e2f0",
+      "winner": "r1-w01",
+      "claims": 1,
+      "blocked": 49
+    },
+    {
+      "round": 2,
+      "grantId": "108e51de-83dc-45d1-acab-1f7b3a81f7f0",
+      "winner": "r2-w09",
+      "claims": 1,
+      "blocked": 49
+    },
+    {
+      "round": 3,
+      "grantId": "50bc0e62-a387-4b65-bca9-8c37a9452652",
+      "winner": "r3-w04",
+      "claims": 1,
+      "blocked": 49
+    }
+  ],
+  "claimLatency": {
+    "samples": 150,
+    "p50Ms": 652,
+    "p95Ms": 1007,
+    "minMs": 54,
+    "maxMs": 1248
+  },
+  "crash": {
+    "grantId": "8d06c232-488b-4768-a757-92747c8fe655",
+    "claimedBy": "crash-exec-a",
+    "status": "CLAIMED",
+    "attemptsClaimed": 1
+  },
+  "flow": {
+    "grantId": "b3e2a6b1-2863-4ba2-bd85-2716f86cbca9",
+    "total": 6,
+    "created": 1,
+    "deduped": 0,
+    "blocked": 5,
+    "blockedReasons": [
+      "PREFLIGHT_P2028",
+      "ALREADY_CLAIMED",
+      "CONSUMED"
+    ],
+    "claimBlocked": 4,
+    "writesPerformed": 1,
+    "grantStatus": "CONSUMED"
+  },
+  "final": {
+    "grantCount": 5,
+    "attemptCount": 6
+  }
+}

@@ -44,6 +44,7 @@ const ALLOWED_DATABASE_PATTERNS = [
   /^ofertano_4e_[a-z0-9_]+$/,
   /^ofertano_50ag1_(foundation|forward|partial|unknown)$/,
   /^ofertano_50ag2_(shadow|forward)$/,
+  /^ofertano_50ag3_(control_plane|forward)$/,
 ];
 
 function result(verdict, category, detail) {

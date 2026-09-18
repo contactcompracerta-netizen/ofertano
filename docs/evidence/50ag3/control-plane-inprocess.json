@@ -1,0 +1,64 @@
+{
+  "inProcessRace": [
+    "CLAIM_SUCCESS",
+    "ALREADY_CLAIMED",
+    "ALREADY_CLAIMED"
+  ],
+  "performance": {
+    "claimLatency": {
+      "samples": 40,
+      "p50Ms": 3.9082930000004126,
+      "p95Ms": 8.00802399999975,
+      "minMs": 2.767030999999406,
+      "maxMs": 12.800540999999612
+    },
+    "blockedLatency": {
+      "samples": 40,
+      "p50Ms": 4.87508600000001,
+      "p95Ms": 10.328701999999794
+    },
+    "finalizeLatency": {
+      "samples": 40,
+      "p50Ms": 4.148078000000169,
+      "p95Ms": 9.766710000000785
+    }
+  },
+  "legacyDelta": {
+    "product": 0,
+    "offer": 0,
+    "history": 0,
+    "raw": 0
+  },
+  "baseline": {
+    "product": 2,
+    "offer": 0,
+    "history": 0,
+    "raw": 0,
+    "observation": 0,
+    "component": 0,
+    "grant": 0,
+    "attempt": 0
+  },
+  "final": {
+    "product": 2,
+    "offer": 0,
+    "history": 0,
+    "raw": 0,
+    "observation": 1,
+    "component": 6,
+    "grant": 57,
+    "attempt": 8
+  },
+  "grantStates": {
+    "atom": "CLAIMED",
+    "crash": "CLAIMED",
+    "dryRun": "ARMED",
+    "identityGate": "ARMED",
+    "success": "CONSUMED",
+    "failed": "FAILED"
+  },
+  "inProcess": {
+    "claims": 1,
+    "blocked": 2
+  }
+}
