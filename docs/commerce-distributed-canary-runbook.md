@@ -51,6 +51,10 @@ npx tsx src/services/commerce-intelligence/control-plane/control-plane.integrati
 # 6-process full flow = 1 authorized write; AT-MOST-ONE across processes)
 npx tsx src/services/commerce-intelligence/control-plane/control-plane.multiprocess.test.ts
 
+# Final audit: 10×50 independent rounds (real OS processes), writes
+# docs/evidence/50ag3/control-plane-multiprocess-10-rounds.json
+npx tsx src/services/commerce-intelligence/control-plane/multiprocess-audit-10-rounds.ts
+
 # Full control-plane suite
 npm run test:commerce:control-plane
 ```
@@ -78,6 +82,25 @@ npx prisma validate
 npx prisma generate
 git diff --check
 ```
+
+Hermetic local build (no Production secrets/services; synthetic public vars only):
+
+```bash
+mkdir -p "$HOME/.cache/ofertano-audit/50ag3a-build" && chmod 700 "$HOME/.cache/ofertano-audit/50ag3a-build"
+cat > "$HOME/.cache/ofertano-audit/50ag3a-build/env" <<'EOF'
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:55433/ofertano_50ag3_control_plane"
+DIRECT_URL="postgresql://postgres:postgres@127.0.0.1:55433/ofertano_50ag3_control_plane"
+PRODUCTION_DB_READONLY="UNAVAILABLE_SAFE"
+NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:55434"
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="TEST_ONLY_publishable_key_50ag3a_audit"
+NEXT_PUBLIC_SITE_URL="http://127.0.0.1:55434"
+EOF
+chmod 600 "$HOME/.cache/ofertano-audit/50ag3a-build/env"
+set -a; . "$HOME/.cache/ofertano-audit/50ag3a-build/env"; set +a
+npm run build        # must finish 22/22 static pages with exit code 0
+```
+
+The two `NEXT_PUBLIC_SUPABASE_*` values satisfy `src/lib/supabaseClient.ts` module-load validation; prerender performs no network I/O against them. A local stub (`supabase-stub.cjs`, mission-owned port 55434, request logging) exists in the audit cache for the case where a future page fetches at build time; it must never point anywhere real.
 
 Expected gates: every 50-process race has exactly 1 `CLAIMED` winner and 49 blocked, a different winner each round, and always 0 shadow writes by losers; crash leaves `CLAIMED` (no rearm); full flow ends `CONSUMED` with exactly 1 CREATE; legacy commerce counts remain delta 0.
 

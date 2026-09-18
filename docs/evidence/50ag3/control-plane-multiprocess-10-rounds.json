@@ -1,0 +1,102 @@
+{
+  "timestamp": "2026-09-18T12:51:59.688Z",
+  "baseSha": "49a83ccec9902908c4f30a8598dc94f1c9ba50e9",
+  "rounds": [
+    {
+      "round": 1,
+      "grantId": "6c57c5da-6297-40cc-a0d6-c61da46e0d15",
+      "winner": "r01-w10",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 101829
+    },
+    {
+      "round": 2,
+      "grantId": "dd3c011a-beb4-4b58-a4e6-ab572442d419",
+      "winner": "r02-w12",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 115597
+    },
+    {
+      "round": 3,
+      "grantId": "c382f68e-c6e4-4521-9b7f-b1687fea80a4",
+      "winner": "r03-w01",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 82109
+    },
+    {
+      "round": 4,
+      "grantId": "79348f7b-2408-48a9-955a-273fe47d819b",
+      "winner": "r04-w03",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 66986
+    },
+    {
+      "round": 5,
+      "grantId": "53b7dd81-f7fb-489c-b15d-184327b10021",
+      "winner": "r05-w38",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 75944
+    },
+    {
+      "round": 6,
+      "grantId": "1922ca73-155b-46e3-a0bc-16a7f6072fa5",
+      "winner": "r06-w00",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 67271
+    },
+    {
+      "round": 7,
+      "grantId": "1ad58e89-a2c5-4c31-85a1-29bfef600f99",
+      "winner": "r07-w01",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 110891
+    },
+    {
+      "round": 8,
+      "grantId": "2e075d46-5b12-47b3-9369-3d8588c766b6",
+      "winner": "r08-w09",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 104523
+    },
+    {
+      "round": 9,
+      "grantId": "76b54099-9d93-4bb2-b6d7-7ad09c83fd83",
+      "winner": "r09-w00",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 94134
+    },
+    {
+      "round": 10,
+      "grantId": "360f7502-f493-4de5-82d6-0260f9db3383",
+      "winner": "r10-w00",
+      "claims": 1,
+      "blocked": 49,
+      "durationMs": 80184
+    }
+  ],
+  "summary": {
+    "rounds": 10,
+    "successRounds": 10,
+    "failedRounds": 0,
+    "totalProcesses": 500,
+    "totalClaims": 10,
+    "totalBlocked": 490
+  },
+  "latency": {
+    "samples": 500,
+    "minMs": 31,
+    "p50Ms": 497,
+    "p95Ms": 1218,
+    "maxMs": 4304
+  },
+  "note": "Observed local measurements (127.0.0.1:55433/ofertano_50ag3_control_plane), included worker cold boot. Not a Production SLA."
+}

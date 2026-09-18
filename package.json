@@ -21,7 +21,8 @@
     "test:commerce:control-plane": "npm run test:commerce:control-plane:unit && npm run test:commerce:control-plane:integration && npm run test:commerce:control-plane:multiprocess",
     "test:commerce:control-plane:unit": "npx tsx src/services/commerce-intelligence/control-plane/control-plane.unit.test.ts",
     "test:commerce:control-plane:integration": "npx tsx src/services/commerce-intelligence/control-plane/control-plane.integration.test.ts",
-    "test:commerce:control-plane:multiprocess": "npx tsx src/services/commerce-intelligence/control-plane/control-plane.multiprocess.test.ts"
+    "test:commerce:control-plane:multiprocess": "npx tsx src/services/commerce-intelligence/control-plane/control-plane.multiprocess.test.ts",
+    "test:commerce:control-plane:audit:10-rounds": "npx tsx src/services/commerce-intelligence/control-plane/multiprocess-audit-10-rounds.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
