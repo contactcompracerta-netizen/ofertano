@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "productionHistory": {
+    "knownChecksumDivergences": {
+      "20260824120000_analytics_intelligence": {
+        "productionChecksum": "135d793bbeb9dd11a73dd1eeb5493a10dd4859c637af8821728dfdaf13288311",
+        "repositoryChecksum": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
+        "appliedBytesRecoverable": false,
+        "policy": "KNOWN_WARNING_ONLY_NO_LEDGER_MUTATION"
+      },
+      "20260828220000_admin_push_subscription": {
+        "productionChecksum": "e513a3ead01f6687b95f382818300d4b203a4fb9e6590c4c49e16e94a43e7dd1",
+        "repositoryChecksum": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+        "appliedBytesRecoverable": false,
+        "policy": "KNOWN_WARNING_ONLY_NO_LEDGER_MUTATION"
+      }
+    },
+    "restoredExactMigrations": {
+      "20260915194500_rls_security_hardening": {
+        "productionChecksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+        "repositoryChecksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+        "exactMatch": true
+      },
+      "20260915203000_fix_rls_product_public_read": {
+        "productionChecksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+        "repositoryChecksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+        "exactMatch": true
+      }
+    }
+  }
+}

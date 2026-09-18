@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "baselineSourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
   "baselineSchemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
   "currentSchemaSHA256": "de1a7e1bba3e739d064f4bdc33879090f3ed2178472b6c53aba1881e8cab2a1d",
@@ -14,8 +14,26 @@
     "20260912000000_add_raw_marketplace_listing": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c"
   },
   "forwardMigrations": {
+    "20260915194500_rls_security_hardening": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+    "20260915203000_fix_rls_product_public_read": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
     "20260917120000_commerce_intelligence_foundation": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
     "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0"
   },
-  "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain"
+  "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain",
+  "localCompatibility": {
+    "legacyTablesSQLSHA256": "fe81e1893be6da4988e12cfdc7f2718e6982f54c64bfe0ca5a9ed4c46500e30e",
+    "sourceBlobs": {
+      "Favorite": "c38acb4275f6a4336c3745e3d6a484ff85117986",
+      "PriceAlertEvent": "dec41069809cbf22fff39baae1bbca54275f3603"
+    },
+    "roles": [
+      "anon",
+      "authenticated"
+    ],
+    "authFunction": "auth.uid()",
+    "legacyTables": [
+      "Favorite",
+      "PriceAlertEvent"
+    ]
+  }
 }

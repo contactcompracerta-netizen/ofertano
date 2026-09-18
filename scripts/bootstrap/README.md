@@ -48,3 +48,11 @@ Não regenerar `initial-schema.sql` ao adicionar migrations forward. Os sete che
 Fresh aplica o DDL legado, resolve somente baseline e executa forward com `prisma migrate deploy`. Um banco existente baseline-only deve usar `prisma migrate deploy` diretamente. B requer a ledger completa e schema equivalente; C/D são recusados. Unexpected errors retornam código não zero.
 
 Ver detalhes em [commerce-intelligence-foundation](../../docs/commerce-intelligence-foundation.md).
+
+## Manifest v3: recovered RLS and local compatibility
+
+The seven baseline files/checksums and `initial-schema.sql` remain unchanged. Four real forward migrations now run in order: RLS hardening, RLS Product policy fix, Commerce Foundation, and Commerce Canary Control Plane.
+
+Before local forward deployment, the guarded scaffold creates only the two NOLOGIN public roles, `auth.uid()`, and the two required legacy tables omitted from the pinned DDL. It rejects remote/Production/55432 targets and unsafe existing auth objects. Completed checks include legacy-aware relational diff plus RLS/grants/default privilege metadata; no runtime model is changed.
+
+`npm run test:migration-history` runs pure fail-closed tests. `npm run test:migration-history:local` exercises fresh/forward/idempotence and the local Production-like checksum rehearsal. See [migration-history-reconciliation](../../docs/migration-history-reconciliation.md) for exact hashes and the observed Prisma 7.9.0 missing-warning blocker. Production checksum exceptions are not accepted by the local bootstrap.

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "ledger": [
+    {
+      "migration_name": "20260824000000_postgresql_baseline",
+      "checksum": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 0
+    },
+    {
+      "migration_name": "20260824120000_analytics_intelligence",
+      "checksum": "135d793bbeb9dd11a73dd1eeb5493a10dd4859c637af8821728dfdaf13288311",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260828220000_admin_push_subscription",
+      "checksum": "e513a3ead01f6687b95f382818300d4b203a4fb9e6590c4c49e16e94a43e7dd1",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260905120000_price_alerts",
+      "checksum": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260907000000_social_automation",
+      "checksum": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260907220000_social_three_slots",
+      "checksum": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260912000000_add_raw_marketplace_listing",
+      "checksum": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260915194500_rls_security_hardening",
+      "checksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260915203000_fix_rls_product_public_read",
+      "checksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
+    }
+  ]
+}

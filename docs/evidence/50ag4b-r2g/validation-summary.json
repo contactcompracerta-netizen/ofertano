@@ -1,0 +1,39 @@
+{
+  "mission": "50AG.4B-R2G",
+  "missionStatus": "BLOCKED_BY_REQUIRED_PRISMA_WARNING_EXPECTATION",
+  "classification": "G — PRISMA_MISMATCH_REHEARSAL_FAILURE",
+  "readyForR2H": false,
+  "baseSHA": "452e9525aa2075d0e98fa44e67494933536aec03",
+  "featureBranch": "feature/migration-history-reconciliation-20260918",
+  "baselineUnchanged": "7/7",
+  "rlsExactGitAndForensicChecksums": "2/2",
+  "pureTests": "18/18 PASS",
+  "nativeMatrix": "34/34 PASS",
+  "targeted": {
+    "foundation": "PASS",
+    "repositoriesIntegration": "PASS",
+    "shadowPureAndLocal": "PASS",
+    "controlPlaneUnitIntegrationMultiprocess": "PASS",
+    "persist": "PASS in official matrix",
+    "offlineMlMagaluCluster": "PASS in official matrix"
+  },
+  "build": "PASS — npm run build, Turbopack, synthetic public env, local DB and local font server",
+  "toolchain": {
+    "encoding": "PASS",
+    "prismaValidate": "PASS",
+    "prismaGenerate": "PASS",
+    "diffCheck": "PASS"
+  },
+  "secretScan": "PASS",
+  "prismaWarningObserved": false,
+  "commerceOnlyApplied": "PASS",
+  "productionDBAccessed": false,
+  "productionDBChanged": false,
+  "productionEnvChanged": false,
+  "productionDeploymentCreated": false,
+  "mainChanged": false,
+  "existingBootstrapIntegrationTests": {
+    "foundation": "PASS — classification A/B/C/D and tripwire",
+    "shadow": "PASS — fresh/forward ledger/schema"
+  }
+}

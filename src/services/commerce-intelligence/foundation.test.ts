@@ -79,7 +79,7 @@ await assert.rejects(on.productIdentifierRepository.create({productId:'p',type:'
 await assert.rejects(on.productIdentifierRepository.create({productId:'p',type:'GTIN',value:'fake',normalizedValue:'fake',source:'test',confidence:'LOW'}),/INVALID_IDENTIFIER/);
 
 const manifest=JSON.parse(readFileSync('scripts/bootstrap/manifest.json','utf8'));
-assert.equal(manifest.version,2);
+assert.equal(manifest.version,3);
 assert.equal(Object.keys(manifest.baselineMigrations).length,7);
 // forwardMigrations é um inventário EXTENSÍVEL: 50AG.3+ adicionou
 // legitimamente 20260918100000_commerce_canary_control_plane. Este teste da

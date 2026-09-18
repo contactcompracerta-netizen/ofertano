@@ -28,6 +28,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { validateLocalTarget, scaffoldLocalSupabase, localEquivalenceSchema, verifyLocalRls } from "./local-supabase-compatibility.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
@@ -39,13 +40,6 @@ const PRISMA_CLI = path.join(ROOT, "node_modules/prisma/build/index.js");
 const CHECK_MODE = process.argv.includes("--check") || process.argv.includes("--dry-run");
 const sha256 = (buffer) => crypto.createHash("sha256").update(buffer).digest("hex");
 
-const ALLOWED_DATABASE_PATTERNS = [
-  /^ofertano_bootstrap_probe_n1[abc]$/,
-  /^ofertano_4e_[a-z0-9_]+$/,
-  /^ofertano_50ag1_(foundation|forward|partial|unknown)$/,
-  /^ofertano_50ag2_(shadow|forward)$/,
-  /^ofertano_50ag3_(control_plane|forward)$/,
-];
 
 function result(verdict, category, detail) {
   console.log(JSON.stringify({ verdict, category, dryRun: CHECK_MODE, ...detail }));
@@ -59,7 +53,10 @@ function abort(code, extra = {}) {
 
 function verifyManifest() {
   if (Object.keys(MANIFEST.baselineMigrations ?? {}).length !== 7) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact:"immutable baseline inventory"});
-  if (MANIFEST.version !== 2) abort("BOOTSTRAP_MANIFEST_DIVERGED");
+  if (MANIFEST.version !== 3) abort("BOOTSTRAP_MANIFEST_DIVERGED");
+  if (sha256(fs.readFileSync(path.join(HERE, "local-legacy-tables.sql"))) !== MANIFEST.localCompatibility?.legacyTablesSQLSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "local compatibility DDL" });
+  const forwardNames = Object.keys(MANIFEST.forwardMigrations);
+  if (JSON.stringify(forwardNames) !== JSON.stringify([...forwardNames].sort())) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "forward order" });
   const tracked = Object.keys({...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations}).sort();
   const actual = fs.readdirSync(path.join(ROOT, "prisma/migrations")).filter(n => fs.existsSync(path.join(ROOT, "prisma/migrations", n, "migration.sql"))).sort();
   if (JSON.stringify(tracked) !== JSON.stringify(actual)) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "migration inventory" });
@@ -77,26 +74,14 @@ function verifyManifest() {
 function resolveTarget() {
   const target = process.env.DIRECT_URL || process.env.DATABASE_URL;
   if (!target) abort("CONNECTION_ENV_ABSENT", { category: "D" });
-  let url;
-  try {
-    url = new URL(target);
-  } catch {
-    abort("CONNECTION_URL_INVALID", { category: "D" });
-  }
-  const override = (process.env.BOOTSTRAP_ALLOWED_DATABASES ?? "").split(",").map((v) => v.trim()).filter(Boolean);
-  const database = url.pathname.replace(/^\//, "");
-  const isAllowed = override.includes(database) || ALLOWED_DATABASE_PATTERNS.some((re) => re.test(database));
-  if (url.hostname !== "127.0.0.1" || url.port !== "55433") {
-    abort("LOCAL_TRIPWIRE_VIOLATED", { category: "D", host: url.hostname, port: url.port });
-  }
-  if (!isAllowed) abort("TARGET_NOT_DISPOSABLE", { category: "D", database });
+  try { validateLocalTarget(target); } catch (error) { abort(error.message, { category: "D" }); }
   return target;
 }
 
 function runPrisma(args, target) {
   const proc = spawnSync(process.execPath, [PRISMA_CLI, ...args], {
     cwd: ROOT,
-    env: { ...process.env, DIRECT_URL: target, DATABASE_URL: target },
+    env: { ...process.env, DIRECT_URL: target, DATABASE_URL: target, DOTENV_CONFIG_PATH: "/dev/null" },
     encoding: "utf8",
     timeout: 180000,
   });
@@ -171,10 +156,14 @@ async function bootstrapFresh(client, target) {
   }
 }
 
-function checkEquivalence(target, category) {
-  const diff = runPrisma(["migrate", "diff", "--from-config-datasource", "--to-schema", SCHEMA_PATH, "--exit-code"], target);
-  if (diff.status === 2) abort("SCHEMA_DIVERGENCE_DETECTED", { category });
-  if (diff.status !== 0) abort("SCHEMA_DIFF_ERROR", { category, stderr: diff.stderr.trim().slice(0, 800) });
+async function checkEquivalence(client, target, category) {
+  const schema = localEquivalenceSchema(SCHEMA_PATH);
+  try {
+    const diff = runPrisma(["migrate", "diff", "--from-config-datasource", "--to-schema", schema.file, "--exit-code"], target);
+    if (diff.status === 2) abort("SCHEMA_DIVERGENCE_DETECTED", { category });
+    if (diff.status !== 0) abort("SCHEMA_DIFF_ERROR", { category, stderr: diff.stderr.trim().slice(0, 800) });
+    await verifyLocalRls(client, target);
+  } finally { schema.cleanup(); }
 }
 
 function deployAndStatus(target) {
@@ -199,13 +188,14 @@ async function main() {
         return;
       }
       await bootstrapFresh(client, target);
+      await scaffoldLocalSupabase(client, target);
       deployAndStatus(target);
-      checkEquivalence(target, "A");
+      await checkEquivalence(client, target, "A");
       result("PASS", "A", { classification: "A", ...detail });
       return;
     }
     if (category === "B") {
-      checkEquivalence(target, "B");
+      await checkEquivalence(client, target, "B");
       if (CHECK_MODE) {
         result("PASS", "B", { classification: "B", action: "already canonical", ...detail });
         return;
@@ -223,6 +213,6 @@ async function main() {
 main().catch((error) => {
   process.exitCode = 1;
   if (!/^(BOOTSTRAP_MANIFEST_DIVERGED|HISTORICAL_CHECKSUM_DIVERGED|CONNECTION_ENV_ABSENT|CONNECTION_URL_INVALID|LOCAL_TRIPWIRE_VIOLATED|TARGET_NOT_DISPOSABLE|LOCAL_SOCKET_DIVERGED|DDL_APPLY_FAILED|PRISMA_STEP_FAILED_|SCHEMA_DIVERGENCE_DETECTED|SCHEMA_DIFF_ERROR|TARGET_SCHEMA_NOT_BOOTSTRAPPABLE)/.test(error.message)) {
-    console.error("VERSIONED_FRESH_BOOTSTRAP=UNEXPECTED_ERROR", error);
+    console.error("VERSIONED_FRESH_BOOTSTRAP=UNEXPECTED_ERROR", /^[A-Z0-9_]+$/.test(error.message) ? error.message : "SANITIZED_ERROR");
   }
 });
