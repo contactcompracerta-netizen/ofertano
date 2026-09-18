@@ -1,0 +1,469 @@
+{
+  "version": 1,
+  "rls": [
+    {
+      "tableName": "AdminPushDispatch",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AdminPushSubscription",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AnalyticsDailyAgg",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AnalyticsEvent",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AnalyticsSessionDay",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "BlogPost",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "Favorite",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "ImportQueue",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "MarketplaceConnection",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "MarketplaceOffer",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "PriceAlert",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "PriceAlertEvent",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "PriceHistory",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "Product",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "ProductOpportunity",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "RawMarketplaceListing",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "SearchRequest",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "SocialPost",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "_prisma_migrations",
+      "enabled": true,
+      "forced": false
+    }
+  ],
+  "policies": [
+    {
+      "tablename": "BlogPost",
+      "policyname": "blog_post_public_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((status = 'PUBLISHED'::\"BlogPostStatus\") AND (\"publishedAt\" <= now()))",
+      "with_check": null
+    },
+    {
+      "tablename": "Favorite",
+      "policyname": "favorite_delete_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "Favorite",
+      "policyname": "favorite_insert_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((auth.uid())::text = \"userId\")"
+    },
+    {
+      "tablename": "Favorite",
+      "policyname": "favorite_select_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "MarketplaceOffer",
+      "policyname": "marketplace_offer_public_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((active = true) AND (available = true) AND (\"matchStatus\" = 'EXACT'::\"ProductMatchStatus\") AND (status <> ALL (ARRAY['UNAVAILABLE'::\"MarketplaceOfferStatus\", 'ERROR'::\"MarketplaceOfferStatus\"])) AND (price > (0)::double precision))",
+      "with_check": null
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_delete_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_insert_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((auth.uid())::text = \"userId\")"
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_select_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_update_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": "((auth.uid())::text = \"userId\")"
+    },
+    {
+      "tablename": "Product",
+      "policyname": "product_public_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((active = true) AND (\"publicationStatus\" <> ALL (ARRAY['DRAFT'::\"ProductPublicationStatus\", 'ARCHIVED'::\"ProductPublicationStatus\"])) AND (price > (0)::double precision) AND (image IS NOT NULL) AND (image <> ''::text) AND (EXISTS ( SELECT 1\n   FROM \"MarketplaceOffer\" o\n  WHERE (o.\"productId\" = \"Product\".id)\n HAVING (count(DISTINCT o.marketplace) >= 2))))",
+      "with_check": null
+    }
+  ],
+  "grants": [
+    {
+      "tableName": "AdminPushDispatch",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AdminPushDispatch",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AdminPushSubscription",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AdminPushSubscription",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsDailyAgg",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsDailyAgg",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsEvent",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsEvent",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsSessionDay",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsSessionDay",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "BlogPost",
+      "role": "anon",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "BlogPost",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Favorite",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Favorite",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "SELECT",
+        "UPDATE"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ImportQueue",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ImportQueue",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceConnection",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceConnection",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceOffer",
+      "role": "anon",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceOffer",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlert",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlert",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "SELECT",
+        "UPDATE"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlertEvent",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlertEvent",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceHistory",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceHistory",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Product",
+      "role": "anon",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Product",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ProductOpportunity",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ProductOpportunity",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "RawMarketplaceListing",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "RawMarketplaceListing",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SearchRequest",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SearchRequest",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SocialPost",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SocialPost",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "_prisma_migrations",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "_prisma_migrations",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    }
+  ],
+  "defaultPrivileges": [],
+  "columnPrivilegeExceptions": []
+}

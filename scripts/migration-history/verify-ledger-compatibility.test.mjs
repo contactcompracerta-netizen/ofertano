@@ -42,12 +42,26 @@ test('invalid snapshot, checksum, timestamps and absent rollback field block', (
  reject(s => { delete s.ledger[0].rolled_back_at; }, 'ROLLED_BACK_MIGRATION');
 });
 
-test('Prisma rehearsal requires a real modified-migration warning, not a generic npm warning', async () => {
- const { verifyPrismaDeployRehearsal } = await import('./verify-prisma-deploy-rehearsal.mjs');
- const applied = commercePending.map(n => `Applying migration \`${n}\``).join('\n');
- assert.throws(() => verifyPrismaDeployRehearsal({ exitCode: 0, output: applied }), /WARNING_NOT_OBSERVED/);
- assert.throws(() => verifyPrismaDeployRehearsal({ exitCode: 0, output: 'npm warn unknown config\n'+applied }), /WARNING_NOT_OBSERVED/);
- assert.throws(() => verifyPrismaDeployRehearsal({ exitCode: 1, output: applied }), /NONZERO/);
- assert.throws(() => verifyPrismaDeployRehearsal({ exitCode: 0, output: 'Applying migration `unexpected`\nmodified' }), /UNEXPECTED_MIGRATION/);
- assert.equal(verifyPrismaDeployRehearsal({ exitCode: 0, output: 'Applied migration was modified\n'+applied }).verdict, 'PASS');
+for (const index of [1, 2]) {
+ test(`known divergence ${index} rejects random checksum and repository substitution`, () => {
+  reject(s => { s.ledger[index].checksum = 'e'.repeat(64); }, 'UNKNOWN_HISTORICAL_CHECKSUM');
+  const c = loadRepositoryContract(); reject(s => { s.ledger[index].checksum = c.repositoryChecksums[s.ledger[index].migration_name]; }, 'UNKNOWN_HISTORICAL_CHECKSUM');
+ });
+}
+test('missing baseline and unexpected pending block', () => {
+ reject(s => { s.ledger.splice(3, 1); }, 'REQUIRED_APPLIED_MIGRATION_MISSING');
+ const c=loadRepositoryContract();reject(s=>s.ledger.push({...s.ledger[1],migration_name:commercePending[0],checksum:c.repositoryChecksums[commercePending[0]]}),'UNEXPECTED_PENDING_SET');
+});
+for (const name of commercePending) test(`applied ${name} requires exact checksum and completed step`,()=>{
+ const c=loadRepositoryContract();
+ reject(s=>{for(const n of commercePending)s.ledger.push({...s.ledger[1],migration_name:n,checksum:n===name?'f'.repeat(64):c.repositoryChecksums[n]});},'UNEXPECTED_CHECKSUM_MISMATCH',[]);
+ reject(s=>{for(const n of commercePending)s.ledger.push({...s.ledger[1],migration_name:n,checksum:c.repositoryChecksums[n],applied_steps_count:n===name?0:1});},'APPLIED_STEPS_DIVERGED',[]);
+});
+test('coordinated compatibility and snapshot rewrite cannot redefine forensic pins',()=>{
+ const c=loadRepositoryContract(),s=clone(),name=s.ledger[1].migration_name;c.compatibility.productionHistory.knownChecksumDivergences[name].productionChecksum='a'.repeat(64);s.ledger[1].checksum='a'.repeat(64);
+ assert.throws(()=>verifyLedgerCompatibility(s,commercePending,c),/FORENSIC_PINS_CHANGED/);
+});
+test('baseline applied-step simulation and schema contract drift block',()=>{
+ reject(s=>{s.ledger[1].applied_steps_count=0;},'APPLIED_STEPS_DIVERGED');
+ const c=loadRepositoryContract();c.schemaChecksum='a'.repeat(64);assert.throws(()=>verifyLedgerCompatibility(clone(),commercePending,c),/REPOSITORY_SCHEMA_CONTRACT_CHANGED/);
 });

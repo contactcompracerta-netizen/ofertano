@@ -1,0 +1,22 @@
+{
+  "sourceMission": "50AG.4B-R2G.1",
+  "prismaVersion": "7.9.0",
+  "exactLedgerMatched": true,
+  "exactWarningObserved": {
+    "stdout": false,
+    "stderr": false,
+    "combined": false
+  },
+  "resolvedWarningObserved": {
+    "stdout": false,
+    "stderr": false,
+    "combined": false
+  },
+  "warningDifferenceObserved": false,
+  "commerceOnlyAppliedBoth": true,
+  "oldNineRowsUnchangedBoth": true,
+  "statusSignaledChecksums": false,
+  "statusSignaledPending": true,
+  "classification": "OBSERVED_BEHAVIOR_DIFFERS_FROM_DOCUMENTED_WORKFLOW",
+  "productionAccessed": false
+}

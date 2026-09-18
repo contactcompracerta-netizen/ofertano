@@ -23,7 +23,7 @@
     "test:commerce:control-plane:integration": "npx tsx src/services/commerce-intelligence/control-plane/control-plane.integration.test.ts",
     "test:commerce:control-plane:multiprocess": "npx tsx src/services/commerce-intelligence/control-plane/control-plane.multiprocess.test.ts",
     "test:commerce:control-plane:audit:10-rounds": "npx tsx src/services/commerce-intelligence/control-plane/multiprocess-audit-10-rounds.ts",
-    "test:migration-history": "node --test scripts/migration-history/verify-ledger-compatibility.test.mjs scripts/bootstrap/local-supabase-compatibility.test.mjs",
+    "test:migration-history": "node --test scripts/migration-history/*.test.mjs scripts/bootstrap/local-supabase-compatibility.test.mjs",
     "test:migration-history:local": "node scripts/bootstrap/migration-history.integration.mjs"
   },
   "dependencies": {

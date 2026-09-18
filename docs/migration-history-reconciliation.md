@@ -57,16 +57,41 @@ No service role is introduced. Baseline DDL is not regenerated. The runtime Pris
 
 The local bootstrap requires repository checksums throughout. The Production exception allowlist does not weaken local bootstrap classification. Completed databases with schema/security divergence fail; partial and unknown databases are refused. `--check` does not create compatibility objects.
 
-## Local validation and the Prisma 7.9.0 warning blocker
+## Local validation and observed Prisma 7.9.0 behavior
 
 ```sh
 npm run test:migration-history:local
 ```
 
-This requires disposable fixtures in `127.0.0.1:55433`: `ofertano_50ag4b_history_fresh`, `ofertano_50ag4b_history_forward`, and `ofertano_50ag4b_history_rehearsal`. Fresh/forward fixtures produce eleven rows: seven resolved baseline rows with zero applied steps and four genuinely deployed forwards with one step each. Existing fixture data is never reset by the test.
+This creates new disposable fixtures in `127.0.0.1:55433`: `ofertano_50ag4b_history_r2g2_fresh`, `ofertano_50ag4b_history_r2g2_forward`, and `ofertano_50ag4b_history_r2g2_rehearsal`, explicitly allowlisted for this process. Fresh/forward fixtures produce eleven rows: seven resolved baseline rows with zero applied steps and four genuinely deployed forwards with one step each. Existing fixture data is never reset by the test. For another run, supply a new `MIGRATION_HISTORY_RUN_ID` containing only lower-case letters, digits and underscores (maximum 24 characters).
 
-For the rehearsal, the test applies RLS genuinely using an isolated nine-file inventory, then explicitly changes only the two known checksums in the LOCAL disposable ledger. It compares all baseline/RLS rows before/after, counts legacy tables, and requires exactly two Commerce migrations applied and ten empty Commerce tables. No Production connection is possible through this helper.
+For the rehearsal, the test applies RLS genuinely using an isolated nine-file inventory, then explicitly simulates all nine fixture checksums and applied-step counts in the LOCAL disposable ledger. Only the initial baseline has zero steps; the other eight historical rows have one. Finished/rolled-back booleans must match the fixture exactly. This is ledger metadata simulation, not proof that the lost historical SQL was executed. It compares all baseline/RLS rows before/after, counts legacy tables, and requires exactly two Commerce migrations applied and ten empty Commerce tables. No Production connection is possible through this helper.
 
-The installed Prisma 7.9.0 exited zero and applied only the two pending Commerce migrations. Baseline/RLS rows and legacy counts were unchanged. **It emitted no modified-migration/checksum warning.** This differs from the mission's required warning expectation and is a hard blocker for declaring R2G ready for R2H. Do not synthesize a Prisma warning or treat silent `migrate deploy` as verification of historical checksums. Evidence is in `docs/evidence/50ag4b-r2g/local-validation.json`; the compatibility verifier, not Prisma deploy output, detects the two mismatches.
+The installed Prisma 7.9.0 exited zero and applied only pending Commerce. The nine historical rows and legacy counts were unchanged, with RLS/policies/grants intact. No modified-migration warning appeared in either the exact Production-like control or the resolved-baseline control from R2G.1. Changing the six noninitial baseline applied-step counts from zero to one did not change the observed warning. `migrate status` returned one for pending migrations and did not identify these checksum mismatches.
 
+The [Prisma v7 documented workflow](https://www.prisma.io/docs/orm/v7/prisma-migrate/workflows/development-and-production) describes modified-migration warnings. Classification: `OBSERVED_BEHAVIOR_DIFFERS_FROM_DOCUMENTED_WORKFLOW`; no upstream-confirmed bug is claimed. Ofertano does not depend on those warnings. The R2G/R2G.1 blocker was a requirement to observe that output; R2G.2 explicitly replaces that requirement with independent ledger verification. Original evidence remains historical evidence, not the current readiness decision.
+
+The independent verifier now also checks immutable forensic pins, pinned baseline DDL/schema hashes, and exact applied-step metadata. `forensic-pins.json` is trusted code-reviewed policy; an observed snapshot cannot redefine it. A coordinated rewrite of compatibility values and snapshot checksums is rejected. Fresh bootstrap retains its separate seven-resolved-row contract; it is not a Production ledger snapshot. After Commerce, the Production gate requires their exact checksums and one applied step each.
+
+The rehearsal execution verifier checks exit zero, exactly the two Commerce applications in order, and the positive success message. Its warning boolean is telemetry only. Silence, unexpected/historical/repeated applications, nonzero exit, or missing success cannot pass. `checksumSafetyAuthority` is `INDEPENDENT_LEDGER_VERIFIER`.
+
+## Five independent responsibilities
+
+1. Repository integrity: verify manifest, exact eleven migration file hashes, immutable forensic pins, baseline DDL, and current schema hash.
+2. Production ledger integrity: the future separately authorized runner reads `_prisma_migrations` read-only and passes the JSON snapshot to `verify-ledger-compatibility.mjs`. Exactly the two pinned exceptions, exact RLS and step metadata, no unknown/duplicate/unfinished/rolled-back rows, and explicit pending are required.
+3. Database state safety: observed flags must explicitly be boolean false for all eleven required flags, token-presence false, all ten Commerce tables absent, no blockers, valid counts for all eighteen legacy application tables, and exact nineteen-table RLS/ten-policy/effective-grant/default-privilege state. Policy qualifiers and owner checks are compared, not just policy names.
+4. Prisma execution: only after gates 1–3 pass, run one controlled `migrate deploy`. Prisma executes pending SQL; its output is not checksum verification.
+5. Post-migration proof: re-read ledger, preserve all nine historical rows, require exact Commerce checksums/steps, ten tables, legacy count delta zero, intact security state, and the separately authorized future smoke checks.
+
+## Pure predeploy authorization and snapshot limits
+
+`authorize-commerce-migrate-deploy.mjs` performs one pure decision across ledger, allowed pending, trusted repository contract, observed flag snapshot and schema-state snapshot. It never connects, deploys, resolves, or mutates. Missing, malformed, ambiguous, or unsafe fields produce `DENIED`. Only the exact Foundation + Control Plane pending set can produce `AUTHORIZED`.
+
+Expected Production identity is an explicit **trusted release input**, supplied by the audited future runner: environment and target environment production, forensic project id `prj_KcIMFLniTVvZGIGh1OCIkSE8SsND`, and the forty-character audited delivery SHA. Never derive the expected SHA from the observed identity or allow observations to supply their own expectation. The observed target must match that entire input exactly. In local tests these identity/flag fields are clearly synthetic; actual SQL still uses the local-only connection guard. This pure result does not authorize Production work in this mission.
+
+The schema snapshot contains `rls`, canonical `policies` (including qualifiers and roles), effective `grants` including grant options and MAINTAIN, `columnPrivilegeExceptions` for effective access beyond table grants, relevant `defaultPrivileges`, the ten-table presence map, unfinished/rolled-back counts, blockers, and eighteen legacy counts. `expected-security-state.json` records the canonical R2F metadata for the nineteen managed tables. Pre-existing unrelated Supabase objects are outside this managed-table contract; a future runner must bind all observations to its verified target and perform its separate broader state checks. Snapshot builders must collect actual metadata and explicitly normalize flags, never replace missing observations with false or zero.
+
+A read-only snapshot and a pure authorization decision do not make deploy mathematically atomic relative to all writers. The future runner must collect a consistent read-only preflight immediately before execution, use one controlled instance with no minutes-long delay, keep Prisma advisory locking enabled, and verify the ledger/security/counts again afterward. This module does not itself create a DB lock or an end-to-end transaction.
+
+Versioned current evidence: `docs/evidence/50ag4b-r2g2/summary.json` and `local-validation.json`. R2G.1 evidence preserves both silent controls; its behavior observations remain valid.
 No Production migration, environment change, code deployment, staged deployment, alias operation, merge to main, or R2H/R3 execution is authorized by these local proofs.

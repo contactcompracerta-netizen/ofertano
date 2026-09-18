@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "projectId": "prj_KcIMFLniTVvZGIGh1OCIkSE8SsND",
+  "repositoryMigrationChecksums": {
+    "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+    "20260824120000_analytics_intelligence": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
+    "20260828220000_admin_push_subscription": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+    "20260905120000_price_alerts": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+    "20260907000000_social_automation": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+    "20260907220000_social_three_slots": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+    "20260912000000_add_raw_marketplace_listing": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
+    "20260915194500_rls_security_hardening": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+    "20260915203000_fix_rls_product_public_read": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+    "20260917120000_commerce_intelligence_foundation": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
+    "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0"
+  },
+  "knownDivergences": {
+    "20260824120000_analytics_intelligence": {
+      "productionChecksum": "135d793bbeb9dd11a73dd1eeb5493a10dd4859c637af8821728dfdaf13288311",
+      "repositoryChecksum": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
+      "appliedBytesRecoverable": false,
+      "policy": "KNOWN_WARNING_ONLY_NO_LEDGER_MUTATION"
+    },
+    "20260828220000_admin_push_subscription": {
+      "productionChecksum": "e513a3ead01f6687b95f382818300d4b203a4fb9e6590c4c49e16e94a43e7dd1",
+      "repositoryChecksum": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+      "appliedBytesRecoverable": false,
+      "policy": "KNOWN_WARNING_ONLY_NO_LEDGER_MUTATION"
+    }
+  },
+  "restoredExactMigrations": {
+    "20260915194500_rls_security_hardening": {
+      "productionChecksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+      "repositoryChecksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+      "exactMatch": true
+    },
+    "20260915203000_fix_rls_product_public_read": {
+      "productionChecksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+      "repositoryChecksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+      "exactMatch": true
+    }
+  },
+  "baselineDDLChecksum": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
+  "schemaChecksum": "de1a7e1bba3e739d064f4bdc33879090f3ed2178472b6c53aba1881e8cab2a1d",
+  "productionAppliedSteps": {
+    "20260824000000_postgresql_baseline": 0,
+    "20260824120000_analytics_intelligence": 1,
+    "20260828220000_admin_push_subscription": 1,
+    "20260905120000_price_alerts": 1,
+    "20260907000000_social_automation": 1,
+    "20260907220000_social_three_slots": 1,
+    "20260912000000_add_raw_marketplace_listing": 1,
+    "20260915194500_rls_security_hardening": 1,
+    "20260915203000_fix_rls_product_public_read": 1
+  }
+}

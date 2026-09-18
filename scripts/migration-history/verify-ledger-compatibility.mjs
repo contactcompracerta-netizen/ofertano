@@ -1,5 +1,6 @@
 /** Pure Production-ledger gate. Reads snapshots/files only; never connects or mutates. */
 import fs from 'node:fs';
+import pins from './forensic-pins.json' with { type: 'json' };
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,7 +17,7 @@ export function loadRepositoryContract() {
   const compatibility = JSON.parse(fs.readFileSync(path.join(root, 'scripts/migration-history/production-ledger-compatibility.json'), 'utf8'));
   const names = fs.readdirSync(path.join(root, 'prisma/migrations')).filter(n => fs.existsSync(path.join(root, 'prisma/migrations', n, 'migration.sql'))).sort();
   const repositoryChecksums = Object.fromEntries(names.map(n => [n, sha(fs.readFileSync(path.join(root, 'prisma/migrations', n, 'migration.sql')))]));
-  return { manifest, compatibility, repositoryChecksums };
+  return { manifest, compatibility, repositoryChecksums, baselineDDLChecksum: sha(fs.readFileSync(path.join(root, 'scripts/bootstrap/initial-schema.sql'))), schemaChecksum: sha(fs.readFileSync(path.join(root, 'prisma/schema.prisma'))) };
 }
 export function verifyLedgerCompatibility(snapshot, allowedPending, contract = loadRepositoryContract()) {
   if (!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.ledger)) fail('INVALID_SNAPSHOT');
@@ -24,6 +25,8 @@ export function verifyLedgerCompatibility(snapshot, allowedPending, contract = l
   const { manifest, compatibility, repositoryChecksums } = contract;
   if (manifest.version !== 3 || compatibility.version !== 1) fail('CONTRACT_VERSION_MISMATCH');
   const expected = { ...manifest.baselineMigrations, ...manifest.forwardMigrations };
+  if (!same(expected, pins.repositoryMigrationChecksums) || !same(compatibility.productionHistory?.knownChecksumDivergences, pins.knownDivergences) || !same(compatibility.productionHistory?.restoredExactMigrations, pins.restoredExactMigrations)) fail('FORENSIC_PINS_CHANGED');
+  if (manifest.baselineDDLHash !== pins.baselineDDLChecksum || contract.baselineDDLChecksum !== pins.baselineDDLChecksum || manifest.currentSchemaSHA256 !== pins.schemaChecksum || contract.schemaChecksum !== pins.schemaChecksum) fail('REPOSITORY_SCHEMA_CONTRACT_CHANGED');
   const baselineNames = ['20260824000000_postgresql_baseline', ...knownNames, '20260905120000_price_alerts', '20260907000000_social_automation', '20260907220000_social_three_slots', '20260912000000_add_raw_marketplace_listing'];
   if (!same(Object.keys(manifest.baselineMigrations).sort(), baselineNames.sort()) || !same(Object.keys(manifest.forwardMigrations), [...rlsNames, ...commercePending])) fail('CANONICAL_INVENTORY_CHANGED');
   if (!same(Object.keys(repositoryChecksums).sort(), Object.keys(expected).sort())) fail('REPOSITORY_INVENTORY_MISMATCH');
@@ -48,7 +51,8 @@ export function verifyLedgerCompatibility(snapshot, allowedPending, contract = l
     seen.add(name);
     if (row.rolled_back_at !== null) fail('ROLLED_BACK_MIGRATION');
     if (!row.finished_at) fail('UNFINISHED_MIGRATION');
-    if (!Number.isFinite(Date.parse(row.started_at)) || !Number.isFinite(Date.parse(row.finished_at)) || Date.parse(row.finished_at) < Date.parse(row.started_at) || !Number.isInteger(row.applied_steps_count) || row.applied_steps_count < 0) fail('INVALID_LEDGER_ROW');
+    if (typeof row.started_at !== 'string' || typeof row.finished_at !== 'string' || !Number.isFinite(Date.parse(row.started_at)) || !Number.isFinite(Date.parse(row.finished_at)) || Date.parse(row.finished_at) < Date.parse(row.started_at) || !Number.isInteger(row.applied_steps_count) || row.applied_steps_count < 0) fail('INVALID_LEDGER_ROW');
+    if (row.applied_steps_count !== (pins.productionAppliedSteps[name] ?? 1)) fail('APPLIED_STEPS_DIVERGED');
     const known = history.knownChecksumDivergences[name];
     if (known) {
       // Require the forensic checksum itself; a silently edited ledger is not accepted.
