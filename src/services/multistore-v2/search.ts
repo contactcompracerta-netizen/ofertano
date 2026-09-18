@@ -1269,10 +1269,27 @@ async function acquireOneMarketplace(
             ].map((item) => normalizeMultistoreText(item).trim()).filter(Boolean)),
           )
         : basePlan;
+      const attemptGrantMs = Math.min(
+        budget.fetchMs,
+        Math.max(hardBudgetMs, 1),
+      );
       for (const [index, searchQuery] of effectivePlan.entries()) {
         if (isolated.signal.aborted || globalDeadline.expired()) {
           timedOut = true;
           abortedByGlobal = globalDeadline.expired();
+          break;
+        }
+
+        // Nao lancar uma variante que nao consiga cobrir nem um unico
+        // grant de fetch antes do deadline do marketplace: a tentativa
+        // seria abortada no meio do voo, ninguem a aguardaria e o trabalho
+        // ficaria pendurado alem do deadline. So valem quando o orcamento
+        // comporta multiplas tentativas de qualquer forma.
+        if (
+          hardBudgetMs > attemptGrantMs &&
+          trace.startedAt! + hardBudgetMs - Date.now() < attemptGrantMs
+        ) {
+          timedOut = true;
           break;
         }
 

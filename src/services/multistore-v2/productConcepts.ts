@@ -817,14 +817,34 @@ const COMMERCIAL_FLUFF = new Set([
   "frete",
 ]);
 
+// Memoização local bounded: normalizeConceptText e contentTokens são funções
+// puras chamadas dezenas de vezes por candidato dentro do pipeline de relevância
+// (classifyProductConcept → familyScore/headEvidenceWidth/hasMoreSpecificChildHit).
+// Recomputar normalizeConceptText a cada comparação tornava a classificação
+// O(famílias × frases × tokens) apenas para re-derivar os MESMOS tokens do texto.
+// O cache é por-valor (strings imutáveis) e limitado para impedir crescimento
+// ilimitado em produção; limpar o cache não altera nenhum resultado observável.
+const CONCEPT_TEXT_CACHE = new Map<string, string>();
+const CONCEPT_TOKENS_CACHE = new Map<string, string[]>();
+const CONCEPT_CACHE_LIMIT = 50_000;
+
 export function normalizeConceptText(value: string): string {
-  return value
+  const cached = CONCEPT_TEXT_CACHE.get(value);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const result = value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+  if (CONCEPT_TEXT_CACHE.size >= CONCEPT_CACHE_LIMIT) {
+    CONCEPT_TEXT_CACHE.clear();
+  }
+  CONCEPT_TEXT_CACHE.set(value, result);
+  return result;
 }
 
 export function matchesConceptLexeme(candidateToken: string, conceptToken: string): boolean {
@@ -849,9 +869,18 @@ function tokenBoundaryMatch(text: string, token: string): boolean {
 }
 
 function contentTokens(text: string): string[] {
-  return normalizeConceptText(text)
+  const cached = CONCEPT_TOKENS_CACHE.get(text);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const tokens = normalizeConceptText(text)
     .split(" ")
     .filter((token) => token.length > 0 && !FUNCTION_WORDS.has(token));
+  if (CONCEPT_TOKENS_CACHE.size >= CONCEPT_CACHE_LIMIT) {
+    CONCEPT_TOKENS_CACHE.clear();
+  }
+  CONCEPT_TOKENS_CACHE.set(text, tokens);
+  return tokens;
 }
 
 function phraseAppears(normalized: string, phrase: string): boolean {
@@ -1221,7 +1250,22 @@ function headStartAhead(tokens: string[], fromIndex: number): number {
  * desconhecido sem cabeca de produto adiante — isso seria
  * host/contexto, não o sold item.
  */
+const SOLD_NUCLEUS_CACHE = new Map<string, SoldItemNucleus>();
+
 export function extractSoldItemNucleus(text: string): SoldItemNucleus {
+  const cached = SOLD_NUCLEUS_CACHE.get(text);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const computed = extractSoldItemNucleusUncached(text);
+  if (SOLD_NUCLEUS_CACHE.size >= CONCEPT_CACHE_LIMIT) {
+    SOLD_NUCLEUS_CACHE.clear();
+  }
+  SOLD_NUCLEUS_CACHE.set(text, computed);
+  return computed;
+}
+
+function extractSoldItemNucleusUncached(text: string): SoldItemNucleus {
   const tokens = normalizeConceptText(text)
     .split(" ")
     .filter((token) => token.length > 0);
@@ -1421,7 +1465,33 @@ function familyScore(
   return { score, index };
 }
 
+// Memoização por texto de classifyProductConcept (função pura sobre o input,
+// dependente apenas das constantes de módulo). Consumidores apenas leem
+// id/confidence/matchedPhrase; devolvemos cópia rasa para proteger o cache.
+const CONCEPT_CLASS_CACHE = new Map<string, {
+  id: ProductConceptId;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE";
+  matchedPhrase: string | null;
+}>();
+
 export function classifyProductConcept(text: string): {
+  id: ProductConceptId;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE";
+  matchedPhrase: string | null;
+} {
+  const cached = CONCEPT_CLASS_CACHE.get(text);
+  if (cached !== undefined) {
+    return { ...cached };
+  }
+  const computed = classifyProductConceptUncached(text);
+  if (CONCEPT_CLASS_CACHE.size >= CONCEPT_CACHE_LIMIT) {
+    CONCEPT_CLASS_CACHE.clear();
+  }
+  CONCEPT_CLASS_CACHE.set(text, computed);
+  return { ...computed };
+}
+
+function classifyProductConceptUncached(text: string): {
   id: ProductConceptId;
   confidence: "HIGH" | "MEDIUM" | "LOW" | "NONE";
   matchedPhrase: string | null;

@@ -2,42 +2,42 @@
   "freshLedger": [
     {
       "migration_name": "20260824000000_postgresql_baseline",
-      "finished_at": "2026-09-17T23:14:04.810Z",
+      "finished_at": "2026-09-18T00:32:03.343Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260824120000_analytics_intelligence",
-      "finished_at": "2026-09-17T23:14:08.566Z",
+      "finished_at": "2026-09-18T00:32:08.287Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260828220000_admin_push_subscription",
-      "finished_at": "2026-09-17T23:14:12.371Z",
+      "finished_at": "2026-09-18T00:32:13.361Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260905120000_price_alerts",
-      "finished_at": "2026-09-17T23:14:16.244Z",
+      "finished_at": "2026-09-18T00:32:18.236Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260907000000_social_automation",
-      "finished_at": "2026-09-17T23:14:20.111Z",
+      "finished_at": "2026-09-18T00:32:23.081Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260907220000_social_three_slots",
-      "finished_at": "2026-09-17T23:14:24.038Z",
+      "finished_at": "2026-09-18T00:32:28.115Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260912000000_add_raw_marketplace_listing",
-      "finished_at": "2026-09-17T23:14:27.885Z",
+      "finished_at": "2026-09-18T00:32:32.933Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260917120000_commerce_intelligence_foundation",
-      "finished_at": "2026-09-17T23:14:31.884Z",
+      "finished_at": "2026-09-18T00:32:38.253Z",
       "applied_steps_count": 1
     }
   ],
@@ -45,57 +45,57 @@
     {
       "migration_name": "20260824000000_postgresql_baseline",
       "checksum": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
-      "finished_at": "2026-09-17T22:57:39.752Z",
-      "started_at": "2026-09-17T22:57:39.752Z",
+      "finished_at": "2026-09-18T00:32:57.947Z",
+      "started_at": "2026-09-18T00:32:57.947Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260824120000_analytics_intelligence",
       "checksum": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
-      "finished_at": "2026-09-17T22:57:54.447Z",
-      "started_at": "2026-09-17T22:57:54.447Z",
+      "finished_at": "2026-09-18T00:33:02.334Z",
+      "started_at": "2026-09-18T00:33:02.334Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260828220000_admin_push_subscription",
       "checksum": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
-      "finished_at": "2026-09-17T22:58:04.432Z",
-      "started_at": "2026-09-17T22:58:04.432Z",
+      "finished_at": "2026-09-18T00:33:06.437Z",
+      "started_at": "2026-09-18T00:33:06.437Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260905120000_price_alerts",
       "checksum": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
-      "finished_at": "2026-09-17T22:58:08.242Z",
-      "started_at": "2026-09-17T22:58:08.242Z",
+      "finished_at": "2026-09-18T00:33:10.479Z",
+      "started_at": "2026-09-18T00:33:10.479Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260907000000_social_automation",
       "checksum": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
-      "finished_at": "2026-09-17T22:58:12.418Z",
-      "started_at": "2026-09-17T22:58:12.418Z",
+      "finished_at": "2026-09-18T00:33:14.904Z",
+      "started_at": "2026-09-18T00:33:14.904Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260907220000_social_three_slots",
       "checksum": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
-      "finished_at": "2026-09-17T22:58:16.391Z",
-      "started_at": "2026-09-17T22:58:16.391Z",
+      "finished_at": "2026-09-18T00:33:19.025Z",
+      "started_at": "2026-09-18T00:33:19.025Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260912000000_add_raw_marketplace_listing",
       "checksum": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
-      "finished_at": "2026-09-17T22:58:21.383Z",
-      "started_at": "2026-09-17T22:58:21.383Z",
+      "finished_at": "2026-09-18T00:33:23.167Z",
+      "started_at": "2026-09-18T00:33:23.167Z",
       "applied_steps_count": 0
     },
     {
       "migration_name": "20260917120000_commerce_intelligence_foundation",
       "checksum": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
-      "finished_at": "2026-09-17T22:58:27.151Z",
-      "started_at": "2026-09-17T22:58:26.957Z",
+      "finished_at": "2026-09-18T00:33:28.070Z",
+      "started_at": "2026-09-18T00:33:27.836Z",
       "applied_steps_count": 1
     }
   ],
@@ -104,6 +104,5 @@
   "schemaSHA256": "d5c9d7e790626cce93d40b80cf548859942827e6c7d7053d58ca365efc5698fc",
   "forwardMigrationNames": [
     "20260917120000_commerce_intelligence_foundation"
-  ],
-  "postCanarySchemaEquivalent": true
+  ]
 }

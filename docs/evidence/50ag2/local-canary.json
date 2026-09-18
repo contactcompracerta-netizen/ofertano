@@ -226,10 +226,10 @@
     "writesPerformed": 0,
     "deduped": false,
     "conflict": false,
-    "durationMs": 136.88463000000002,
+    "durationMs": 169.32967999999983,
     "timings": {
-      "identityMs": 122.15791300000001,
-      "purePipelineMs": 13.846230000000105,
+      "identityMs": 140.6903140000004,
+      "purePipelineMs": 25.535053000000516,
       "dbWriteMs": 0
     }
   },
@@ -330,7 +330,7 @@
         "inputFingerprintVersion": "v2",
         "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
       },
-      "id": "1601c05a-fcd3-49dd-830b-fbecc6deda55"
+      "id": "16799ca8-9762-4cb1-ad02-32d5e5a0a67c"
     },
     "priceTruth": {
       "value": "100.000000",
@@ -416,11 +416,11 @@
     "writesPerformed": 1,
     "deduped": false,
     "conflict": false,
-    "durationMs": 279.73573199999964,
+    "durationMs": 355.8404959999998,
     "timings": {
-      "identityMs": 21.3059089999997,
-      "purePipelineMs": 1.8181509999999435,
-      "dbWriteMs": 255.5534950000001
+      "identityMs": 43.3530839999994,
+      "purePipelineMs": 5.434634000000187,
+      "dbWriteMs": 301.9209129999999
     }
   },
   "dedupe": {
@@ -520,7 +520,7 @@
         "inputFingerprintVersion": "v2",
         "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
       },
-      "id": "1601c05a-fcd3-49dd-830b-fbecc6deda55"
+      "id": "16799ca8-9762-4cb1-ad02-32d5e5a0a67c"
     },
     "priceTruth": {
       "value": "100.000000",
@@ -606,11 +606,11 @@
     "writesPerformed": 0,
     "deduped": true,
     "conflict": false,
-    "durationMs": 46.59927300000027,
+    "durationMs": 138.0515400000004,
     "timings": {
-      "identityMs": 16.248481000000083,
-      "purePipelineMs": 2.768145999999888,
-      "dbWriteMs": 26.63489699999991
+      "identityMs": 46.36105099999986,
+      "purePipelineMs": 10.284790000000612,
+      "dbWriteMs": 79.85734899999989
     }
   },
   "irrelevant": {
@@ -710,7 +710,7 @@
         "inputFingerprintVersion": "v2",
         "inputFingerprint": "v2:862eaec6f5521583ce0c5aa157110f3d3b937db6eb650dabac6ebbba1ab80846"
       },
-      "id": "1601c05a-fcd3-49dd-830b-fbecc6deda55"
+      "id": "16799ca8-9762-4cb1-ad02-32d5e5a0a67c"
     },
     "priceTruth": {
       "value": "100.000000",
@@ -796,11 +796,11 @@
     "writesPerformed": 0,
     "deduped": true,
     "conflict": false,
-    "durationMs": 46.762917000000016,
+    "durationMs": 80.52185800000007,
     "timings": {
-      "identityMs": 18.094390999999632,
-      "purePipelineMs": 3.131894999999986,
-      "dbWriteMs": 24.85965400000032
+      "identityMs": 32.75200399999994,
+      "purePipelineMs": 5.734782999999879,
+      "dbWriteMs": 41.23955300000034
     }
   },
   "exhausted": {
@@ -985,11 +985,11 @@
     "writesPerformed": 0,
     "deduped": false,
     "conflict": false,
-    "durationMs": 34.94137300000011,
+    "durationMs": 67.80758900000001,
     "timings": {
-      "identityMs": 14.18064400000003,
-      "purePipelineMs": 2.191128999999819,
-      "dbWriteMs": 18.05643999999984
+      "identityMs": 26.415273999999954,
+      "purePipelineMs": 3.3086990000001606,
+      "dbWriteMs": 37.47777099999985
     }
   },
   "changed": {
@@ -1089,7 +1089,7 @@
         "inputFingerprintVersion": "v2",
         "inputFingerprint": "v2:fa3ab7195c763f61acf5a9ead9d3700f500563b3c6707817ee4f6d6c3beb53c2"
       },
-      "id": "1d6454b8-7d7e-4b13-9c68-852cb7af84c9"
+      "id": "484cc6ce-17dd-475f-b34f-7eec2a88e50c"
     },
     "priceTruth": {
       "value": "90.000000",
@@ -1175,11 +1175,11 @@
     "writesPerformed": 1,
     "deduped": false,
     "conflict": false,
-    "durationMs": 113.59795899999972,
+    "durationMs": 237.15098599999965,
     "timings": {
-      "identityMs": 11.939742999999908,
-      "purePipelineMs": 1.5756540000002133,
-      "dbWriteMs": 99.56122500000038
+      "identityMs": 43.847271999999975,
+      "purePipelineMs": 5.883542999999918,
+      "dbWriteMs": 185.21030000000064
     }
   },
   "races": [
@@ -1280,7 +1280,7 @@
           "inputFingerprintVersion": "v2",
           "inputFingerprint": "v2:be39a5c73e7f36484646086d786c494cb09c2400abd27e99035d3b6b422a9296"
         },
-        "id": "7fd85572-1a97-4c40-aaff-62077c44cc4d"
+        "id": "99d869bc-4e1e-48da-bd59-17e60989539e"
       },
       "priceTruth": {
         "value": "82.000000",
@@ -1366,11 +1366,11 @@
       "writesPerformed": 1,
       "deduped": false,
       "conflict": false,
-      "durationMs": 107.8437700000004,
+      "durationMs": 182.38318400000026,
       "timings": {
-        "identityMs": 14.748254000000088,
-        "purePipelineMs": 1.4085030000001098,
-        "dbWriteMs": 90.97595300000057
+        "identityMs": 58.4443969999993,
+        "purePipelineMs": 1.9910140000001775,
+        "dbWriteMs": 120.90810000000056
       }
     },
     {
@@ -1470,7 +1470,7 @@
           "inputFingerprintVersion": "v2",
           "inputFingerprint": "v2:be39a5c73e7f36484646086d786c494cb09c2400abd27e99035d3b6b422a9296"
         },
-        "id": "7fd85572-1a97-4c40-aaff-62077c44cc4d"
+        "id": "99d869bc-4e1e-48da-bd59-17e60989539e"
       },
       "priceTruth": {
         "value": "82.000000",
@@ -1556,11 +1556,11 @@
       "writesPerformed": 0,
       "deduped": true,
       "conflict": false,
-      "durationMs": 123.15789099999984,
+      "durationMs": 218.70749100000012,
       "timings": {
-        "identityMs": 64.08880499999987,
-        "purePipelineMs": 1.6429619999998977,
-        "dbWriteMs": 57.05485099999987
+        "identityMs": 87.41015100000004,
+        "purePipelineMs": 1.8942250000000058,
+        "dbWriteMs": 128.92585099999997
       }
     }
   ],
@@ -1746,11 +1746,11 @@
     "writesPerformed": 0,
     "deduped": false,
     "conflict": false,
-    "durationMs": 162.6963880000003,
+    "durationMs": 202.14881699999933,
     "timings": {
-      "identityMs": 10.865681000000222,
-      "purePipelineMs": 1.4771719999998822,
-      "dbWriteMs": 149.90147199999956
+      "identityMs": 14.14459700000043,
+      "purePipelineMs": 1.9611860000004526,
+      "dbWriteMs": 185.40756899999997
     }
   },
   "conflictDry": {
@@ -1931,10 +1931,10 @@
     "writesPerformed": 0,
     "deduped": false,
     "conflict": true,
-    "durationMs": 18.903432999999495,
+    "durationMs": 12.142447000000175,
     "timings": {
-      "identityMs": 16.69456699999955,
-      "purePipelineMs": 1.759328000000096,
+      "identityMs": 10.570894999999837,
+      "purePipelineMs": 1.2124089999997523,
       "dbWriteMs": 0
     }
   },
@@ -2116,10 +2116,10 @@
     "writesPerformed": 0,
     "deduped": false,
     "conflict": true,
-    "durationMs": 17.833152999999584,
+    "durationMs": 12.304833999999573,
     "timings": {
-      "identityMs": 15.634356999999909,
-      "purePipelineMs": 1.6523989999996047,
+      "identityMs": 10.299777000000176,
+      "purePipelineMs": 1.6578740000004473,
       "dbWriteMs": 0
     }
   },
@@ -2301,11 +2301,11 @@
     "writesPerformed": 1,
     "deduped": false,
     "conflict": true,
-    "durationMs": 35.51396600000044,
+    "durationMs": 42.52104799999961,
     "timings": {
-      "identityMs": 9.169708999999784,
-      "purePipelineMs": 1.4753189999992173,
-      "dbWriteMs": 24.33286699999917
+      "identityMs": 9.099526999999398,
+      "purePipelineMs": 1.795589000000291,
+      "dbWriteMs": 31.03871100000015
     }
   },
   "legacyOutputDeepEqual": true,
@@ -2364,7 +2364,7 @@
         "provenance": {
           "sourceFlow": "multistore-v2-post-barrier",
           "shadowVersion": "50ag2-v1",
-          "capturedAt": "2026-09-17T23:14:48.472Z",
+          "capturedAt": "2026-09-18T00:34:00.197Z",
           "marketplace": "AMAZON",
           "externalId": "SHADOW-ASIN1",
           "identityMethod": "validated-gtin",
@@ -2455,10 +2455,10 @@
       "writesPerformed": 0,
       "deduped": false,
       "conflict": false,
-      "durationMs": 18.609243999999308,
+      "durationMs": 11.049238999999943,
       "timings": {
-        "identityMs": 17.21056099999987,
-        "purePipelineMs": 1.0348319999993691,
+        "identityMs": 9.674882999999681,
+        "purePipelineMs": 0.9997130000001562,
         "dbWriteMs": 0
       }
     },
@@ -2516,14 +2516,14 @@
         "provenance": {
           "sourceFlow": "multistore-v2-post-barrier",
           "shadowVersion": "50ag2-v1",
-          "capturedAt": "2026-09-17T23:14:49.510Z",
+          "capturedAt": "2026-09-18T00:34:00.247Z",
           "marketplace": "AMAZON",
           "externalId": "SHADOW-ASIN1",
           "identityMethod": "validated-gtin",
           "inputFingerprintVersion": "v2",
           "inputFingerprint": "v2:d8ee089565509b0db2a4da08d75d5780c153769018727111c2b2270eacfaab18"
         },
-        "id": "c23e0695-a325-4374-85ac-e1ec8d262879"
+        "id": "072b3bb4-7c74-41b5-8934-6709907542ce"
       },
       "priceTruth": {
         "value": "100.000000",
@@ -2608,11 +2608,11 @@
       "writesPerformed": 1,
       "deduped": false,
       "conflict": false,
-      "durationMs": 133.75537299999996,
+      "durationMs": 134.72202199999992,
       "timings": {
-        "identityMs": 10.366400999999314,
-        "purePipelineMs": 0.7943269999996119,
-        "dbWriteMs": 122.06992600000012
+        "identityMs": 22.34673600000042,
+        "purePipelineMs": 1.004914000000099,
+        "dbWriteMs": 110.830919
       }
     }
   ],
@@ -2621,10 +2621,10 @@
   ],
   "performance": {
     "purePipelineSamples": 200,
-    "p50Ms": 1.0115679999998974,
-    "p95Ms": 1.877306999999746,
-    "dbWriteMs": 255.5534950000001,
-    "dedupeMs": 26.63489699999991
+    "p50Ms": 1.517319999999927,
+    "p95Ms": 6.45261599999958,
+    "dbWriteMs": 301.9209129999999,
+    "dedupeMs": 79.85734899999989
   },
   "events": [
     {
@@ -2632,7 +2632,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 1.047088000000258,
+      "durationMs": 1.5486170000003767,
       "writeCount": 0
     },
     {
@@ -2640,7 +2640,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "SHADOW_DISABLED",
-      "durationMs": 1.380399000000125,
+      "durationMs": 2.0022820000003776,
       "writeCount": 0
     },
     {
@@ -2648,7 +2648,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.38321799999994255,
+      "durationMs": 0.41140100000029634,
       "writeCount": 0
     },
     {
@@ -2656,7 +2656,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "MARKETPLACE_NOT_ALLOWED",
-      "durationMs": 1.1453559999999925,
+      "durationMs": 1.564487999999983,
       "writeCount": 0
     },
     {
@@ -2664,7 +2664,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.09185999999999694,
+      "durationMs": 0.2192109999996319,
       "writeCount": 0
     },
     {
@@ -2672,7 +2672,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "EXTERNAL_ID_NOT_ALLOWED",
-      "durationMs": 0.2716099999997823,
+      "durationMs": 0.5768589999997857,
       "writeCount": 0
     },
     {
@@ -2680,7 +2680,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.07007999999996173,
+      "durationMs": 0.19728699999996024,
       "writeCount": 0
     },
     {
@@ -2688,7 +2688,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "WRITE_BUDGET_ZERO",
-      "durationMs": 0.12237699999968754,
+      "durationMs": 0.31969799999933457,
       "writeCount": 0
     },
     {
@@ -2696,7 +2696,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.0828639999999723,
+      "durationMs": 0.14546599999994214,
       "writeCount": 0
     },
     {
@@ -2706,7 +2706,7 @@
       "reason": "DRY_RUN",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 136.81973900000003,
+      "durationMs": 169.2465060000004,
       "writeCount": 0
     },
     {
@@ -2714,7 +2714,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.1609889999999723,
+      "durationMs": 0.34036599999944883,
       "writeCount": 0
     },
     {
@@ -2724,7 +2724,7 @@
       "reason": "IDENTITY_NOT_EXACT",
       "identityConfidence": "HIGH",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 26.617428999999902,
+      "durationMs": 67.45468999999957,
       "writeCount": 0
     },
     {
@@ -2732,7 +2732,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.14320600000019112,
+      "durationMs": 0.17824199999995471,
       "writeCount": 0
     },
     {
@@ -2742,7 +2742,7 @@
       "reason": "IDENTITY_NOT_EXACT",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:ba66a3371d42",
-      "durationMs": 19.51669400000037,
+      "durationMs": 64.18215899999996,
       "writeCount": 0
     },
     {
@@ -2750,7 +2750,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.2393609999999171,
+      "durationMs": 0.20609999999942374,
       "writeCount": 0
     },
     {
@@ -2760,7 +2760,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 279.66436099999964,
+      "durationMs": 355.7464949999994,
       "writeCount": 1
     },
     {
@@ -2768,7 +2768,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.2254370000000563,
+      "durationMs": 0.18587600000046223,
       "writeCount": 0
     },
     {
@@ -2778,7 +2778,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 46.54240800000025,
+      "durationMs": 137.88611800000035,
       "writeCount": 0
     },
     {
@@ -2786,7 +2786,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.23158799999964685,
+      "durationMs": 0.26404900000034104,
       "writeCount": 0
     },
     {
@@ -2796,7 +2796,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 46.677156999999625,
+      "durationMs": 80.42568300000039,
       "writeCount": 0
     },
     {
@@ -2804,7 +2804,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.17708200000015495,
+      "durationMs": 0.16060699999979988,
       "writeCount": 0
     },
     {
@@ -2814,7 +2814,7 @@
       "reason": "BUDGET_EXHAUSTED",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:fa3ab7195c76",
-      "durationMs": 34.91433099999995,
+      "durationMs": 67.75513299999966,
       "writeCount": 0
     },
     {
@@ -2822,7 +2822,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.13561099999969883,
+      "durationMs": 1.0089229999994132,
       "writeCount": 0
     },
     {
@@ -2832,7 +2832,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:fa3ab7195c76",
-      "durationMs": 113.57660999999962,
+      "durationMs": 237.1242569999995,
       "writeCount": 1
     },
     {
@@ -2840,7 +2840,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.1338500000001659,
+      "durationMs": 0.1567060000006677,
       "writeCount": 0
     },
     {
@@ -2848,7 +2848,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.08532700000023397,
+      "durationMs": 0.09835099999963859,
       "writeCount": 0
     },
     {
@@ -2858,7 +2858,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:be39a5c73e7f",
-      "durationMs": 107.8241710000002,
+      "durationMs": 182.35463600000003,
       "writeCount": 1
     },
     {
@@ -2868,7 +2868,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:be39a5c73e7f",
-      "durationMs": 123.14516100000037,
+      "durationMs": 218.69094200000018,
       "writeCount": 0
     },
     {
@@ -2876,7 +2876,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.10152500000003783,
+      "durationMs": 0.13703699999950913,
       "writeCount": 0
     },
     {
@@ -2886,7 +2886,7 @@
       "reason": "P2039",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:2924122b32c9",
-      "durationMs": 162.68502400000034,
+      "durationMs": 202.13873799999965,
       "writeCount": 0
     },
     {
@@ -2894,7 +2894,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.1389339999996082,
+      "durationMs": 0.18601200000011886,
       "writeCount": 0
     },
     {
@@ -2904,7 +2904,7 @@
       "reason": "DRY_RUN",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:d8ee08956550",
-      "durationMs": 18.59740199999942,
+      "durationMs": 11.037577000000056,
       "writeCount": 0
     },
     {
@@ -2912,7 +2912,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.1342030000005252,
+      "durationMs": 0.1701679999996486,
       "writeCount": 0
     },
     {
@@ -2922,7 +2922,7 @@
       "reason": "READY",
       "identityConfidence": "EXACT",
       "observationFingerprintPrefix": "v2:d8ee08956550",
-      "durationMs": 133.7253410000003,
+      "durationMs": 134.69720599999982,
       "writeCount": 1
     },
     {
@@ -2930,7 +2930,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.14299599999958446,
+      "durationMs": 0.13041900000007445,
       "writeCount": 0
     },
     {
@@ -2940,7 +2940,7 @@
       "reason": "MULTIPLE_STRONG_IDENTITIES",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 18.852116999999453,
+      "durationMs": 12.112659999999778,
       "writeCount": 0
     },
     {
@@ -2950,7 +2950,7 @@
       "reason": "DRY_RUN",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 18.888680000000022,
+      "durationMs": 12.13245999999981,
       "writeCount": 0
     },
     {
@@ -2958,7 +2958,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.11587199999939912,
+      "durationMs": 0.054962000000159605,
       "writeCount": 0
     },
     {
@@ -2968,7 +2968,7 @@
       "reason": "MULTIPLE_STRONG_IDENTITIES",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 17.706293999999616,
+      "durationMs": 12.203405999999632,
       "writeCount": 0
     },
     {
@@ -2978,7 +2978,7 @@
       "reason": "IDENTITY_NOT_EXACT",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 17.822156999999606,
+      "durationMs": 12.29584799999975,
       "writeCount": 0
     },
     {
@@ -2986,7 +2986,7 @@
       "marketplace": "AMAZON",
       "externalIdSafe": "b4fe13379f4c",
       "reason": "ATTEMPT",
-      "durationMs": 0.12263400000028923,
+      "durationMs": 0.13929800000005343,
       "writeCount": 0
     },
     {
@@ -2996,7 +2996,7 @@
       "reason": "MULTIPLE_STRONG_IDENTITIES",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 10.976290000000517,
+      "durationMs": 11.27182300000004,
       "writeCount": 0
     },
     {
@@ -3006,7 +3006,7 @@
       "reason": "IDENTITY_NOT_EXACT",
       "identityConfidence": "LOW",
       "observationFingerprintPrefix": "v2:862eaec6f552",
-      "durationMs": 35.48648400000002,
+      "durationMs": 42.49557499999992,
       "writeCount": 1
     }
   ]
