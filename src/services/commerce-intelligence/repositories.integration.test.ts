@@ -26,7 +26,7 @@ try {
   assert.equal(await prisma.offerObservation.count(),before);
   const trust=await on.trustSignalRepository.append({scopeType:'OFFER_OBSERVATION',scopeId:a.value.id,observationId:a.value.id,signalType:'price.observed',state:'CONFIRMED',source:'lab',evidence:{captured:true},observedAt:new Date()});
   assert.equal(trust.status,'written');
-  await assert.rejects(prisma.offerObservation.delete({where:{id:a.value.id}}), /foreign key constraint/);
+  await assert.rejects(prisma.offerObservation.delete({where:{id:a.value.id}}), /foreign key constraint/i);
   assert.equal(await prisma.product.count(),0);assert.equal(await prisma.rawMarketplaceListing.count(),0);assert.equal(await prisma.marketplaceOffer.count(),0);
   console.log('REAL_REPOSITORY_CONCURRENT_DEDUPE=PASS\nPRICE_COMPONENT_ATOMIC_APPEND=PASS\nTRUST_SCOPE_FK=PASS\nLEDGER_DELETE_RESTRICT=PASS\nLEGACY_LOCAL_COUNTS_ZERO=PASS');
 } finally {await prisma.$disconnect();}

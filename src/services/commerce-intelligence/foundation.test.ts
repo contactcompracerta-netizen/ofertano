@@ -79,8 +79,16 @@ await assert.rejects(on.productIdentifierRepository.create({productId:'p',type:'
 await assert.rejects(on.productIdentifierRepository.create({productId:'p',type:'GTIN',value:'fake',normalizedValue:'fake',source:'test',confidence:'LOW'}),/INVALID_IDENTIFIER/);
 
 const manifest=JSON.parse(readFileSync('scripts/bootstrap/manifest.json','utf8'));
-assert.equal(manifest.version,2);assert.equal(Object.keys(manifest.baselineMigrations).length,7);assert.equal(Object.keys(manifest.forwardMigrations).length,1);
-const sql=readFileSync('prisma/migrations/'+Object.keys(manifest.forwardMigrations)[0]+'/migration.sql','utf8');
+assert.equal(manifest.version,2);
+assert.equal(Object.keys(manifest.baselineMigrations).length,7);
+// forwardMigrations é um inventário EXTENSÍVEL: 50AG.3+ adicionou
+// legitimamente 20260918100000_commerce_canary_control_plane. Este teste da
+// Foundation deve provar que a migration Foundation continua PRESENTE, PINADA
+// e ADITIVA — e não impor uma contagem total de forward migrations.
+const foundationMigration='20260917120000_commerce_intelligence_foundation';
+const foundationChecksum=manifest.forwardMigrations[foundationMigration];
+assert.ok(typeof foundationChecksum==='string'&&/^[0-9a-f]{64}$/.test(foundationChecksum),'foundation migration presente e pinada no manifest (checksum valido)');
+const sql=readFileSync('prisma/migrations/'+foundationMigration+'/migration.sql','utf8');
 for (const statement of sql.replace(/--[^\n]*/g,'').split(';').filter(s=>s.trim())) assert.match(statement.trim(), /^(CREATE (TYPE|TABLE|(?:UNIQUE )?INDEX)|ALTER TABLE \"[^\"]+\" ADD CONSTRAINT)/);
 console.log('COMMERCE_FOUNDATION_TESTS=PASS');
 }
