@@ -38,8 +38,15 @@
   "staticCommerceObjectContract": {
     "tables": 10,
     "enumTypes": 11,
-    "indexes": 30,
+    "regularIndexes": 29,
     "uniqueIndexes": 3,
+    "totalIndexes": 32,
+    "functions": 0,
+    "triggers": 0,
+    "explicitSequences": 0,
+    "views": 0,
+    "policies": 0,
+    "grants": 0,
     "forbiddenObjectTypes": "none"
   },
   "checksumSafetyAuthority": "INDEPENDENT_LEDGER_VERIFIER",
