@@ -150,3 +150,93 @@ test('D6 valid inputs still AUTHORIZED after boundary hardening',()=>{
  assert.equal(authorizeCommerceMigrateDeploy(input()).verdict,'AUTHORIZED');
  assert.equal(authorizeCommerceMigrateDeploy(r3bInput()).verdict,'AUTHORIZED');
 });
+// R3C.5: global (empty-schema) defaults affect tables created in public.
+const aclTablePrivileges = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'];
+const aclPrivilegesByType = {r:aclTablePrivileges,S:['SELECT','UPDATE','USAGE'],f:['EXECUTE'],T:['USAGE'],n:['USAGE','CREATE']};
+function aclRow(overrides={}) {
+ return {owner:'postgres',schema:'',objectType:'r',grantee:'anon',privilege:'SELECT',grantable:false,...overrides};
+}
+function authorizeAcl(row) {
+ const i=r3bInput();i.schemaState.defaultPrivileges.push(row);return authorizeCommerceMigrateDeploy(i);
+}
+for(const [name,row] of [
+ ['public anon SELECT',aclRow({schema:'public'})],
+ ['public authenticated INSERT',aclRow({schema:'public',grantee:'authenticated',privilege:'INSERT'})],
+ ['public PUBLIC SELECT',aclRow({schema:'public',grantee:'PUBLIC'})],
+ ['global anon SELECT',aclRow()],
+ ['global authenticated INSERT',aclRow({grantee:'authenticated',privilege:'INSERT'})],
+ ['global PUBLIC DELETE',aclRow({grantee:'PUBLIC',privilege:'DELETE'})],
+ ['global PUBLIC MAINTAIN',aclRow({grantee:'PUBLIC',privilege:'MAINTAIN'})],
+ ...['anon','authenticated','PUBLIC'].map(grantee=>['global grant option '+grantee,aclRow({grantee,grantable:true})]),
+])test('R3C5 unsafe '+name+' DENIED',()=>{
+ assert.deepEqual(authorizeAcl(row),{verdict:'DENIED',code:'DEFAULT_ACL_UNSAFE'});
+});
+for(const [name,row] of [
+ ['platform global',aclRow({owner:'supabase_admin'})],
+ ['platform public',aclRow({owner:'supabase_admin',schema:'public'})],
+ ['unrelated schema',aclRow({schema:'unrelated_schema'})],
+ ...Object.entries(aclPrivilegesByType).filter(([type])=>type!=='r').map(([objectType,privileges])=>['non-table '+objectType,aclRow({objectType,privilege:privileges[0]})]),
+])test('R3C5 safe '+name+' AUTHORIZED',()=>{
+ assert.equal(authorizeAcl(row).verdict,'AUTHORIZED');
+});
+test('R3C5 global service_role ALL-like expanded privileges remain AUTHORIZED',()=>{
+ const i=r3bInput();
+ i.schemaState.defaultPrivileges.push(...aclTablePrivileges.map(privilege=>aclRow({grantee:'service_role',privilege,grantable:true})));
+ assert.equal(authorizeCommerceMigrateDeploy(i).verdict,'AUTHORIZED');
+});
+for(const malformed of [
+ {privilege:''},{privilege:'BOGUS'},{privilege:'ALL'},{privilege:'select'},
+ {privilege:'USAGE'},{privilege:'EXECUTE'},{privilege:null},{privilege:[]},
+ {objectType:''},{objectType:'X'},{objectType:null},{objectType:['r']},{objectType:'__proto__'},
+ {objectType:'S',privilege:'DELETE'},{objectType:'f',privilege:'SELECT'},
+ {objectType:'T',privilege:'SELECT'},{objectType:'n',privilege:'SELECT'},
+ {grantable:'true'},{schema:null},
+])test('R3C5 malformed global ACL '+JSON.stringify(malformed)+' DENIED',()=>{
+ assert.deepEqual(authorizeAcl(aclRow({grantee:'PUBLIC',...malformed})),{verdict:'DENIED',code:'DEFAULT_ACL_ROW_INVALID'});
+});
+test('R3C5 missing defaults and null snapshot stay fail closed',()=>{
+ const i=r3bInput();delete i.schemaState.defaultPrivileges;
+ assert.deepEqual(authorizeCommerceMigrateDeploy(i),{verdict:'DENIED',code:'DEFAULT_PRIVILEGES_MISSING'});
+ assert.deepEqual(authorizeCommerceMigrateDeploy(null),{verdict:'DENIED',code:'INVALID_SNAPSHOT'});
+});
+test('R3C5 exhaustive mutation matrix: 7680 cases, no unsafe authorization',t=>{
+ const baseline=r3bInput();assert.equal(authorizeCommerceMigrateDeploy(baseline).verdict,'AUTHORIZED');
+ let mutationCases=0,unsafeCases=0,unsafeAuthorizedCount=0,malformedAuthorizedCount=0;
+ // Two independent insertion positions also check that row order cannot hide an ACL.
+ for(const position of ['first','last'])for(const owner of ['postgres','supabase_admin','service_role_like'])
+ for(const schema of ['','public','private','other'])for(const objectType of ['r','S','f','T','n'])
+ for(const grantee of ['anon','authenticated','PUBLIC','service_role'])for(const privilege of aclTablePrivileges)
+ for(const grantable of [false,true]) {
+  const row={owner,schema,objectType,grantee,privilege,grantable};
+  const defaults=baseline.schemaState.defaultPrivileges;
+  const i={...baseline,schemaState:{...baseline.schemaState,defaultPrivileges:position==='first'?[row,...defaults]:[...defaults,row]}};
+  const result=authorizeCommerceMigrateDeploy(i);mutationCases++;
+  // Independent property oracle: enumerate exposed targets, not the production filter.
+  const unsafe=['postgres||r|anon','postgres||r|authenticated','postgres||r|PUBLIC',
+   'postgres|public|r|anon','postgres|public|r|authenticated','postgres|public|r|PUBLIC'].includes([owner,schema,objectType,grantee].join('|'));
+  if(unsafe){unsafeCases++;if(result.verdict==='AUTHORIZED')unsafeAuthorizedCount++;}
+  if(!aclPrivilegesByType[objectType].includes(privilege)&&result.verdict==='AUTHORIZED')malformedAuthorizedCount++;
+ }
+ t.diagnostic(JSON.stringify({mutationCases,unsafeCases,unsafeAuthorizedCount,malformedAuthorizedCount}));
+ assert.equal(mutationCases,7680);assert.equal(unsafeCases,192);
+ assert.equal(unsafeAuthorizedCount,0);assert.equal(malformedAuthorizedCount,0);
+});
+test('R3C5 safe-case matrix: at least 2000 valid ACL cases, no false denials',t=>{
+ const baseline=r3bInput();assert.equal(authorizeCommerceMigrateDeploy(baseline).verdict,'AUTHORIZED');
+ const safeRows=[];
+ for(const owner of ['postgres','supabase_admin','service_role_like'])for(const schema of ['','public','private','other'])
+ for(const [objectType,privileges] of Object.entries(aclPrivilegesByType))for(const grantee of ['anon','authenticated','PUBLIC','service_role'])
+ for(const privilege of privileges)for(const grantable of [false,true]) {
+  // Construct safe families independently: another owner/schema/recipient/object class.
+  if(owner==='supabase_admin'||owner==='service_role_like'||schema==='private'||schema==='other'||grantee==='service_role'||objectType!=='r')
+   safeRows.push({owner,schema,objectType,grantee,privilege,grantable});
+ }
+ let safeCases=0,falseDenyCount=0;
+ for(const row of safeRows)for(const position of ['first','last']) {
+  const defaults=baseline.schemaState.defaultPrivileges;
+  const result=authorizeCommerceMigrateDeploy({...baseline,schemaState:{...baseline.schemaState,defaultPrivileges:position==='first'?[row,...defaults]:[...defaults,row]}});
+  safeCases++;if(result.verdict!=='AUTHORIZED')falseDenyCount++;
+ }
+ t.diagnostic(JSON.stringify({safeCases,distinctSafeRows:safeRows.length,falseDenyCount}));
+ assert.ok(safeCases>=2000);assert.equal(falseDenyCount,0);
+});

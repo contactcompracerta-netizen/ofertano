@@ -9,7 +9,7 @@ const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
 const namesEqual = (a,b) => same([...a].sort(), [...b].sort());
 const sortRows = (rows,key) => [...rows].sort((a,b)=>key(a).localeCompare(key(b)));
 const TABLE_PRIVILEGES = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'];
-const DEFAULT_ACL_OBJECT_TYPES = ['r','S','f','T','n'];
+const DEFAULT_ACL_PRIVILEGES = {r:TABLE_PRIVILEGES,S:['SELECT','UPDATE','USAGE'],f:['EXECUTE'],T:['USAGE'],n:['USAGE','CREATE']};
 const protectedRoles = ['anon','authenticated'];
 // Managed security scope is derived ONLY from the authoritative canonical inventory (security.rls).
 function managedTableSet(){
@@ -41,13 +41,14 @@ function verifySecurity(snapshot) {
   const grantKeys = new Set();
   for (const r of managedGrants){ const k=r.tableName+'|'+r.role; requireState(!grantKeys.has(k), 'DUPLICATE_MANAGED_GRANT'); grantKeys.add(k); }
   requireState(managedGrants.length === security.grants.length && same(sortRows(managedGrants.map(grant),r=>r.tableName+r.role),sortRows(security.grants.map(grant),r=>r.tableName+r.role)), 'GRANT_STATE_DIVERGED');
-  // DEFAULT ACL: scoped contract — only the migration role / public schema / TABLES matter for Commerce-created objects.
+  // DEFAULT ACL: migration-role TABLES defaults in public OR global scope affect Commerce-created tables.
+  // The local collector represents global defaults (defaclnamespace=0) with schema="".
   requireState(Array.isArray(snapshot.defaultPrivileges), 'DEFAULT_PRIVILEGES_MISSING');
   const dap = security.defaultPrivilegeSafety;
   const forbidden = new Set(dap.forbiddenTablePrivileges);
-  const validAcl = row => row && typeof row.owner==='string' && row.owner.length>0 && typeof row.schema==='string' && DEFAULT_ACL_OBJECT_TYPES.includes(row.objectType) && typeof row.grantee==='string' && typeof row.privilege==='string' && typeof row.grantable==='boolean';
+  const validAcl = row => row && typeof row.owner==='string' && row.owner.length>0 && typeof row.schema==='string' && typeof row.objectType==='string' && Object.hasOwn(DEFAULT_ACL_PRIVILEGES, row.objectType) && typeof row.grantee==='string' && DEFAULT_ACL_PRIVILEGES[row.objectType].includes(row.privilege) && typeof row.grantable==='boolean';
   snapshot.defaultPrivileges.forEach(row=>requireState(validAcl(row), 'DEFAULT_ACL_ROW_INVALID'));
-  const unsafe = snapshot.defaultPrivileges.filter(row => row.owner===dap.migrationRole && row.schema===dap.schema && row.objectType==='r' && (dap.protectedRoles.includes(row.grantee) || row.grantee==='PUBLIC') && (forbidden.has(row.privilege) || row.grantable===true));
+  const unsafe = snapshot.defaultPrivileges.filter(row => row.owner===dap.migrationRole && (row.schema===dap.schema || row.schema==='') && row.objectType==='r' && (dap.protectedRoles.includes(row.grantee) || row.grantee==='PUBLIC') && (forbidden.has(row.privilege) || row.grantable===true));
   requireState(unsafe.length === 0, 'DEFAULT_ACL_UNSAFE');
   // COLUMN privileges: fail-closed, no exceptions may be observed on managed tables.
   requireState(same(snapshot.columnPrivilegeExceptions, []), 'COLUMN_PRIVILEGES_DIVERGED');

@@ -1,0 +1,260 @@
+{
+  "mission": "50AG.4B-R3C.5",
+  "status": "COMPLETE",
+  "classification": "A = GLOBAL_DEFAULT_ACL_GATE_HARDENED",
+  "baseSHA": "e5007f1c126bef7ea7a72b54567e6fe4c84cc6bf",
+  "finalSHA": "COMMIT_CONTAINING_THIS_REPORT",
+  "finalSHAResolution": "git log -1 --format=%H -- docs/evidence/50ag4b-r3c5/summary.json",
+  "branch": "feature/security-gate-global-default-acl-r3c5-20260919",
+  "defaultAclGlobalSemantics": "EMPTY_SCHEMA_MEANS_GLOBAL",
+  "migrationRole": "postgres",
+  "targetSchema": "public",
+  "globalDefaultAclCovered": true,
+  "publicDefaultAclCovered": true,
+  "mutationCases": 7680,
+  "unsafeCases": 192,
+  "unsafeAuthorizedCount": 0,
+  "malformedAuthorizedCount": 0,
+  "safeCases": 2688,
+  "distinctSafeRows": 1344,
+  "falseDenyCount": 0,
+  "mutationMethod": "Exhaustive requested Cartesian matrix, each row prepended and appended to the unchanged R3B snapshot; safe corpus uses valid privilege/objectType pairs.",
+  "beforeFix": {
+    "tests": 103,
+    "pass": 85,
+    "fail": 18,
+    "unsafeAuthorizedCount": 96,
+    "malformedAuthorizedCount": 5760,
+    "falseDenyCount": 0
+  },
+  "authorizerTests": {
+    "tests": 105,
+    "pass": 105,
+    "fail": 0
+  },
+  "migrationHistoryTests": {
+    "tests": 136,
+    "pass": 136,
+    "fail": 0,
+    "exitCode": 0
+  },
+  "r3bFixtureResult": "AUTHORIZED",
+  "r3bFixtureUnchanged": true,
+  "npmTest": {
+    "exitCode": 0,
+    "durationSeconds": 200.49,
+    "result": "PASS"
+  },
+  "build": {
+    "result": "PASS",
+    "environment": "Clean explicit environment; documented local placeholders and TEST_ONLY keys; cached Geist fonts via loopback HTTP and NEXT_FONT_GOOGLE_MOCKED_RESPONSES. No Production secrets or platform calls.",
+    "exitCode": 0,
+    "durationSeconds": 57.96,
+    "fontSource": "Existing cached font assets served by temporary loopback-only HTTP fixture",
+    "previousAttempt": {
+      "exitCode": 1,
+      "reason": "Temporary font mock used unsupported absolute paths; fixed only the external build fixture to serve existing fonts over loopback HTTP."
+    }
+  },
+  "prismaValidate": {
+    "exitCode": 0,
+    "result": "PASS"
+  },
+  "prismaGenerate": {
+    "exitCode": 0,
+    "result": "PASS",
+    "version": "7.9.0"
+  },
+  "encoding": {
+    "exitCode": 0,
+    "result": "PASS"
+  },
+  "diffCheck": "PASS",
+  "secretScan": "PASS",
+  "migrationChecksumsUnchanged": true,
+  "schemaUnchanged": true,
+  "bootstrapUnchanged": true,
+  "forensicPinsUnchanged": true,
+  "runtimeUnchanged": true,
+  "collectorUnchanged": true,
+  "immutableSha256BeforeAndAfter": {
+    "prisma/migrations/20260824000000_postgresql_baseline/migration.sql": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+    "prisma/migrations/20260824120000_analytics_intelligence/migration.sql": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
+    "prisma/migrations/20260828220000_admin_push_subscription/migration.sql": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+    "prisma/migrations/20260905120000_price_alerts/migration.sql": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+    "prisma/migrations/20260907000000_social_automation/migration.sql": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+    "prisma/migrations/20260907220000_social_three_slots/migration.sql": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+    "prisma/migrations/20260912000000_add_raw_marketplace_listing/migration.sql": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
+    "prisma/migrations/20260915194500_rls_security_hardening/migration.sql": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+    "prisma/migrations/20260915203000_fix_rls_product_public_read/migration.sql": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+    "prisma/migrations/20260917120000_commerce_intelligence_foundation/migration.sql": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
+    "prisma/migrations/20260918100000_commerce_canary_control_plane/migration.sql": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0",
+    "prisma/schema.prisma": "de1a7e1bba3e739d064f4bdc33879090f3ed2178472b6c53aba1881e8cab2a1d",
+    "scripts/bootstrap/initial-schema.sql": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
+    "scripts/bootstrap/manifest.json": "4835ed91a66a7ad0f5d7425ff158d5e0f13d9d44bc8b59a080feaff1cbb8f46d",
+    "scripts/migration-history/forensic-pins.json": "6c6cd68891c4f1a2a27c3249e13cf1d4470bbaf16839c8e5505d666764e299b0"
+  },
+  "unchangedContracts": {
+    "scripts/bootstrap/local-security-state.mjs": {
+      "sha256": "e542eee0753aad24e5933652153bcf51aaf66a93ef52e22c3d9a071d8987b6bb",
+      "unchanged": true
+    },
+    "scripts/migration-history/production-security-r3b.fixture.json": {
+      "sha256": "ff948a4607a18ac90ff216f1f74b62a5efb5dce9693d47b62ed80c90919ad069",
+      "unchanged": true
+    },
+    "scripts/migration-history/production-ledger.fixture.json": {
+      "sha256": "fd24401acc9cdc3bc931e9cf3d72771839ba1332aa6971ea5db3e821815a2b07",
+      "unchanged": true
+    }
+  },
+  "localRehearsal": {
+    "result": "PASS",
+    "target": "127.0.0.1:55433",
+    "database": "ofertano_50ag4b_r3c5_rehearsal_20260919",
+    "authorization": {
+      "verdict": "AUTHORIZED",
+      "pending": [
+        "20260917120000_commerce_intelligence_foundation",
+        "20260918100000_commerce_canary_control_plane"
+      ],
+      "knownDivergences": 2,
+      "checksumSafetyAuthority": "INDEPENDENT_LEDGER_VERIFIER",
+      "securityScope": "MANAGED_TABLES_ONLY",
+      "managedTableCount": 19,
+      "managedPolicyCount": 10,
+      "outOfScopePolicyCount": 6,
+      "outOfScopePolicies": [
+        {
+          "tablename": "notifications",
+          "policyname": "notifications_select_own",
+          "cmd": "SELECT"
+        },
+        {
+          "tablename": "notifications",
+          "policyname": "notifications_update_own",
+          "cmd": "UPDATE"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_delete_own",
+          "cmd": "DELETE"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_insert_own",
+          "cmd": "INSERT"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_select_own",
+          "cmd": "SELECT"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_update_own",
+          "cmd": "UPDATE"
+        }
+      ],
+      "managedGrantCount": 38,
+      "unsafeMigrationDefaultAclCount": 0,
+      "publicSchemaCreateSafe": true
+    },
+    "syntheticProductionIdentity": true,
+    "flagsWereSyntheticAllOff": true,
+    "pendingAndApplied": [
+      "20260917120000_commerce_intelligence_foundation",
+      "20260918100000_commerce_canary_control_plane"
+    ],
+    "commerceOnly": true,
+    "ledgerBefore": 9,
+    "ledgerAfter": 11,
+    "commerceTableCount": 10,
+    "commerceRows": 0,
+    "anonAuthEffectivePrivilegeCount": 0,
+    "globalDefaultAclProbe": {
+      "scope": "LOCAL_ONLY",
+      "emptySchemaObserved": true,
+      "verdict": "DENIED",
+      "rolledBack": true
+    },
+    "dbDroppedAfter": true,
+    "harness": "Existing R3C rehearsal adapted only in /tmp for mission-owned DB, imports, current synthetic identity and global ACL rollback probe; repository collector unchanged."
+  },
+  "productionAccessed": false,
+  "vercelUsed": false,
+  "readyForR3D2": true,
+  "recordedAt": "2026-09-19T20:09:12.702328+00:00",
+  "localEvidence": {
+    "before-fix.log": {
+      "path": "/tmp/ofertano-r3c5/before-fix.log",
+      "sha256": "92133ee709e65fd46798bb5df2c5425a6012b4594f5ceb38196d417484724f05"
+    },
+    "authorizer.log": {
+      "path": "/tmp/ofertano-r3c5/authorizer.log",
+      "sha256": "c73528f13233c75f8703686c80af74eb7e04b24029637e751c3f1034669b50eb"
+    },
+    "migration-history.log": {
+      "path": "/tmp/ofertano-r3c5/migration-history.log",
+      "sha256": "11c9c4e39431cb69b0a5fb1be3006724d241554e9a9bf3cb34fc1fe259787a8a"
+    },
+    "npm-test.log": {
+      "path": "/tmp/ofertano-r3c5/npm-test.log",
+      "sha256": "bbc437d7cc9f80d5d61cf94ea98138e105b9892b58d5a31af9d7743f411a2d08"
+    },
+    "prisma-validate.log": {
+      "path": "/tmp/ofertano-r3c5/prisma-validate.log",
+      "sha256": "e1344514cb0e93026a245afd134e0c874287a64f7c5798cbda02eff700d2aa22"
+    },
+    "prisma-generate.log": {
+      "path": "/tmp/ofertano-r3c5/prisma-generate.log",
+      "sha256": "b62f02730c9fede7177896ee92838f9b30db14cfe7c69c9b1423ca9868ea706b"
+    },
+    "rehearsal.json": {
+      "path": "/tmp/ofertano-r3c5/rehearsal.json",
+      "sha256": "d53a74da5b8bc321a0771de6361eb919083cd180a76e2668f816df1070570f72"
+    },
+    "rehearsal.mjs": {
+      "path": "/tmp/ofertano-r3c5/rehearsal.mjs",
+      "sha256": "2fffd7de5ac6126bd12ed4d2a048f4895d1b9142570362619843267a900bcd0c"
+    },
+    "cleanup.json": {
+      "path": "/tmp/ofertano-r3c5/cleanup.json",
+      "sha256": "c044326bc9b4b2ac806a507c35bbc3057d6cb00c3242e4895a4178dfe6e958ce"
+    },
+    "build.log": {
+      "path": "/tmp/ofertano-r3c5/build.log",
+      "sha256": "a0241ef75cdf817fa734716f4f53dab9e1ed17d20dee9a08894f073071834ae8"
+    },
+    "build-font-path-error.log": {
+      "path": "/tmp/ofertano-r3c5/build-font-path-error.log",
+      "sha256": "b33807f6589da5715a6e4a59ed2f9a18eb52bd6bd49dc2d9a8b658e55fcd5ff2"
+    },
+    "run-build.py": {
+      "path": "/tmp/ofertano-r3c5/run-build.py",
+      "sha256": "61c81d4175549d07dddf751e1f84f0e7c14c44703f5e3bb97e75122348d223be"
+    },
+    "checks.json": {
+      "path": "/tmp/ofertano-r3c5/checks.json",
+      "sha256": "35307180eb53f067e4aafe8dff794a09160a64a80c3b24bb96b6c029fe7281d1"
+    },
+    "run-checks.py": {
+      "path": "/tmp/ofertano-r3c5/run-checks.py",
+      "sha256": "144626214c420c886fa5c8528c6c228fc42dafc5d83f6d37502cefeeee5d506b"
+    }
+  },
+  "harnessSetupNote": "Initial temporary harness import failed before execution; corrected CommonJS import, then rehearsal passed once. No test failure was suppressed.",
+  "rootCause": {
+    "collectorExpression": "COALESCE(n.nspname,'') AS schema",
+    "globalNamespace": "defaclnamespace=0; LEFT JOIN yields NULL namespace name",
+    "oldFilter": "row.schema === dap.schema",
+    "newFilter": "row.schema === dap.schema || row.schema === ''",
+    "validation": "Privilege must be valid for its expanded ACL object type"
+  },
+  "diffScope": [
+    "scripts/migration-history/authorize-commerce-migrate-deploy.mjs",
+    "scripts/migration-history/authorize-commerce-migrate-deploy.test.mjs",
+    "docs/security-gate-scope-reconciliation.md",
+    "docs/evidence/50ag4b-r3c5/summary.json"
+  ]
+}

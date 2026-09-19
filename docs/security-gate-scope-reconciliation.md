@@ -24,7 +24,7 @@ R3B additionally proved:
 - the migration role (`postgres`) default ACL in `public` grants **nothing** to
   `anon`/`authenticated` (only `postgres` and `service_role`);
 - `public` schema: `anon`/`authenticated` have `USAGE`, but `CREATE=false`;
-- new Commerce tables would inherit **no** dangerous privileges.
+- that historical fixture is not proof of a fresh preflight; global defaults must also be observed before authorizing new Commerce tables.
 
 ## MANAGED SECURITY SCOPE
 
@@ -62,7 +62,7 @@ The snapshot carries expanded default-ACL rows `{owner, schema, objectType, gran
 privilege, grantable}`. The gate evaluates **only** rows where
 
 - `owner === migrationRole` (`postgres`),
-- `schema === public`,
+- `schema === "public"` **or** `schema === ""` (global defaults),
 - `objectType === 'r'` (TABLES — the object class Commerce creates),
 
 and denies if such a row grants any forbidden table privilege — directly or via
@@ -79,8 +79,8 @@ public user.
 The gate is not blind to `PUBLIC`: effective table privileges (`has_table_privilege`)
 already include anything transmitted via `PUBLIC`, so a `PUBLIC`-hidden grant on a
 managed table is seen as a real effective privilege and denied when non-canonical.
-Default ACL rows with `grantee === 'PUBLIC'` from the migration role in `public` are
-denied as well.
+Default ACL rows with `grantee === 'PUBLIC'` from the migration role in `public` or
+global scope are denied as well.
 
 ## PUBLIC schema safety
 
@@ -148,3 +148,33 @@ An `AUTHORIZED` result includes `securityScope: MANAGED_TABLES_ONLY`,
 `outOfScopePolicies` (tablename/policyname/cmd), `managedGrantCount`,
 `unsafeMigrationDefaultAclCount`, and `publicSchemaCreateSafe`. These are
 observational fields that do not weaken the verdict.
+
+## R3C.5: global default ACL hardening
+
+PostgreSQL default privileges can apply globally for an owner or to a specific
+schema. Global defaults also apply to objects that owner creates in `public`.
+The unchanged local collector uses a left join on `pg_default_acl.defaclnamespace`
+and `COALESCE(n.nspname,'') AS schema`: namespace OID 0 has no matching namespace,
+so global defaults become the empty string (SQL NULL after the join).
+`EMPTY_SCHEMA_MEANS_GLOBAL` is the snapshot contract; a JSON null schema is invalid.
+
+The earlier gate checked only `row.schema === dap.schema`, omitting these global
+rows. It now checks both `postgres/public` and `postgres/global` for table ACLs
+granting protected roles or `PUBLIC` any forbidden privilege or grant option.
+Defaults for unrelated schemas, platform owners and `service_role` recipients
+remain observational and do not deny a valid snapshot merely by existing.
+
+Every expanded row must carry a privilege valid for its object class: tables use
+SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN; sequences use
+SELECT/UPDATE/USAGE; functions EXECUTE; types USAGE; schemas USAGE/CREATE.
+Unknown privileges, raw ALL, mismatched privilege/object-type pairs, malformed
+rows and missing defaultPrivileges fail closed. ALL-like legitimate state is
+represented by individual expanded privileges, as in the unchanged R3B fixture.
+The existing `unsafeMigrationDefaultAclCount` now covers global and public defaults.
+
+Regressions exercise 7,680 mutations (the full requested Cartesian matrix at both
+insertion positions) and more than 2,000 safe valid cases. Invalid non-table
+privilege combinations belong to malformed tests, not the safe-case corpus.
+The collector remains **Never a Production helper**. Production collection still
+requires a separate runner and future explicit authorization. This mission uses
+only pure snapshots and a new disposable database on `127.0.0.1:55433`.
