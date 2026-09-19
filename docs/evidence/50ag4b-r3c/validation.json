@@ -1,0 +1,48 @@
+{
+  "mission": "50AG.4B-R3C",
+  "runId": "r3c",
+  "target": "127.0.0.1:55433",
+  "databases": [
+    "ofertano_50ag4b_history_r3c_fresh",
+    "ofertano_50ag4b_history_r3c_forward",
+    "ofertano_50ag4b_history_r3c_rehearsal",
+    "ofertano_50ag4b_r3c_rehearsal"
+  ],
+  "results": {
+    "fresh": "PASS",
+    "forward": "PASS",
+    "equivalence": "PASS",
+    "idempotence": "PASS",
+    "migration-history.rehearsal": "PASS",
+    "r3c.rehearsal": "PASS"
+  },
+  "r3cRehearsal": {
+    "authorizeGate": {
+      "verdict": "AUTHORIZED",
+      "securityScope": "MANAGED_TABLES_ONLY",
+      "managedTableCount": 19,
+      "managedPolicyCount": 10,
+      "outOfScopePolicyCount": 6,
+      "managedGrantCount": 38,
+      "unsafeMigrationDefaultAclCount": 0,
+      "publicSchemaCreateSafe": true
+    },
+    "commerceApplied": [
+      "20260917120000_commerce_intelligence_foundation",
+      "20260918100000_commerce_canary_control_plane"
+    ],
+    "commerceTablesPresent": 10,
+    "commerceRowsAfter": 0,
+    "anonAuthEffectivePrivilegesOnCommerce": "none"
+  },
+  "staticCommerceObjectContract": {
+    "tables": 10,
+    "enumTypes": 11,
+    "indexes": 30,
+    "uniqueIndexes": 3,
+    "forbiddenObjectTypes": "none"
+  },
+  "checksumSafetyAuthority": "INDEPENDENT_LEDGER_VERIFIER",
+  "productionAccessed": false,
+  "secrets": "none"
+}

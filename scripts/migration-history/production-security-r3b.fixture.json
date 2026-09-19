@@ -1,0 +1,1008 @@
+{
+  "version": 2,
+  "provenance": {
+    "source": "R3B_REAL_AUDIT_LOG_20260918",
+    "classification": "SUPABASE_PLATFORM_OR_EXTERNAL",
+    "sanitized": true,
+    "secrets": "none",
+    "productionAccessed": false,
+    "observedDefaultAclRowCount": 276,
+    "fixtureDefaultAclRowCount": 56,
+    "managedPolicyCount": 10,
+    "unmanagedPolicyCount": 6,
+    "managedGrantCount": 38
+  },
+  "scope": "MANAGED_TABLES_ONLY",
+  "migrationRole": "postgres",
+  "rls": [
+    {
+      "tableName": "AdminPushDispatch",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AdminPushSubscription",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AnalyticsDailyAgg",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AnalyticsEvent",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "AnalyticsSessionDay",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "BlogPost",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "Favorite",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "ImportQueue",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "MarketplaceConnection",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "MarketplaceOffer",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "PriceAlert",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "PriceAlertEvent",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "PriceHistory",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "Product",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "ProductOpportunity",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "RawMarketplaceListing",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "SearchRequest",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "SocialPost",
+      "enabled": true,
+      "forced": false
+    },
+    {
+      "tableName": "_prisma_migrations",
+      "enabled": true,
+      "forced": false
+    }
+  ],
+  "policies": [
+    {
+      "tablename": "BlogPost",
+      "policyname": "blog_post_public_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((status = 'PUBLISHED'::\"BlogPostStatus\") AND (\"publishedAt\" <= now()))",
+      "with_check": null
+    },
+    {
+      "tablename": "Favorite",
+      "policyname": "favorite_delete_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "Favorite",
+      "policyname": "favorite_insert_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((auth.uid())::text = \"userId\")"
+    },
+    {
+      "tablename": "Favorite",
+      "policyname": "favorite_select_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "MarketplaceOffer",
+      "policyname": "marketplace_offer_public_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((active = true) AND (available = true) AND (\"matchStatus\" = 'EXACT'::\"ProductMatchStatus\") AND (status <> ALL (ARRAY['UNAVAILABLE'::\"MarketplaceOfferStatus\", 'ERROR'::\"MarketplaceOfferStatus\"])) AND (price > (0)::double precision))",
+      "with_check": null
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_delete_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_insert_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((auth.uid())::text = \"userId\")"
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_select_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": null
+    },
+    {
+      "tablename": "PriceAlert",
+      "policyname": "price_alert_update_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((auth.uid())::text = \"userId\")",
+      "with_check": "((auth.uid())::text = \"userId\")"
+    },
+    {
+      "tablename": "Product",
+      "policyname": "product_public_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((active = true) AND (\"publicationStatus\" <> ALL (ARRAY['DRAFT'::\"ProductPublicationStatus\", 'ARCHIVED'::\"ProductPublicationStatus\"])) AND (price > (0)::double precision) AND (image IS NOT NULL) AND (image <> ''::text) AND (EXISTS ( SELECT 1\n   FROM \"MarketplaceOffer\" o\n  WHERE (o.\"productId\" = \"Product\".id)\n HAVING (count(DISTINCT o.marketplace) >= 2))))",
+      "with_check": null
+    },
+    {
+      "tablename": "notifications",
+      "policyname": "notifications_select_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+      "with_check": null
+    },
+    {
+      "tablename": "notifications",
+      "policyname": "notifications_update_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+      "with_check": "(( SELECT auth.uid() AS uid) = user_id)"
+    },
+    {
+      "tablename": "price_alerts",
+      "policyname": "price_alerts_delete_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+      "with_check": null
+    },
+    {
+      "tablename": "price_alerts",
+      "policyname": "price_alerts_insert_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(( SELECT auth.uid() AS uid) = user_id)"
+    },
+    {
+      "tablename": "price_alerts",
+      "policyname": "price_alerts_select_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+      "with_check": null
+    },
+    {
+      "tablename": "price_alerts",
+      "policyname": "price_alerts_update_own",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+      "with_check": "(( SELECT auth.uid() AS uid) = user_id)"
+    }
+  ],
+  "grants": [
+    {
+      "tableName": "AdminPushDispatch",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AdminPushDispatch",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AdminPushSubscription",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AdminPushSubscription",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsDailyAgg",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsDailyAgg",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsEvent",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsEvent",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsSessionDay",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "AnalyticsSessionDay",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "BlogPost",
+      "role": "anon",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "BlogPost",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Favorite",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Favorite",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "SELECT",
+        "UPDATE"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ImportQueue",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ImportQueue",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceConnection",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceConnection",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceOffer",
+      "role": "anon",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "MarketplaceOffer",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlert",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlert",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "SELECT",
+        "UPDATE"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlertEvent",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceAlertEvent",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceHistory",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "PriceHistory",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Product",
+      "role": "anon",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "Product",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ProductOpportunity",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "ProductOpportunity",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "RawMarketplaceListing",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "RawMarketplaceListing",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SearchRequest",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SearchRequest",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SocialPost",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "SocialPost",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "_prisma_migrations",
+      "role": "anon",
+      "privileges": [],
+      "grantOptions": []
+    },
+    {
+      "tableName": "_prisma_migrations",
+      "role": "authenticated",
+      "privileges": [],
+      "grantOptions": []
+    }
+  ],
+  "defaultPrivileges": [
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grantee": "postgres",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grantee": "postgres",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grantee": "postgres",
+      "privilege": "USAGE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grantee": "service_role",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grantee": "service_role",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grantee": "service_role",
+      "privilege": "USAGE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "f",
+      "grantee": "postgres",
+      "privilege": "EXECUTE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "f",
+      "grantee": "service_role",
+      "privilege": "EXECUTE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "INSERT",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "DELETE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "REFERENCES",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "TRIGGER",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "INSERT",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "DELETE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "REFERENCES",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "TRIGGER",
+      "grantable": false
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "INSERT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "DELETE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "TRUNCATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "REFERENCES",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "TRIGGER",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "anon",
+      "privilege": "MAINTAIN",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "INSERT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "DELETE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "TRUNCATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "REFERENCES",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "TRIGGER",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "authenticated",
+      "privilege": "MAINTAIN",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "INSERT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "DELETE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "REFERENCES",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "TRIGGER",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "SELECT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "INSERT",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "UPDATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "DELETE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "REFERENCES",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "TRIGGER",
+      "grantable": false
+    },
+    {
+      "owner": "supabase_admin",
+      "schema": "public",
+      "objectType": "r",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN",
+      "grantable": false
+    }
+  ],
+  "columnPrivilegeExceptions": [],
+  "publicSchemaPrivileges": {
+    "anon": {
+      "usage": true,
+      "create": false
+    },
+    "authenticated": {
+      "usage": true,
+      "create": false
+    }
+  }
+}

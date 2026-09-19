@@ -1,5 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
+  "scope": "MANAGED_TABLES_ONLY",
+  "managedTableSetSource": "security.rls[].tableName",
+  "migrationRole": "postgres",
   "rls": [
     {
       "tableName": "AdminPushDispatch",
@@ -465,5 +468,34 @@
     }
   ],
   "defaultPrivileges": [],
-  "columnPrivilegeExceptions": []
+  "columnPrivilegeExceptions": [],
+  "defaultPrivilegeSafety": {
+    "migrationRole": "postgres",
+    "schema": "public",
+    "protectedRoles": [
+      "anon",
+      "authenticated"
+    ],
+    "forbiddenTablePrivileges": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "TRUNCATE",
+      "REFERENCES",
+      "TRIGGER",
+      "MAINTAIN"
+    ],
+    "publicSchemaCreateForbidden": true
+  },
+  "publicSchemaPrivileges": {
+    "anon": {
+      "usage": true,
+      "create": false
+    },
+    "authenticated": {
+      "usage": true,
+      "create": false
+    }
+  }
 }

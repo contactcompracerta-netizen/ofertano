@@ -1,0 +1,53 @@
+{
+  "mission": "50AG.4B-R3C",
+  "title": "SECURITY_GATE_SCOPE_RECONCILIATION",
+  "baseSHA": "ac54cf4e30cb4a93120d83472da490534524acf1",
+  "scope": "MANAGED_TABLES_ONLY",
+  "managedTableCount": 19,
+  "managedPolicyCount": 10,
+  "outOfScopePolicyFixtureCount": 6,
+  "managedGrantCount": 38,
+  "migrationRole": "postgres",
+  "unsafeMigrationDefaultAclCount": 0,
+  "publicSchemaCreateSafe": true,
+  "defaultAclScope": {
+    "migrationRole": "postgres",
+    "schema": "public",
+    "objectType": "TABLES",
+    "protectedRoles": ["anon", "authenticated"],
+    "publicInheritance": "considered_via_effective_privileges"
+  },
+  "staticCommerceObjectContract": {
+    "tables": 10,
+    "enumTypes": 11,
+    "indexes": 30,
+    "uniqueIndexes": 3,
+    "forbiddenObjectTypes": "none (no FUNCTION/TRIGGER/SEQUENCE/VIEW/MATERIALIZED VIEW/POLICY/GRANT/RLS/OWNER TO)"
+  },
+  "localIntegration": {
+    "fresh": "PASS",
+    "forward": "PASS",
+    "equivalence": "PASS",
+    "idempotence": "PASS",
+    "rehearsal": "PASS"
+  },
+  "localR3bRehearsal": {
+    "database": "ofertano_50ag4b_r3c_rehearsal",
+    "authorizeGate": "AUTHORIZED",
+    "outOfScopePoliciesAuthorized": 6,
+    "commerceOnlyApplied": true,
+    "commerceTablesAfter": 10,
+    "commerceRowsAfter": 0,
+    "anonAuthEffectivePrivilegesOnCommerce": "none"
+  },
+  "fixtureSource": "R3B_REAL_AUDIT_LOG_20260918",
+  "fixtureSanitized": true,
+  "migrationChecksums": {
+    "20260917120000_commerce_intelligence_foundation": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
+    "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0",
+    "20260915194500_rls_security_hardening": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+    "20260915203000_fix_rls_product_public_read": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3"
+  },
+  "productionAccessed": false,
+  "secrets": "none"
+}

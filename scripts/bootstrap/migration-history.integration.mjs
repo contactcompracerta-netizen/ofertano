@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { validateLocalTarget, assertLocalConnection, scaffoldLocalSupabase, verifyLocalRls, localEquivalenceSchema, verifyLocalRolesAndAuth } from './local-supabase-compatibility.mjs';
+import { collectPredeployState } from './local-security-state.mjs';
 import { verifyLedgerCompatibility, commercePending } from '../migration-history/verify-ledger-compatibility.mjs';
 import fixture from '../migration-history/production-ledger.fixture.json' with {type:'json'};
 import security from '../migration-history/expected-security-state.json' with {type:'json'};
@@ -52,24 +53,7 @@ async function baseline(client, name) {
 }
 async function ledger(client) { return JSON.parse(JSON.stringify((await client.query('SELECT * FROM "_prisma_migrations" ORDER BY migration_name')).rows)); }
 async function counts(client, tables) { const result = {}; for (const table of tables) result[table] = Number((await client.query(`SELECT count(*) AS n FROM "${table}"`)).rows[0].n); return result; }
-async function predeployState(client,identity) {
- const rls=(await client.query("SELECT c.relname AS \"tableName\",c.relrowsecurity AS enabled,c.relforcerowsecurity AS forced FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[]) ORDER BY c.relname",[security.rls.map(r=>r.tableName)])).rows;
- const policies=(await client.query("SELECT tablename,policyname,permissive,roles::text[] AS roles,cmd,qual,with_check FROM pg_policies WHERE schemaname='public' ORDER BY tablename,policyname")).rows;
- const grants=[],columnPrivilegeExceptions=[];
- for(const t of security.rls.map(r=>r.tableName))for(const role of ['anon','authenticated']) {
-  const privileges=[],grantOptions=[];
-  for(const p of ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']) {
-   const allowed=(await client.query('SELECT has_table_privilege($1,$2,$3) AS allowed,has_table_privilege($1,$2,$4) AS grantable',[role,`public."${t}"`,p,p+' WITH GRANT OPTION'])).rows[0];
-   if(allowed.allowed)privileges.push(p);if(allowed.grantable)grantOptions.push(p);
-   if(['SELECT','INSERT','UPDATE','REFERENCES'].includes(p)&&!allowed.allowed&&(await client.query('SELECT has_any_column_privilege($1,$2,$3) AS allowed',[role,`public."${t}"`,p])).rows[0].allowed)columnPrivilegeExceptions.push({tableName:t,role,privilege:p});
-  }
-  grants.push({tableName:t,role,privileges,grantOptions});
- }
- const defaultPrivileges=(await client.query("SELECT pg_get_userbyid(d.defaclrole) AS owner,n.nspname AS schema,pg_get_userbyid(a.grantee) AS role,a.privilege_type FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace CROSS JOIN LATERAL aclexplode(d.defaclacl) a WHERE (n.nspname='public' OR n.nspname IS NULL) AND pg_get_userbyid(a.grantee) IN ('anon','authenticated') ORDER BY owner,schema,role,privilege_type")).rows;
- const present=(await client.query("SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])",[commerceTables])).rows.map(r=>r.relname);
- const ledgerCounts=(await client.query('SELECT count(*) FILTER (WHERE finished_at IS NULL AND rolled_back_at IS NULL)::int AS unfinished,count(*) FILTER (WHERE rolled_back_at IS NOT NULL)::int AS rolled_back FROM "_prisma_migrations"')).rows[0];
- return {version:1,targetIdentity:identity,rls,policies,grants,defaultPrivileges,columnPrivilegeExceptions,commerceTables:Object.fromEntries(commerceTables.map(t=>[t,present.includes(t)])),unfinishedCount:ledgerCounts.unfinished,unexpectedRolledBackCount:ledgerCounts.rolled_back,blockers:[],legacyCounts:await counts(client,security.rls.map(r=>r.tableName).filter(n=>n!=='_prisma_migrations'))};
-}
+async function predeployState(client, identity) { return collectPredeployState(client, identity); }
 function assertFullLedger(rows) {
  assert.equal(rows.length, 11);
  for (const row of rows) { assert.ok(row.finished_at); assert.equal(row.rolled_back_at, null); assert.equal(row.checksum, ({ ...manifest.baselineMigrations, ...manifest.forwardMigrations })[row.migration_name]); assert.equal(row.applied_steps_count, manifest.baselineMigrations[row.migration_name] ? 0 : 1); }
@@ -137,7 +121,14 @@ try {
  verifyLedgerCompatibility({version:1,ledger:after},[]);
  const warningObserved=/modified|changed since|checksum[^\n]*(?:mismatch|differ)/i.test(deployOutput);
  evidence.rehearsal={verdict:'PASS',blocker:null,exitCode:0,appliedNames,baselineNotReapplied:true,rlsNotReapplied:true,ledgerBefore:before,ledgerAfter:after,legacyCountsBefore:beforeCounts,legacyCountsAfter:await counts(rehearsal,Object.keys(beforeCounts)),newTableCounts:newCounts,prismaWarningObserved:warningObserved,prismaOutput:deployOutput,gate:gate.verdict};
- const afterState=await predeployState(rehearsal,expectedProductionIdentity);assert.deepEqual({rls:afterState.rls,policies:afterState.policies,grants:afterState.grants,defaultPrivileges:afterState.defaultPrivileges,columnPrivilegeExceptions:afterState.columnPrivilegeExceptions},securityBefore);
+ const afterState=await predeployState(rehearsal,expectedProductionIdentity);
+  // Managed security state must be byte-identical across the Commerce deploy; the collector
+  // observes ALL public tables, so new Commerce tables legitimately gain empty anon/auth rows.
+  const managedGrantsOf=s=>({rls:s.rls,policies:s.policies,grants:s.grants.filter(g=>security.rls.map(r=>r.tableName).includes(g.tableName)),defaultPrivileges:s.defaultPrivileges,columnPrivilegeExceptions:s.columnPrivilegeExceptions});
+  assert.deepEqual(managedGrantsOf(afterState),managedGrantsOf(securityBefore));
+  const commerceGrants=afterState.grants.filter(g=>newTables.includes(g.tableName));
+  assert.equal(commerceGrants.length,newTables.length*2);
+  assert.ok(commerceGrants.every(g=>g.privileges.length===0&&g.grantOptions.length===0));
  await verifyLocalRls(rehearsal,target(names.rehearsal));
  evidence.rehearsal={...evidence.rehearsal,verdict:'PASS',blocker:null,exactLedgerMatched:true,localLedgerMetadataSimulation:true,authorization,execution,syntheticProductionIdentity:true};
  fs.mkdirSync('docs/evidence/50ag4b-r2g2',{recursive:true}); fs.writeFileSync('docs/evidence/50ag4b-r2g2/local-validation.json',JSON.stringify(evidence,null,2)+'\n');
