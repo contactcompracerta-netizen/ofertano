@@ -67,8 +67,10 @@ function verifySecurity(snapshot) {
     publicSchemaCreateSafe
   };
 }
-export function authorizeCommerceMigrateDeploy({ledgerSnapshot,allowedPending,repositoryContract,observedFlags,schemaState,expectedProductionIdentity} = {}) {
+export function authorizeCommerceMigrateDeploy(input) {
  try {
+  requireState(input !== null && typeof input === 'object' && !Array.isArray(input), 'INVALID_SNAPSHOT');
+  const {ledgerSnapshot,allowedPending,repositoryContract,observedFlags,schemaState,expectedProductionIdentity} = input;
   // expected delivery SHA is a trusted release input, never inferred from observations.
   requireState(expectedProductionIdentity?.environment === 'production' && expectedProductionIdentity.targetEnvironment === 'production' && expectedProductionIdentity.projectId === pins.projectId && /^[a-f0-9]{40}$/.test(expectedProductionIdentity.deliverySHA ?? ''), 'TRUSTED_RELEASE_IDENTITY_REQUIRED');
   requireState(schemaState?.version === 2 && same(schemaState.targetIdentity, expectedProductionIdentity), 'TARGET_IDENTITY_DIVERGED');
@@ -83,6 +85,7 @@ export function authorizeCommerceMigrateDeploy({ledgerSnapshot,allowedPending,re
   const scope = verifySecurity(schemaState);
   return {verdict:'AUTHORIZED',pending:ledger.pending,knownDivergences:2,checksumSafetyAuthority:'INDEPENDENT_LEDGER_VERIFIER',securityScope:'MANAGED_TABLES_ONLY',managedTableCount:scope.managedTableCount,managedPolicyCount:scope.managedPolicyCount,outOfScopePolicyCount:scope.outOfScopePolicyCount,outOfScopePolicies:scope.outOfScopePolicies,managedGrantCount:scope.managedGrantCount,unsafeMigrationDefaultAclCount:scope.unsafeMigrationDefaultAclCount,publicSchemaCreateSafe:scope.publicSchemaCreateSafe};
  } catch(error) {
-  return {verdict:'DENIED',code:/^[A-Z_]+$/.test(error.message)?error.message:'INVALID_SNAPSHOT'};
+  const message=error instanceof Error?error.message:'';
+  return {verdict:'DENIED',code:/^[A-Z_]+$/.test(message)?message:'INVALID_SNAPSHOT'};
  }
 }

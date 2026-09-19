@@ -1,0 +1,159 @@
+{
+  "mission": "50AG.4B-R3C.4",
+  "title": "DEFECT-1_INPUT_BOUNDARY_FAIL_CLOSED",
+  "classification": "A",
+  "readyForR3D": true,
+  "sourceSHA": "9a4662c12635721d119588d89732fbafda149695",
+  "baseBranch": "feature/security-gate-scope-reconciliation-20260918",
+  "originMainSHA": "ac54cf4e30cb4a93120d83472da490534524acf1",
+  "newBranch": "feature/security-gate-input-boundary-r3c4-20260919",
+  "newWorktree": "/home/evaldo/Projetos/ofertano.worktrees/r3c4-input-boundary",
+  "dirtyWorktreeTouched": false,
+  "commitMessage": "fix(security): fail closed on malformed authorization input",
+  "defect1Before": {
+    "reproRuns": 5,
+    "typeErrors": 5,
+    "authorized": 0,
+    "error": "Cannot destructure property 'ledgerSnapshot' ... as it is null."
+  },
+  "defect1Fix": {
+    "signature": "authorizeCommerceMigrateDeploy(input)",
+    "boundaryGuard": "requireState(input !== null && typeof input === 'object' && !Array.isArray(input), 'INVALID_SNAPSHOT')",
+    "catchHardening": "const message = error instanceof Error ? error.message : ''; map to INVALID_SNAPSHOT unless /^[A-Z_]+$/"
+  },
+  "defect1After": {
+    "nullRuns": 100,
+    "nullThrows": 0,
+    "nullDenied": 100,
+    "nullAuthorized": 0,
+    "nullCode": "INVALID_SNAPSHOT"
+  },
+  "verificationMatrix": {
+    "malformed": {
+      "cases": 5000,
+      "throws": 0,
+      "authorized": 0
+    },
+    "hostile": {
+      "cases": 6,
+      "escaped": 0
+    },
+    "unsafeMutations": {
+      "cases": 10000,
+      "authorized": 0
+    },
+    "safeOutOfScope": {
+      "cases": 2000,
+      "falseDeny": 0
+    },
+    "determinism": {
+      "runs": 1000,
+      "mismatches": 0
+    },
+    "orderPermutations": {
+      "permutations": 1000,
+      "failures": 0
+    },
+    "invalidBoundaryCodeMismatch": 0,
+    "namedUnsafe": {
+      "denied": 19,
+      "total": 19
+    }
+  },
+  "validFixtures": {
+    "canonical": {
+      "verdict": "AUTHORIZED",
+      "managedTableCount": 19,
+      "managedPolicyCount": 10,
+      "outOfScopePolicyCount": 0,
+      "managedGrantCount": 38,
+      "unsafeMigrationDefaultAclCount": 0,
+      "publicSchemaCreateSafe": true
+    },
+    "r3b": {
+      "verdict": "AUTHORIZED",
+      "managedTableCount": 19,
+      "managedPolicyCount": 10,
+      "outOfScopePolicyCount": 6,
+      "managedGrantCount": 38,
+      "unsafeMigrationDefaultAclCount": 0,
+      "publicSchemaCreateSafe": true
+    }
+  },
+  "byDesignNote": "Empty observed defaultPrivileges [] is accepted by the pre-existing R3C scoped UNSAFE-only DEFAULT ACL contract (comment: only migration role / public schema / TABLES matter). verifySecurity is byte-identical to HEAD (git diff proves exactly 2 hunks: signature+boundary guard and catch hardening), so the behavior is unchanged pre/post fix. Empty-array defaultPrivileges was therefore classified OUT of the malformed corpus: it violates no gate invariant. Malformed corpus is invariant-violating inputs only.",
+  "tests": {
+    "migrationHistory": {
+      "files": 4,
+      "tests": 96,
+      "pass": 96,
+      "fail": 0
+    },
+    "defectRegressionTests": [
+      "D1",
+      "D2",
+      "D3",
+      "D4",
+      "D5",
+      "D6"
+    ],
+    "npmTestRounds": 2,
+    "npmTestExitCodes": [
+      0,
+      0
+    ]
+  },
+  "build": {
+    "exit": 0,
+    "staticPages": "22/22",
+    "checkEncoding": "ok (501 arquivos textuais, 0 mojibake)",
+    "prismaVersion": "7.9.0",
+    "validate": "ok",
+    "generate": "ok",
+    "env": "synthetic placeholders only (127.0.0.1:55433 dummy URLs, TEST_ONLY keys, http://127.0.0.1:55434 NEXT_PUBLIC)"
+  },
+  "localRehearsal": {
+    "database": "ofertano_50ag4b_r3c4_rehearsal",
+    "target": "127.0.0.1:55433",
+    "verdict": "PASS",
+    "authorization": "AUTHORIZED",
+    "applied": [
+      "20260917120000_commerce_intelligence_foundation",
+      "20260918100000_commerce_canary_control_plane"
+    ],
+    "commerceOnlyApplied": true,
+    "ledgerBefore": 9,
+    "ledgerAfter": 11,
+    "commerceTablesAfter": 10,
+    "commerceRowsAfter": 0,
+    "anonAuthEffectivePrivilegesOnCommerce": "none",
+    "publicSchemaAnonCreate": false,
+    "outOfScopePoliciesAuthorized": 6,
+    "unsafeMigrationDefaultAclCount": 0,
+    "staticObjectContract": {
+      "tables": 10,
+      "enumTypes": 11
+    },
+    "dbDroppedAfter": true
+  },
+  "migrationChecksums11of11": true,
+  "pinnedMigrationChecksums": {
+    "20260915194500_rls_security_hardening": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+    "20260915203000_fix_rls_product_public_read": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+    "20260917120000_commerce_intelligence_foundation": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
+    "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0"
+  },
+  "diffScope": {
+    "files": [
+      "scripts/migration-history/authorize-commerce-migrate-deploy.mjs",
+      "scripts/migration-history/authorize-commerce-migrate-deploy.test.mjs",
+      "docs/evidence/50ag4b-r3c4/rehearsal.json",
+      "docs/evidence/50ag4b-r3c4/summary.json"
+    ],
+    "forbiddenPathsHit": false,
+    "allowed": "gate .mjs, gate test, docs/evidence/50ag4b-r3c4/*"
+  },
+  "productionAccessed": false,
+  "vercelUsed": false,
+  "mainChanged": false,
+  "secrets": "none"
+}

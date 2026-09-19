@@ -1,0 +1,329 @@
+{
+  "prismaVersion": "7.9.0",
+  "target": "127.0.0.1:55433",
+  "database": "ofertano_50ag4b_r3c4_rehearsal",
+  "staticObjectContract": {
+    "tables": 10,
+    "enumTypes": 11,
+    "indexes": 29,
+    "uniqueIndexes": 3
+  },
+  "rehearsal": {
+    "verdict": "PASS",
+    "authorization": {
+      "verdict": "AUTHORIZED",
+      "pending": [
+        "20260917120000_commerce_intelligence_foundation",
+        "20260918100000_commerce_canary_control_plane"
+      ],
+      "knownDivergences": 2,
+      "checksumSafetyAuthority": "INDEPENDENT_LEDGER_VERIFIER",
+      "securityScope": "MANAGED_TABLES_ONLY",
+      "managedTableCount": 19,
+      "managedPolicyCount": 10,
+      "outOfScopePolicyCount": 6,
+      "outOfScopePolicies": [
+        {
+          "tablename": "notifications",
+          "policyname": "notifications_select_own",
+          "cmd": "SELECT"
+        },
+        {
+          "tablename": "notifications",
+          "policyname": "notifications_update_own",
+          "cmd": "UPDATE"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_delete_own",
+          "cmd": "DELETE"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_insert_own",
+          "cmd": "INSERT"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_select_own",
+          "cmd": "SELECT"
+        },
+        {
+          "tablename": "price_alerts",
+          "policyname": "price_alerts_update_own",
+          "cmd": "UPDATE"
+        }
+      ],
+      "managedGrantCount": 38,
+      "unsafeMigrationDefaultAclCount": 0,
+      "publicSchemaCreateSafe": true
+    },
+    "execution": {
+      "verdict": "PASS",
+      "applied": [
+        "20260917120000_commerce_intelligence_foundation",
+        "20260918100000_commerce_canary_control_plane"
+      ],
+      "modifiedMigrationWarningObserved": false,
+      "checksumSafetyAuthority": "INDEPENDENT_LEDGER_VERIFIER"
+    },
+    "appliedNames": [
+      "20260917120000_commerce_intelligence_foundation",
+      "20260918100000_commerce_canary_control_plane"
+    ],
+    "commerceOnly": true,
+    "newTableCounts": {
+      "ProductIdentifier": 0,
+      "ProductVariant": 0,
+      "IdentityEvidence": 0,
+      "IdentityConflict": 0,
+      "OfferObservation": 0,
+      "OfferPriceComponent": 0,
+      "TrustSignal": 0,
+      "ProductRelation": 0,
+      "CommerceCanaryGrant": 0,
+      "CommerceCanaryAttempt": 0
+    },
+    "anonAuthPrivileges": {
+      "anon": {
+        "ProductIdentifier": [],
+        "ProductVariant": [],
+        "IdentityEvidence": [],
+        "IdentityConflict": [],
+        "OfferObservation": [],
+        "OfferPriceComponent": [],
+        "TrustSignal": [],
+        "ProductRelation": [],
+        "CommerceCanaryGrant": [],
+        "CommerceCanaryAttempt": []
+      },
+      "authenticated": {
+        "ProductIdentifier": [],
+        "ProductVariant": [],
+        "IdentityEvidence": [],
+        "IdentityConflict": [],
+        "OfferObservation": [],
+        "OfferPriceComponent": [],
+        "TrustSignal": [],
+        "ProductRelation": [],
+        "CommerceCanaryGrant": [],
+        "CommerceCanaryAttempt": []
+      }
+    },
+    "publicSchemaAnonCreate": false,
+    "ledgerBefore": [
+      {
+        "id": "8c6d1173-9ab2-462f-971d-94527fe0614b",
+        "checksum": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+        "finished_at": "2026-09-19T11:19:20.356Z",
+        "migration_name": "20260824000000_postgresql_baseline",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:20.356Z",
+        "applied_steps_count": 0
+      },
+      {
+        "id": "ac08d320-9e93-4eee-a3bc-b25a2fa4fda6",
+        "checksum": "135d793bbeb9dd11a73dd1eeb5493a10dd4859c637af8821728dfdaf13288311",
+        "finished_at": "2026-09-19T11:19:22.225Z",
+        "migration_name": "20260824120000_analytics_intelligence",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:22.225Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "f87c6f07-17de-4579-9e93-9f2682786ef9",
+        "checksum": "e513a3ead01f6687b95f382818300d4b203a4fb9e6590c4c49e16e94a43e7dd1",
+        "finished_at": "2026-09-19T11:19:24.122Z",
+        "migration_name": "20260828220000_admin_push_subscription",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:24.122Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "d64a9439-9e73-476b-8119-df546279874e",
+        "checksum": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+        "finished_at": "2026-09-19T11:19:26.219Z",
+        "migration_name": "20260905120000_price_alerts",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:26.219Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "588b419e-9376-4ac6-b4c6-136fea553ce9",
+        "checksum": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+        "finished_at": "2026-09-19T11:19:28.180Z",
+        "migration_name": "20260907000000_social_automation",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:28.180Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "954465c6-9dff-49e2-9e16-86b284d14faf",
+        "checksum": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+        "finished_at": "2026-09-19T11:19:30.333Z",
+        "migration_name": "20260907220000_social_three_slots",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:30.333Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "f9f40bbb-4cca-4286-92db-e0edcb80b093",
+        "checksum": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
+        "finished_at": "2026-09-19T11:19:32.253Z",
+        "migration_name": "20260912000000_add_raw_marketplace_listing",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:32.253Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "54dcca56-1264-4fc9-a463-3beef1ef0ec1",
+        "checksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+        "finished_at": "2026-09-19T11:19:34.540Z",
+        "migration_name": "20260915194500_rls_security_hardening",
+        "logs": null,
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:34.518Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "508938f5-2517-4281-8c32-4ff85e015f65",
+        "checksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+        "finished_at": "2026-09-19T11:19:34.550Z",
+        "migration_name": "20260915203000_fix_rls_product_public_read",
+        "logs": null,
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:34.541Z",
+        "applied_steps_count": 1
+      }
+    ],
+    "ledgerAfter": [
+      {
+        "id": "8c6d1173-9ab2-462f-971d-94527fe0614b",
+        "checksum": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
+        "finished_at": "2026-09-19T11:19:20.356Z",
+        "migration_name": "20260824000000_postgresql_baseline",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:20.356Z",
+        "applied_steps_count": 0
+      },
+      {
+        "id": "ac08d320-9e93-4eee-a3bc-b25a2fa4fda6",
+        "checksum": "135d793bbeb9dd11a73dd1eeb5493a10dd4859c637af8821728dfdaf13288311",
+        "finished_at": "2026-09-19T11:19:22.225Z",
+        "migration_name": "20260824120000_analytics_intelligence",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:22.225Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "f87c6f07-17de-4579-9e93-9f2682786ef9",
+        "checksum": "e513a3ead01f6687b95f382818300d4b203a4fb9e6590c4c49e16e94a43e7dd1",
+        "finished_at": "2026-09-19T11:19:24.122Z",
+        "migration_name": "20260828220000_admin_push_subscription",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:24.122Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "d64a9439-9e73-476b-8119-df546279874e",
+        "checksum": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
+        "finished_at": "2026-09-19T11:19:26.219Z",
+        "migration_name": "20260905120000_price_alerts",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:26.219Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "588b419e-9376-4ac6-b4c6-136fea553ce9",
+        "checksum": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
+        "finished_at": "2026-09-19T11:19:28.180Z",
+        "migration_name": "20260907000000_social_automation",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:28.180Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "954465c6-9dff-49e2-9e16-86b284d14faf",
+        "checksum": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
+        "finished_at": "2026-09-19T11:19:30.333Z",
+        "migration_name": "20260907220000_social_three_slots",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:30.333Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "f9f40bbb-4cca-4286-92db-e0edcb80b093",
+        "checksum": "a1ae543e7c728bd7af7ffb7eece310bbead93f7e1041215824403033557d143c",
+        "finished_at": "2026-09-19T11:19:32.253Z",
+        "migration_name": "20260912000000_add_raw_marketplace_listing",
+        "logs": "",
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:32.253Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "54dcca56-1264-4fc9-a463-3beef1ef0ec1",
+        "checksum": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
+        "finished_at": "2026-09-19T11:19:34.540Z",
+        "migration_name": "20260915194500_rls_security_hardening",
+        "logs": null,
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:34.518Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "508938f5-2517-4281-8c32-4ff85e015f65",
+        "checksum": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
+        "finished_at": "2026-09-19T11:19:34.550Z",
+        "migration_name": "20260915203000_fix_rls_product_public_read",
+        "logs": null,
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:34.541Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "767e7c06-d446-4515-bbec-01feaf7b2616",
+        "checksum": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
+        "finished_at": "2026-09-19T11:19:36.969Z",
+        "migration_name": "20260917120000_commerce_intelligence_foundation",
+        "logs": null,
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:36.835Z",
+        "applied_steps_count": 1
+      },
+      {
+        "id": "eeba076c-f90f-4c69-9231-3e2e705099a9",
+        "checksum": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0",
+        "finished_at": "2026-09-19T11:19:36.998Z",
+        "migration_name": "20260918100000_commerce_canary_control_plane",
+        "logs": null,
+        "rolled_back_at": null,
+        "started_at": "2026-09-19T11:19:36.970Z",
+        "applied_steps_count": 1
+      }
+    ],
+    "r3bSnapshotInjected": {
+      "unmanagedPolicies": 6,
+      "platformDefaultRows": 52
+    },
+    "staticObjectContract": {
+      "tables": 10,
+      "enumTypes": 11,
+      "indexes": 29,
+      "uniqueIndexes": 3
+    }
+  }
+}

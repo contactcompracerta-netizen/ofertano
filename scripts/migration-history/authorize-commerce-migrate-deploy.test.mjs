@@ -113,3 +113,40 @@ test('S21 duplicate managed policy DENIED',()=>{const i=r3bInput();const p=i.sch
 test('S22 duplicate managed grant row DENIED',()=>{const i=r3bInput();const r=i.schemaState.grants.find(r=>r.tableName==='Product'&&r.role==='anon');i.schemaState.grants.push({...r});assert.equal(authorizeCommerceMigrateDeploy(i).verdict,'DENIED');});
 test('S23 malformed default ACL objectType DENIED',()=>{const i=r3bInput();i.schemaState.defaultPrivileges.push({owner:'postgres',schema:'public',objectType:'X',grantee:'anon',privilege:'SELECT',grantable:false});assert.equal(authorizeCommerceMigrateDeploy(i).verdict,'DENIED');});
 test('S24 unknown managed table state DENIED',()=>{const i=r3bInput();i.schemaState.legacyCounts.UnknownTable=0;assert.equal(authorizeCommerceMigrateDeploy(i).verdict,'DENIED');});
+// ============ R3C.4 (DEFECT-1): fail-closed boundary hardening on malformed authorization input ============
+function verdictOf(value){try{return {threw:false,result:authorizeCommerceMigrateDeploy(value)};}catch(error){return {threw:true,error};}}
+test('D1 null/undefined/primitives are DENIED with INVALID_SNAPSHOT and never throw',()=>{
+ for(const value of [null,undefined,[],'', 'text',0,1,false,true,1n,Symbol('x'),function(){}]){
+  const r=verdictOf(value);
+  assert.equal(r.threw,false,'gate threw for '+String(value));
+  assert.equal(r.result.verdict,'DENIED');
+  assert.equal(r.result.code,'INVALID_SNAPSHOT');
+ }
+});
+test('D2 empty object snapshot DENIED (never throw, never AUTHORIZED)',()=>{
+ const r=verdictOf({});
+ assert.equal(r.threw,false);assert.equal(r.result.verdict,'DENIED');
+});
+test('D3 hostile getter/proxy throws never escape the gate',()=>{
+ for(const thrown of [null,undefined,'synthetic',123,{},new Error('SYNTHETIC_TEST_ERROR')]){
+  const hostile=new Proxy({}, {get(){throw thrown;}});
+  const r=verdictOf(hostile);
+  assert.equal(r.threw,false,'hostile throw escaped for '+String(thrown));
+  assert.equal(r.result.verdict,'DENIED');
+ }
+});
+test('D4 100 consecutive null calls: 100/100 DENIED, 0 throws, 0 AUTHORIZED',()=>{
+ for(let n=0;n<100;n++){const r=verdictOf(null);assert.equal(r.threw,false);assert.equal(r.result.verdict,'DENIED');assert.equal(r.result.code,'INVALID_SNAPSHOT');}
+});
+test('D5 malformed field corruption DENIED (no throw, no AUTHORIZED)',()=>{
+ const i=input();
+ for(const key of ['ledgerSnapshot','allowedPending','repositoryContract','observedFlags','schemaState','expectedProductionIdentity']){
+  const j=structuredClone(i);j[key]=null;assert.equal(verdictOf(j).threw,false);assert.equal(verdictOf(j).result.verdict,'DENIED');
+  const k=structuredClone(i);k[key]='x';assert.equal(verdictOf(k).threw,false);assert.equal(verdictOf(k).result.verdict,'DENIED');
+  const l=structuredClone(i);l[key]=[];assert.equal(verdictOf(l).threw,false);assert.equal(verdictOf(l).result.verdict,'DENIED');
+ }
+});
+test('D6 valid inputs still AUTHORIZED after boundary hardening',()=>{
+ assert.equal(authorizeCommerceMigrateDeploy(input()).verdict,'AUTHORIZED');
+ assert.equal(authorizeCommerceMigrateDeploy(r3bInput()).verdict,'AUTHORIZED');
+});
