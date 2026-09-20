@@ -103,7 +103,7 @@ assert.match(
 );
 assert.match(
   publicSrc,
-  /buscarPostPublicadoPorSlug[\s\S]*findFirst\s*\(\s*\{[\s\S]*where\s*:\s*condicaoPublicacaoEfetiva\s*\(/,
+  /buscarPostPublicadoPorSlug[\s\S]*findFirst\s*\(\s*\{\s*where\s*:\s*\{\s*slug\s*,\s*\.\.\.condicaoPublicacaoEfetiva\s*\(\s*\)\s*,?\s*\}/,
   "buscarPostPublicadoPorSlug deve usar condicaoPublicacaoEfetiva() no where do findFirst",
 );
 
@@ -188,14 +188,14 @@ function linhaEhVisivel(condicao: CondicaoPublicacaoEfetiva, linha: LinhaPost): 
  *  comportamental, sem importar prisma). */
 function extrairCondicaoDoFonte(agora: Date): CondicaoPublicacaoEfetiva {
   const m = publicSrc.match(
-    /condicaoPublicacaoEfetiva\s*\(\s*agora[^)]*\)\s*:\s*Prisma\.BlogPostWhereInput\s*\{[\s\S]*?return\s*\{[\s\S]*?\};/,
+    /condicaoPublicacaoEfetiva\s*\(\s*agora\s*:\s*Date\s*=\s*new\s+Date\(\)\s*,?\s*\)\s*:\s*Prisma\.BlogPostWhereInput\s*\{[\s\S]*?return\s*\{[\s\S]*?\};/,
   );
   assert.ok(m, "não consegui isolar o corpo de condicaoPublicacaoEfetiva do fonte");
   const corpo = m[0];
   assert.match(corpo, /"PUBLISHED"/, "sub-condição PUBLISHED presente");
   assert.match(corpo, /"SCHEDULED"/, "sub-condição SCHEDULED presente");
-  assert.match(corpo, /publishedAt\s*:\s*\{\s*lte\s*:\s*agora\s*\}/, "publishedAt lte agora");
-  assert.match(corpo, /scheduledAt\s*:\s*\{\s*lte\s*:\s*agora\s*\}/, "scheduledAt lte agora");
+  assert.match(corpo, /publishedAt\s*:\s*\{\s*lte\s*:\s*agora\s*,?\s*\}/, "publishedAt lte agora");
+  assert.match(corpo, /scheduledAt\s*:\s*\{\s*lte\s*:\s*agora\s*,?\s*\}/, "scheduledAt lte agora");
 
   // Reconstrói comportamentalmente o objeto que o Prisma aplicaria.
   return {

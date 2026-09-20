@@ -7,7 +7,7 @@
   "build": {
     "exit_code": 0,
     "command": "npm run build (check:encoding && prisma generate && next build)",
-    "check_encoding": "PASS (505 arquivos textuais, 0 mojibake)",
+    "check_encoding": "PASS (506 arquivos textuais, 0 mojibake)",
     "prisma_generate": "PASS (Generated Prisma Client v7.9.0)",
     "next_build": "PASS (Turbopack, compiled successfully)"
   },
@@ -19,29 +19,61 @@
     "env_vars": {
       "DATABASE_URL": "postgresql://sentinel@127.0.0.1:55431/ofertano_sentinel",
       "DIRECT_URL": "postgresql://sentinel@127.0.0.1:55431/ofertano_sentinel",
-      "NEXT_FONT_GOOGLE_MOCKED_RESPONSES": "/tmp/ofertano-r3d2a-fonts/mocked-responses.js"
+      "NEXT_FONT_GOOGLE_MOCKED_RESPONSES": "/tmp/r3d2a1/mocked-responses.js"
     }
   },
   "dynamic_routes": {
-    "blog_page": {"path": "/blog", "dynamic": true, "badge": "ƒ"},
-    "blog_slug_page": {"path": "/blog/[slug]", "dynamic": true, "badge": "ƒ"},
+    "blog_page": {
+      "path": "/blog",
+      "dynamic": true,
+      "badge": "ƒ"
+    },
+    "blog_slug_page": {
+      "path": "/blog/[slug]",
+      "dynamic": true,
+      "badge": "ƒ"
+    },
     "revalidate": "NONE on blog pages",
     "generateStaticParams": "NONE in src/app"
   },
   "public_ts_readonly": {
-    "exports": ["condicaoPublicacaoEfetiva", "listarPostsPublicados", "buscarPostPublicadoPorSlug"],
+    "exports": [
+      "condicaoPublicacaoEfetiva",
+      "listarPostsPublicados",
+      "buscarPostPublicadoPorSlug"
+    ],
     "write_methods": "NONE (no updateMany, create, upsert, delete, $transaction, $executeRaw, publicarAgendadosVencidos)",
     "condicaoPublicacaoEfetiva_used_in_findMany": true,
     "condicaoPublicacaoEfetiva_used_in_findFirst": true
   },
   "tests": {
-    "npm_test_chain": {"parts": 35, "result": "PASS (exit 0)"},
-    "build_purity_test": {"path": "src/services/blog/buildPurity.test.ts", "result": "PASS (0 DB connections)"},
-    "r3c5": "7760/0/0 (from docs/evidence/50ag4b-r3c5/summary.json)"
+    "npm_test_chain": {
+      "parts": 36,
+      "result": "PASS (exit 0)"
+    },
+    "build_purity_test": {
+      "path": "src/services/blog/buildPurity.test.ts",
+      "result": "PASS (0 DB connections)"
+    },
+    "r3c5": {
+      "mutationCases": 7680,
+      "unsafeAuthorizedCount": 0,
+      "safeCases": 2688,
+      "falseDenyCount": 0,
+      "source": "docs/evidence/50ag4b-r3c5/summary.json",
+      "authorizerTests": 105,
+      "result": "PASS"
+    },
+    "public_read_only_test": {
+      "path": "src/services/blog/publicReadOnly.test.ts",
+      "result": "PASS",
+      "visibilityCases": 8,
+      "registeredInNpmTest": true
+    }
   },
   "files_changed": [
-    "next.config.ts (turbopack.resolveAlias for @vercel/turbopack-next)",
-    "package.json (appended buildPurity.test.ts to test chain)",
+    "next.config.ts (internal Turbopack alias removed by R3D.2A.1)",
+    "package.json (buildPurity.test.ts and publicReadOnly.test.ts registered in test chain)",
     "src/app/blog/page.tsx (force-dynamic)",
     "src/app/blog/[slug]/page.tsx (force-dynamic)",
     "src/services/blog/public.ts (read-only refactor with condicaoPublicacaoEfetiva)"
@@ -51,5 +83,84 @@
     "docs/evidence/50ag4b-r3d2a/build-sentinel.log"
   ],
   "schema_migrations_unchanged": true,
-  "no_env_files_in_worktree": true
+  "no_env_files_in_worktree": true,
+  "publicReadOnlyTest": "PASS",
+  "buildPurityTest": "PASS",
+  "turbopackInternalAliasPresent": false,
+  "reconciliation": {
+    "mission": "50AG.4B-R3D.2A.1",
+    "status": "COMPLETE",
+    "classification": "R3D2A_EVIDENCE_AND_TESTS_RECONCILED",
+    "baseSHA": "22da4e40528cfa1095d8daa099dade7bf60d10f5",
+    "publicReadOnlyTestBefore": "FAIL: findFirst/slug regex rejected the real where object",
+    "intermediateFailure": "After fixing slug, extraction regex rejected nested new Date() and trailing commas; corrected test only.",
+    "publicReadOnlyTestAfter": "PASS",
+    "buildPurityTest": "PASS",
+    "npmTest": "PASS",
+    "migrationHistoryTests": {
+      "pass": 136,
+      "fail": 0
+    },
+    "r3c5": {
+      "mutationCases": 7680,
+      "unsafeAuthorizedCount": 0,
+      "safeCases": 2688,
+      "falseDenyCount": 0
+    },
+    "aliasBefore": true,
+    "aliasRequired": false,
+    "aliasAfter": false,
+    "aliasRemovalBuildResult": "PASS",
+    "buildExitCode": 0,
+    "dbSentinelConnectionAttempts": 0,
+    "blogBuildMode": "ƒ dynamic",
+    "blogSlugBuildMode": "ƒ dynamic",
+    "environment": "Clean explicit environment, local sentinel at 127.0.0.1:55431, TEST_ONLY Supabase key, loopback Supabase URL, telemetry disabled. No env files or inherited service credentials.",
+    "fontFixture": "Original /tmp/ofertano-r3d2a-fonts fixture no longer existed. Recreated the documented test-only mocked-response mechanism using bundled Geist fonts over mission-owned loopback HTTP. Original fixture bytes could not be recovered.",
+    "aliasConclusion": "Installed Next.js 16.2.11 build succeeds without the internal alias; no application requirement demonstrated. Alias removed.",
+    "checks": {
+      "encoding": "PASS",
+      "diffCheck": "PASS",
+      "prismaValidate": "PASS",
+      "prismaGenerate": "PASS"
+    },
+    "immutability": {
+      "migrationCount": 11,
+      "migrationHashesMatchCanonicalR3C5": true,
+      "schemaUnchanged": true,
+      "forensicPinsUnchanged": true,
+      "r3c5GateUnchanged": true,
+      "publicTsUnchanged": true
+    },
+    "productionAccessed": false,
+    "vercelUsed": false,
+    "mainChanged": false,
+    "readyForR3D2Reauthorization": true,
+    "localEvidence": {
+      "build-no-alias.log": {
+        "path": "/tmp/r3d2a1/build-no-alias.log",
+        "sha256": "49d8a87a9a28ec547469e48fb0a2964ba9568a0e75d45b250a5d163d9337a622"
+      },
+      "immutability.json": {
+        "path": "/tmp/r3d2a1/immutability.json",
+        "sha256": "547c0e4fcc41c17f33e39af290d8f6df42dc9627eb499228da1c9a014f80f032"
+      },
+      "npm-test.log": {
+        "path": "/tmp/r3d2a1/npm-test.log",
+        "sha256": "3fa937d889b26cc21b0391cc1ecf2f453def222cc8306e6415084c55cc70a777"
+      },
+      "public-read-only-after.log": {
+        "path": "/tmp/r3d2a1/public-read-only-after.log",
+        "sha256": "2b91137c8f1823f201823f5b4f7f60ff4674506b23ac01f50e195a02997b9315"
+      },
+      "r3c5.log": {
+        "path": "/tmp/r3d2a1/r3c5.log",
+        "sha256": "bc1900ca663414fc5066aa0d21de9fdd7e4ef5fbd070e7b7e074ecd0c6b11b29"
+      },
+      "run.py": {
+        "path": "/tmp/r3d2a1/run.py",
+        "sha256": "c3d23d341768f5efecbb6fea7e50c06bb3338c7ece1c655c6587565ad3aa128f"
+      }
+    }
+  }
 }
