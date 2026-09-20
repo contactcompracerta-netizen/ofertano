@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import { listarPostsPublicados } from "@/services/blog/public";
 import type { BlogPost } from "@/services/blog/types";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Blog | Guias para comprar melhor",

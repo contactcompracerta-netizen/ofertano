@@ -1,0 +1,109 @@
+
+> ofertano@0.1.0 build
+> npm run check:encoding && prisma generate && next build
+
+
+> ofertano@0.1.0 check:encoding
+> node scripts/check-encoding.mjs
+
+check-encoding: ok (505 arquivos textuais, 0 mojibake).
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.9.0) to ./node_modules/@prisma/client in 635ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+▲ Next.js 16.2.11 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 17.1s
+  Running TypeScript ...
+  Finished TypeScript in 23.1s ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/21) ...
+  Generating static pages using 3 workers (5/21) 
+  Generating static pages using 3 workers (10/21) 
+  Generating static pages using 3 workers (15/21) 
+✓ Generating static pages using 3 workers (21/21) in 661ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/blog
+├ ○ /admin/fila
+├ ○ /admin/integracoes
+├ ○ /admin/inteligencia
+├ ○ /admin/links-afiliados
+├ ○ /admin/oportunidades
+├ ƒ /api/admin/blog
+├ ƒ /api/admin/blog/[id]
+├ ƒ /api/admin/blog/import-legacy
+├ ƒ /api/admin/integracoes/status
+├ ƒ /api/admin/integracoes/test
+├ ƒ /api/admin/inteligencia
+├ ƒ /api/admin/push/subscribe
+├ ƒ /api/admin/push/vapid
+├ ƒ /api/analytics/events
+├ ƒ /api/auth/mercadolivre
+├ ƒ /api/auth/mercadolivre/callback
+├ ƒ /api/auth/mercadolivre/status
+├ ƒ /api/auth/mercadolivre/test-item
+├ ƒ /api/auth/mercadolivre/test-public-item
+├ ƒ /api/cron/catalog-populate
+├ ƒ /api/cron/catalog-regression-monitor
+├ ƒ /api/cron/import-queue
+├ ƒ /api/cron/price-monitor
+├ ƒ /api/cron/social-daily
+├ ƒ /api/discovery/publish
+├ ƒ /api/discovery/test
+├ ƒ /api/favorites
+├ ƒ /api/favorites/products
+├ ƒ /api/import-product/v2
+├ ƒ /api/import-queue
+├ ƒ /api/import-queue/add
+├ ƒ /api/import-queue/delete
+├ ƒ /api/import-queue/process
+├ ƒ /api/import-queue/retry
+├ ƒ /api/opportunities
+├ ƒ /api/opportunities/affiliate
+├ ƒ /api/opportunities/affiliate/offers
+├ ƒ /api/opportunities/batch-publish
+├ ƒ /api/opportunities/categories
+├ ƒ /api/opportunities/discover
+├ ƒ /api/opportunities/queue
+├ ƒ /api/opportunities/release
+├ ƒ /api/price-alerts
+├ ƒ /api/products
+├ ƒ /api/products/[id]/live-offers
+├ ƒ /api/social/card/[id]
+├ ƒ /api/social/daily
+├ ƒ /blog
+├ ƒ /blog/[slug]
+├ ○ /categoria
+├ ƒ /categorias
+├ ○ /contato
+├ ○ /favoritos
+├ ○ /icon.svg
+├ ○ /login
+├ ƒ /o/[codigo]
+├ ƒ /ofertas
+├ ○ /politica-de-privacidade
+├ ƒ /produto/[id]
+├ ○ /recuperar-senha
+├ ○ /robots.txt
+├ ƒ /seguranca
+├ ƒ /sitemap.xml
+├ ○ /sobre
+└ ○ /termos
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

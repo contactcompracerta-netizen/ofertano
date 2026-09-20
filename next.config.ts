@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    resolveAlias: {
+      "@vercel/turbopack-next/internal/font/google/cssmodule.module.css": "./node_modules/@vercel/turbopack-next/internal/font/google/cssmodule.module.css",
+    },
+  },
   images: {
     remotePatterns: [
       {

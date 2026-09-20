@@ -6,22 +6,38 @@ import {
 
 import { mapearPostPublico } from "./format";
 import type { BlogPost } from "./types";
+import type { Prisma } from "@prisma/client";
 
-async function publicarAgendadosVencidos() {
-  const now = new Date();
-
-  await prisma.blogPost.updateMany({
-    where: {
-      status: "SCHEDULED",
-      scheduledAt: {
-        lte: now,
+/**
+ * Condição de publicação efetiva (somente leitura).
+ *
+ * Um post fica publicamente visível quando:
+ * - status PUBLISHED e publishedAt <= agora; OU
+ * - status SCHEDULED e scheduledAt <= agora (publicação agendada vencida).
+ *
+ * Não publica: DRAFT, ARCHIVED, SCHEDULED futuro e PUBLISHED com
+ * publishedAt futuro. Nenhuma linha é modificada: a decisão de
+ * visibilidade é aplicada diretamente no WHERE das queries.
+ */
+export function condicaoPublicacaoEfetiva(
+  agora: Date = new Date(),
+): Prisma.BlogPostWhereInput {
+  return {
+    OR: [
+      {
+        status: "PUBLISHED",
+        publishedAt: {
+          lte: agora,
+        },
       },
-    },
-    data: {
-      status: "PUBLISHED",
-      publishedAt: now,
-    },
-  });
+      {
+        status: "SCHEDULED",
+        scheduledAt: {
+          lte: agora,
+        },
+      },
+    ],
+  };
 }
 
 function ordenarLegados(): BlogPost[] {
@@ -46,16 +62,9 @@ export async function listarPostsPublicados(): Promise<
   BlogPost[]
 > {
   try {
-    await publicarAgendadosVencidos();
-
     const posts =
       await prisma.blogPost.findMany({
-        where: {
-          status: "PUBLISHED",
-          publishedAt: {
-            lte: new Date(),
-          },
-        },
+        where: condicaoPublicacaoEfetiva(),
         orderBy: [
           {
             featured: "desc",
@@ -90,16 +99,11 @@ export async function buscarPostPublicadoPorSlug(
   slug: string,
 ): Promise<BlogPost | null> {
   try {
-    await publicarAgendadosVencidos();
-
     const post =
       await prisma.blogPost.findFirst({
         where: {
           slug,
-          status: "PUBLISHED",
-          publishedAt: {
-            lte: new Date(),
-          },
+          ...condicaoPublicacaoEfetiva(),
         },
       });
 

@@ -10,7 +10,7 @@ import {
 } from "@/services/blog/public";
 import type { BlogPost } from "@/services/blog/types";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 type BlogArticlePageProps = {
   params: Promise<{
