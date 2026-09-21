@@ -1048,4 +1048,63 @@ assert.equal(
   "AUTOMOTIVE_PULLEY_ALTERNATOR",
 );
 
+/*
+ * Catalog Release 01 — variante EXPLICITA conflitante.
+ * Caso real do primeiro produto publico: origem M170 CINZA vs M170 AZUL.
+ */
+const realM170Gray =
+  "Mouse Sem Fio Logitech M170 Cinza F133";
+const realM170Blue =
+  "Mouse sem fio Logitech M170 com Design Ambidestro Compacto, Conexão USB e Pilha Inclusa, Azul - 910-004800";
+
+const realCase = avaliarCompatibilidadeExataEntreImports(
+  listing(realM170Gray, "Logitech"),
+  listing(realM170Blue, "Logitech"),
+);
+assert.equal(
+  realCase.exact,
+  false,
+  "Caso real: M170 Cinza x M170 Azul -> NOT EXACT.",
+);
+assert.ok(
+  /color/i.test(realCase.reason) &&
+    /cinza/.test(realCase.reason) &&
+    /azul/.test(realCase.reason),
+  `Caso real: razao deve citar o conflito de cor: ${realCase.reason}`,
+);
+
+mustBeExact(
+  "Logitech M170 Cinza",
+  "Mouse Sem Fio Logitech M170 Cinza",
+  "Logitech",
+); // B: mesma cor e mesmo modelo -> EXACT permitido.
+
+const missingColorPair = avaliarCompatibilidadeExataEntreImports(
+  listing("Logitech M170", "Logitech"),
+  listing("Logitech M170 Cinza", "Logitech"),
+);
+assert.equal(
+  missingColorPair.exact,
+  true,
+  "C: ausencia de cor em um lado nao e conflito (M170 x M170 Cinza).",
+);
+
+mustBeDifferent(
+  "Smartphone NovaTech Pulse NTX20-41-8C3 128GB 5G",
+  "Smartphone NovaTech Pulse NTX20-41-8C3 256GB 5G",
+  "NovaTech",
+); // D: 128GB x 256GB -> NOT EXACT.
+
+mustBeDifferent(
+  "Batedeira Mondial 110V",
+  "Batedeira Mondial 220V",
+  "Mondial",
+); // E: 110V x 220V -> NOT EXACT.
+
+mustBeExact(
+  "Smartphone Samsung Galaxy A55 256GB Preto 5G",
+  "Samsung Galaxy A55 5G 256 GB Preto Dual Chip",
+  "Samsung",
+); // F: mesmo modelo e mesma variante -> EXACT continua possivel.
+
 console.log("identity exact matcher: todos os casos globais passaram");

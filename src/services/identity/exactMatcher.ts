@@ -36,6 +36,11 @@ const HARD_VARIANT_KEYS: IdentityVariantKey[] = [
   "size",
   "capacity",
   "kitQuantity",
+  /*
+   * Catalog Release 01: cor explicita diferente (Cinza x Azul) e conflito
+   * de EXACT. Ambos os lados precisam declarar a cor; ausencia passa.
+   */
+  "color",
 ];
 
 const ASYMMETRIC_VARIANT_KEYS: IdentityVariantKey[] = [
@@ -43,10 +48,15 @@ const ASYMMETRIC_VARIANT_KEYS: IdentityVariantKey[] = [
 ];
 
 /*
- * Cor e uma variante de apresentacao, nao de identidade-base.
- * Quando o cliente NAO pede uma cor, anuncios do mesmo modelo em cores
- * diferentes podem compartilhar o mesmo Product e competir por preco.
- * Se a consulta explicitar uma cor, queryMatcher continua exigindo-a.
+ * Cor e tratada como variante EXPLICITA desde o Catalog Release 01:
+ * quando os DOIS anuncios declaram cores canonicas diferentes
+ * (ex.: Cinza x Azul), o par NAO pode ser EXACT.
+ * Ausencia de cor em um dos lados NAO e conflito (M170 x M170 Cinza
+ * continua compativel). A extracao e conservadora (extrairCorCanonica):
+ * apenas cores do vocabulario canonico, com fronteira de palavra, viram
+ * variante; "sortido"/multicor e ambiguidade retornam null.
+ * canonicalKey (indice de busca) continua sem cor; o Exact Matcher e a
+ * autorizacao de merge.
  */
 
 const FURNITURE_GENERIC_TOKENS = new Set([
