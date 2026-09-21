@@ -1,3 +1,9 @@
+import type {
+  Marketplace,
+  Prisma,
+  PrismaClient,
+} from "@prisma/client";
+
 import prisma from "@/lib/prisma";
 import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
@@ -2730,6 +2736,96 @@ export type ManualComparisonOptions = {
   suppressProductSync?: boolean;
 };
 
+type ReavaliacaoOfertaClient = Pick<
+  PrismaClient,
+  "$transaction" | "marketplaceOffer"
+>;
+
+type ReavaliacaoOfertaOptions = {
+  /*
+   * Quando true, a rejeicao da oferta existente nao
+   * sincroniza/publica o Product nesta etapa — o pipeline
+   * central fara uma unica sincronizacao ao final.
+   */
+  suppressProductSync: boolean;
+
+  sincronizarMelhorOferta: (
+    tx: Prisma.TransactionClient,
+    productId: string,
+  ) => Promise<unknown>;
+};
+
+/**
+ * Revalidacao da oferta existente: quando a comparacao manual reavalia
+ * um candidato que JA esta salvo no mesmo Product — mesmo marketplace e
+ * externalId — e o matcher atual o classifica como NOT EXACT, a oferta
+ * existente deixa de ser valida e e marcada REJECTED.
+ *
+ * Somente atualiza quando o registro existe E esta marcado como EXACT.
+ * So altera matchStatus, matchScore, reviewReason, isBest e reviewedAt;
+ * active, available, price, oldPrice, affiliateLink, sourceUrl, stock e
+ * PriceHistory permanecem intactos.
+ *
+ * Retorna true quando uma oferta existente foi rejeitada.
+ */
+export async function rejeitarOfertaExistenteReavaliada(
+  client: ReavaliacaoOfertaClient,
+  targetProductId: string,
+  marketplace: Marketplace,
+  externalId: string | null,
+  reviewReason: string,
+  options: ReavaliacaoOfertaOptions,
+): Promise<boolean> {
+  /*
+   * Sem externalId nao ha como confirmar que o candidato e a
+   * mesma oferta do marketplace — não rejeitar.
+   */
+  if (!externalId) {
+    return false;
+  }
+
+  let ofertaRejeitada = false;
+
+  await client.$transaction(async (tx) => {
+    const atualizadas =
+      await tx.marketplaceOffer.updateMany({
+        where: {
+          productId: targetProductId,
+          marketplace,
+          externalId,
+          matchStatus: "EXACT",
+        },
+
+        data: {
+          matchStatus: "REJECTED",
+          matchScore: null,
+          reviewReason,
+          isBest: false,
+          reviewedAt: new Date(),
+        },
+      });
+
+    ofertaRejeitada =
+      atualizadas.count > 0;
+
+    /*
+     * Mesmo criterio do caminho EXACT: sincroniza somente
+     * quando o pipeline central nao fara isso depois.
+     */
+    if (
+      ofertaRejeitada &&
+      !options.suppressProductSync
+    ) {
+      await options.sincronizarMelhorOferta(
+        tx,
+        targetProductId,
+      );
+    }
+  });
+
+  return ofertaRejeitada;
+}
+
 export async function buscarComparacaoManual(
   original: ProductImport,
   targetProductId: string,
@@ -3116,6 +3212,30 @@ termoBusca,
       );
 
     if (!match.exact) {
+      try {
+        await rejeitarOfertaExistenteReavaliada(
+          prisma,
+          targetProductId,
+          candidato.marketplace,
+          candidateProduct.externalId,
+          match.reason,
+          {
+            suppressProductSync:
+              options.suppressProductSync ??
+              false,
+
+            sincronizarMelhorOferta:
+              sincronizarMelhorOfertaDoProduto,
+          },
+        );
+      } catch (error) {
+        errors.push(
+          error instanceof Error
+            ? `${candidateProduct.marketplace}: ${error.message}`
+            : `${candidateProduct.marketplace}: falha ao rejeitar oferta existente reavaliada.`,
+        );
+      }
+
       rejectedCandidates += 1;
 
       rejections.push({
