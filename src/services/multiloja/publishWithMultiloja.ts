@@ -14,6 +14,11 @@ import {
 } from "@/services/comparison/manualComparison";
 
 import {
+  PUBLIC_OFFER_SELECT,
+  countDistinctPublicMarketplaces,
+} from "@/services/publicVisibility/multiStoreVisibility";
+
+import {
   agendarComparacaoMultilojaDoProduto,
 } from "@/services/multiloja/orchestrator";
 
@@ -121,20 +126,58 @@ export async function publicarProdutoComMultiloja(
       ),
     );
 
-    const exactStores =
-      await prisma.marketplaceOffer.count({
+    /*
+     * O gate usa a MESMA noção de oferta pública válida de
+     * hasPublicMultiStore: marketplaces DISTINTOS com oferta ativa,
+     * EXACT, disponível, status comprável e preço válido.
+     *
+     * Contar linhas brutas permitiria publicar um Product single store
+     * que a página pública depois esconderia com notFound().
+     */
+    const ofertasPublicas =
+      await prisma.marketplaceOffer.findMany({
         where: {
           productId: saved.id,
+
           active: true,
+
           available: true,
+
           matchStatus: "EXACT",
+
+          status: {
+            notIn: ["UNAVAILABLE", "ERROR"],
+          },
+
+          price: {
+            gt: 0,
+          },
         },
+
+        ...PUBLIC_OFFER_SELECT,
       });
 
-    if (exactStores < Math.max(1, minimumExactStores)) {
+    const distinctPublicMarketplaces =
+      countDistinctPublicMarketplaces(
+        ofertasPublicas,
+      );
+
+    const minimoExigido = Math.max(
+      1,
+      minimumExactStores,
+    );
+
+    if (
+      distinctPublicMarketplaces <
+      minimoExigido
+    ) {
+      /*
+       * Lançado ANTES de sincronizar/publicar: o Product permanece
+       * publicationStatus=DRAFT e active=false.
+       */
       throw new Error(
-        `Multi Loja incompleto: ${exactStores} loja(s) EXACT encontrada(s); ` +
-          `minimo exigido: ${Math.max(1, minimumExactStores)}.`,
+        `Multi Loja incompleto: ${distinctPublicMarketplaces} marketplace(s) publico(s) distinto(s); ` +
+          `minimo exigido: ${minimoExigido}.`,
       );
     }
 

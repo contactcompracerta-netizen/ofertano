@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  PUBLIC_MULTISTORE_MIN_MARKETPLACES,
   hasPublicMultiStore,
   isUsablePublicOffer,
   countDistinctPublicMarketplaces,
@@ -231,5 +232,148 @@ assert.equal(
   false,
   "oferta indisponivel nao e utilizavel",
 );
+
+/*
+ * INVARIANTE DE PUBLICACAO AUTOMATICA
+ *
+ * publicarProdutoComMultiloja decide com EXATAMENTE esta expressao:
+ *   countDistinctPublicMarketplaces(ofertas) >= minimumExactStores
+ * e processImportQueue passa minimumExactStores =
+ * PUBLIC_MULTISTORE_MIN_MARKETPLACES para ProductOpportunity automatica.
+ * Assim "publicado" nunca pode divirgir de "visivel publicamente".
+ */
+assert.equal(
+  PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+  2,
+  "minimo publico de marketplaces e 2",
+);
+
+const gatePublicacaoAutomatica = (
+  ofertas: Offer[],
+  minimo: number = PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+): boolean =>
+  countDistinctPublicMarketplaces(ofertas) >= minimo;
+
+// A. 1 oferta Mercado Livre => 1 marketplace => publicacao rejeitada
+{
+  const ofertas = [oferta("MERCADO_LIVRE")];
+  assert.equal(
+    countDistinctPublicMarketplaces(ofertas),
+    1,
+    "A: uma oferta Mercado Livre conta 1 marketplace publico",
+  );
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    false,
+    "A: publicacao automatica rejeitada com 1 marketplace",
+  );
+  assert.equal(
+    hasPublicMultiStore(ofertas),
+    false,
+    "A: produto permanece publicamente oculto",
+  );
+}
+
+// B. Mercado Livre + Magalu => 2 => aceita
+{
+  const ofertas = [
+    oferta("MERCADO_LIVRE"),
+    oferta("MAGAZINE_LUIZA"),
+  ];
+  assert.equal(
+    countDistinctPublicMarketplaces(ofertas),
+    2,
+    "B: Mercado Livre + Magalu contam 2 marketplaces",
+  );
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    true,
+    "B: publicacao automatica aceita com 2 marketplaces",
+  );
+  assert.equal(
+    hasPublicMultiStore(ofertas),
+    true,
+    "B: produto fica publicamente visivel",
+  );
+}
+
+// C. duas entradas do mesmo marketplace continuam 1
+{
+  const ofertas = [
+    oferta("MERCADO_LIVRE"),
+    oferta("MERCADO_LIVRE", { price: 90 }),
+  ];
+  assert.equal(
+    countDistinctPublicMarketplaces(ofertas),
+    1,
+    "C: duas entradas do mesmo marketplace continuam 1",
+  );
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    false,
+    "C: duas ofertas da mesma loja nao publicam",
+  );
+}
+
+// D. oferta ERROR nao conta
+{
+  const ofertas = [
+    oferta("MERCADO_LIVRE"),
+    oferta("AMAZON", { status: "ERROR" }),
+  ];
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    false,
+    "D: oferta ERROR nao conta para o gate",
+  );
+}
+
+// E. oferta UNAVAILABLE nao conta
+{
+  const ofertas = [
+    oferta("MERCADO_LIVRE"),
+    oferta("SHOPEE", { status: "UNAVAILABLE" }),
+  ];
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    false,
+    "E: oferta UNAVAILABLE nao conta para o gate",
+  );
+}
+
+// F. available=false nao conta
+{
+  const ofertas = [
+    oferta("MERCADO_LIVRE"),
+    oferta("ALIEXPRESS", { available: false }),
+  ];
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    false,
+    "F: oferta indisponivel nao conta para o gate",
+  );
+}
+
+// G. price <= 0 nao conta
+{
+  const ofertas = [
+    oferta("MERCADO_LIVRE"),
+    oferta("AMAZON", { price: 0 }),
+  ];
+  assert.equal(
+    gatePublicacaoAutomatica(ofertas),
+    false,
+    "G: preco zerado nao conta para o gate",
+  );
+
+  assert.equal(
+    gatePublicacaoAutomatica([
+      oferta("MERCADO_LIVRE"),
+      oferta("AMAZON", { price: -10 }),
+    ]),
+    false,
+    "G: preco negativo nao conta para o gate",
+  );
+}
 
 console.log("multiStoreVisibility: todos os casos passaram");

@@ -3,7 +3,16 @@ import { buscarComparacaoManual } from "@/services/comparison/manualComparison";
 import { publicarProdutoComMultiloja } from "@/services/multiloja/publishWithMultiloja";
 import {
   corrigirLinksAmazonPendentes,
+  sincronizarMelhorOfertaDoProduto,
 } from "@/services/database/saveProduct";
+import {
+  PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+  PUBLIC_OFFER_SELECT,
+  hasPublicMultiStore,
+} from "@/services/publicVisibility/multiStoreVisibility";
+import type {
+  PublicOfferLike,
+} from "@/services/publicVisibility/multiStoreVisibility";
 import { importarProduto } from "@/services/importers";
 import type {
   ProductImport,
@@ -25,6 +34,50 @@ export type QueueProcessResult = {
     error?: string;
   }>;
 };
+
+export type RetryPublicacaoAutoResultado = {
+  permitirSucesso: boolean;
+  motivo: string | null;
+};
+
+/*
+ * Gate da retomada de publicação de um Product autoCreated que nasceu
+ * DRAFT (modo `productId && !opportunityId` da fila).
+ *
+ * Um Product automático só pode terminar em SUCCESS se a PÁGINA PÚBLICA
+ * também o exibir, ou seja, se hasPublicMultiStore(...) for verdadeiro.
+ * Caso contrário a fila cai em ERROR com motivo determinístico.
+ */
+export function avaliarRetryPublicacaoAutoCatalogo(
+  params: {
+    autoCreated: boolean;
+    ofertasPublicas: PublicOfferLike[];
+  },
+): RetryPublicacaoAutoResultado {
+  if (!params.autoCreated) {
+    return {
+      permitirSucesso: true,
+      motivo: null,
+    };
+  }
+
+  if (
+    !hasPublicMultiStore({
+      offers: params.ofertasPublicas,
+    })
+  ) {
+    return {
+      permitirSucesso: false,
+      motivo:
+        "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE",
+    };
+  }
+
+  return {
+    permitirSucesso: true,
+    motivo: null,
+  };
+}
 
 function limitarQuantidade(
   valor: unknown,
@@ -201,6 +254,10 @@ export async function processImportQueue(
               color: true,
               voltage: true,
               size: true,
+
+              autoCreated: true,
+              active: true,
+              publicationStatus: true,
             },
           });
 
@@ -420,30 +477,167 @@ export async function processImportQueue(
           attributes,
         };
 
+        const autoCreated =
+          produtoExistente.autoCreated ===
+          true;
+
         const comparison =
           await buscarComparacaoManual(
             referencia,
             item.productId,
+
+            /*
+             * Product automático em DRAFT: a sincronização fica sob o
+             * gate abaixo. Nada publica antes de provar Multi Loja
+             * pública real.
+             */
+            autoCreated
+              ? {
+                  suppressProductSync: true,
+                }
+              : {},
           );
 
-
-        
-
-
-const processedAt =
+        const processedAt =
           new Date();
 
-        await prisma.importQueue.update({
-          where: {
-            id: item.id,
-          },
+        if (autoCreated) {
+          /*
+           * A. carregar ofertas públicas válidas
+           * B. exigir hasPublicMultiStore(...) = true
+           */
+          const ofertasPublicas =
+            await prisma.marketplaceOffer.findMany({
+              where: {
+                productId:
+                  item.productId,
 
-          data: {
-            status: "SUCCESS",
-            errorMessage: null,
-            processedAt,
-          },
-        });
+                active: true,
+
+                available: true,
+
+                matchStatus: "EXACT",
+
+                status: {
+                  notIn: [
+                    "UNAVAILABLE",
+                    "ERROR",
+                  ],
+                },
+
+                price: {
+                  gt: 0,
+                },
+              },
+
+              ...PUBLIC_OFFER_SELECT,
+            });
+
+          const gate =
+            avaliarRetryPublicacaoAutoCatalogo(
+              {
+                autoCreated: true,
+
+                ofertasPublicas,
+              },
+            );
+
+          if (
+            !gate.permitirSucesso
+          ) {
+            /*
+             * Cai no tratamento ERROR existente deste catch.
+             */
+            throw new Error(
+              gate.motivo ??
+                "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE",
+            );
+          }
+
+          /*
+           * Passou: sincroniza e só então marca SUCCESS.
+           */
+          await prisma.$transaction(
+            async (tx) => {
+              await sincronizarMelhorOfertaDoProduto(
+                tx,
+                item.productId!,
+              );
+
+              await tx.importQueue.update(
+                {
+                  where: {
+                    id: item.id,
+                  },
+
+                  data: {
+                    status:
+                      "SUCCESS",
+                    errorMessage:
+                      null,
+                    processedAt,
+                  },
+                },
+              );
+            },
+          );
+
+          const produtoPublicado =
+            await prisma.product.findUnique(
+              {
+                where: {
+                  id: item.productId,
+                },
+
+                select: {
+                  active: true,
+
+                  offers: {
+                    where: {
+                      active: true,
+                      matchStatus:
+                        "EXACT",
+                    },
+
+                    ...PUBLIC_OFFER_SELECT,
+                  },
+                },
+              },
+            );
+
+          if (
+            !produtoPublicado ||
+            produtoPublicado.active !==
+              true
+          ) {
+            throw new Error(
+              "AUTO_CATALOG_PUBLISH_NOT_ACTIVE",
+            );
+          }
+
+          if (
+            !hasPublicMultiStore({
+              offers:
+                produtoPublicado.offers,
+            })
+          ) {
+            throw new Error(
+              "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE",
+            );
+          }
+        } else {
+          await prisma.importQueue.update({
+            where: {
+              id: item.id,
+            },
+
+            data: {
+              status: "SUCCESS",
+              errorMessage: null,
+              processedAt,
+            },
+          });
+        }
 
         console.log(
           `[ImportQueue] Multi Loja em fila concluído para ${item.productId}: ` +
@@ -571,6 +765,16 @@ const processedAt =
               : "MANUAL",
 
           queueOnFailure: true,
+
+          /*
+           * ProductOpportunity automática só pode ser publicada se a
+           * página pública também for exibir: >= 2 marketplaces
+           * distintos reais. Fluxos manuais mantêm o default.
+           */
+          minimumExactStores:
+            item.opportunityId
+              ? PUBLIC_MULTISTORE_MIN_MARKETPLACES
+              : undefined,
         },
       );
 

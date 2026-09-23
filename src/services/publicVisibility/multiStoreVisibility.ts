@@ -17,6 +17,14 @@ import type { Prisma } from "@prisma/client";
  * passar por aqui. Não espalhar `.length >= 2` em arquivos.
  */
 
+/*
+ * Mínimo de marketplaces DISTINTOS exigido para um produto ser
+ * publicamente visível. É a MESMA noção usada pelo gate de publicação
+ * automática (publicarProdutoComMultiloja / processImportQueue), para
+ * que "publicado" e "visível" nunca divirjam.
+ */
+export const PUBLIC_MULTISTORE_MIN_MARKETPLACES = 2;
+
 // Critério de oferta VÁLIDA, consistente com o comparador público
 // (ver src/app/produto/[id]/page.tsx e a Home):
 // ativa, EXACT, disponível, status comprável e preço válido.
@@ -69,7 +77,10 @@ export function hasPublicMultiStore(
   },
 ): boolean {
   const lista = Array.isArray(offers) ? offers : (offers.offers ?? []);
-  return countDistinctPublicMarketplaces(lista) >= 2;
+  return (
+    countDistinctPublicMarketplaces(lista) >=
+    PUBLIC_MULTISTORE_MIN_MARKETPLACES
+  );
 }
 
 // Para ofertas já validadas upstream (ex.: clusters do matcher Multi Loja V2),
