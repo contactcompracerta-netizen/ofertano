@@ -106,6 +106,67 @@ Invariantes exigidos:
   comercial da oferta (preço), **sem re-executar matching estrutural pesado e sem
   TCC de produto** — o caminho rápido de oferta, próximo estágio da progressão.
 
+## FASE 6.1 — CANÁRIO PROGRESSÃO `MAX_WRITES 1 -> 5` (concurrency=1, SEM cutover)
+
+> Missão FASE 6.1 (docs-only, commit `be4cbb9` mantido; runtime INALTERADO).
+> **Objetivo**: provar o canário com orçamento **5** writes reais controlados,
+> concurrency=1, idempotente, sem efeito público indevido. **NÃO avançar 25.**
+
+### Preflight (FASE A) — read-only
+- Deploy production = `be4cbb9` (githubCommitSha `be4cbb98e46ab2d2b3acaf0d0b96fb6db53499a3`),
+  READY/PROMOTED. Probes: `/` `/sitemap.xml` `/ofertas` `/categorias` `/?q=fone` => **200**.
+- Snapshot: Product=12, MarketplaceOffer=17, PriceHistory=17,
+  RawMarketplaceListing=1 (DISCOVERED, com catalogHash+offerHash),
+  ImportRun=10 / ImportBatch=10 COMPLETED (append por design),
+  ImportQueue PENDING/PROCESSING=0. AUTO_ACTIVE_LT2=0.
+
+### Flags auditadas (FASE B) — API Vercel read-only
+- `vs OFF_SHADOW_ENABLED=1`, `_MARKETPLACE_IDS=mercado_livre`,
+  `_MAX_WRITES=1 -> 5` (sensitive, target production — **única flag alterada**),
+  `_PERSIST_RAW=1`, `_PERSIST_HASHES=1`, `_DRY_RUN=0`.
+- Comportamento das 6 flags equivalente ao provado nas FASE E/G/H (fail-closed).
+
+### Write budget (FASE C) — local fail-closed (empírico, dry-run)
+- `MAX_WRITES=0` => CLI recusa (`--max-writes deve ser inteiro >= 1`) — fail-closed
+  nunca escreve com orçamento 0.
+- `MAX_WRITES=1` e `MAX_WRITES=5` dry-run => `processed=1, writeSuccess=0`
+  (nenhuma escrita em dry-run; orçamento NUNCA excedido).
+- `writeSuccess <= maxWrites` SEMPRE; `exceedMaxWritesSkipped=false`.
+
+### Canário 5 escreve reais (FASE D) — uvicorn? não: runner real (replay #1)
+- `--max-writes 5 --no-dry-run`, concurrency=1, marketplace=mercado_livre:
+  - `processed=1, realWrites=1, rawWrites=1, hashWrites=1`
+  - `writeSuccess=1 <= 5` **PASS**; `skippedMaxWrites=0`, `writeFailed=0`,
+    `systemErrors=0`, `duplicatePrevented=0`
+  - `dryRun=false`, `DATABASE_WRITES_PERFORMED=true`,
+    `DATABASE_WRITES_OUTSIDE_ALLOWLIST=false`, `CUTOVER_EXECUTED=false`.
+
+### Invariantes pós-write (FASE E) — snapshot read-only
+- Product=12 / MarketplaceOffer=17 / PriceHistory=17 **INALTERADOS**.
+- RawMarketplaceListing=1 (upsert idempotente; catalogHash+offerHash persistidos).
+- ImportRun/ImportBatch: +1 run append (replay #1). Fila PENDING/PROCESSING=0.
+- AUTO_ACTIVE_LT2=0 (ser publicado ativo somente com >=2 marketplaces públicos).
+- Zero duplicatas em Product/MarketplaceOffer/PriceHistory/RawMarketplaceListing.
+
+### Replay idempotente (FASE I) — rerun real (#2)
+- Rerun real `--max-writes 5` => `processed=1, writeSuccess=1 <= 5`,
+  `duplicatePrevented=1` (upsert idempotente em Raw), ImportRun/Batch +1 append,
+  **nenhuma** nova Product/MarketplaceOffer/PriceHistory, hashes determinísticos.
+
+### Métricas (FASE K)
+- `writeSuccess=1 <= 5` **PASS**; `skippedMaxWrites=0`; `writeFailed=0`; `systemErrors=0`.
+
+### Prova pública (FASE L)
+- Probes pós-canário => **200** em `/`, `/sitemap.xml`, `/ofertas`, `/categorias`, `/?q=fone`.
+- `AUTO_ACTIVE_LT2=0`; `PUBLIC_MULTISTORE_MIN_MARKETPLACES=2` inalterado; legado autoritativo.
+
+### Status / decisão (FASE M)
+- `CANARY_MAX_WRITES_5` = **PASS** (writeSuccess=1<=5, invariantes OK, zero duplicatas,
+  zero erros inexplicados, fila limpa).
+- `NEXT_CANARY_MAX_WRITES` = **25** (documentado; **NÃO executado nesta missão**).
+- `CATALOG_V1_CUTOVER_READY` = **NO** (nenhum cutover; missão FASE 6.1 não autoriza).
+- `CUTOVER_EXECUTED` = **false** (nada gravado fora de Raw/ImportRun/ImportBatch).
+
 ## Limites desta missão (NÃO fazer)
 
 - NENHUM cutover, mesmo com `CATALOG_V1_CUTOVER_READY=YES`.
