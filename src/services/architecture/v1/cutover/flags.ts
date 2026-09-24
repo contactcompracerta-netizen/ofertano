@@ -39,7 +39,12 @@ export const DEFAULT_AUTHORITATIVE_FLAGS: AuthoritativeFlags = {
 
 function truthy(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  );
 }
 
 function parseMarketplaceIds(value: string | undefined): string[] {

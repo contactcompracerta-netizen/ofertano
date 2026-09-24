@@ -77,6 +77,20 @@ async function main(): Promise<void> {
     );
   }
 
+  // --- Fallback legado: aceita ON explícito (valor oficial do spec FASE C) --------
+  {
+    const on = readAuthoritativeFlags({
+      ARCHITECTURE_V1_LEGACY_FALLBACK_ENABLED: "ON",
+    } as Record<string, string>);
+    assert.equal(on.legacyFallbackEnabled, true, "ON é truthy");
+    const off = readAuthoritativeFlags({
+      ARCHITECTURE_V1_LEGACY_FALLBACK_ENABLED: "OFF",
+    } as Record<string, string>);
+    assert.equal(off.legacyFallbackEnabled, false, "OFF desabilita");
+    const noenv = readAuthoritativeFlags({});
+    assert.equal(noenv.legacyFallbackEnabled, true, "default mantém ON");
+  }
+
   // --- Cutover global: sempre proibido --------------------------------------------
   {
     assert.equal(isGlobalCutoverRequested({}), false);
