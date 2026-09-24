@@ -1,0 +1,78 @@
+{
+  "mission": "50AG.4B-FASE4-CATALOG_ARCHITECTURE_V1",
+  "status": "PASS",
+  "statusMarker": "CATALOG_ARCHITECTURE_V1_STATUS=PASS",
+  "baseSHA": "e324aae351e415d434b96b1cde790047b97810ff",
+  "finalSHA": "3b54a330a734bf69872938669d9fe01eed0c899d",
+  "finalSHAResolution": "origin/main (fast-forward normal e324aae..3b54a33)",
+  "branch": "feat/catalog-architecture-v1-20260924",
+  "forcePushUsed": false,
+  "destructiveMigration": false,
+  "recordedAt": "2026-09-24T05:20:00Z",
+  "productionDeploy": {
+    "migration": "20260924080000_catalog_architecture_v1 (somente aditivo: ADD COLUMN nullable, CREATE TYPE/TABLE/INDEX, FK; sem DROP/RENAME/TRUNCATE/backfill)",
+    "migrateDeployResult": "All migrations have been successfully applied",
+    "migrateStatusAfter": "12 migrations found; Database schema is up to date!",
+    "productionColumns": ["catalogHash", "offerHash", "payloadVersion"],
+    "productionTables": ["ImportRun", "ImportBatch"],
+    "vercelProduction": "https://ofertano.vercel.app (Ready in 2m; Build Completed in /vercel/output [42s])",
+    "siteHomeStatus": 200,
+    "siteSitemapStatus": 200,
+    "postDeployAudit": {
+      "metric": "AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES=0",
+      "scanned": 3,
+      "violations": 0,
+      "written": 0,
+      "dryRun": true,
+      "databaseWritesPerformed": false
+    }
+  },
+  "acceptance": {
+    "CATALOG_ARCHITECTURE_DOC": { "result": "PASS", "evidence": "docs/architecture/CATALOG_ARCHITECTURE_V1.md (ADR)" },
+    "CURRENT_CATALOG_MAP": { "result": "PASS", "evidence": "docs/architecture/CURRENT_CATALOG_MAP.md (auditoria FASE A)" },
+    "UNIVERSAL_CONNECTOR_CONTRACT": { "result": "PASS", "evidence": "src/services/architecture/v1/types/connector.ts + multiMarketplaceContract.test.ts" },
+    "NORMALIZED_LISTING_V1": { "result": "PASS", "evidence": "src/services/architecture/v1/types/normalizedListingV1.ts" },
+    "MARKETPLACE_HARDCODE_CORE": { "result": "NO", "evidence": "marketplaceRegistry.ts único ponto com nomes + extensibility.test.ts (marketplace novo sem tocar núcleo)" },
+    "SOURCE_LISTING_IDEMPOTENCY": { "result": "PASS", "evidence": "RawMarketplaceListing @@unique([marketplace, externalId]) + pipeline NOOP (pipeline.test.ts)" },
+    "CATALOG_HASH": { "result": "PASS", "evidence": "hashing.ts (computeCatalogHash) + hashing.test.ts + benchmark invariante G" },
+    "OFFER_HASH": { "result": "PASS", "evidence": "hashing.ts (computeOfferHash) + hashing.test.ts + benchmark invariante G" },
+    "FAST_OFFER_PATH": { "result": "PASS", "evidence": "classifyHashChange OFFER_ONLY + pipeline.test.ts + reprocess.test.ts + benchmark offer-only 21817 items/s" },
+    "RAW_REPROCESSABLE": { "result": "PASS", "evidence": "reprocess.ts + reprocess.test.ts + computeRawHash + rawPayload preservado" },
+    "IMPORT_RUN": { "result": "PASS", "evidence": "ingestion/importRun.ts + importRun.test.ts + tabelas ImportRun/ImportBatch" },
+    "FRESHNESS": { "result": "PASS", "evidence": "freshness.ts (FRESH/AGING/STALE/EXPIRED fail-closed) + freshness.test.ts" },
+    "PRICE_HISTORY_NO_DUPLICATE": { "result": "PASS", "evidence": "priceHistoryNoDuplicate.test.ts reusando historicoPrecisaNovaEntrada (TOLERANCIA_PRECO=0.009)" },
+    "PUBLICATION_GATE_CENTRAL": { "result": "PASS", "evidence": "publication/publicationEligibility.ts (eligible+reasonCodes+evidence) + test" },
+    "POLICY_BLOCKED_METRIC_SEPARATED": { "result": "PASS", "evidence": "observability/outcomeClassifier.ts (POLICY BLOCK vs SYSTEM FAILURE, NON_RETRYABLE_ENVELOPE_PREFIX) + test" },
+    "MULTI_MARKETPLACE_CONTRACT_TESTS": { "result": "PASS", "evidence": "fake/multiMarketplaceContract.test.ts (A/B end-to-end, snapshot, NOOP, OFFER_ONLY)" },
+    "FAKE_CONNECTOR_A": { "result": "PASS", "evidence": "fake/fakeConnectors.ts FakeMarketplaceConnectorA" },
+    "FAKE_CONNECTOR_B": { "result": "PASS", "evidence": "fake/fakeConnectors.ts FakeMarketplaceConnectorB" },
+    "LEGACY_CATALOG_REGRESSION": { "result": "PASS", "evidence": "npm test exit 0; catalog-listings/index.test.ts 87 pass" },
+    "PUBLIC_MULTISTORE_INVARIANT": { "result": "PASS", "evidence": "multiStoreVisibility reuse (isUsablePublicOffer/countDistinctPublicMarketplaces) + AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES=0 pós-deploy" }
+  },
+  "qualityGates": {
+    "testArchitectureV1": { "result": "PASS", "tests": 11, "script": "npm run test:architecture-v1" },
+    "legacyNpmTest": { "result": "PASS", "exitCode": 0 },
+    "migrationHistory": { "result": "PASS", "tests": 138, "fail": 0 },
+    "prismaValidate": { "result": "PASS" },
+    "eslintTouched": { "result": "PASS", "errors": 0, "warnings": 0 },
+    "tscNoEmit": { "result": "PASS_ON_TOUCHED", "note": "somente 4 erros pré-existentes confirmados no baseline (repository.test.ts 80/113/150/197); zero erros novos nos arquivos tocados" },
+    "build": { "result": "PASS", "command": "npm run build (check:encoding && prisma generate && next build)", "turbopack": "Compiled successfully in 16.9s", "staticPages": 21 },
+    "checkEncoding": { "result": "PASS", "files": 550, "mojibake": 0 }
+  },
+  "benchmark": {
+    "script": "scripts/benchmark/architecture-v1-benchmark.ts (in-memory, zero produção)",
+    "sizes": [1000, 10000, 100000],
+    "structural_itemsPerSec": { "1000": 11966, "10000": 16455, "100000": 21255 },
+    "noop_itemsPerSec": { "1000": 16086, "10000": 19836, "100000": 20782 },
+    "offerOnly_itemsPerSec": { "1000": 16310, "10000": 20615, "100000": 21817 },
+    "noopRate": 0.333,
+    "duplicatePrevented": 100000,
+    "catalogHashChanged": 100000,
+    "integrityInvariants": "OK (records=100000, structuralHookCalls=100000, offerHookCalls=100000, catalogHash ignora preço, offerHash muda com preço)"
+  },
+  "notes": {
+    "shadowOffByDefault": "Flags ARCHITECTURE_V1_* default OFF (src/lib/featureFlags.ts); persistência aditiva de catalogHash/offerHash/payloadVersion inerte até ligar",
+    "localBuildWorkaround": "node_modules do worktree era symlink fora da raiz -> Turbopack recusa; substituído por diretório real (precedente r3d2a) antes de npm run build",
+    "migrateDeployFlakyOnce": "P1001 transitório em migrate deploy na 1a tentativa; 2a tentativa aplicou com sucesso"
+  }
+}

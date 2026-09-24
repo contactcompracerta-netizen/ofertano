@@ -1,8 +1,9 @@
 # CATALOG ARCHITECTURE V1 — ADR
 
-Status: **Aprovado (aditivo, deploy OFF/shadow)**
+Status: **Aprovado (aditivo, deploy OFF/shadow) — VIVO EM PRODUÇÃO**
 Worktree: `catalog-architecture-v1` (branch `feat/catalog-architecture-v1-20260924`)
-Base: `e324aae` (produção) → bump `3d7182e`
+Base: `e324aae` (produção) → final `3b54a33` (fast-forward normal, sem force-push)
+Produção: `origin/main` em `3b54a33`; migration aditiva aplicada (`prisma migrate deploy`); site 200.
 
 ## Decisão
 
