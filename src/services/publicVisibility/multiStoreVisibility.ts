@@ -83,6 +83,31 @@ export function hasPublicMultiStore(
   );
 }
 
+/*
+ * GUARDA CENTRAL DE ATIVAÇÃO (FASE E)
+ *
+ * Todo caminho de escrita que possa terminar com Product.active=true
+ * passa por sincronizarMelhorOfertaDoProduto, que consulta esta função.
+ *
+ * - Fluxo MANUAL (autoCreated=false): liberado (comportamento legado).
+ * - Fluxo AUTO-CRIADO: só pode sair de DRAFT com Multi Loja pública.
+ *
+ * A decisão é PURA (sem I/O) e usa o MESMO predicado da página pública;
+ * "publicado no banco" nunca pode divergir de "visível publicamente".
+ */
+export function permitirAtivacaoProdutoAutoCriado(
+  autoCreated: boolean,
+  offers: PublicOfferLike[] | {
+    offers?: PublicOfferLike[];
+  },
+): boolean {
+  if (autoCreated !== true) {
+    return true;
+  }
+
+  return hasPublicMultiStore(offers);
+}
+
 // Para ofertas já validadas upstream (ex.: clusters do matcher Multi Loja V2),
 // conta apenas marketplaces DISTINTOS não vazios, sem revalidar cada oferta.
 export function countDistinctNonEmptyMarketplaces(

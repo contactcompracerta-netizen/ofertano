@@ -24,6 +24,8 @@ import {
   precoValidoParaHistorico,
 } from "@/services/priceHistory/priceHistoryService";
 
+import { permitirAtivacaoProdutoAutoCriado } from "@/services/publicVisibility/multiStoreVisibility";
+
 type MarketplaceDatabase =
   | "MERCADO_LIVRE"
   | "AMAZON"
@@ -2198,11 +2200,51 @@ export async function sincronizarMelhorOfertaDoProduto(
       ].includes(item.status),
     );
 
+  /*
+   * GUARDA CENTRAL DE ATIVAÇÃO AUTOMÁTICA (FASE E)
+   *
+   * Todo caminho de escrita que possa terminar com Product.active=true
+   * passa por esta sincronização. Para Product AUTO-CRIADO (autoCreated),
+   * a ativação exige a MESMA noção pública de Multi Loja da página:
+   * hasPublicMultiStore(...) = true.
+   *
+   * Sem isso, um single-store automático seria "ativado no banco" e
+   * ficaria 404 na página — ou pior, reativado por manutenções como
+   * corrigirLinksAmazonPendentes. Com a guarda, ele permanece DRAFT e
+   * active=false até chegar um marketplace distinto real (reavaliação
+   * dirigida por evento).
+   *
+   * Produtos manuais (autoCreated=false) mantêm o comportamento legado.
+   */
+  const produtoAtual =
+    await tx.product.findUnique({
+      where: {
+        id: productId,
+      },
+      select: {
+        autoCreated: true,
+      },
+    });
+
+  const autoCreated =
+    produtoAtual?.autoCreated === true;
+
+  const semMultiLojaPublica =
+    !permitirAtivacaoProdutoAutoCriado(
+      autoCreated,
+      ofertasExatas,
+    );
+
   const publicationStatus =
-    possuiOfertaPendente ||
-    !possuiOfertaAtiva
-      ? "LIVE_PARTIAL"
-      : "LIVE_COMPLETE";
+    semMultiLojaPublica
+      ? "DRAFT"
+      : possuiOfertaPendente ||
+          !possuiOfertaAtiva
+        ? "LIVE_PARTIAL"
+        : "LIVE_COMPLETE";
+
+  const activeFinal =
+    !semMultiLojaPublica;
 
   if (!melhorOfertaPrincipal) {
     return tx.product.update({
@@ -2211,7 +2253,7 @@ export async function sincronizarMelhorOfertaDoProduto(
       },
       data: {
         publicationStatus,
-        active: true,
+        active: activeFinal,
       },
     });
   }
@@ -2251,7 +2293,7 @@ export async function sincronizarMelhorOfertaDoProduto(
       discount: descontoCalculado,
 
       publicationStatus,
-      active: true,
+      active: activeFinal,
     },
   });
 }

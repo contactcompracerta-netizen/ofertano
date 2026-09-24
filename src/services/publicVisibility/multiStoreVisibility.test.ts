@@ -6,6 +6,7 @@ import {
   isUsablePublicOffer,
   countDistinctPublicMarketplaces,
   countDistinctNonEmptyMarketplaces,
+  permitirAtivacaoProdutoAutoCriado,
 } from "./multiStoreVisibility";
 
 type Offer = {
@@ -375,5 +376,107 @@ const gatePublicacaoAutomatica = (
     "G: preco negativo nao conta para o gate",
   );
 }
+
+/*
+ * FASE E — GUARDA CENTRAL DE ATIVAÇÃO ("publicado" === "visível").
+ *
+ * Marketplaces fictícios A/B/C/D (regra: nunca acoplar teste a nome
+ * real de loja).
+ */
+
+assert.equal(
+  PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+  2,
+  "minimo publico de marketplaces e 2",
+);
+
+// E1. Manual (autoCreated=false) segue liberado mesmo single-store.
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(false, [oferta("A")]),
+  true,
+  "E1: fluxo manual mantem comportamento legado",
+);
+
+// E2. Automático com 1 marketplace real nao pode ativar.
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [oferta("A")]),
+  false,
+  "E2: auto single-store A permanece DRAFT",
+);
+
+// E3. Automático com A+B distintos ativa.
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [
+    oferta("A"),
+    oferta("B"),
+  ]),
+  true,
+  "E3: auto com A+B distintos ativa",
+);
+
+// E4. Automático só com A (duas ofertas da mesma loja) nao ativa.
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [
+    oferta("A"),
+    oferta("A", { price: 90 }),
+  ]),
+  false,
+  "E4: auto com duas ofertas A nao ativa",
+);
+
+// E5. Automático com C inválida (UNAVAILABLE/ERROR/nao EXACT/preco<=0)
+// nao ativa — só oferta válida conta.
+for (const invalida of [
+  { status: "UNAVAILABLE" },
+  { status: "ERROR" },
+  { matchStatus: "REVIEW" },
+  { price: 0 },
+  { available: false },
+]) {
+  assert.equal(
+    permitirAtivacaoProdutoAutoCriado(true, [
+      oferta("A"),
+      oferta("C", invalida),
+    ]),
+    false,
+    `E5: oferta C inválida ${JSON.stringify(invalida)} nao fecha multiloja`,
+  );
+}
+
+// E6. A+C válidos ativam (novo marketplace real = reavaliação dirigida
+// por evento; sem job periódico).
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [
+    oferta("A"),
+    oferta("C"),
+  ]),
+  true,
+  "E6: transicao A->A+C real reavalia e ativa",
+);
+
+// E7. B->C (troca de marketplace) com ainda 1 unico continua DRAFT.
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [oferta("C")]),
+  false,
+  "E7: B->C continua single-store e permanece DRAFT",
+);
+
+// E8. invalido->valido (2o marketplace chega válido) ativa.
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [
+    oferta("A"),
+    oferta("B", { status: "ERROR" }),
+  ]),
+  false,
+  "E8a: invalido ainda nao ativa",
+);
+assert.equal(
+  permitirAtivacaoProdutoAutoCriado(true, [
+    oferta("A"),
+    oferta("B"),
+  ]),
+  true,
+  "E8b: marketplace B valido ativa",
+);
 
 console.log("multiStoreVisibility: todos os casos passaram");
