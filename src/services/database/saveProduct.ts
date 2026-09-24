@@ -2,6 +2,8 @@ import type { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 
+import { runArchitectureV1ShadowHook } from "@/services/architecture/v1/shadow";
+
 import type { ProductImport } from "@/services/importers/core/types";
 import {
   isRawListingDualWriteEnabled,
@@ -3301,6 +3303,46 @@ export async function saveProduct(
     } catch (error) {
       console.error(
         "[SAVE_PRODUCT] persistencia Raw Listing falhou; Product preservado",
+        error,
+      );
+    }
+
+    /*
+     * CATALOG_ARCHITECTURE_V1 — SHADOW REAL CONTROLADO (FASE 5).
+     *
+     * Hook INERTE por default: flags OFF (ambientes) => retorna
+     * imediatamente sem I/O. Quando ligado, reprocessa a MESMA listing no
+     * pipeline V1 e escreve SOMENTE RawMarketplaceListing (hashes/rawPayload)
+     * e, no canário, ImportRun/Batch. NUNCA altera Product/MarketplaceOffer/
+     * publicação. Falhas aqui NUNCA revertem o Product (isoladas).
+     */
+    try {
+      await runArchitectureV1ShadowHook({
+        context: {
+          ...options.rawListingContext,
+          title: product.title ?? options.rawListingContext.title ?? null,
+          price: product.price ?? options.rawListingContext.price ?? null,
+          oldPrice: product.oldPrice ?? null,
+          stock: product.stock ?? null,
+          available:
+            product.stock != null
+              ? product.stock > 0
+              : null,
+          brand: product.brand ?? null,
+          category: product.category ?? null,
+          image: product.image || null,
+          attributes: null,
+          canonicalProductId: savedProduct.id,
+        },
+        legacyOutcome: {
+          autoCreated: savedProduct.autoCreated === true,
+          active: savedProduct.active === true,
+          publicationStatus: savedProduct.publicationStatus ?? null,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[SAVE_PRODUCT] shadow Architecture V1 falhou (inerte); Product preservado",
         error,
       );
     }
