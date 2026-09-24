@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 import { runArchitectureV1ShadowHook } from "@/services/architecture/v1/shadow";
+import { runArchitectureV1AuthoritativeHook } from "@/services/architecture/v1/cutover";
 
 import type { ProductImport } from "@/services/importers/core/types";
 import {
@@ -3343,6 +3344,47 @@ export async function saveProduct(
     } catch (error) {
       console.error(
         "[SAVE_PRODUCT] shadow Architecture V1 falhou (inerte); Product preservado",
+        error,
+      );
+    }
+
+    /*
+     * CATALOG_ARCHITECTURE_V1 — CUTOVER AUTORITATIVO (FASE 7).
+     *
+     * Hook INERTE por default (flags OFF / allowlist / modo): retorna
+     * `handled:false` imediatamente, sem I/O, e o fluxo legado segue
+     * intacto. NUNCA executa escrita autoritativa aqui: a decisão do
+     * cutover progressivo com orçamento vive no runner canário
+     * (`runAuthoritativeCanary`), nunca dentro do saveProduct legado.
+     * Falhas aqui NUNCA revertem o Product (isoladas como o hook shadow).
+     */
+    try {
+      runArchitectureV1AuthoritativeHook({
+        context: {
+          ...options.rawListingContext,
+          title: product.title ?? options.rawListingContext.title ?? null,
+          price: product.price ?? options.rawListingContext.price ?? null,
+          oldPrice: product.oldPrice ?? null,
+          stock: product.stock ?? null,
+          available:
+            product.stock != null
+              ? product.stock > 0
+              : null,
+          brand: product.brand ?? null,
+          category: product.category ?? null,
+          image: product.image || null,
+          attributes: null,
+          canonicalProductId: savedProduct.id,
+        },
+        legacyOutcome: {
+          autoCreated: savedProduct.autoCreated === true,
+          active: savedProduct.active === true,
+          publicationStatus: savedProduct.publicationStatus ?? null,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[SAVE_PRODUCT] hook authoritative falhou (inerte); Product preservado",
         error,
       );
     }
