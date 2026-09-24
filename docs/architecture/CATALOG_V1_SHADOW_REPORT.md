@@ -94,6 +94,18 @@ Invariantes exigidos:
 - `FASE_G_RERUN_IDEMPOTENT`: rerun => 2º ImportRun/Batch, Raw continua 1 linha (upsert),
   Product=12/MarketplaceOffer=17/PriceHistory=17 INALTERADOS, AUTO_ACTIVE_LT2=0
 
+- `FASE_H_PERSIST_HASHES`: `_PERSIST_HASHES` 0->1 (API Vercel, sensitive), redeploy
+  **SAME commit 08fa4a3d** (`githubCommitSha` idêntico — só env mudou), replay real
+  `--no-dry-run` => hashes GRAVADOS no Raw REAL:
+  `catalogHash=5a1452680dfb2d8f727a49bc2d074072d3d2266357859824e8adb7f265711279`,
+  `offerHash=7bae2fc5325d7553f5909ba196e082c786d64b3deeac865d0e559cda26e42899`,
+  `payloadVersion=raw/v1`. **Determinismo DB<->hash**: recomputo no replay bate com o DB.
+- `FASE_H_OFFER_ONLY_FAST_PATH`: MESMA listing REAL, mudança só comercial
+  (price=R$10 -> R$95, +R$85) => catalogHash ESTÁVEL + offerHash MUDOU => `OFFER_ONLY`
+  (`classifyHashChange`). `OFFER_ONLY` = **FAST OFFER PATH**: atualiza só o estado
+  comercial da oferta (preço), **sem re-executar matching estrutural pesado e sem
+  TCC de produto** — o caminho rápido de oferta, próximo estágio da progressão.
+
 ## Limites desta missão (NÃO fazer)
 
 - NENHUM cutover, mesmo com `CATALOG_V1_CUTOVER_READY=YES`.
