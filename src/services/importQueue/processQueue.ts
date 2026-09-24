@@ -19,6 +19,12 @@ import type {
   MarketplaceName,
 } from "@/services/importers/core/types";
 
+import {
+  NON_RETRYABLE_ENVELOPE_PREFIX,
+  formatErrorMessageStructured,
+  PublicationPolicyError,
+} from "@/services/importQueue/retryClassification";
+
 export type QueueProcessResult = {
   success: boolean;
   message: string;
@@ -146,6 +152,23 @@ export async function processImportQueue(
               not: null,
             },
             opportunityId: null,
+            /*
+             * Terminais de política (envelope NON_RETRYABLE) não são
+             * re-selecionados: o bloqueio só se resolve por novo evento.
+             */
+            OR: [
+              {
+                errorMessage: null,
+              },
+              {
+                errorMessage: {
+                  not: {
+                    startsWith:
+                      NON_RETRYABLE_ENVELOPE_PREFIX,
+                  },
+                },
+              },
+            ],
           },
           orderBy: {
             createdAt: "asc",
@@ -546,11 +569,22 @@ export async function processImportQueue(
             !gate.permitirSucesso
           ) {
             /*
-             * Cai no tratamento ERROR existente deste catch.
+             * Bloqueio de política: retomada de Product autoCreated
+             * sem Multi Loja pública real. Cai no tratamento ERROR
+             * existente com envelope NON_RETRYABLE (terminal).
              */
-            throw new Error(
-              gate.motivo ??
-                "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE",
+            throw new PublicationPolicyError(
+              "AUTO_CATALOG_MULTISTORE_NOT_READY",
+              formatErrorMessageStructured(
+                {
+                  retryable: false,
+                  category: "POLICY_NOT_READY",
+                  code: "AUTO_CATALOG_MULTISTORE_NOT_READY",
+                },
+                `Product automático ${item.productId} ainda sem ` +
+                  `hasPublicMultiStore no modo de retomada ` +
+                  `(motivo: ${gate.motivo ?? "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE"}).`,
+              ),
             );
           }
 
@@ -610,8 +644,17 @@ export async function processImportQueue(
             produtoPublicado.active !==
               true
           ) {
-            throw new Error(
+            throw new PublicationPolicyError(
               "AUTO_CATALOG_PUBLISH_NOT_ACTIVE",
+              formatErrorMessageStructured(
+                {
+                  retryable: false,
+                  category: "POLICY_NOT_READY",
+                  code: "AUTO_CATALOG_PUBLISH_NOT_ACTIVE",
+                },
+                `Product automático ${item.productId} marcado SUCCESS ` +
+                  `mas permaneceu inativo após a sincronização.`,
+              ),
             );
           }
 
@@ -621,8 +664,17 @@ export async function processImportQueue(
                 produtoPublicado.offers,
             })
           ) {
-            throw new Error(
+            throw new PublicationPolicyError(
               "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE",
+              formatErrorMessageStructured(
+                {
+                  retryable: false,
+                  category: "POLICY_NOT_READY",
+                  code: "AUTO_CATALOG_INSUFFICIENT_PUBLIC_MULTISTORE",
+                },
+                `Product automático ${item.productId} marcado SUCCESS ` +
+                  `mas sem hasPublicMultiStore após a sincronização.`,
+              ),
             );
           }
         } else {

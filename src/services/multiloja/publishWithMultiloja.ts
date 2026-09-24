@@ -23,6 +23,12 @@ import {
 } from "@/services/multiloja/orchestrator";
 
 import {
+  classificarErroRetry,
+  formatErrorMessageStructured,
+  PublicationPolicyError,
+} from "@/services/importQueue/retryClassification";
+
+import {
   reconstruirReferenciaMultiloja,
 } from "@/services/multiloja/reference";
 
@@ -174,8 +180,14 @@ export async function publicarProdutoComMultiloja(
       /*
        * Lançado ANTES de sincronizar/publicar: o Product permanece
        * publicationStatus=DRAFT e active=false.
+       *
+       * Erro estruturado de política: NÃO retentável. O catch abaixo
+       * não agenda retry para esta classe — o bloqueio só se resolve
+       * quando um novo marketplace público real chega (reavaliação
+       * dirigida por evento via saveProduct/merge de identidade).
        */
-      throw new Error(
+      throw new PublicationPolicyError(
+        "MULTISTORE_NOT_READY",
         `Multi Loja incompleto: ${distinctPublicMarketplaces} marketplace(s) publico(s) distinto(s); ` +
           `minimo exigido: ${minimoExigido}.`,
       );
@@ -220,10 +232,21 @@ export async function publicarProdutoComMultiloja(
      * Portanto nunca aparece incompleto no site.
      */
 
+    const decision =
+      classificarErroRetry(error);
+
     let queuedForRetry =
       false;
 
-    if (queueOnFailure) {
+    /*
+     * Retry somente para falhas transitórias/infra. Bloqueios de
+     * política (PublicationPolicyError) são TERMINAIS: não ganham
+     * nova linha PENDING e não reincidem em laço.
+     */
+    if (
+      queueOnFailure &&
+      decision.retryable
+    ) {
       try {
         queuedForRetry =
           await agendarComparacaoMultilojaDoProduto(
@@ -244,6 +267,20 @@ export async function publicarProdutoComMultiloja(
       error instanceof Error
         ? error.message
         : String(error);
+
+    if (!decision.retryable) {
+      throw new PublicationPolicyError(
+        error instanceof PublicationPolicyError
+          ? error.code
+          : "MULTISTORE_NOT_READY",
+        formatErrorMessageStructured(
+          decision,
+          `O produto foi importado, mas o Multi Loja nao terminou. ` +
+            `Ele permaneceu oculto e nao foi publicado (bloqueio de politica terminal). ` +
+            `Detalhe: ${detalhe}`,
+        ),
+      );
+    }
 
     throw new Error(
       queuedForRetry
