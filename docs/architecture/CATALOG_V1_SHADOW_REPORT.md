@@ -174,3 +174,32 @@ Invariantes exigidos:
 - Nenhum DELETE/DROP, nenhum force push, nenhum backfill global de hashes.
 - Canário: 1 marketplace por vez, MAX_WRITES na progressão 1 -> 5 -> 25 -> 100.
 - `PUBLIC_MULTISTORE_MIN_MARKETPLACES` permanece 2; legado permanece autoritativo.
+
+---
+
+## FASE 6.2 — PROGRESSÃO CANÁRIO REAL `MAX_WRITES 5 -> 25 -> 100` (concurrency=1, sem cutover)
+
+**Status:** canário 25 real = **PASS**; canário 100 real = **PASS** (orçamento); **cutover NÃO executado**.
+
+### Proveniência / reconciliação (FASE A/B/C read-only)
+- `origin/main` = `a2998df` (= `be4cbb9` runtime + docs FASE 6.1); deploy prod READY `be4cbb9`/`a2998df` (runtime idêntico; docs-only não altera runtime); probes `/`,`/sitemap.xml`,`/ofertas`,`/categorias`,`/?q=fone` = **200/5**.
+- Flags shadow em prod (sensíveis, valores nunca impressos): `_ENABLED=1`, `_MARKETPLACE_IDS=mercado_livre`, `_MAX_WRITES=25` (progressão), `_PERSIST_RAW=1`, `_PERSIST_HASHES=1`, `_DRY_RUN=0`.
+
+### Canário real 25 (FASE D)
+- `processed=1, writeSuccess=1 <= 25`; `rawWrites=1, hashWrites=1`; `writeFailed=0, systemErrors=0, skippedMaxWrites=0`; `dryRun=false`; `budget25_respeitado=YES`.
+- **Idempotência/rerun real #2**: Raw permanece **1 linha** (upsert), Product/MarketplaceOffer/PriceHistory **inalterados**; ImportRun/ImportBatch **append** (auditoria); `duplicatePrevented=1`.
+- `CANARY_MAX_WRITES_25 = PASS`.
+
+### Canário real 100 (FASE K)
+- Mesma 1 listing real elegível (única Raw em prod; **não fabricamos volume**).
+- `processed=1, writeSuccess=1 <= 100`; `rawWrites=1, hashWrites=1`; `writeFailed=0, systemErrors=0`; `dryRun=false`; `budget100_respeitado=YES`.
+- `CANARY_MAX_WRITES_100 = PASS` (orçamento); `UNIQUE_REAL_LISTINGS=1` (volume real limitado — **INSUFFICIENT_REAL_SAMPLE_VOLUME** documentado, não é falha de arquitetura).
+
+### Decisão (FASE S)
+- `CATALOG_V1_CUTOVER_READY = NO`
+- `CUTOVER_BLOCKER = INSUFFICIENT_REAL_SAMPLE_VOLUME` (1 listing real; missão proíbe fabricar)
+- `CUTOVER_EXECUTED = false`; legado permanece autoritativo; canário agnóstico de marketplace provado (mercado_livre).
+
+### Gates locais (FASE R, read-only)
+- `prisma validate` = OK; `tsc --noEmit` = 0; suíte shadow arquitetura-v1 (runner/shadowProcessor/flags/adapter/parity/multiMarketplaceContract) = **PASS**; multistore-v2 focalizada = PASS.
+- Nenhum deploy além do redeploy flag-only do mesmo commit; sem cutover; sem INSERT manual; sem fabricar dados.
