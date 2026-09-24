@@ -27,7 +27,7 @@ AUTHORITATIVE_READY=YES (CATALOG_V1_AUTHORITATIVE_READY)
 | Legacy fallback habilitado | `true` |
 | ImportRun final | cmug688ga00005zdh7gfgu5mv (estágio 100) |
 | Base SHA | `257173d97b1fdb854fbe418ab093f86d4535044d` |
-| Final SHA | `f935738cb2f1870e0d1f77687d8dd8d1d348db75` |
+| Final SHA | `26f2d491e03cb9e2b22bddefcaf2a10ad192e06c` |
 
 ## Canários executados (viés real, sem fabricação)
 
@@ -110,5 +110,5 @@ hashes persistidos** — retry da MESMA listing => NOOP (prova de idempotência 
 - `AUTO_ACTIVE_LT2`: 0 (gate multiloja preservado — 1 marketplace nunca ativa)
 - `PUBLIC_MULTISTORE_MIN_MARKETPLACES`: 2 (inalterado)
 - `CUTOVER_GLOBAL_PROHIBITED`: true (CATALOG_V1_GLOBAL_CUTOVER=NO)
-- `PRODUCTION_SHA`: f935738cb2f1870e0d1f77687d8dd8d1d348db75 (deploy production READY 24/09 23:38 UTC-3)
+- `PRODUCTION_SHA`: 26f2d491e03cb9e2b22bddefcaf2a10ad192e06c (deploy production READY 24/09 23:5x UTC-3; runtime = FASE 7 completo)
 - `VERCEL_DEPLOY_TARGET`: production (flags OFF fail-closed — nenhuma env de cutover no Vercel)
