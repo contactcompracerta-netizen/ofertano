@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { validateLocalTarget, assertLocalConnection, scaffoldLocalSupabase, verifyLocalRls } from './local-supabase-compatibility.mjs';
 import { collectPredeployState } from './local-security-state.mjs';
-import { verifyLedgerCompatibility, commercePending, loadRepositoryContract } from '../migration-history/verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, commercePending, architecturePending, loadRepositoryContract } from '../migration-history/verify-ledger-compatibility.mjs';
+const fullPending = [...commercePending, ...architecturePending];
 import { authorizeCommerceMigrateDeploy, commerceTables, requiredOffFlags } from '../migration-history/authorize-commerce-migrate-deploy.mjs';
 import { verifyPrismaDeployRehearsal } from '../migration-history/verify-prisma-deploy-rehearsal.mjs';
 import fixture from '../migration-history/production-ledger.fixture.json' with {type:'json'};
@@ -52,7 +53,7 @@ async function ledger(client) { return JSON.parse(JSON.stringify((await client.q
 async function counts(client, tables) { const result = {}; for (const table of tables) result[table] = Number((await client.query(`SELECT count(*) AS n FROM "${table}"`)).rows[0].n); return result; }
 // Part M: static object contract of the two Commerce migrations (SQL comments stripped).
 function staticObjectContract() {
-  const names = ['20260917120000_commerce_intelligence_foundation', '20260918100000_commerce_canary_control_plane'];
+  const names = ['20260917120000_commerce_intelligence_foundation', '20260918100000_commerce_canary_control_plane', ...architecturePending];
   const forbidden = [/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION/i, /CREATE\s+TRIGGER/i, /CREATE\s+(?:SEQUENCE|VIEW|MATERIALIZED\s+VIEW|POLICY)\b/i, /\bGRANT\s+/i, /\bREVOKE\s+/i, /ALTER\s+DEFAULT\s+PRIVILEGES/i, /\bOWNER\s+TO\b/i, /ENABLE\s+ROW\s+LEVEL/i];
   const summary = { tables: 0, enumTypes: 0, indexes: 0, uniqueIndexes: 0 };
   for (const name of names) {
@@ -63,7 +64,7 @@ function staticObjectContract() {
     summary.indexes += (sql.match(/CREATE\s+INDEX\b/gi) ?? []).length;
     summary.uniqueIndexes += (sql.match(/CREATE\s+UNIQUE\s+INDEX\b/gi) ?? []).length;
   }
-  assert.equal(summary.tables, 10); assert.equal(summary.enumTypes, 11); assert.ok(summary.indexes >= 25); assert.ok(summary.uniqueIndexes >= 3);
+  assert.equal(summary.tables, 12); assert.equal(summary.enumTypes, 14); assert.ok(summary.indexes >= 29); assert.ok(summary.uniqueIndexes >= 4);
   return summary;
 }
 const evidence = { prismaVersion: '7.9.0', target: '127.0.0.1:55433', database: dbName };
@@ -89,7 +90,7 @@ try {
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   const before = await ledger(client); assert.equal(before.length, 9);
-  const gate = verifyLedgerCompatibility({ version: 1, ledger: before }, commercePending); assert.equal(gate.warnings.length, 2);
+  const gate = verifyLedgerCompatibility({ version: 1, ledger: before }, fullPending); assert.equal(gate.warnings.length, 2);
   const expectedProductionIdentity = { environment: 'production', targetEnvironment: 'production', projectId: pins.projectId, deliverySHA: pinsDeliverySHA };
   const schemaState = await collectPredeployState(client, expectedProductionIdentity);
   assert.equal(schemaState.version, 2); assert.equal(schemaState.migrationRole, 'postgres');
@@ -106,7 +107,7 @@ try {
   const platformDefaults = [...r3b.defaultPrivileges.filter(r => r.owner === 'supabase_admin'), ...r3b.defaultPrivileges.filter(r => r.grantee === 'service_role')];
   schemaState.defaultPrivileges = [...schemaState.defaultPrivileges, ...platformDefaults];
   const observedFlags = { version: 1, flags: Object.fromEntries(requiredOffFlags.map(n => [n, false])), canaryTokenPresent: false };
-  const authorization = authorizeCommerceMigrateDeploy({ ledgerSnapshot: { version: 1, ledger: before }, allowedPending: commercePending, repositoryContract: loadRepositoryContract(), observedFlags, schemaState, expectedProductionIdentity });
+  const authorization = authorizeCommerceMigrateDeploy({ ledgerSnapshot: { version: 1, ledger: before }, allowedPending: fullPending, repositoryContract: loadRepositoryContract(), observedFlags, schemaState, expectedProductionIdentity });
   assert.equal(authorization.verdict, 'AUTHORIZED', JSON.stringify(authorization));
   assert.equal(authorization.outOfScopePolicyCount, 6);
   assert.equal(authorization.managedPolicyCount, 10);
@@ -116,10 +117,10 @@ try {
   assert.deepEqual(authorization.outOfScopePolicies.map(p => p.policyname).sort(), ['notifications_select_own', 'notifications_update_own', 'price_alerts_delete_own', 'price_alerts_insert_own', 'price_alerts_select_own', 'price_alerts_update_own'].sort());
   // LOCAL migrate deploy of Commerce ONLY (Foundation + Control Plane).
   const deployOutput = run([cli, 'migrate', 'deploy']);
-  const execution = verifyPrismaDeployRehearsal({ exitCode: 0, output: deployOutput });
-  assert.deepEqual(execution.applied, commercePending);
-  const after = await ledger(client); assert.equal(after.length, 11);
-  for (const name of commercePending) { const row = after.find(r => r.migration_name === name); assert.ok(row.finished_at); assert.equal(row.applied_steps_count, 1); assert.equal(row.checksum, manifest.forwardMigrations[name]); }
+  const execution = verifyPrismaDeployRehearsal({ exitCode: 0, output: deployOutput, expected: fullPending });
+  assert.deepEqual(execution.applied, fullPending);
+  const after = await ledger(client); assert.equal(after.length, 12);
+  for (const name of fullPending) { const row = after.find(r => r.migration_name === name); assert.ok(row.finished_at); assert.equal(row.applied_steps_count, 1); assert.equal(row.checksum, manifest.forwardMigrations[name]); }
   // Part W: 10 Commerce tables present, 0 rows, zero effective anon/authenticated privileges.
   const present = (await client.query("SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])", [commerceTables])).rows.map(r => r.relname);
   assert.deepEqual(present.sort(), [...commerceTables].sort());

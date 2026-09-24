@@ -2,7 +2,7 @@
   "version": 3,
   "baselineSourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
   "baselineSchemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
-  "currentSchemaSHA256": "de1a7e1bba3e739d064f4bdc33879090f3ed2178472b6c53aba1881e8cab2a1d",
+  "currentSchemaSHA256": "8cc65f431d8364d4b285cab500126a8c0ff92f0c07fb5836ee85b13c59e2f084",
   "baselineDDLHash": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
   "baselineMigrations": {
     "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
@@ -17,7 +17,8 @@
     "20260915194500_rls_security_hardening": "8aa4a426944155c3bac3acf95d30b3d3d0242da2be3a50c1448de0fad75e03a4",
     "20260915203000_fix_rls_product_public_read": "cdb15a3dbaba80c57d15d53edde4a5539fe654c860dac9a70fcd24c28f77b0c3",
     "20260917120000_commerce_intelligence_foundation": "54982212bf5a4df3a993e18756ed80c2a06dc5c362922c3eed2c5ff5fff643b0",
-    "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0"
+    "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0",
+    "20260924080000_catalog_architecture_v1": "5e1ff01571575e22d660cd7a19c5fcc10bb0af8c0a7b5ee66b34f6718c1b1e04"
   },
   "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain",
   "localCompatibility": {

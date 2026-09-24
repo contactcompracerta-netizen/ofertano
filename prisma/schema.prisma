@@ -179,6 +179,14 @@ model RawMarketplaceListing {
   status      RawListingStatus @default(DISCOVERED)
   fingerprint String?
 
+  // CATALOG_ARCHITECTURE_V1 (aditivo, FASE G/I):
+  //   catalogHash   => mudanças estruturais (título/marca/modelo/GTIN/variante).
+  //   offerHash     => estado comercial (preço/estoque/disponibilidade).
+  //   payloadVersion=> versão do schema do payload bruto (reprocessamento).
+  catalogHash    String?
+  offerHash      String?
+  payloadVersion String?
+
   canonicalProductId String?
   canonicalProduct   Product? @relation("ProductRawMarketplaceListings", fields: [canonicalProductId], references: [id], onDelete: SetNull)
 
@@ -373,6 +381,30 @@ enum ImportQueueStatus {
   ERROR
 }
 
+// CATALOG_ARCHITECTURE_V1 — Import Run / Batch (FASE J/K).
+// Registra execuções de ingestão para grandes volumes e permite a
+// reconciliação por FULL SNAPSHOT com grace period (nunca marcar
+// indisponível no meio de importação incompleta).
+enum ImportRunMode {
+  FULL_SNAPSHOT
+  INCREMENTAL
+  REPROCESS
+}
+
+enum ImportRunStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+enum ImportBatchStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model ImportQueue {
   id String @id @default(cuid())
 
@@ -393,6 +425,72 @@ model ImportQueue {
 
   @@index([status, createdAt])
   @@index([marketplace, status])
+}
+
+// CATALOG_ARCHITECTURE_V1 — ImportRun registra uma execução de ingestão:
+// fonte, marketplaceId canônico (string — nunca nome), modo, status e totais.
+model ImportRun {
+  id String @id @default(cuid())
+
+  source String
+  // marketplaceId canônico da Architecture V1 (string). null => run agregado.
+  marketplaceId String?
+  mode ImportRunMode
+  status ImportRunStatus @default(RUNNING)
+
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+
+  itemsReceived  Int @default(0)
+  itemsChanged   Int @default(0)
+  itemsUnchanged Int @default(0)
+  itemsRejected  Int @default(0)
+  itemsFailed    Int @default(0)
+
+  // Marcador de snapshot (último item visto) para reconciliação (FASE K).
+  lastSeenAt DateTime?
+  gracePeriodMinutes Int @default(1440)
+  cursor String?
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batches ImportBatch[]
+
+  @@index([source, marketplaceId, startedAt])
+  @@index([status, startedAt])
+}
+
+// Subdivisão operacional de um ImportRun (FASE J).
+model ImportBatch {
+  id String @id @default(cuid())
+
+  runId String
+  run ImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  index Int
+  status ImportBatchStatus @default(PENDING)
+
+  cursorStart String?
+  cursorEnd String?
+
+  itemsReceived  Int @default(0)
+  itemsChanged   Int @default(0)
+  itemsUnchanged Int @default(0)
+  itemsRejected  Int @default(0)
+  itemsFailed    Int @default(0)
+
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  lastSeenAt DateTime?
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([runId, index])
+  @@index([status, startedAt])
 }
 
 enum OpportunitySourceType {

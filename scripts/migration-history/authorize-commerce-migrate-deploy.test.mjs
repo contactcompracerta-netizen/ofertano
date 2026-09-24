@@ -4,7 +4,7 @@ import fixture from './production-ledger.fixture.json' with {type:'json'};
 import security from './expected-security-state.json' with {type:'json'};
 import r3b from './production-security-r3b.fixture.json' with {type:'json'};
 import pins from './forensic-pins.json' with {type:'json'};
-import {loadRepositoryContract,commercePending} from './verify-ledger-compatibility.mjs';
+import {loadRepositoryContract,commercePending,architecturePending} from './verify-ledger-compatibility.mjs';
 import {authorizeCommerceMigrateDeploy,requiredOffFlags,commerceTables} from './authorize-commerce-migrate-deploy.mjs';
 function identity(){return {environment:'production',targetEnvironment:'production',projectId:pins.projectId,deliverySHA:'ec755ac167db6d46f939be1005c791142c6127c2'};}
 function schemaStateFrom(core){
@@ -13,15 +13,15 @@ function schemaStateFrom(core){
 }
 function input(){
  const id=identity();
- return {ledgerSnapshot:structuredClone(fixture),allowedPending:[...commercePending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(security)};
+ return {ledgerSnapshot:structuredClone(fixture),allowedPending:[...commercePending,...architecturePending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(security)};
 }
 function r3bInput(){
  const id=identity();
- return {ledgerSnapshot:structuredClone(fixture),allowedPending:[...commercePending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(r3b)};
+ return {ledgerSnapshot:structuredClone(fixture),allowedPending:[...commercePending,...architecturePending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(r3b)};
 }
 test('all independent gates authorize exact pending without mutating inputs',()=>{
  const i=input(),before=structuredClone(i);const result=authorizeCommerceMigrateDeploy(i);
- assert.equal(result.verdict,'AUTHORIZED');assert.equal(result.knownDivergences,2);assert.deepEqual(result.pending,commercePending);assert.deepEqual(i,before);
+ assert.equal(result.verdict,'AUTHORIZED');assert.equal(result.knownDivergences,2);assert.deepEqual(result.pending,[...commercePending,...architecturePending]);assert.deepEqual(i,before);
 });
 const mutations={
  'third checksum mismatch':i=>{i.ledgerSnapshot.ledger[3].checksum='a'.repeat(64);},

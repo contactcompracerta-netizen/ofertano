@@ -8,7 +8,8 @@ import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
 import { validateLocalTarget, assertLocalConnection, scaffoldLocalSupabase, verifyLocalRls, localEquivalenceSchema, verifyLocalRolesAndAuth } from './local-supabase-compatibility.mjs';
 import { collectPredeployState } from './local-security-state.mjs';
-import { verifyLedgerCompatibility, commercePending } from '../migration-history/verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, commercePending, architecturePending } from '../migration-history/verify-ledger-compatibility.mjs';
+const fullPending = [...commercePending, ...architecturePending];
 import fixture from '../migration-history/production-ledger.fixture.json' with {type:'json'};
 import security from '../migration-history/expected-security-state.json' with {type:'json'};
 import pins from '../migration-history/forensic-pins.json' with {type:'json'};
@@ -55,7 +56,7 @@ async function ledger(client) { return JSON.parse(JSON.stringify((await client.q
 async function counts(client, tables) { const result = {}; for (const table of tables) result[table] = Number((await client.query(`SELECT count(*) AS n FROM "${table}"`)).rows[0].n); return result; }
 async function predeployState(client, identity) { return collectPredeployState(client, identity); }
 function assertFullLedger(rows) {
- assert.equal(rows.length, 11);
+ assert.equal(rows.length, 12);
  for (const row of rows) { assert.ok(row.finished_at); assert.equal(row.rolled_back_at, null); assert.equal(row.checksum, ({ ...manifest.baselineMigrations, ...manifest.forwardMigrations })[row.migration_name]); assert.equal(row.applied_steps_count, manifest.baselineMigrations[row.migration_name] ? 0 : 1); }
 }
 for (const name of Object.values(names)) await ensureDatabase(name);
@@ -103,19 +104,20 @@ try {
  const relevant=rows=>rows.map(r=>({migration_name:r.migration_name,checksum:r.checksum,applied_steps_count:r.applied_steps_count,finished:!!r.finished_at,rolledBack:!!r.rolled_back_at})).sort((a,b)=>a.migration_name.localeCompare(b.migration_name));
  assert.deepEqual(relevant(before),relevant(fixture.ledger));
  const beforeCounts = await counts(rehearsal,security.rls.map(r=>r.tableName).filter(n=>n!=='_prisma_migrations'));
- const gate = verifyLedgerCompatibility({version:1,ledger:before},commercePending); assert.equal(gate.warnings.length,2);
+ const gate = verifyLedgerCompatibility({version:1,ledger:before},fullPending); assert.equal(gate.warnings.length,2);
  // Production identity/flags are synthetic gate inputs; actual SQL target is guarded local.
  const expectedProductionIdentity={environment:'production',targetEnvironment:'production',projectId:pins.projectId,deliverySHA:pinsDeliverySHA};
  const schemaState=await predeployState(rehearsal,expectedProductionIdentity);
  const observedFlags={version:1,flags:Object.fromEntries(requiredOffFlags.map(n=>[n,false])),canaryTokenPresent:false};
- const authorization=authorizeCommerceMigrateDeploy({ledgerSnapshot:{version:1,ledger:before},allowedPending:commercePending,repositoryContract:loadRepositoryContract(),observedFlags,schemaState,expectedProductionIdentity});
+ const authorization=authorizeCommerceMigrateDeploy({ledgerSnapshot:{version:1,ledger:before},allowedPending:fullPending,repositoryContract:loadRepositoryContract(),observedFlags,schemaState,expectedProductionIdentity});
  assert.equal(authorization.verdict,'AUTHORIZED',JSON.stringify(authorization));
  const securityBefore={rls:schemaState.rls,policies:schemaState.policies,grants:schemaState.grants,defaultPrivileges:schemaState.defaultPrivileges,columnPrivilegeExceptions:schemaState.columnPrivilegeExceptions};
- const deployOutput = run([cli,'migrate','deploy'],names.rehearsal);
- const execution=verifyPrismaDeployRehearsal({exitCode:0,output:deployOutput});
- const appliedNames = [...deployOutput.matchAll(/Applying migration `([^`]+)`/g)].map(m=>m[1]); assert.deepEqual(appliedNames,commercePending);
- const after = await ledger(rehearsal); assert.equal(after.length,11); assert.deepEqual(after.filter(r=>!commercePending.includes(r.migration_name)),before);
- for (const name of commercePending) { const row=after.find(r=>r.migration_name===name); assert.ok(row.finished_at);assert.equal(row.applied_steps_count,1);assert.equal(row.checksum,manifest.forwardMigrations[name]); }
+ const deployment = run([cli,'migrate','deploy'],names.rehearsal);
+ const deployOutput = deployment;
+ const execution=verifyPrismaDeployRehearsal({exitCode:0,output:deployOutput,expected:fullPending});
+ const appliedNames = [...deployOutput.matchAll(/Applying migration `([^`]+)`/g)].map(m=>m[1]); assert.deepEqual(appliedNames,fullPending);
+ const after = await ledger(rehearsal); assert.equal(after.length,12); assert.deepEqual(after.filter(r=>!fullPending.includes(r.migration_name)),before);
+ for (const name of fullPending) { const row=after.find(r=>r.migration_name===name); assert.ok(row.finished_at);assert.equal(row.applied_steps_count,1);assert.equal(row.checksum,manifest.forwardMigrations[name]); }
  assert.deepEqual(await counts(rehearsal,Object.keys(beforeCounts)),beforeCounts);
  const newCounts=await counts(rehearsal,newTables); assert.ok(Object.values(newCounts).every(n=>n===0));
  verifyLedgerCompatibility({version:1,ledger:after},[]);
@@ -132,7 +134,7 @@ try {
  await verifyLocalRls(rehearsal,target(names.rehearsal));
  evidence.rehearsal={...evidence.rehearsal,verdict:'PASS',blocker:null,exactLedgerMatched:true,localLedgerMetadataSimulation:true,authorization,execution,syntheticProductionIdentity:true};
  fs.mkdirSync('docs/evidence/50ag4b-r2g2',{recursive:true}); fs.writeFileSync('docs/evidence/50ag4b-r2g2/local-validation.json',JSON.stringify(evidence,null,2)+'\n');
- fs.writeFileSync('docs/evidence/50ag4b-r2g2/summary.json',JSON.stringify({version:1,prismaVersion:'7.9.0',exactLedgerMatched:true,knownDivergences:2,unknownDivergences:0,warningObserved,commerceOnlyApplied:true,baselineReapplied:false,rlsReapplied:false,independentLedgerGate:'PASS',authorizeGate:'PASS',warningRequiredForSafety:false,localLedgerMetadataSimulation:true,productionAccessed:false},null,2)+'\n');
+ fs.writeFileSync('docs/evidence/50ag4b-r2g2/summary.json',JSON.stringify({version:1,prismaVersion:'7.9.0',exactLedgerMatched:true,knownDivergences:2,unknownDivergences:0,warningObserved,commerceOnlyApplied:JSON.stringify(appliedNames)===JSON.stringify(commercePending),baselineReapplied:false,rlsReapplied:false,independentLedgerGate:'PASS',authorizeGate:'PASS',warningRequiredForSafety:false,localLedgerMetadataSimulation:true,productionAccessed:false,architectureV1PendingApplied:appliedNames.includes(architecturePending[0])},null,2)+'\n');
  console.log(JSON.stringify({fresh:'PASS',forward:'PASS',equivalence:'PASS',idempotence:'PASS',rehearsal:'PASS',prismaWarningObserved:warningObserved}));
- verifyPrismaDeployRehearsal({exitCode:0,output:deployOutput});
+ verifyPrismaDeployRehearsal({exitCode:0,output:deployOutput,expected:fullPending});
 } finally { await Promise.all([fresh.end(),forward.end(),rehearsal.end()]); }

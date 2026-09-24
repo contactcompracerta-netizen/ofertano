@@ -1,7 +1,7 @@
 /** Pure decision over trusted repository/release inputs and observed snapshots. No DB/CLI. */
 import pins from './forensic-pins.json' with { type: 'json' };
 import security from './expected-security-state.json' with { type: 'json' };
-import {verifyLedgerCompatibility, commercePending} from './verify-ledger-compatibility.mjs';
+import {verifyLedgerCompatibility, commercePending, architecturePending} from './verify-ledger-compatibility.mjs';
 export const commerceTables = ['ProductIdentifier','ProductVariant','IdentityEvidence','IdentityConflict','OfferObservation','OfferPriceComponent','TrustSignal','ProductRelation','CommerceCanaryGrant','CommerceCanaryAttempt'];
 export const requiredOffFlags = ['COMMERCE_IDENTITY_GRAPH_ENABLED','COMMERCE_VARIANTS_ENABLED','OFFER_LEDGER_ENABLED','PRICE_TRUTH_ENABLED','TRUST_SIGNALS_ENABLED','COMMERCE_SHADOW_ENABLED','COMMERCE_DISTRIBUTED_CANARY_ENABLED','RAW_LISTING_DUAL_WRITE_ENABLED','CATALOG_POPULATE_ENABLED','IMPORT_QUEUE_PROCESS_ENABLED','PUBLIC_SEARCH_PERSISTENCE_ENABLED'];
 const requireState = (ok, code) => { if (!ok) throw new Error(code); };
@@ -75,7 +75,8 @@ export function authorizeCommerceMigrateDeploy(input) {
   // expected delivery SHA is a trusted release input, never inferred from observations.
   requireState(expectedProductionIdentity?.environment === 'production' && expectedProductionIdentity.targetEnvironment === 'production' && expectedProductionIdentity.projectId === pins.projectId && /^[a-f0-9]{40}$/.test(expectedProductionIdentity.deliverySHA ?? ''), 'TRUSTED_RELEASE_IDENTITY_REQUIRED');
   requireState(schemaState?.version === 2 && same(schemaState.targetIdentity, expectedProductionIdentity), 'TARGET_IDENTITY_DIVERGED');
-  requireState(repositoryContract && same(allowedPending,commercePending), 'EXACT_COMMERCE_PENDING_REQUIRED');
+  const allowedDeployPending = [[...commercePending], [...commercePending, ...architecturePending]];
+  requireState(repositoryContract && allowedDeployPending.some(set => same(set, allowedPending)), 'EXACT_COMMERCE_PENDING_REQUIRED');
   const ledger = verifyLedgerCompatibility(ledgerSnapshot,allowedPending,repositoryContract);
   requireState(ledger.warnings.length === 2, 'EXACT_KNOWN_DIVERGENCES_REQUIRED');
   requireState(observedFlags?.version === 1 && observedFlags.flags && namesEqual(Object.keys(observedFlags.flags),requiredOffFlags) && requiredOffFlags.every(f=>observedFlags.flags[f] === false) && observedFlags.canaryTokenPresent === false, 'FLAGS_OR_TOKEN_UNSAFE');
