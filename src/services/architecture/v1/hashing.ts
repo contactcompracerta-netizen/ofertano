@@ -150,9 +150,18 @@ export type HashComparisonDecisionV1 =
  *   catalogHash mudou        => STRUCTURAL (CATALOG / COLLECTION PATH)
  *   catalogHash igual        => offerHash mudou? OFFER_ONLY (FAST OFFER PATH)
  *   ambos iguais             => NOOP (idempotente)
+ *
+ * `previous` admite campos null: first-seen e listings sem hash calculado
+ * (caminho shadow pré-V1) caem nas mesmas decisões fail-closed.
  */
+export type PreviousHashPairV1 = {
+  catalogHash?: string | null;
+  offerHash?: string | null;
+  rawHash?: string | null;
+};
+
 export function classifyHashChange(
-  previous: Partial<HashPairV1> | null,
+  previous: PreviousHashPairV1 | null,
   current: HashPairV1,
 ): HashComparisonDecisionV1 {
   if (!previous?.catalogHash) return "STRUCTURAL";

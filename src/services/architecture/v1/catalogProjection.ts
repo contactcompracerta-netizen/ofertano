@@ -10,8 +10,8 @@
  * marketplaceId + identidade normalizada, nunca de nomes de marketplace.
  */
 
-import type { NormalizedMarketplaceListingV1 } from "../types/normalizedListingV1";
-import { canonicalJson } from "../hashing";
+import type { NormalizedMarketplaceListingV1 } from "./types/normalizedListingV1";
+import { canonicalJson } from "./hashing";
 
 export interface ProjectedOfferV1 {
   marketplaceId: string;

@@ -229,7 +229,6 @@ export function detectMissingListingsFromSnapshot(
 
   const snapshotOk = previousOk && input.previousKeys.length > 0;
 
-  const previousSet = new Set(input.previousKeys);
   const currentSet = new Set(input.currentKeys);
 
   const missingKeys: string[] = [];

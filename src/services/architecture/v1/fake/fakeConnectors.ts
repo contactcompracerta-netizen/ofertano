@@ -254,6 +254,7 @@ export class FakeMarketplaceConnectorB implements MarketplaceConnector {
   collect(fromCursor: string | null = null): Promise<CollectedListingBatch> {
     const fixtures: FakeListingFixtureV1[] = [
       {
+        marketplaceId: "MARKET_B",
         externalListingId: "b1",
         identity: { brand: "Nova", model: "Nova X" },
         catalog: {
@@ -264,6 +265,7 @@ export class FakeMarketplaceConnectorB implements MarketplaceConnector {
         metadata: { sourceUpdatedAt: new Date().toISOString(), payloadVersion: "raw/v1" },
       },
       {
+        marketplaceId: "MARKET_B",
         externalListingId: "b2",
         identity: { brand: "Som", model: "Max" },
         catalog: {

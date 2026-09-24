@@ -15,10 +15,9 @@ import type { NormalizedMarketplaceListingV1 } from "../types/normalizedListingV
 import type {
   MarketplaceConnector,
 } from "../types/connector";
-import type { RawListingRecordV1, RawListingRepositoryV1 } from "./rawRepository";
+import type { RawListingRecordV1 } from "./rawRepository";
 import { processNormalizedListing } from "./pipeline";
 import type { PipelineContextV1 } from "./pipeline";
-import type { CatalogMetrics } from "../observability/metrics";
 
 export interface ReprocessResultV1 {
   reprocessed: boolean;

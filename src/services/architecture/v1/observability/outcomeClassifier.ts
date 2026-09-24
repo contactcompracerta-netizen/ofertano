@@ -11,7 +11,7 @@
  * (NON_RETRYABLE|POLICY_NOT_READY|...).
  */
 
-import { NON_RETRYABLE_ENVELOPE_PREFIX } from "../../importQueue/retryClassification";
+import { NON_RETRYABLE_ENVELOPE_PREFIX } from "../../../importQueue/retryClassification";
 
 export const POLICY_NOT_READY_TOKEN = "POLICY_NOT_READY";
 

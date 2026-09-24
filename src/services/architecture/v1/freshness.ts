@@ -79,11 +79,17 @@ export function classifyFreshness(
     return "EXPIRED";
   }
 
+  // Contrato normalizado com defaults documentados (tolerante a contrato parcial).
+  const c: Required<FreshnessContractV1> = {
+    ...DEFAULT_FRESHNESS_CONTRACT,
+    ...(contract ?? {}),
+  };
+
   const age = now - referenceMs;
   if (age < 0) return "FRESH"; // relógio da fonte no futuro: trata como atual.
-  if (age > contract.ttlMs) return "EXPIRED";
-  if (age > contract.staleAfterMs) return "STALE";
-  if (age > contract.agingAfterMs) return "AGING";
+  if (age > c.ttlMs) return "EXPIRED";
+  if (age > c.staleAfterMs) return "STALE";
+  if (age > c.agingAfterMs) return "AGING";
   return "FRESH";
 }
 

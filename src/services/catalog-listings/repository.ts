@@ -29,6 +29,10 @@ export type RawMarketplaceListingRow = {
   status: NormalizedMarketplaceListing["status"];
   fingerprint: string | null;
   canonicalProductId: string | null;
+  // CATALOG_ARCHITECTURE_V1 (aditivo, shadow OFF): hashes duplos + version.
+  catalogHash?: string | null;
+  offerHash?: string | null;
+  payloadVersion?: string | null;
 };
 
 type RawMarketplaceListingDelegate = {
@@ -78,6 +82,9 @@ function toNormalizedListing(row: RawMarketplaceListingRow): NormalizedMarketpla
     status: row.status,
     fingerprint: row.fingerprint,
     canonicalProductId: row.canonicalProductId,
+    catalogHash: row.catalogHash ?? null,
+    offerHash: row.offerHash ?? null,
+    payloadVersion: row.payloadVersion ?? null,
   });
 }
 
@@ -104,6 +111,9 @@ function toPersistenceData(listing: NormalizedMarketplaceListing) {
     status: listing.status ?? "DISCOVERED",
     fingerprint: listing.fingerprint ?? null,
     canonicalProductId: listing.canonicalProductId ?? null,
+    catalogHash: listing.catalogHash ?? null,
+    offerHash: listing.offerHash ?? null,
+    payloadVersion: listing.payloadVersion ?? null,
   };
 }
 

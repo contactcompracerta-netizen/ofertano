@@ -21,6 +21,7 @@ import type {
   ImportBatchRecordV1,
   ImportRunRecordV1,
   ImportRunRepositoryV1,
+  ImportRunStatusV1,
 } from "../ingestion/importRun";
 
 export class InMemoryRawListingRepository implements RawListingRepositoryV1 {
@@ -214,6 +215,7 @@ export class InMemoryImportRunRepository implements ImportRunRepositoryV1 {
   }
 
   async failRun(runId: string, _reason: string): Promise<ImportRunRecordV1> {
+    void _reason;
     const run = this.runs.get(runId);
     if (!run) throw new Error(`run ${runId} not found`);
     const next: ImportRunRecordV1 = {

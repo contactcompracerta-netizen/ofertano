@@ -24,8 +24,8 @@ import {
   PUBLIC_MULTISTORE_MIN_MARKETPLACES,
   countDistinctPublicMarketplaces,
   isUsablePublicOffer,
-} from "../../publicVisibility/multiStoreVisibility";
-import type { PublicOfferLike } from "../../publicVisibility/multiStoreVisibility";
+} from "../../../publicVisibility/multiStoreVisibility";
+import type { PublicOfferLike } from "../../../publicVisibility/multiStoreVisibility";
 import {
   canCompeteForBestOffer,
   classifyFreshness,
@@ -145,7 +145,8 @@ export function evaluatePublicationEligibility(
   }
 
   const freshnessCanCompete =
-    !freshnessContractApplied || canCompeteForBestOffer(freshness);
+    !freshnessContractApplied ||
+    (freshness !== "UNKNOWN" && canCompeteForBestOffer(freshness));
 
   const eligible =
     validOffers.length > 0 &&

@@ -38,6 +38,12 @@ export type NormalizedMarketplaceListing = {
   status?: RawListingStatus;
   fingerprint?: string | null;
   canonicalProductId?: string | null;
+  // CATALOG_ARCHITECTURE_V1 (aditivo, shadow OFF por default):
+  // São persistidos apenas quando fornecidos; ausência deriva para null sem
+  // mudar o comportamento do caminho legado.
+  catalogHash?: string | null;
+  offerHash?: string | null;
+  payloadVersion?: string | null;
 };
 
 export type ListingIdentity = {
@@ -114,6 +120,11 @@ export function normalizeMarketplaceListing(
       price: input.price ?? null,
     }),
     canonicalProductId: input.canonicalProductId ?? null,
+    // CATALOG_ARCHITECTURE_V1 (aditivo): preservados pela normalização;
+    // ausentes => null (shadow OFF).
+    catalogHash: input.catalogHash ?? null,
+    offerHash: input.offerHash ?? null,
+    payloadVersion: input.payloadVersion ?? null,
   };
 }
 
