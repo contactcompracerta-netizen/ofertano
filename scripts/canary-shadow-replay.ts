@@ -152,11 +152,20 @@ async function main(): Promise<void> {
 
   const nextStage = nextShadowCanaryStage(maxWrites);
 
+  const metricsSnapshot = metrics.snapshot();
+
   const summary = {
     marketplace: result.marketplaceId,
     blocked: result.blockedReason,
     processed: result.processed,
     realWrites: result.realWrites,
+    rawWrites: metricsSnapshot.rawWrites,
+    hashWrites: metricsSnapshot.hashWrites,
+    skippedMaxWrites: metricsSnapshot.skippedMaxWrites,
+    writeFailed: metricsSnapshot.writeFailed,
+    systemErrors: result.rows.filter((row) => row.error).length,
+    duplicatePrevented: result.rows.filter((row) => row.path === "NOOP").length,
+    exceedMaxWritesSkipped: metricsSnapshot.skippedMaxWrites > 0,
     dryRun: result.dryRun,
     parity: result.parity,
     CATALOG_V1_CUTOVER_READY: result.readiness.ready ? "YES" : "NO",

@@ -265,8 +265,17 @@ export async function processShadowListing(
     };
   }
 
+  // FASE 6: listing processada pela pipeline V1 oficial (handled, sem skip).
+  metrics.incProcessed(marketplaceId);
+
   if (wouldWrite && deps.realRepos) {
     metrics.incWriteSuccess(marketplaceId);
+    if (flags.persistRaw) {
+      metrics.incRawWrite(marketplaceId);
+    }
+    if (flags.persistHashes) {
+      metrics.incHashWrite(marketplaceId);
+    }
   } else if (flags.dryRun) {
     metrics.incSkippedDryRun(marketplaceId);
   } else if (budgetRemaining <= 0) {

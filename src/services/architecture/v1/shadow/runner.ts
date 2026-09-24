@@ -86,6 +86,12 @@ export type ShadowReplayResultV1 = {
   rows: ShadowRunResultV1[];
   processed: number;
   realWrites: number;
+  /** FASE 6: escritas reais que persistiram rawPayload (PERSIST_RAW). */
+  rawWriteCount: number;
+  /** FASE 6: escritas reais que persistiram hashes (PERSIST_HASHES). */
+  hashWriteCount: number;
+  /** FASE 6: listings reprocessadas em memória por orçamento exausto. */
+  maxWriteSkippedCount: number;
   totals: RunTotalsV1;
   parityVerdicts: ShadowReplayParityRecord[];
   parity: ParityAggregate;
@@ -127,6 +133,9 @@ export async function runShadowReplay(
     rows: [],
     processed: 0,
     realWrites: 0,
+    rawWriteCount: 0,
+    hashWriteCount: 0,
+    maxWriteSkippedCount: 0,
     totals: emptyTotals(),
     parityVerdicts: [],
     parity: aggregateParityVerdicts([]),
@@ -360,6 +369,11 @@ export async function runShadowReplay(
   );
 
   const metricsSnapshot = metrics.snapshot();
+  // FASE 6 (aditivo): breakdown raw vs hash a partir do snapshot process-local
+  // (mesmo snapshot usado pelo readiness — semântica preservada).
+  result.rawWriteCount = metricsSnapshot.rawWrites;
+  result.hashWriteCount = metricsSnapshot.hashWrites;
+  result.maxWriteSkippedCount = metricsSnapshot.skippedMaxWrites;
   result.readiness = evaluateShadowReadiness({
     realWrites: metricsSnapshot.writeSuccess,
     unexpectedMismatch: result.parity.unexpectedMismatch,
@@ -434,6 +448,15 @@ ${ready === "YES" ? "**Atenção:** YES habilita apenas a DECISÃO de agendar o 
 | ImportRun | ${result.runId ?? "_dry-run (sem run)_"} |
 | received / changed / unchanged | ${result.totals.received} / ${result.totals.changed} / ${result.totals.unchanged} |
 | rejected / failed | ${result.totals.rejected} / ${result.totals.failed} |
+
+## Métricas de escrita (FASE 6 — breakdown raw vs hash)
+
+| Métrica | Valor |
+| --- | --- |
+| writeSuccess (upserts reais no banco) | ${result.realWrites} |
+| rawWrites (rawPayload persistido) | ${result.rawWriteCount} |
+| hashWrites (hashes persistidos) | ${result.hashWriteCount} |
+| skippedMaxWrites (orçamento exausto, fail-closed) | ${result.maxWriteSkippedCount} |
 
 ## Paridade (gate legado vs gate V1, MESMO conjunto de ofertas)
 
