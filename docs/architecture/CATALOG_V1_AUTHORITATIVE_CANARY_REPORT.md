@@ -27,7 +27,7 @@ AUTHORITATIVE_READY=YES (CATALOG_V1_AUTHORITATIVE_READY)
 | Legacy fallback habilitado | `true` |
 | ImportRun final | cmug688ga00005zdh7gfgu5mv (estágio 100) |
 | Base SHA | `257173d97b1fdb854fbe418ab093f86d4535044d` |
-| Final SHA | veja git log do worktree `feat/catalog-v1-progressive-cutover-20260924` |
+| Final SHA | `f935738cb2f1870e0d1f77687d8dd8d1d348db75` |
 
 ## Canários executados (viés real, sem fabricação)
 
@@ -110,5 +110,5 @@ hashes persistidos** — retry da MESMA listing => NOOP (prova de idempotência 
 - `AUTO_ACTIVE_LT2`: 0 (gate multiloja preservado — 1 marketplace nunca ativa)
 - `PUBLIC_MULTISTORE_MIN_MARKETPLACES`: 2 (inalterado)
 - `CUTOVER_GLOBAL_PROHIBITED`: true (CATALOG_V1_GLOBAL_CUTOVER=NO)
-- `PRODUCTION_SHA`: 0add3b320493ab91e06f37f8f3db59a08ad08484
-- `VERCEL_DEPLOY_TARGET`: production (flags OFF fail-closed)
+- `PRODUCTION_SHA`: f935738cb2f1870e0d1f77687d8dd8d1d348db75 (deploy production READY 24/09 23:38 UTC-3)
+- `VERCEL_DEPLOY_TARGET`: production (flags OFF fail-closed — nenhuma env de cutover no Vercel)
