@@ -8,7 +8,8 @@ import prisma from "@/lib/prisma";
 import { searchCatalogOrDiscover } from "@/services/search/searchCatalogOrDiscover";
 import { saveProduct } from "@/services/database/saveProduct";
 import { processPriceMonitor } from "@/services/priceMonitor/processPriceMonitor";
-import type { DiscoveryAdapter } from "@/services/discovery/core/types";
+import type { DiscoveryAdapter, DiscoveryCandidate, DiscoveryMarketplace } from "@/services/discovery/core/types";
+import type { MarketplaceName } from "@/services/importers/core/types";
 import type { PersistProductFn } from "@/services/multistore-v2/persist";
 
 const DB_URL = process.env.DATABASE_URL ?? "";
@@ -25,13 +26,13 @@ function cronRequest(): Request {
 
 function foundCandidate(
   extras: {
-    marketplace: string;
-    marketplaceName: string;
+    marketplace: DiscoveryMarketplace;
+    marketplaceName: MarketplaceName;
     externalId: string;
     price?: number;
     title?: string;
   },
-) {
+): DiscoveryCandidate {
   const title = extras.title ?? "Headphone MarcaX ZX100";
   return {
     marketplace: extras.marketplace,
@@ -54,7 +55,7 @@ function foundCandidate(
 
 function fakeAdapter(
   marketplace: DiscoveryAdapter["marketplace"],
-  marketplaceName: string,
+  marketplaceName: MarketplaceName,
   searcher: NonNullable<DiscoveryAdapter["searcher"]>,
 ): DiscoveryAdapter {
   return {

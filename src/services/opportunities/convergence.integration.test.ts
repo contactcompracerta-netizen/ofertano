@@ -396,7 +396,6 @@ async function run() {
     resolverHrefProprioOfertaPublica({
       ...awaiting,
       affiliateLink: AFFILIATE_ML,
-      status: "ACTIVE",
     }),
     AFFILIATE_ML,
   );

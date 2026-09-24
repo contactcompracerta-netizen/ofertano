@@ -3,8 +3,18 @@ import assert from "node:assert/strict";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
+  DiscoveryMarketplace,
 } from "../discovery/core/types";
+import type { MarketplaceName } from "../importers/core/types";
 import { buildSearchPlan, searchMultistoreV2 } from "./search";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 function candidate(
   marketplace: DiscoveryCandidate["marketplace"],
@@ -13,10 +23,11 @@ function candidate(
 ): DiscoveryCandidate {
   return {
     marketplace,
-    marketplaceName: marketplace,
+    marketplaceName: MARKETPLACE_DISPLAY[marketplace],
     externalId,
     title,
     price: 100,
+    oldPrice: null,
     sourceUrl: `https://example.test/${externalId}`,
     image: null,
     brand: null,
@@ -33,7 +44,7 @@ function adapter(
   marketplace: DiscoveryAdapter["marketplace"],
   searcher: NonNullable<DiscoveryAdapter["searcher"]>,
 ): DiscoveryAdapter {
-  return { marketplace, marketplaceName: marketplace, enabled: true, searcher };
+  return { marketplace, marketplaceName: MARKETPLACE_DISPLAY[marketplace], enabled: true, searcher };
 }
 
 const budget = {

@@ -40,8 +40,15 @@ import { legacyBlogPosts } from "../../app/blog/posts";
  * /admin/layout.tsx importa um CSS module (via AdminNav). O tsx não sabe
  * lidar com CSS, então registramos um stub para .css ANTES de carregar a
  * metadata real de admin dinamicamente (ver checarAdminNoindex abaixo).
+ *
+ * Node 20 ainda expõe Module._extensions em runtime (deprecado), mas os
+ * tipos @types/node 20 não o declaram; registramos o stub com o shape
+ * mínimo necessário via narrowing explícito (sem any).
  */
-Module._extensions[".css"] = (mod: NodeModule) => {
+const moduleWithExtensions = Module as unknown as {
+  _extensions: Record<string, (mod: NodeModule, filename: string) => void>;
+};
+moduleWithExtensions._extensions[".css"] = (mod: NodeModule) => {
   mod.exports = {};
 };
 
@@ -76,27 +83,52 @@ const produtoReal: ProductSeoInput = {
 }
 console.log("SEO_ROBOTS_EXISTS=PASS");
 
+import type { Metadata } from "next";
+
+/**
+ * metadata.robots do Next aceita string OU objeto de regras. Estes testes
+ * exigem a forma OBJETO (index/follow explícitos). O helper estreita o tipo
+ * por guardas em runtime — sem casts cegos.
+ */
+type MetadataRobotsValue = Metadata["robots"];
+
+function assertRobotsObjectNoindex(
+  robotsValue: MetadataRobotsValue,
+  label: string,
+): void {
+  assert.ok(robotsValue, `${label} deve ter robots.`);
+  assert.ok(
+    typeof robotsValue !== "string",
+    `${label} deve usar objeto de regras, não string.`,
+  );
+  if (typeof robotsValue === "string") {
+    assert.fail(`${label} deve usar objeto de regras, não string.`);
+  }
+  assert.ok(
+    robotsValue.index === false,
+    `${label} robots.index deve bloquear indexação (received ${robotsValue.index}).`,
+  );
+  assert.ok(
+    robotsValue.follow === false,
+    `${label} robots.follow deve bloquear follow (received ${robotsValue.follow}).`,
+  );
+}
+
 // ---- SEO_LOGIN_NOINDEX ------------------------------------------------------
 {
-  assert.ok(loginMetadata.robots, "login deve ter robots.");
-  assert.equal(loginMetadata.robots!.index, false);
-  assert.equal(loginMetadata.robots!.follow, false);
+  assertRobotsObjectNoindex(loginMetadata.robots, "login");
 }
 console.log("SEO_LOGIN_NOINDEX=PASS");
 
 // ---- SEO_FAVORITES_NOINDEX --------------------------------------------------
 {
-  assert.ok(favoritosMetadata.robots, "favoritos deve ter robots.");
-  assert.equal(favoritosMetadata.robots!.index, false);
-  assert.equal(favoritosMetadata.robots!.follow, false);
+  assertRobotsObjectNoindex(favoritosMetadata.robots, "favoritos");
 }
 console.log("SEO_FAVORITES_NOINDEX=PASS");
 
 // ---- recuperar-senha também noindex ----------------------------------------
 {
-  assert.ok(recuperarSenhaMetadata.robots, "recuperar-senha deve ter robots.");
-  assert.equal(recuperarSenhaMetadata.robots!.index, false);
-  assert.equal(recuperarSenhaMetadata.robots!.follow, false);
+  assertRobotsObjectNoindex(recuperarSenhaMetadata.robots, "recuperar-senha");
 }
 console.log("SEO_RECUPERAR_SENHA_NOINDEX=PASS");
 
@@ -423,11 +455,11 @@ console.log("SEO_HELPERS=PASS");
 async function checarAdminNoindex(): Promise<void> {
   const { metadata: adminMetadata } = await import("../../app/admin/layout");
 
-  assert.ok(adminMetadata.robots, "/admin deve ter robots.");
-  assert.equal(adminMetadata.robots!.index, false);
-  assert.equal(adminMetadata.robots!.follow, false);
+  assertRobotsObjectNoindex(adminMetadata.robots, "/admin");
 
-  const disallow = robots().rules?.[0]?.disallow ?? [];
+  const robotsRules = robots().rules;
+  const firstRule = Array.isArray(robotsRules) ? robotsRules[0] : undefined;
+  const disallow = firstRule?.disallow ?? [];
   assert.ok(disallow.includes("/admin"), "robots deve bloquear /admin.");
   assert.equal(
     rotaPrivadaExcluidaDoSitemap("/admin"),

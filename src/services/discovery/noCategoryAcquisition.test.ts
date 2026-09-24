@@ -16,10 +16,13 @@ function fontes(
   onStage?: (stage: string) => void,
 ): MercadoLivreAcquisitionSources {
   const wrap =
-    <T,>(stage: string, run: () => Promise<T>) =>
-    async () => {
+    <Args extends unknown[], T>(
+      stage: string,
+      run: (...args: Args) => Promise<T>,
+    ) =>
+    async (...args: Args) => {
       onStage?.(stage);
-      return run();
+      return run(...args);
     };
 
   return {
@@ -29,7 +32,7 @@ function fontes(
       httpStatus: 200,
       data: [],
     })),
-    loadCatalogCandidate: wrap("hydration", async (productId) => ({
+    loadCatalogCandidate: wrap("hydration", async (productId: string) => ({
       title: productId,
       externalId: productId,
       stage: "offers-fetch",

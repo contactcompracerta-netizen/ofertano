@@ -3,13 +3,23 @@ import assert from "node:assert/strict";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
+  DiscoveryMarketplace,
   MarketplaceDiscoveryResult,
 } from "@/services/discovery/core/types";
+import type { MarketplaceName } from "@/services/importers/core/types";
 import { classifyQueryMode } from "./queryIdentity";
 import { extractSanitizedIdentity } from "./sanitizedIdentity";
 import { hasStrongProductConceptConflict } from "./queryCore";
 import { normalizeMultistoreText } from "./normalizeCandidate";
 import { searchMultistoreV2 } from "./search";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 function candidate(
   marketplace: DiscoveryCandidate["marketplace"],
@@ -21,7 +31,7 @@ function candidate(
 ): DiscoveryCandidate {
   return {
     marketplace,
-    marketplaceName: marketplace,
+    marketplaceName: MARKETPLACE_DISPLAY[marketplace],
     externalId,
     sourceUrl: `https://offline.example/${externalId}`,
     title,
@@ -32,6 +42,7 @@ function candidate(
     category: null,
     seller: null,
     attributes: { modelNumber, capacity: "550W" },
+    status: "FOUND",
   };
 }
 
@@ -55,7 +66,7 @@ function adapter(
   marketplace: DiscoveryAdapter["marketplace"],
   searcher: NonNullable<DiscoveryAdapter["searcher"]>,
 ): DiscoveryAdapter {
-  return { marketplace, marketplaceName: marketplace, enabled: true, searcher };
+  return { marketplace, marketplaceName: MARKETPLACE_DISPLAY[marketplace], enabled: true, searcher };
 }
 
 function modelFromQuery(query: string): "L-99" | "OLI" | null {

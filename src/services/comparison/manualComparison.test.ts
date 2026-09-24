@@ -87,7 +87,7 @@ function criarHarness(rows: LinhaOferta[]) {
 
   const client = {
     $transaction: async (
-      callback: (tx: typeof tx) => Promise<unknown>,
+      callback: (transaction: unknown) => Promise<unknown>,
     ) => {
       await callback(tx);
     },
@@ -96,7 +96,7 @@ function criarHarness(rows: LinhaOferta[]) {
   };
 
   return {
-    client: client as Parameters<
+    client: client as unknown as Parameters<
       typeof rejeitarOfertaExistenteReavaliada
     >[0],
 

@@ -3,11 +3,21 @@ import assert from "node:assert/strict";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
+  DiscoveryMarketplace,
   MarketplaceDiscoveryResult,
 } from "../discovery/core/types";
+import type { MarketplaceName } from "../importers/core/types";
 import { buildAliExpressCompactFallbackQuery, buildSearchPlan } from "./queryPlan";
 import { searchMultistoreV2 } from "./search";
 import { extractSanitizedIdentity } from "./sanitizedIdentity";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 const query = "Console Playstation 4 Ps4 Slim 1 Tb 2controles + Jogos (Recondicionado)";
 const identity = extractSanitizedIdentity(query);
@@ -16,6 +26,7 @@ const compactQuery = buildAliExpressCompactFallbackQuery(query, identity.queryCo
 
 assert.ok(compactQuery, "AliExpress compact query must be available for this test");
 assert.ok(!normalPlan.includes(compactQuery), "compact query must be a distinct fallback variant");
+const compactQueryNonNull: string = compactQuery;
 
 const budget = {
   globalMs: 2_000,
@@ -31,7 +42,7 @@ function candidate(
 ): DiscoveryCandidate {
   return {
     marketplace,
-    marketplaceName: marketplace,
+    marketplaceName: MARKETPLACE_DISPLAY[marketplace],
     externalId,
     title: "Console Playstation 4 PS4 Slim 1TB 2 Controles Recondicionado",
     price: 100,
@@ -69,7 +80,7 @@ function adapter(
 ): DiscoveryAdapter {
   return {
     marketplace,
-    marketplaceName: marketplace,
+    marketplaceName: MARKETPLACE_DISPLAY[marketplace],
     enabled: true,
     searcher,
   };
@@ -132,7 +143,7 @@ async function run(): Promise<void> {
   });
   for (const marketplace of otherMarketplaceCalls.keys()) {
     assert.equal(
-      otherMarketplaceCalls.get(marketplace)?.includes(compactQuery),
+      otherMarketplaceCalls.get(marketplace)?.includes(compactQueryNonNull),
       false,
       `${marketplace} must not use the AliExpress compact query`,
     );
@@ -163,7 +174,7 @@ async function run(): Promise<void> {
     ],
   });
   assert.equal(deadlineCalls.length, 1, "no compact retry may start after acquisition deadline");
-  assert.equal(deadlineCalls.includes(compactQuery), false, "deadline must prevent new compact network work");
+  assert.equal(deadlineCalls.includes(compactQueryNonNull), false, "deadline must prevent new compact network work");
 
   console.log("ALIEXPRESS_NORMAL_EMPTY=PASS");
   console.log("ALIEXPRESS_COMPACT_TRIGGERED=PASS");

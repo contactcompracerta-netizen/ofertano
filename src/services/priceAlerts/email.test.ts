@@ -350,7 +350,7 @@ async function run() {
 
     let resultado:
       | ReturnType<typeof statuses>
-      | undefined = undefined;
+      | undefined = undefined as ReturnType<typeof statuses> | undefined;
 
     await assert.doesNotReject(async () => {
       const saida = await processProductAlerts(criarContexto(), deps);
@@ -600,6 +600,7 @@ async function run() {
         currentPrice: 899,
         savings: 101,
         dropPercentage: 10.1,
+        publicLink: "https://ofertano.vercel.app/produto/prod_1",
       });
 
       verificar(
@@ -655,6 +656,7 @@ async function run() {
         currentPrice: 899,
         savings: 101,
         dropPercentage: 10.1,
+        publicLink: "https://ofertano.vercel.app/produto/prod_1",
       });
 
       verificar(

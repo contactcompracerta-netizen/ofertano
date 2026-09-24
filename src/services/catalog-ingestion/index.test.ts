@@ -65,7 +65,7 @@ test("cross-brand candidate is rejected by guard", () => {
 });
 
 test("dry run produces metrics without writes", async () => {
-  const adapter = async (query: string) => [{
+  const adapter = async (query: string): Promise<CatalogIngestionCandidate[]> => [{
     marketplace: "AMAZON",
     marketplaceName: "Amazon",
     externalId: `amazon-${query}`,

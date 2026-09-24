@@ -18,8 +18,18 @@ import type { RawCandidate } from "./types";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
+  DiscoveryMarketplace,
   MarketplaceDiscoveryResult,
 } from "../discovery/core/types";
+import type { MarketplaceName } from "../importers/core/types";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 function raw(
   title: string,
@@ -825,7 +835,7 @@ assert.equal(
 
 function fakeAdapter(
   marketplace: DiscoveryAdapter["marketplace"],
-  marketplaceName: string,
+  marketplaceName: MarketplaceName,
   searcher: NonNullable<DiscoveryAdapter["searcher"]>,
 ): DiscoveryAdapter {
   return {
@@ -840,7 +850,7 @@ function foundCandidate(
   extras: Partial<DiscoveryCandidate> & Pick<DiscoveryCandidate, "marketplace" | "externalId" | "title">,
 ): DiscoveryCandidate {
   return {
-    marketplaceName: extras.marketplaceName ?? extras.marketplace,
+    marketplaceName: extras.marketplaceName ?? MARKETPLACE_DISPLAY[extras.marketplace],
     sourceUrl: extras.sourceUrl ?? `https://loja.example/${extras.externalId}`,
     affiliateLink: extras.affiliateLink ?? null,
     image: extras.image ?? "https://loja.example/img.jpg",
@@ -1211,7 +1221,7 @@ async function runAcquisitionContract() {
           };
         }
         secondVariantStarted = true;
-        request.signal.addEventListener(
+        request.signal?.addEventListener(
           "abort",
           () => {
             secondVariantAborted = true;

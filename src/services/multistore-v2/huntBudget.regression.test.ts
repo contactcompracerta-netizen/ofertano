@@ -3,11 +3,21 @@ import assert from "node:assert/strict";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
+  DiscoveryMarketplace,
   MarketplaceDiscoveryResult,
 } from "@/services/discovery/core/types";
+import type { MarketplaceName } from "@/services/importers/core/types";
 import { buildQueryCore, hasStrongProductConceptConflict } from "./queryCore";
 import { buildSearchPlan, searchMultistoreV2 } from "./search";
 import { DEFAULT_SEARCH_BUDGET, resolveHuntReserveMs } from "./timeBudget";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 function candidate(
   marketplace: DiscoveryCandidate["marketplace"],
@@ -17,7 +27,7 @@ function candidate(
 ): DiscoveryCandidate {
   return {
     marketplace,
-    marketplaceName: marketplace,
+    marketplaceName: MARKETPLACE_DISPLAY[marketplace],
     externalId,
     sourceUrl: `https://offline.example/${externalId}`,
     title,
@@ -32,6 +42,7 @@ function candidate(
       color: "preto",
       diameter: "40mm",
     },
+    status: "FOUND",
   };
 }
 
@@ -109,7 +120,7 @@ function adapter(
 ): DiscoveryAdapter {
   return {
     marketplace,
-    marketplaceName: marketplace,
+    marketplaceName: MARKETPLACE_DISPLAY[marketplace],
     enabled: true,
     searcher,
   };

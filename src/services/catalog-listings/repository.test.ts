@@ -6,9 +6,15 @@ import {
   createPrismaRawListingRepository,
   type RawMarketplaceListingRow,
 } from "./repository";
+import type {
+  MarketplaceListingMarket,
+  NormalizedMarketplaceListing,
+} from "./index";
+
+const marketplace: MarketplaceListingMarket = "MERCADO_LIVRE";
 
 const row: RawMarketplaceListingRow = {
-  marketplace: "MERCADO_LIVRE",
+  marketplace,
   externalId: "MLB7184373436",
   sellerId: null,
   sellerName: "Seller",
@@ -39,7 +45,7 @@ function createFakePrisma() {
   return {
     calls,
     rawMarketplaceListing: {
-      async findUnique(args: unknown) {
+      async findUnique(args: unknown): Promise<RawMarketplaceListingRow | null> {
         calls.push({ method: "findUnique", args });
         return null;
       },
@@ -94,8 +100,8 @@ test("find maps an existing row without changing identity or product link", asyn
 test("upsert preserves the composite key and maps create/update data", async () => {
   const prisma = createFakePrisma();
   const repository = createPrismaRawListingRepository(prisma);
-  const listing = {
-    marketplace: row.marketplace,
+  const listing: NormalizedMarketplaceListing = {
+    marketplace,
     externalId: row.externalId,
     sourceUrl: row.sourceUrl,
     title: row.title,
@@ -147,7 +153,7 @@ test("linkListingToProduct updates only the explicit composite identity", async 
   const prisma = createFakePrisma();
   const repository = createPrismaRawListingRepository(prisma);
 
-  await repository.linkListingToProduct(row.externalId, row.canonicalProductId!, row.marketplace);
+  await repository.linkListingToProduct(row.externalId, row.canonicalProductId!, marketplace);
 
   assert.deepEqual(prisma.calls[0], {
     method: "update",
@@ -194,7 +200,7 @@ test("Prisma errors propagate and the repository does not retry", async () => {
 
   await assert.rejects(
     repository.upsertRawMarketplaceListing({
-      marketplace: row.marketplace,
+      marketplace,
       externalId: row.externalId,
     }),
     /prisma-error/,

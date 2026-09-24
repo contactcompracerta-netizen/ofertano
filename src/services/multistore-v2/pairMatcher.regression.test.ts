@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 
+import type {
+  DiscoveryAdapter,
+  MarketplaceDiscoveryResult,
+} from "../discovery/core/types";
 import { buildFingerprint } from "./fingerprint";
 import { normalizeCandidate } from "./normalizeCandidate";
 import { compareFingerprints } from "./pairMatcher";
@@ -198,11 +202,11 @@ async function runCrossStorePublicationRegression(): Promise<void> {
   const adapter = (
     marketplace: "MERCADO_LIVRE" | "AMAZON",
     title: string,
-  ) => ({
+  ): DiscoveryAdapter => ({
     marketplace,
     marketplaceName: marketplace === "AMAZON" ? "Amazon" : "Mercado Livre",
     enabled: true,
-    searcher: async () => ({
+    searcher: async (): Promise<MarketplaceDiscoveryResult> => ({
       marketplace,
       query,
       success: true,
@@ -222,6 +226,8 @@ async function runCrossStorePublicationRegression(): Promise<void> {
         category: "Aspiradores",
         seller: null,
         affiliateLink: null,
+        status: "FOUND",
+        error: null,
         attributes: {},
       }],
     }),
@@ -271,11 +277,11 @@ async function runCrossStorePublicationRegression(): Promise<void> {
   const blenderAdapter = (
     marketplace: "MERCADO_LIVRE" | "AMAZON",
     candidates: Array<{ externalId: string; title: string; brand: string }>,
-  ) => ({
+  ): DiscoveryAdapter => ({
     marketplace,
     marketplaceName: marketplace === "AMAZON" ? "Amazon" : "Mercado Livre",
     enabled: true,
-    searcher: async () => ({
+    searcher: async (): Promise<MarketplaceDiscoveryResult> => ({
       marketplace,
       query: blenderQuery,
       success: true,
@@ -285,6 +291,9 @@ async function runCrossStorePublicationRegression(): Promise<void> {
       candidates: candidates.map((candidate) => ({
         marketplace,
         marketplaceName: marketplace === "AMAZON" ? "Amazon" : "Mercado Livre",
+        externalId: candidate.externalId,
+        title: candidate.title,
+        brand: candidate.brand,
         sourceUrl: `https://example.test/${candidate.externalId}`,
         image: "https://example.test/liquidificador.jpg",
         price: 100,
@@ -293,7 +302,7 @@ async function runCrossStorePublicationRegression(): Promise<void> {
         seller: null,
         affiliateLink: null,
         attributes: {},
-        ...candidate,
+        status: "FOUND",
       })),
     }),
   });

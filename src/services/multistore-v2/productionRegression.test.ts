@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import type {
   DiscoveryAdapter,
+  DiscoveryCandidate,
   MarketplaceDiscoveryResult,
 } from "@/services/discovery/core/types";
 import { criarCandidatos, selectAmazonProductTitle } from "@/services/discovery/amazon";
@@ -95,7 +96,7 @@ assert.equal(selectAmazonProductTitle({ title: "Nike Revolution 8 Tênis Feminin
 async function main(): Promise<void> {
 const fallback = await searchMultistoreV2("Disco de serra 80 dentes", {
   adapters: [amazon(candidateResult("AMAZON", "Disco de serra 80 dentes")), blockedShopee],
-  budget: { globalMs: 3000, marketplaceMs: 500, fetchMs: 300, responseReserveMs: 200, persistReserveMs: 200, hangGraceMs: 50 },
+  budget: { globalMs: 3000, marketplaceMs: 500, fetchMs: 300, persistReserveMs: 200, hangGraceMs: 50 },
 });
 assert.equal(fallback.views.length, 0, "resultado publico nao usa fallback de loja unica");
 assert.equal(fallback.multiStoreClusters, 0);
@@ -137,7 +138,7 @@ const ali: DiscoveryAdapter = {
 };
 await searchMultistoreV2("Tênis adidas Feminino Corrida", {
   adapters: [ali],
-  budget: { globalMs: 3000, marketplaceMs: 1000, fetchMs: 300, responseReserveMs: 200, persistReserveMs: 200, hangGraceMs: 50 },
+  budget: { globalMs: 3000, marketplaceMs: 1000, fetchMs: 300, persistReserveMs: 200, hangGraceMs: 50 },
 });
 assert.equal(aliAttempts, 1);
 
@@ -145,7 +146,7 @@ const huntCandidate = (
   marketplace: "AMAZON" | "SHOPEE" | "MAGAZINE_LUIZA",
   externalId: string,
   title: string,
-) => ({
+): DiscoveryCandidate => ({
   marketplace,
   marketplaceName:
     marketplace === "AMAZON"
@@ -168,7 +169,7 @@ const huntResult = (
   marketplace: "AMAZON" | "SHOPEE" | "MAGAZINE_LUIZA",
   query: string,
   candidates: ReturnType<typeof huntCandidate>[],
-) => ({
+): MarketplaceDiscoveryResult => ({
   marketplace,
   query,
   success: true,
@@ -184,7 +185,7 @@ const huntRegression = await searchMultistoreV2("Headphone JBL", {
   persist: false,
   hunt: true,
   limit: 10,
-  budget: { globalMs: 12000, marketplaceMs: 2000, fetchMs: 200, responseReserveMs: 200, persistReserveMs: 200, hangGraceMs: 50 },
+  budget: { globalMs: 12000, marketplaceMs: 2000, fetchMs: 200, persistReserveMs: 200, hangGraceMs: 50 },
   adapters: [
     {
       marketplace: "AMAZON",

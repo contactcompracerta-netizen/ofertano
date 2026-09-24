@@ -597,7 +597,7 @@ async function persistirComSalvadorSimulado(
       ofertaExistenteProductId: existingOfferProductId,
     });
 
-    const savedId = decisao.usarTarget
+    const savedId: string = decisao.usarTarget
       ? productId!
       : productId ?? "product-canonico";
 

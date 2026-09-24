@@ -4,7 +4,7 @@ import {PrismaClient} from '@prisma/client';
 import {PrismaPg} from '@prisma/adapter-pg';
 import {runCommerceShadowCanary} from './service';
 import {buildShadowPlan} from './plan';
-import {WriteBudget,type CommerceShadowInput,type ShadowEvent} from './contracts';
+import {WriteBudget,type CommerceShadowInput,type CommerceShadowResult,type ShadowEvent} from './contracts';
 import {scheduleCommerceShadowAfterBarrier} from './integration';
 import {searchMultistoreV2} from '../../multistore-v2/search';
 import type {DiscoveryAdapter,DiscoveryCandidate} from '../../discovery/core/types';
@@ -50,7 +50,7 @@ finally {await db.$executeRawUnsafe('DROP TRIGGER _50ag2_component_failure ON "O
 assert.equal(failure!.status,'FAILED');assert.equal(failureBudget.committed,0);assert.deepEqual(await counts(),preFailure);
 // Exercise the REAL acquisition entry point with offline adapters and the attached scheduling hook.
 const adapters:DiscoveryAdapter[]=['AMAZON','SHOPEE'].map((marketplace)=>({enabled:true,marketplace:marketplace as DiscoveryAdapter['marketplace'],marketplaceName:(marketplace==='AMAZON'?'Amazon':'Shopee') as DiscoveryAdapter['marketplaceName'],searcher:async req=>({marketplace:marketplace as DiscoveryAdapter['marketplace'],query:req.query,success:true,scanned:1,error:null,candidates:[{marketplace,marketplaceName:marketplace==='AMAZON'?'Amazon':'Shopee',externalId:marketplace==='AMAZON'?input.externalId:'offline-shopee',sourceUrl:'https://shop.example/item',affiliateLink:'https://shop.example/aff',title:input.title,image:'https://shop.example/img',price:100,oldPrice:120,brand:'JBL',attributes:{ean:input.ean!,color:'Preto'},seller:'Synthetic Seller',status:'FOUND',error:null} as DiscoveryCandidate]})}));
-const saved={...process.env};const responses=[];const boundaryResults=[];
+const saved={...process.env};const responses:unknown[]=[];const boundaryResults:CommerceShadowResult[]=[];
 const normalize=(value:unknown):unknown=>Array.isArray(value)?value.map(normalize):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>k!=='elapsedMs').map(([k,v])=>[k,normalize(v)])):value;
 for(const mode of ['OFF','DRY','WRITE']) {
  Object.assign(process.env,env,{DATABASE_URL:url,COMMERCE_SHADOW_ENABLED:mode==='OFF'?'false':'true',COMMERCE_SHADOW_DRY_RUN:mode==='DRY'?'true':'false'});

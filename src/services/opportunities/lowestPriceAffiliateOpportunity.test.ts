@@ -491,10 +491,7 @@ async function run() {
   assert.equal(sanitized.sourceUrl, null);
   assert.equal(sanitized.affiliateLink, null);
   assert.equal(
-    resolverHrefProprioOfertaPublica({
-      ...awaiting,
-      status: "PENDING_AFFILIATE",
-    }),
+    resolverHrefProprioOfertaPublica(awaiting),
     null,
     "cliente nunca recebe sourceUrl como href enquanto aguarda afiliado",
   );

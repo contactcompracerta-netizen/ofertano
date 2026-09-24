@@ -435,13 +435,13 @@ console.log("EDGE_CASE_MINIMAL_INPUT=PASS");
     },
   });
 
-  const emptySpec = result.displaySpecifications.find(([key]) => key === "empty value");
+  const emptySpec = result.displaySpecifications.find(([key]) => key === "empty value")!;
   assert.equal(emptySpec[1], "Não informado", "Empty string should show 'Não informado'");
 
-  const nullSpec = result.displaySpecifications.find(([key]) => key === "null value");
+  const nullSpec = result.displaySpecifications.find(([key]) => key === "null value")!;
   assert.equal(nullSpec[1], "Não informado", "Null value should show 'Não informado'");
 
-  const spacesSpec = result.displaySpecifications.find(([key]) => key === "spaces only");
+  const spacesSpec = result.displaySpecifications.find(([key]) => key === "spaces only")!;
   assert.equal(spacesSpec[1], "Não informado", "Spaces-only value should show 'Não informado'");
 }
 console.log("EDGE_CASE_EMPTY_VALUES=PASS");
@@ -455,10 +455,10 @@ console.log("EDGE_CASE_EMPTY_VALUES=PASS");
     },
   });
 
-  const trueSpec = result.displaySpecifications.find(([key]) => key === "boolean true");
+  const trueSpec = result.displaySpecifications.find(([key]) => key === "boolean true")!;
   assert.equal(trueSpec[1], "Sim", "Boolean true should show 'Sim'");
 
-  const falseSpec = result.displaySpecifications.find(([key]) => key === "boolean false");
+  const falseSpec = result.displaySpecifications.find(([key]) => key === "boolean false")!;
   assert.equal(falseSpec[1], "Não", "Boolean false should show 'Não'");
 }
 console.log("EDGE_CASE_BOOLEAN_VALUES=PASS");
@@ -471,7 +471,7 @@ console.log("EDGE_CASE_BOOLEAN_VALUES=PASS");
     },
   });
 
-  const arraySpec = result.displaySpecifications.find(([key]) => key === "array value");
+  const arraySpec = result.displaySpecifications.find(([key]) => key === "array value")!;
   assert.equal(arraySpec[1], "item1, item2, item3", "Array should be joined with commas");
 }
 console.log("EDGE_CASE_ARRAY_VALUES=PASS");

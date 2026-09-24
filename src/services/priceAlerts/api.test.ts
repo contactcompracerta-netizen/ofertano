@@ -120,7 +120,7 @@ async function run() {
 
     verificar(
       "PRICE_ALERT_API_REQUIRES_AUTH",
-      resultado.status === 200 && resultado.alert === null,
+      resultado.status === 200 && "alert" in resultado && resultado.alert === null,
       "sem sessao, a consulta nao pode expor dados de nenhum usuario.",
     );
   }

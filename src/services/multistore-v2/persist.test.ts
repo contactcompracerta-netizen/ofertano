@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
 
-import type { DiscoveryAdapter, DiscoveryCandidate } from "../discovery/core/types";
+import type { DiscoveryAdapter, DiscoveryCandidate, DiscoveryMarketplace } from "../discovery/core/types";
+import type { MarketplaceName } from "../importers/core/types";
+import type { SaveProductOptions } from "@/services/database/saveProduct";
 import { persistCanonicalProducts, persistSelectedSearchClusters, scheduleSelectedClusterPersist, isClusterPublishable, isSearchVisible } from "./persist";
 import type { PersistProductFn } from "./persist";
 import { coverageStatusOf, searchMultistoreV2 } from "./search";
 import { searchCatalogOrDiscover } from "../search/searchCatalogOrDiscover";
 import type { CanonicalProduct, MarketplaceAcquisition, MarketplaceCode } from "./types";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 process.env.PUBLIC_SEARCH_PERSISTENCE_ENABLED = "true";
 
@@ -50,7 +60,7 @@ function canonicalProduct(
 
 function fakeAdapter(
   marketplace: DiscoveryAdapter["marketplace"],
-  marketplaceName: string,
+  marketplaceName: MarketplaceName,
   searcher: NonNullable<DiscoveryAdapter["searcher"]>,
 ): DiscoveryAdapter {
   return {
@@ -66,8 +76,7 @@ function foundCandidate(
     Pick<DiscoveryCandidate, "marketplace" | "externalId" | "title">,
 ): DiscoveryCandidate {
   return {
-    marketplace: extras.marketplace ?? "AMAZON",
-    marketplaceName: extras.marketplaceName ?? extras.marketplace,
+    marketplaceName: extras.marketplaceName ?? MARKETPLACE_DISPLAY[extras.marketplace],
     sourceUrl: extras.sourceUrl ?? `https://loja.example/${extras.externalId}`,
     affiliateLink: extras.affiliateLink ?? `https://aff.example/${extras.externalId}`,
     image: extras.image ?? "https://loja.example/img.jpg",
@@ -398,7 +407,7 @@ async function runCoveragePublicationCases() {
     hangGraceMs: 40,
   };
   const query = "Headphone MarcaX ZX100";
-  const found = (marketplace: DiscoveryAdapter["marketplace"], marketplaceName: string, externalId: string, price: number) =>
+  const found = (marketplace: DiscoveryAdapter["marketplace"], marketplaceName: MarketplaceName, externalId: string, price: number) =>
     foundCandidate({
       marketplace,
       marketplaceName,
@@ -1030,7 +1039,7 @@ async function runCoveragePublicationCases() {
   const catalog = createMemoryCatalog();
   const foundOffer = (
     marketplace: DiscoveryAdapter["marketplace"],
-    marketplaceName: string,
+    marketplaceName: MarketplaceName,
     externalId: string,
     price: number,
   ) =>
@@ -1043,7 +1052,8 @@ async function runCoveragePublicationCases() {
       price,
     });
 
-  let firstScheduled: (() => Promise<void>) | null = null;
+  let firstScheduled: (() => Promise<void>) | null =
+    null as (() => Promise<void>) | null;
   const firstSearch = await searchCatalogOrDiscover(query, 5, {
     budget: tightBudget,
     adapters: [
@@ -1103,7 +1113,8 @@ async function runCoveragePublicationCases() {
     "cluster parcial entra em Ofertas recentes",
   );
 
-  let secondScheduled: (() => Promise<void>) | null = null;
+  let secondScheduled: (() => Promise<void>) | null =
+    null as (() => Promise<void>) | null;
   const secondSearch = await searchCatalogOrDiscover(query, 5, {
     adapters: [
       fakeAdapter("MERCADO_LIVRE", "Mercado Livre", async () => ({
@@ -1575,7 +1586,8 @@ async function runAdversarialLatencyCases(thirty: CanonicalProduct[]) {
 async function runAfterResponseCases() {
   const hang = deferred<{ id: string }>();
   let persistCalls = 0;
-  let scheduled: (() => Promise<void>) | null = null;
+  let scheduled: (() => Promise<void>) | null =
+    null as (() => Promise<void>) | null;
   let headFinished = false;
   let tailPersistStarted = false;
   let tailResolved = false;
@@ -1767,7 +1779,8 @@ async function runAfterResponseCases() {
 
   let scheduleThrew = false;
   try {
-    let afterTask: (() => Promise<void>) | null = null;
+    let afterTask: (() => Promise<void>) | null =
+        null as (() => Promise<void>) | null;
     scheduleSelectedClusterPersist(
       (task) => {
         afterTask = task;

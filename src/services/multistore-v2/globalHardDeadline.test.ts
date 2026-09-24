@@ -3,9 +3,19 @@ import assert from "node:assert/strict";
 import type {
   DiscoveryAdapter,
   DiscoveryCandidate,
+  DiscoveryMarketplace,
   MarketplaceDiscoveryResult,
 } from "../discovery/core/types";
+import type { MarketplaceName } from "../importers/core/types";
 import { DEFAULT_SEARCH_BUDGET, type SearchDeadline } from "./timeBudget";
+
+const MARKETPLACE_DISPLAY: Record<DiscoveryMarketplace, MarketplaceName> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+  MAGAZINE_LUIZA: "Magazine Luiza",
+  ALIEXPRESS: "AliExpress",
+};
 
 type TimerTask = {
   at: number;
@@ -28,7 +38,7 @@ class FakeClock {
       const id = this.nextId++;
       schedule(id, Number(timeout ?? 0), handler);
       return id as unknown as ReturnType<typeof setTimeout>;
-    }) as typeof setTimeout;
+    }) as unknown as typeof setTimeout;
 
     globalThis.clearTimeout = ((id?: ReturnType<typeof setTimeout>) => {
       if (id != null) {
@@ -80,7 +90,7 @@ class FakeClock {
 
 function fakeAdapter(
   marketplace: DiscoveryAdapter["marketplace"],
-  marketplaceName: string,
+  marketplaceName: MarketplaceName,
   searcher: NonNullable<DiscoveryAdapter["searcher"]>,
 ): DiscoveryAdapter {
   return {
@@ -96,7 +106,7 @@ function foundCandidate(
     Pick<DiscoveryCandidate, "marketplace" | "externalId" | "title">,
 ): DiscoveryCandidate {
   return {
-    marketplaceName: extras.marketplaceName ?? extras.marketplace,
+    marketplaceName: extras.marketplaceName ?? MARKETPLACE_DISPLAY[extras.marketplace],
     sourceUrl: extras.sourceUrl ?? `https://loja.example/${extras.externalId}`,
     affiliateLink: extras.affiliateLink ?? null,
     image: extras.image ?? "https://loja.example/img.jpg",
@@ -106,6 +116,7 @@ function foundCandidate(
     category: extras.category ?? null,
     seller: extras.seller ?? null,
     attributes: extras.attributes ?? {},
+    status: "FOUND",
     ...extras,
   };
 }
@@ -325,7 +336,7 @@ async function runParallelStartCase(): Promise<void> {
       hangGraceMs: 0,
     },
     adapters: marketplaces.map((marketplace) =>
-      fakeAdapter(marketplace, marketplace, async (request) => {
+      fakeAdapter(marketplace, MARKETPLACE_DISPLAY[marketplace], async (request) => {
         if (!starts.has(marketplace)) {
           starts.set(marketplace, Date.now());
         }
