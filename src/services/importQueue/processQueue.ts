@@ -5,6 +5,9 @@ import {
   corrigirLinksAmazonPendentes,
   sincronizarMelhorOfertaDoProduto,
 } from "@/services/database/saveProduct";
+import type {
+  RawListingPersistenceContext,
+} from "@/services/database/saveProduct";
 import {
   PUBLIC_MULTISTORE_MIN_MARKETPLACES,
   PUBLIC_OFFER_SELECT,
@@ -99,6 +102,60 @@ function limitarQuantidade(
     Math.max(valor, 1),
     10,
   );
+}
+
+/*
+ * Arquitetura V1 (FASE 6) — contexto raw da listing REAL de ingestão.
+ *
+ * O saveProduct só dispara o hook shadow (`runArchitectureV1ShadowHook`)
+ * quando recebe `rawListingContext`. Sem ele, a fila de importação (fluxo
+ * real de ingestão do Mercado Livre) passaria ao largo da Architecture V1
+ * e nunca produziria prova de raw-first em produção.
+ *
+ * Este helper é ADITIVO e inerte por default: com as flags shadow OFF o
+ * hook retorna imediatamente; e o dual-write legado
+ * (`persistRawListingContextIfEnabled`) continua governado pela própria
+ * flag RAW_LISTING_DUAL_WRITE_ENABLED (ausente em produção). Nada aqui
+ * altera Product, MarketplaceOffer, PriceHistory nem a publicação.
+ */
+const MARKETPLACE_NAME_TO_CODE: Record<
+  MarketplaceName,
+  RawListingPersistenceContext["marketplace"]
+> = {
+  "Mercado Livre": "MERCADO_LIVRE",
+  Amazon: "AMAZON",
+  Shopee: "SHOPEE",
+  "Magazine Luiza": "MAGAZINE_LUIZA",
+  AliExpress: "ALIEXPRESS",
+};
+
+export function buildRawListingContextFromImport(
+  imported: ProductImport,
+): RawListingPersistenceContext | undefined {
+  const externalId = imported.externalId?.trim();
+  const sourceUrl = imported.url?.trim();
+
+  if (!externalId || !sourceUrl) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(sourceUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return {
+    marketplace:
+      MARKETPLACE_NAME_TO_CODE[imported.marketplace],
+    externalId,
+    sourceUrl,
+    title: imported.title,
+    price: imported.price,
+  };
 }
 
 export async function processImportQueue(
@@ -817,6 +874,16 @@ export async function processImportQueue(
               : "MANUAL",
 
           queueOnFailure: true,
+
+          /*
+           * Arquitetura V1 (FASE 6): contexto raw da listing real
+           * recém-importada. O saveProduct dispara o hook shadow
+           * (inerte por default, ver flags ARCHITECTURE_V1_SHADOW_*).
+           */
+          rawListingContext:
+            buildRawListingContextFromImport(
+              imported,
+            ),
 
           /*
            * ProductOpportunity automática só pode ser publicada se a
