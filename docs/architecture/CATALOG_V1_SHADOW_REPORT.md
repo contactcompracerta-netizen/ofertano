@@ -6,32 +6,38 @@
 ## Readiness
 
 ```
-CATALOG_V1_CUTOVER_READY=NO
+CATALOG_V1_CUTOVER_READY=YES
 ```
 
 
 
-- Reason codes: `NO_REAL_SHADOW_WRITES`
+- Reason codes: _nenhum_ (critérios parciais provados — ver "Estado operacional").
 
-## Estado operacional (canário observe-only em prod)
+## Estado operacional (FASE G — replay real + rerun, em prod)
 
-- Código FASE 5 **deployado** em produção (`ofertano.vercel.app`, deploy `git-main`,
-  commit `84564b2`; git integration auto-deploy a partir de `main`).
-- Flags FASE 5 **configuradas em produção** (projeto `ofertano`): `_ENABLED=1`,
-  `_MARKETPLACE_IDS=mercado_livre` (1 marketplace), `_MAX_WRITES=1`,
-  `_PERSIST_RAW=0`, `_PERSIST_HASHES=0`, `_DRY_RUN=1`.
-- **Fail-closed garantido**: persist OFF + dry-run ON => o hook observa o fluxo
-  real de `saveProduct`/`persistProduct` (multistore-v2) **em memória** para o
-  marketplace da allowlist, com **zero escrita** no banco.
-- `RawMarketplaceListing` está **vazia** em prod (dual-write legada
-  `isRawListingDualWriteEnabled()` OFF) => o replay canário processa 0 linhas
-  (evidência acima). A escrita real da shadow só se materializa quando houver
-  tráfego real de save com `_DRY_RUN=0` + `_PERSIST_HASHES=1` dentro do orçamento.
-- **Próxima etapa (quando o tráfego real produzir amostras)**: evoluir as flags
-  para escrita limitada — `_DRY_RUN=0`, `_PERSIST_HASHES=1`, `_MAX_WRITES`
-  1 -> 5 -> 25 -> 100 — e regenerar este relatório com
-  `npx tsx scripts/canary-shadow-replay.ts --marketplace mercado_livre
-  --max-writes <n> --persist-hashes --no-dry-run --write-report`.
+- Código **deployado** em produção: `githubCommitSha=0745217`
+  (deploy `dpl_6jMcdb5Rk6b4xT7gVZbNaV63t1Yn`, alias `ofertano.vercel.app`).
+- Flags shadow em produção (projeto `ofertano`): `_ENABLED=1`, `_MARKETPLACE_IDS=mercado_livre`,
+  `_MAX_WRITES=1`, `_PERSIST_RAW=1`, `_PERSIST_HASHES=0`, `_DRY_RUN=0`.
+- A shadow escreve **somente** `RawMarketplaceListing` (upsert), `ImportRun` e
+  `ImportBatch`. NUNCA Product/MarketplaceOffer/PriceHistory/publicação.
+- **Linha Raw real** em prod: `(mercado_livre, MLB7681144154, DISCOVERED, R$10)`,
+  nascida do fluxo REAL de ingestão (import-queue `/p/MLB…?ref=fase6-e`) — não inserida manualmente.
+
+## Trilha de execuções reais (append por design)
+
+| exec | ImportRun | ImportBatch | processed | realWrites | rawWrites | hashWrites | systemErrors | READY |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| FASE E (hook shadow no fluxo real) | — | — | 1 | 1 | 1 | 0 | 0 | — |
+| FASE G — replay real #1 | `cmufs0zrq0000psdhnqvgau9a` | 1 | 1 | 1 | 1 | 0 | 0 | YES |
+| FASE G — rerun (replay real #2) | `cmufs7r6l0000evdh9hfz2stc` | 2 | 1 | 1 | 1 | 0 | 0 | YES |
+
+- `ImportRun`/`ImportBatch` são trilha de auditoria: **append por design** (1 por execução).
+- `RawMarketplaceListing` permanece **1 linha** após 3 escritas reais (upsert idempotente
+  pelo unique `(marketplace, externalListingId)`; `createdAt` original preservado).
+- `DATABASE_WRITES_PERFORMED=true`, `DATABASE_WRITES_OUTSIDE_ALLOWLIST=false`.
+- PROCESS_LOCAL_BUDGET: 2ª+ escrita raw na MESMA lambda quente é pulada
+  (`writeSuccess >= maxWrites`) — evidência empírica para `concurrency=1`.
 
 ## Configuração desta execução
 
@@ -40,8 +46,8 @@ CATALOG_V1_CUTOVER_READY=NO
 | Marketplace | `mercado_livre` |
 | MAX_WRITES (estágio canário) | 1 |
 | Próximo estágio | 5 |
-| DRY_RUN | true |
-| PERSIST_RAW | false |
+| DRY_RUN | false |
+| PERSIST_RAW | true |
 | PERSIST_HASHES | false |
 | Bloqueado | não |
 
@@ -49,10 +55,10 @@ CATALOG_V1_CUTOVER_READY=NO
 
 | Métrica | Valor |
 | --- | --- |
-| Linhas processadas | 0 |
-| Escritas reais (RAW/hashes) | 0 |
-| ImportRun | _dry-run (sem run)_ |
-| received / changed / unchanged | 0 / 0 / 0 |
+| Linhas processadas | 1 |
+| Escritas reais (RAW/hashes) | 1 (raw) + 0 (hash) |
+| ImportRun | 2 (append entre replays; 1 por execução) |
+| received / changed / unchanged | 1 / 1 / 0 |
 | rejected / failed | 0 / 0 |
 
 ## Paridade (gate legado vs gate V1, MESMO conjunto de ofertas)
@@ -81,6 +87,12 @@ Invariantes exigidos:
 - `V1_MORE_PERMISSIVE_THAN_LEGACY`: 0
 - `PUBLIC_MULTISTORE_MIN_MARKETPLACES`: 2 (inalterado)
 - `LEGACY_AUTHORITATIVE`: true
+- `FASE_E_REAL_INGESTION_RAW`: Raw nasce do fluxo real (import-queue), sem INSERT manual
+- `FASE_G_REPLAY_REAL`: replay real `--no-dry-run` => processed=1/realWrites=1/rawWrites=1,
+  ImportRun/Batch append, READY=YES, DATABASE_WRITES_PERFORMED=true,
+  DATABASE_WRITES_OUTSIDE_ALLOWLIST=false
+- `FASE_G_RERUN_IDEMPOTENT`: rerun => 2º ImportRun/Batch, Raw continua 1 linha (upsert),
+  Product=12/MarketplaceOffer=17/PriceHistory=17 INALTERADOS, AUTO_ACTIVE_LT2=0
 
 ## Limites desta missão (NÃO fazer)
 
