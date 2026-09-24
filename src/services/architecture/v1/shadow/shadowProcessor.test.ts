@@ -122,6 +122,7 @@ async function main(): Promise<void> {
       dryRun: false,
       persistHashes: true,
       persistRaw: false,
+      maxWrites: 100,
     });
 
     const primeira = await processShadowListing(
@@ -159,6 +160,7 @@ async function main(): Promise<void> {
       dryRun: false,
       persistRaw: true,
       persistHashes: false,
+      maxWrites: 1,
     });
     const result = await processShadowListing(
       { flags, realRepos: repos },
@@ -166,6 +168,40 @@ async function main(): Promise<void> {
     );
     assert.equal(result.wroteRaw, true);
     assert.equal(result.wroteHashes, false);
+  }
+
+  // --- Orçamento _MAX_WRITES exausto => skippedMaxWrites (fail-closed) --------
+  {
+    resetShadowMetrics();
+    const repos = realReposReset();
+    const flags = flagsWith({
+      enabled: true,
+      marketplaceIds: ["mercado_livre"],
+      dryRun: false,
+      persistHashes: true,
+      maxWrites: 1,
+    });
+
+    const primeira = await processShadowListing(
+      { flags, realRepos: repos },
+      { ...baseInput },
+    );
+    assert.equal(primeira.wroteHashes, true);
+    assert.equal(primeira.path, "STRUCTURAL", "first-seen usa o orçamento");
+
+    const segunda = await processShadowListing(
+      { flags, realRepos: repos },
+      { ...baseInput },
+    );
+    assert.equal(segunda.wroteHashes, false, "orçamento exausto => zero escrita");
+    assert.equal(segunda.created, true, "observação continua em memória (in-memory)");
+
+    const metrics = resetShadowMetrics();
+    assert.equal(metrics.writeSuccess, 1, "_MAX_WRITES=1 respeitado como teto real");
+    assert.equal(metrics.skippedMaxWrites, 1, "exaustão contabilizada");
+
+    const rows = await repos.raw.listRawRows("mercado_livre", 10);
+    assert.equal(rows.length, 1, "uma única linha persistida (teto de 1)");
   }
 
   // --- Listing inválida (preço <= 0) => skipped --------------------------------

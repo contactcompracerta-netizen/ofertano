@@ -218,8 +218,17 @@ export async function processShadowListing(
     });
   }
 
+  // Orçamento canário: `_MAX_WRITES` é um TETO REAL de escritas por processo
+  // (fail-closed). Além do teto, o processador cai para in-memory (dry-run
+  // equivalente) sem tocar o banco. No runner o teto também limita as linhas
+  // lidas; aqui ele vale para o caminho do hook (saveProduct) por instância.
+  const budgetRemaining =
+    flags.maxWrites - metrics.snapshot().writeSuccess;
+
   const wouldWrite =
-    !flags.dryRun && (flags.persistRaw || flags.persistHashes);
+    !flags.dryRun &&
+    (flags.persistRaw || flags.persistHashes) &&
+    budgetRemaining > 0;
 
   // DRY-RUN ou sem persist => repositório in-memory (zero escrita no banco).
   const repository = wouldWrite && deps.realRepos
@@ -260,6 +269,10 @@ export async function processShadowListing(
     metrics.incWriteSuccess(marketplaceId);
   } else if (flags.dryRun) {
     metrics.incSkippedDryRun(marketplaceId);
+  } else if (budgetRemaining <= 0) {
+    // Orçamento canário exausto (fail-closed): observado, reprocessado em
+    // memória, zero escrita no banco.
+    metrics.incSkippedMaxWrites(marketplaceId);
   }
 
   let parity: ShadowParityVerdict | null = null;

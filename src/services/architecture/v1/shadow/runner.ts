@@ -111,8 +111,12 @@ export async function runShadowReplay(
   const marketplaceId = options.marketplaceId.trim().toLowerCase();
   const maxWrites = Math.max(0, options.maxWrites);
 
-  const wouldWrite =
+  // Intenção de escrita (persist ligado + dry-run desligado). A autorização
+  // de REAL escrita é o orçamento de ambiente `_MAX_WRITES` (enforce no
+  // processor); aqui a intenção só governa ImportRun e pré-condições.
+  const writeIntent =
     !flags.dryRun && (flags.persistRaw || flags.persistHashes);
+  const wouldWrite = writeIntent && flags.maxWrites > 0;
 
   const result: ShadowReplayResultV1 = {
     marketplaceId,
@@ -148,6 +152,15 @@ export async function runShadowReplay(
     result.blocked = true;
     result.blockedReason = "max-writes-zero";
     result.readiness.reasonCodes = ["MAX_WRITES_ZERO"];
+    return result;
+  }
+  // Fail-closed adicional: intenção de escrita SEM orçamento de ambiente
+  // (_MAX_WRITES=0) => bloqueia com razão clara em vez de "escrever 0"
+  // silenciosamente (o canário exige subir _MAX_WRITES para escrever).
+  if (writeIntent && flags.maxWrites < 1) {
+    result.blocked = true;
+    result.blockedReason = "max-writes-zero-env";
+    result.readiness.reasonCodes = ["MAX_WRITES_ZERO_ENV"];
     return result;
   }
 

@@ -107,6 +107,23 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  // Avisos operacionais (fail-closed): o orçamento de escrita real vive no
+  // ambiente (_MAX_WRITES); o CLI só delimita a janela de linhas por execução.
+  if (
+    !flags.dryRun &&
+    (flags.persistRaw || flags.persistHashes)
+  ) {
+    if (flags.maxWrites < 1) {
+      console.warn(
+        "[WARN] ARCHITECTURE_V1_SHADOW_MAX_WRITES=0 no ambiente: NENHUMA escrita real será permitida (fail-closed). Suba a flag de ambiente para habilitar a gravação canário.",
+      );
+    } else if (flags.maxWrites < maxWrites) {
+      console.warn(
+        `[WARN] orçamento de ambiente _MAX_WRITES=${flags.maxWrites} < --max-writes=${maxWrites}: escritas reais limitadas ao orçamento do ambiente.`,
+      );
+    }
+  }
+
   // Contadores frescos para esta execução (readiness per-execution).
   resetShadowMetrics();
   const metrics = getShadowMetrics();
