@@ -23,6 +23,10 @@ export * from "./ownership";
 export * from "./writer";
 export * from "./commits";
 export * from "./runner";
+/* FASE 7.1 — plano de controle global (orçamento + breaker compartilhados). */
+export * from "./globalControl";
+export * from "./live";
+export * from "./liveParity";
 
 import type { LegacyShadowSaveContext } from "../shadow/adapter";
 import type { LegacyPublicationOutcome } from "../shadow/parityEngine";
