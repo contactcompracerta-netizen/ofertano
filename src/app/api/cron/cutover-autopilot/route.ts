@@ -26,6 +26,18 @@
  *      `legacyFallbackEnabled` tem de estar ligado — a progressão não pode
  *      remover o fallback legado.
  *
+ * CADÊNCIA: `17 12 * * *` — uma vez ao dia, às 12:17 UTC. Três motivos:
+ *   - o plano da Vercel deste projeto é Hobby, que SÓ aceita cron diário. A
+ *     descoberta veio do próprio deploy recusando `17 * * * *`, e está
+ *     documentada em vez de escondida;
+ *   - o tráfego orgânico do Mercado Livre chega num burst diário em ~06:10 UTC.
+ *     Rodar às 12:17 significa observar o dia INTEIRO antes de decidir, e não
+ *     uma janela de minutos;
+ *   - o cooldown é de 24h, então mais frequência não promoveria nada mais
+ *     cedo: o que limita a progressão é EVIDÊNCIA, não o relógio do cron.
+ *     Quem quiser acelerar observation é o operador, com `autopilot-run
+ *     --dry-run`, que é idempotente e não muta nada.
+ *
  * Nada de segredo é impresso: a resposta traz contadores, estados e motivos.
  */
 
