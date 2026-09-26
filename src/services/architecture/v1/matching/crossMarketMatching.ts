@@ -78,10 +78,16 @@ function usable(value: unknown): string | null {
  */
 type MeasureDimension = "storage" | "memory" | "voltage" | "size";
 
+/*
+ * Cada padrao precisa EXATAMENTE DOIS grupos de captura: (numero)(unidade).
+ * `measureTokens` le match[1] e match[2]; um padrao com um grupo so
+ * produziria o token "256undefined" e perderia a unidade — o que faria
+ * "256GB" e "256MB" parecerem iguais.
+ */
 const MEASURE_PATTERNS: Record<MeasureDimension, RegExp> = {
   storage: /(\d+(?:[.,]\d+)?)\s*(tb|gb|mb)\b/g,
-  memory: /(\d+(?:[.,]\d+)?)\s*gb\b/g,
-  voltage: /(\d+(?:[.,]\d+)?)\s*v(?:olt)?\b/g,
+  memory: /(\d+(?:[.,]\d+)?)\s*(gb|mb)\s*(?:ram|mem)/g,
+  voltage: /(\d+(?:[.,]\d+)?)\s*(v|volt)\b/g,
   size: /(\d+(?:[.,]\d+)?)\s*(polegadas|pol|inch)\b/g,
 };
 
@@ -104,7 +110,9 @@ function measureTokensByDimension(
     const matcher = new RegExp(pattern.source, "g");
     let match = matcher.exec(value);
     while (match !== null) {
-      tokens.add(`${match[1].replace(",", ".")}${match[2]}`);
+      const amount = match[1] ?? "";
+      const unit = match[2] ?? "";
+      tokens.add(`${amount.replace(",", ".")}${unit}`);
       match = matcher.exec(value);
     }
     if (tokens.size > 0) {
@@ -119,8 +127,10 @@ function measureTokensConflict(
   left: Set<string>,
   right: Set<string>,
 ): boolean {
-  for (const token of left) {
-    if (right.has(token)) return false;
+  for (const leftToken of left) {
+    for (const rightToken of right) {
+      if (tokensEquivalent(leftToken, rightToken)) return false;
+    }
   }
   return true;
 }
@@ -166,7 +176,9 @@ function scalarConflict(
   const left = usable(leftValue);
   const right = usable(rightValue);
   if (left === null || right === null) return [];
-  if (left === right) return [];
+  // Compara capacidades por GRANDEZA, nao por texto: "1TB" e "1024GB" sao a
+  // mesma capacidade e nao podem gerar um falso conflito.
+  if (tokensEquivalent(left, right)) return [];
   return [{ kind, field, left: String(leftValue), right: String(rightValue) }];
 }
 
@@ -184,6 +196,31 @@ function extractModelTokens(text: string): Set<string> {
     match = pattern.exec(text);
   }
   return tokens;
+}
+
+/**
+ * Converte um token de capacidade em GB, para comparar grandezas de verdade.
+ * 1tb e 1024gb sao a MESMA capacidade: tratá-los como conflito seria um falso
+ * REJECT — e um falso REJECT é tão errado quanto um falso EXACT.
+ * Retorna null quando o token não é capacidade (ex.: "127v", "43polegadas").
+ */
+export function capacityToGb(token: string): number | null {
+  const match = /^(\d+(?:[.,]\d+)?)(tb|gb|mb)$/.exec(token);
+  if (!match) return null;
+  const amount = Number(match[1].replace(",", "."));
+  if (!Number.isFinite(amount)) return null;
+  if (match[2] === "tb") return amount * 1024;
+  if (match[2] === "mb") return amount / 1024;
+  return amount;
+}
+
+/** Dois tokens são equivalentes se forem iguais OU a mesma capacidade. */
+function tokensEquivalent(left: string, right: string): boolean {
+  if (left === right) return true;
+  const leftGb = capacityToGb(left);
+  const rightGb = capacityToGb(right);
+  if (leftGb === null || rightGb === null) return false;
+  return Math.abs(leftGb - rightGb) <= 0.5;
 }
 
 function identityText(listing: NormalizedMarketplaceListingV1): string {
