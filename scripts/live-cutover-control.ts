@@ -1,0 +1,240 @@
+/**
+ * CATALOG_ARCHITECTURE_V1 — FASE 7.1: CONTROLE DO PLANO GLOBAL (operador).
+ *
+ * Ferramenta de operador para o gate live. É o ÚNICO caminho previsto para
+ * armar, inspecionar, abrir e fechar o breaker global — e ela usa exatamente
+ * as funções auditadas de `globalControl.ts`, nunca SQL próprio.
+ *
+ * O que ela NÃO faz:
+ *   - não escreve no catálogo (nunca toca Product/Offer/PriceHistory);
+ *   - não corta tráfego: armar é o ato explícito que AUTORIZA o V1 a ser o
+ *     writer autoritativo daquele marketplaceId, com teto de escritas;
+ *   - não dá deploy: o breaker fecha sem novo deploy porque o estado vive
+ *     no banco e é lido em TODA aquisição de permissão.
+ *
+ * INVARIANTES (não configuráveis aqui):
+ *   - a configuração é por `marketplaceId`; este script não tem nenhuma regra
+ *     por nome de marketplace, só repassa o que o operador digita;
+ *   - PUBLIC_MULTISTORE_MIN_MARKETPLACES=2 e DRAFT/active=false não são
+ *     tocados: o gate decide ATRIBUIÇÃO e ROTA, nunca publicação;
+ *   - `CATALOG_V1_GLOBAL_CUTOVER` continua NO: existe rollback, não cutover.
+ *
+ * Trava dura: sem `--yes`, nada é escrito. `status` é sempre read-only.
+ *
+ * Uso:
+ *   npx tsx scripts/live-cutover-control.ts status
+ *   npx tsx scripts/live-cutover-control.ts arm --marketplace-id mercado_livre \
+ *     --mode V1_PRIMARY_WITH_LEGACY_FALLBACK --max-writes 1 --yes
+ *   npx tsx scripts/live-cutover-control.ts trip  --marketplace-id mercado_livre \
+ *     --reason V1_ERRORS_ABOVE_LIMIT --yes
+ *   npx tsx scripts/live-cutover-control.ts close --marketplace-id mercado_livre --yes
+ */
+import "dotenv/config";
+
+import { Client } from "pg";
+
+import {
+  armGlobalRollout,
+  readGlobalRollout,
+  resetGlobalBreaker,
+  tripGlobalBreaker,
+  type CutoverSqlExecutor,
+  type GlobalRolloutRow,
+} from "@/services/architecture/v1/cutover/globalControl";
+import type { CatalogWriterMode } from "@/services/architecture/v1/cutover/policy";
+
+type Args = Record<string, string | boolean>;
+
+function parse(argv: string[]): { sub: string; args: Args } {
+  const [sub = "", ...rest] = argv;
+  const args: Args = {};
+  for (let i = 0; i < rest.length; i += 1) {
+    const token = rest[i] ?? "";
+    if (!token.startsWith("--")) {
+      continue;
+    }
+    const key = token.slice(2);
+    const next = rest[i + 1];
+    if (next === undefined || next.startsWith("--")) {
+      args[key] = true;
+    } else {
+      args[key] = next;
+      i += 1;
+    }
+  }
+  return { sub, args };
+}
+
+/**
+ * O plano de controle é um recurso de PRODUÇÃO. O alvo vem do ambiente e, se
+ * `FASE71_EXPECTED_CONTROL_HOST` estiver definido, a ferramenta RECUSA qualquer
+ * outro host — assim ela não pode ser apontada por engano para um banco de
+ * desenvolvimento.
+ */
+function controlUrl(): string {
+  const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
+  if (url === "") {
+    throw new Error("CONTROL_URL_MISSING");
+  }
+  const host = new URL(url).hostname;
+  const expected = process.env.FASE71_EXPECTED_CONTROL_HOST;
+  if (expected !== undefined && expected !== "" && host !== expected) {
+    throw new Error(`CONTROL_HOST_MISMATCH:${host}`);
+  }
+  return url;
+}
+
+type Executor = CutoverSqlExecutor & { close: () => Promise<void> };
+
+/** Uma única conexão: todas as operações do operador são sequenciais. */
+async function connect(url: string): Promise<Executor> {
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  return {
+    async query<R>(text: string, values: unknown[] = []) {
+      const res = await client.query({ text, values });
+      return { rows: res.rows as R[], rowCount: res.rowCount };
+    },
+    async close() {
+      await client.end();
+    },
+  };
+}
+
+function show(row: GlobalRolloutRow | null): void {
+  if (row === null) {
+    console.log("  (nenhum) => este marketplace esta em LEGACY_ONLY");
+    return;
+  }
+  console.log(
+    JSON.stringify(
+      {
+        marketplaceId: row.marketplaceId,
+        mode: row.mode,
+        enabled: row.enabled,
+        legacyFallbackEnabled: row.legacyFallbackEnabled,
+        maxWrites: row.maxWrites,
+        usedWrites: row.usedWrites,
+        restante: Math.max(0, row.maxWrites - row.usedWrites),
+        breakerState: row.breakerState,
+        breakerReason: row.breakerReason,
+        breakerTrippedAt: row.breakerTrippedAt,
+        rolloutId: row.id,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function printStatus(executor: Executor): Promise<void> {
+  const rollouts = (
+    await executor.query<{ "marketplaceId": string }>(
+      'SELECT "marketplaceId" FROM "CatalogCutoverRollout" ORDER BY "marketplaceId"',
+    )
+  ).rows;
+
+  console.log(`rollouts: ${rollouts.length}`);
+  for (const { marketplaceId } of rollouts) {
+    console.log(`--- ${marketplaceId} ---`);
+    show(await readGlobalRollout(executor, marketplaceId));
+  }
+  if (rollouts.length === 0) {
+    console.log("  (nenhum) => todo marketplace esta em LEGACY_ONLY");
+  }
+
+  const totals = (
+    await executor.query<{ kind: string; total: number }>(
+      'SELECT "kind"::text AS "kind", count(*)::int AS "total" FROM "CatalogCutoverEvent" GROUP BY 1 ORDER BY 2 DESC, 1',
+    )
+  ).rows;
+  console.log("eventos:", JSON.stringify(totals));
+}
+
+async function main(): Promise<void> {
+  const { sub, args } = parse(process.argv.slice(2));
+  const url = controlUrl();
+  const executor = await connect(url);
+
+  try {
+    if (sub === "status") {
+      await printStatus(executor);
+      return;
+    }
+
+    if (args.yes !== true) {
+      console.error("ABORTADO: escrita exige --yes. (Use `status` para leitura.)");
+      process.exitCode = 1;
+      return;
+    }
+
+    if (sub === "arm") {
+      const marketplaceId = String(args["marketplace-id"] ?? "");
+      const mode = String(args.mode ?? "") as CatalogWriterMode;
+      const maxWrites = Number(args["max-writes"] ?? 0);
+      if (
+        marketplaceId === "" ||
+        mode === "" ||
+        !Number.isInteger(maxWrites) ||
+        maxWrites < 1
+      ) {
+        throw new Error(
+          "USAGE: arm --marketplace-id <id> --mode <modo> --max-writes <n> --yes",
+        );
+      }
+      console.log("antes:");
+      show(await readGlobalRollout(executor, marketplaceId));
+      show(
+        await armGlobalRollout(executor, {
+          marketplaceId,
+          mode,
+          enabled: true,
+          legacyFallbackEnabled: true,
+          maxWrites,
+          resetBudget: args["reset-budget"] === true,
+          closeBreaker: args["close-breaker"] === true,
+          note: typeof args.note === "string" ? args.note : null,
+        }),
+      );
+      return;
+    }
+
+    if (sub === "trip" || sub === "close") {
+      const marketplaceId = String(args["marketplace-id"] ?? "");
+      const before = await readGlobalRollout(executor, marketplaceId);
+      console.log("antes:");
+      show(before);
+      if (before === null) {
+        throw new Error("ROLLOUT_ABSENT");
+      }
+      if (sub === "trip") {
+        await tripGlobalBreaker(executor, {
+          rolloutId: before.id,
+          marketplaceId,
+          reason:
+            typeof args.reason === "string"
+              ? (args.reason as Parameters<typeof tripGlobalBreaker>[1]["reason"])
+              : "MANUAL_TRIP",
+        });
+      } else {
+        await resetGlobalBreaker(executor, {
+          rolloutId: before.id,
+          marketplaceId,
+          note: typeof args.reason === "string" ? args.reason : "MANUAL_RESET",
+        });
+      }
+      console.log("depois:");
+      show(await readGlobalRollout(executor, marketplaceId));
+      return;
+    }
+
+    throw new Error(`UNKNOWN_SUBCOMMAND:${sub}`);
+  } finally {
+    await executor.close();
+  }
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
