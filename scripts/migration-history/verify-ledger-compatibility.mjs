@@ -13,9 +13,14 @@ export const commercePending = ['20260917120000_commerce_intelligence_foundation
 export const autopilotPending = ['20260926120000_catalog_cutover_autopilot'];
 export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', ...autopilotPending];
 export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending];
+// FASE 8.3B: indice de blocking derivado. ADITIVA, ja APLICADA em producao
+// (checksum conferido byte a byte contra _prisma_migrations). Nao entra em
+// nenhum pendingAllowlistSet: nao esta pendente, esta aplicada.
+export const blockingKeyMigration = ['20260926220000_candidate_blocking_keys'];
+export const blockingKeyApplied = true;
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
-export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending];
+export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration];
 /*
  * Estados legítimos de produção para o histórico do catálogo. Nenhum conjunto
  * parcial fora desta lista é aceito: o gate continua fail-closed.

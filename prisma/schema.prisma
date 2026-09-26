@@ -83,6 +83,7 @@ model Product {
   trustSignals TrustSignal[]
   productRelationAsFromProduct ProductRelation[] @relation("RelationFrom")
   productRelationAsToProduct ProductRelation[] @relation("RelationTo")
+  candidateBlockingKeys CandidateBlockingKey[]
   id String @id @default(uuid())
 
   // Campos atuais mantidos para não quebrar o site.
@@ -858,6 +859,80 @@ model ProductIdentifier {
   @@index([productId])
   @@index([variantId])
   @@index([marketplace, normalizedValue])
+}
+
+/// CATALOG_ARCHITECTURE_V1 — FASE 8.3B: CHAVES DE BLOQUEIO DERIVADAS.
+///
+/// POR QUE ISTO EXISTE SEPARADO DE `ProductIdentifier`:
+/// `ProductIdentifier` e a tabela de IDENTIDADE. O enum dela
+/// (GTIN|EAN|UPC|ISBN|MPN|MODEL|BRAND_SKU|MARKETPLACE_EXTERNAL_ID) contem
+/// so identificadores, e a linha carrega `confidence IdentityConfidence` —
+/// ou seja, ela AFFIRMA identidade. Uma assinatura derivada de titulo nao
+/// afirma nada: e uma HIPOTESE de blocking.
+///
+/// Guardar as duas coisas juntas seria perigoso de um jeito especifico: um
+/// dia alguem leria `ProductIdentifier` para decidir identidade e
+/// encontraria "MODEL_CODE:iphone" (extraido de um titulo) com ar de
+/// identificador confiavel. Persistir uma chave derivada NAO pode
+/// conceder autoridade a ela — e a separacao fisica que garante isso.
+///
+/// A distincao e ESTRUTURAL, e nao apenas um campo:
+///   ProductIdentifier     -> tipo A (AUTHORITATIVE/STRUCTURED)
+///   CandidateBlockingKey  -> tipo B (DERIVED BLOCKING KEY)
+///
+/// Persistencia melhora LOOKUP. Nunca melhora CONFIDENCE.
+model CandidateBlockingKey {
+  id        String  @id @default(cuid())
+  /// Dono canonico da chave. A chave indexa o produto; a associacao entre
+  /// listings NAO vem daqui.
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  keyType         CandidateBlockingKeyType
+  /// Valor canonico indexavel (minusculo, sem separadores).
+  normalizedValue String
+  /// Categoria canonica que participou da chave ("" quando nao aplicavel).
+  category        String  @default("")
+  /// STRONG | MEDIUM. Derivadas NUNCA sao STRONG.
+  strength        CandidateBlockingKeyStrength
+  /// STRUCTURED_FIELD | TITLE_EXTRACTED | CANONICAL_DERIVED.
+  provenance      CandidateBlockingProvenance
+  /// Politica que gerou a chave (reprocessavel).
+  policyVersion   String
+  /// Marketplace de origem da chave (auditoria por dimensao).
+  sourceMarketplace String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  // Idempotencia do backfill: a MESMA chave do MESMO dono nao duplica.
+  @@unique([productId, keyType, normalizedValue, policyVersion])
+  // Indice do lookup de producao.
+  @@index([keyType, normalizedValue])
+  @@index([keyType, normalizedValue, strength])
+  @@index([productId])
+}
+
+enum CandidateBlockingKeyType {
+  GTIN
+  EAN
+  UPC
+  MPN
+  MANUFACTURER_MODEL
+  BRAND_CATEGORY_MODEL
+  BRAND_MODEL_SIGNATURE
+  MODEL_CODE
+}
+
+enum CandidateBlockingKeyStrength {
+  STRONG
+  MEDIUM
+}
+
+enum CandidateBlockingProvenance {
+  STRUCTURED_FIELD
+  TITLE_EXTRACTED
+  CANONICAL_DERIVED
 }
 
 model ProductVariant {

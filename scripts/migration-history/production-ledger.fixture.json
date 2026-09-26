@@ -72,6 +72,14 @@
       "finished_at": "2026-09-18T00:00:01.000Z",
       "rolled_back_at": null,
       "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260926220000_candidate_blocking_keys",
+      "checksum": "84d0b473c49d9fbc5b3fada515a62367c44cf2df32a600219a3efbff9b292a10",
+      "started_at": "2026-09-18T00:00:00.000Z",
+      "finished_at": "2026-09-18T00:00:01.000Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
     }
   ]
 }

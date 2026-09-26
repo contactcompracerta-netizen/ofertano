@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending } from './verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
 const clone = () => structuredClone(original);
 const fullPending = [...commercePending, ...architecturePending];
@@ -17,7 +17,57 @@ test('unknown DB-only blocks', () => reject(s => { s.ledger.push({ ...s.ledger[0
 test('unfinished blocks', () => reject(s => { s.ledger[0].finished_at = null; }, 'UNFINISHED_MIGRATION'));
 test('rolled back blocks', () => reject(s => { s.ledger[0].rolled_back_at = s.ledger[0].finished_at; }, 'ROLLED_BACK_MIGRATION'));
 test('RLS checksum mismatch blocks', () => reject(s => { s.ledger[7].checksum = 'c'.repeat(64); }, 'RLS_CHECKSUM_MISMATCH'));
-test('missing RLS blocks', () => reject(s => { s.ledger.pop(); }, 'REQUIRED_APPLIED_MIGRATION_MISSING'));
+/*
+ * CASO A (teste discriminante): falta UMA migration obrigatoriamente aplicada.
+ *
+ * O alvo e a migration RLS POR IDENTIDADE, nao por posicao. Antes este teste
+ * usava `s.ledger.pop()`, o que funcionava so enquanto a migration RLS fosse
+ * a ULTIMA entrada do fixture. Ao adicionar a migration de blocking (que e a
+ * mais recente, portanto a ultima), o `pop()` passou a remover a migration
+ * ERRADA -- uma migration forward, que nao esta em baselineNames/rlsNames.
+ * Resultado: REQUIRED_APPLIED_MIGRATION_MISSING deixava de disparar e o
+ * gate acusava UNEXPECTED_PENDING_SET.
+ *
+ * A precedencia do gate NUNCA mudou. O que estava quebrado era a suposicao
+ * posicional do teste. Aqui o alvo e nomeado, e o teste volta a provar o que
+ * sempre pretendeu provar: sumir com uma RLS continua bloqueando.
+ */
+/*
+ * CASO B: nenhuma required-applied ausente, mas o conjunto PENDING diverge.
+ * O gate tem de dizer UNEXPECTED_PENDING_SET (nao "missing").
+ */
+test('CASO B: pending set inesperado continua sendo UNEXPECTED_PENDING_SET', () => {
+  // Ledger completo, exceto a migration de blocking. Nenhuma required-applied
+  // some, mas o pending {blockingKeyMigration} nao e um set autorizado => o gate
+  // tem de dizer UNEXPECTED_PENDING_SET. Isto prova que a migration nova esta
+  // COBERTA pelo gate (nao e invisivel) e que pending inesperado segue barrando.
+  reject(s => {
+    const idx = s.ledger.findIndex(e => e.migration_name === blockingKeyMigration[0]);
+    assert.notEqual(idx, -1, 'fixture deve conter a migration de blocking');
+    s.ledger.splice(idx, 1);
+  }, 'UNEXPECTED_PENDING_SET');
+});
+
+/*
+ * CASO C: as DUAS anomalias ao mesmo tempo. Documenta a PRECEDENCIA
+ * comprovada: REQUIRED_APPLIED_MISSING vem antes, porque no verificador a
+ * checagem de required-applied (linha ~97) ocorre ANTES do calculo de
+ * pending (linha ~98). Nenhuma condicao fica mascarada: a outra continua
+ * detectavel sozinha (CASO A e CASO B provam isso).
+ */
+test('CASO C: com as duas anomalias, missing tem precedencia sobre pending', () => {
+  reject(s => {
+    const idx = s.ledger.findIndex(e => e.migration_name === '20260915203000_fix_rls_product_public_read');
+    s.ledger.splice(idx, 1);            // remove required-applied -> CASO A
+    s.ledger.pop();                     // e deixa um pending-set inesperado
+  }, 'REQUIRED_APPLIED_MIGRATION_MISSING');
+});
+
+test('missing RLS blocks', () => reject(s => {
+  const idx = s.ledger.findIndex(e => e.migration_name === '20260915203000_fix_rls_product_public_read');
+  assert.notEqual(idx, -1, 'fixture deve conter a migration RLS alvo');
+  s.ledger.splice(idx, 1);
+}, 'REQUIRED_APPLIED_MIGRATION_MISSING'));
 test('duplicate migration blocks', () => reject(s => { s.ledger.push({ ...s.ledger[0] }); }, 'DUPLICATE_MIGRATION'));
 test('pending must be supplied explicitly and be supported', () => {
  assert.throws(() => verifyLedgerCompatibility(clone()), /PENDING_ALLOWLIST_REQUIRED/);
