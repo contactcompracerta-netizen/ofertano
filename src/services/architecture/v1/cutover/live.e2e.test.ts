@@ -18,6 +18,17 @@
  *   E8) MULTILOJA => 1 marketplace => DRAFT/inativo; 2 marketplaces => público.
  *   E9) AGNOSTICISMO => qualquer marketplaceId behaves igual (sem código
  *       por nome de marketplace).
+ *  E10) CONTABILIDADE => 1 evento = 1 permissão global: o caminho público
+ *       consome EXATAMENTE 1 slot, e os commits INTERNOS (`commitV1Structural`
+ *       e `legacyWrite`) não consomem NENHUM — inclusive com o rollout ARMADO,
+ *       que é a condição em que o fallback voltaria a adquirir um 2º permiso.
+ *  E11) maxWrites=1 + falha transitória PRÉ-COMMIT + fallback => `usedWrites`
+ *       PERMANECE 1 e existe exatamente 1 Product + 1 Offer.
+ *  E12) falha PÓS-COMMIT (gatilho DEFERRED rejeita o COMMIT) => ZERO fallback,
+ *       ZERO escrita, ZERO marcador de commit, breaker global aberto.
+ *  E13) INVARIANTES => multiloja preservada no caminho com bypass:
+ *       PUBLIC_MULTISTORE_MIN_MARKETPLACES=2 e 1 marketplace => DRAFT/inativo
+ *       (AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES=0).
  *
  * Requer o banco de missão local. NÃO faz parte de `npm test`.
  *   DATABASE_URL=postgresql://postgres@127.0.0.1:55471/ofertano_fase71_global_control \
@@ -51,11 +62,16 @@ type PrismaClient = import("@prisma/client").PrismaClient;
 type SaveProduct = typeof import("@/services/database/saveProduct").saveProduct;
 type Sync = typeof import("@/services/database/saveProduct").sincronizarMelhorOfertaDoProduto;
 type GlobalControl = typeof import("./globalControl");
+type CreateRealAuthoritativeCommits =
+  typeof import("./commits").createRealAuthoritativeCommits;
+type V1WriteContext = import("./writer").V1WriteContext;
+type NormalizedListing = import("../types/normalizedListingV1").NormalizedMarketplaceListingV1;
 
 let prisma: PrismaClient;
 let saveProduct: SaveProduct;
 let sincronizarMelhorOfertaDoProduto: Sync;
 let globalControl: GlobalControl;
+let createRealAuthoritativeCommits: CreateRealAuthoritativeCommits;
 let PUBLIC_MULTISTORE_MIN_MARKETPLACES: number;
 
 async function loadRuntime(): Promise<void> {
@@ -66,6 +82,8 @@ async function loadRuntime(): Promise<void> {
   sincronizarMelhorOfertaDoProduto =
     saveProductModule.sincronizarMelhorOfertaDoProduto;
   globalControl = await import("./globalControl");
+  createRealAuthoritativeCommits = (await import("./commits"))
+    .createRealAuthoritativeCommits;
   PUBLIC_MULTISTORE_MIN_MARKETPLACES = (
     await import("@/services/publicVisibility/multiStoreVisibility")
   ).PUBLIC_MULTISTORE_MIN_MARKETPLACES;
@@ -172,6 +190,102 @@ async function resetControl(): Promise<void> {
   await admin.query(
     'TRUNCATE "CatalogCutoverEvent", "CatalogCutoverRollout" CASCADE',
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* FIXTURE DO CONTEXTO V1 (para exercitar os commits internos)               */
+/* -------------------------------------------------------------------------- */
+/** Listing normalizada mínima, no contrato V1, para `buildProductImportFromV1Context`. */
+function normalizedListing(
+  marketplaceId: string,
+  externalListingId: string,
+  price: number,
+): NormalizedListing {
+  return {
+    contractVersion: "normalized-listing/v1",
+    source: "fase71-e2e",
+    marketplaceId,
+    externalListingId,
+    seller: { externalSellerId: null, name: null },
+    identity: {
+      gtin: [],
+      mpn: null,
+      manufacturerModel: null,
+      brand: "MarcaFase71",
+      model: null,
+    },
+    catalog: {
+      title: `Produto Canario FASE 7.1 ${externalListingId}`,
+      description: null,
+      category: "TesteFase71",
+      images: ["https://exemplo.fase71.test/img.jpg"],
+      attributes: {},
+      primaryImageUrl: "https://exemplo.fase71.test/img.jpg",
+    },
+    variant: {
+      color: null,
+      storage: null,
+      memory: null,
+      voltage: null,
+      size: null,
+      otherAttributes: {},
+    },
+    commerce: {
+      price,
+      oldPrice: null,
+      pixPrice: null,
+      installments: null,
+      stock: null,
+      availability: "IN_STOCK",
+      shippingHint: null,
+      promotion: null,
+    },
+    metadata: {
+      sourceUpdatedAt: null,
+      collectedAt: new Date().toISOString(),
+      rawHash: "fase71-e2e",
+      payloadVersion: "normalized-listing/v1",
+    },
+  };
+}
+
+/** `V1WriteContext` para `commitV1Structural` / `legacyWrite`. */
+function v1Context(
+  marketplaceId: string,
+  externalListingId: string,
+  price: number,
+): V1WriteContext {
+  return {
+    marketplaceId,
+    externalListingId,
+    listing: normalizedListing(marketplaceId, externalListingId, price),
+    hashes: { catalogHash: "h-cat", offerHash: "h-offer", rawHash: "h-raw" },
+    row: {
+      marketplace: "MERCADO_LIVRE",
+      externalId: externalListingId,
+      sourceUrl: `https://exemplo.fase71.test/${externalListingId}`,
+      title: `Produto Canario FASE 7.1 ${externalListingId}`,
+      brand: "MarcaFase71",
+      category: "TesteFase71",
+      image: "https://exemplo.fase71.test/img.jpg",
+      price,
+      oldPrice: null,
+      stock: null,
+      available: true,
+      attributes: {},
+    },
+  };
+}
+
+/** Contagem de eventos de um `kind` do log de controle. */
+async function countEvents(kind: string): Promise<number> {
+  return (
+    await globalControl.globalControlPool(MISSION_URL)!.query<{ total: number }>(
+      `SELECT COUNT(*)::int AS "total" FROM "CatalogCutoverEvent"
+        WHERE "kind" = $1::"CatalogCutoverEventKind"`,
+      [kind],
+    )
+  ).rows[0].total;
 }
 
 /*
@@ -629,6 +743,336 @@ async function main(): Promise<void> {
       );
     }
     evidence.push("E9 agnosticismo_shopee_magazine_luiza ok");
+  }
+
+  /* ====================================================================== */
+  /* E10) 1 EVENTO = 1 PERMISSÃO GLOBAL (E OS INTERNOS = ZERO)               */
+  /* ====================================================================== */
+  {
+    /* ------------------------------------------------------------------ */
+    /* E10a) caminho público com rollout ARMADO => exatamente 1 slot       */
+    /* ------------------------------------------------------------------ */
+    await resetControl();
+    const armed = await globalControl.armGlobalRollout(
+      globalControl.globalControlPool(MISSION_URL)!,
+      {
+        marketplaceId: "mercado_livre",
+        mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK",
+        enabled: true,
+        legacyFallbackEnabled: true,
+        maxWrites: 1,
+        note: "FASE 7.1 e2e: 1 evento = 1 permissão",
+      },
+    );
+
+    const beforePublic = await counts();
+    assert.equal(armed.usedWrites, 0, "rollout armado começa zerado");
+    assert.equal(armed.breakerState, "CLOSED", "rollout armado nasce CLOSED");
+    await save("Mercado Livre", "FASE71-E10a", 100);
+    const afterPublic = await counts();
+
+    assert.equal(
+      afterPublic.usedWrites - beforePublic.usedWrites,
+      1,
+      "caminho V1 autoritativo => EXATAMENTE 1 permissão global",
+    );
+    assert.equal(await countEvents("PERMIT_GRANTED"), 1, "1 concessão => 1 PERMIT_GRANTED");
+    assert.equal(await countEvents("PERMIT_DENIED"), 0, "nenhuma concessão negada");
+    assert.equal(await countEvents("V1_COMMITTED"), 1, "1 marcador de commit");
+
+    /* ------------------------------------------------------------------ */
+    /* E10b/E10c) commits INTERNOS com o rollout AINDA ARMADO             */
+    /* ------------------------------------------------------------------ */
+    /*
+     * É aqui que mora o risco: com o rollout armado e orçamento DISPONÍVEL,
+     * qualquer `saveProduct` que reabra o gate encontra espaço e adquire uma 2ª
+     * permissão para o MESMO evento. Por isso o rollout é rearmado com orçamento
+     * zerado antes dos commits internos — se o teste rodasse com o teto
+     * esgotado, uma reentrada seria negada por falta de orçamento e o teste
+     * passaria por engano. O commit V1 primário já internalizava o gate; o
+     * fallback legado internalizava agora (FASE 7.1).
+     */
+    const rearmed = await globalControl.armGlobalRollout(
+      globalControl.globalControlPool(MISSION_URL)!,
+      {
+        marketplaceId: "mercado_livre",
+        mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK",
+        enabled: true,
+        legacyFallbackEnabled: true,
+        maxWrites: 5,
+        resetBudget: true,
+        note: "FASE 7.1 e2e: commits internos com orçamento disponível",
+      },
+    );
+    assert.equal(
+      rearmed.usedWrites,
+      0,
+      "orçamento zerado para os commits internos (senão o teste passaria por engano)",
+    );
+
+    const commits = createRealAuthoritativeCommits(prisma as never);
+    const beforeInternal = await counts();
+
+    const v1 = await commits.commitV1Structural(
+      v1Context("mercado_livre", "FASE71-E10b", 100),
+    );
+    if (v1.productId) {
+      createdProductIds.push(v1.productId);
+    }
+    const afterV1 = await counts();
+
+    assert.equal(
+      afterV1.usedWrites,
+      beforeInternal.usedWrites,
+      "commitV1Structural: o dono da autorização não gasta o orçamento global",
+    );
+    assert.equal(
+      afterV1.events,
+      beforeInternal.events,
+      "commitV1Structural: zero evento de controle",
+    );
+    assert.equal(afterV1.products - beforeInternal.products, 1, "o commit V1 gravou 1 Product");
+    assert.equal(afterV1.offers - beforeInternal.offers, 1, "o commit V1 gravou 1 Offer");
+
+    const beforeFallback = await counts();
+    const fallback = await commits.legacyWrite(
+      v1Context("mercado_livre", "FASE71-E10c", 100),
+    );
+    if (fallback.productId) {
+      createdProductIds.push(fallback.productId);
+    }
+    const afterFallback = await counts();
+
+    assert.equal(
+      afterFallback.usedWrites,
+      beforeFallback.usedWrites,
+      "legacyWrite (fallback): NÃO adquire uma 2ª permissão global",
+    );
+    assert.equal(
+      afterFallback.events,
+      beforeFallback.events,
+      "legacyWrite (fallback): zero evento de controle (nem PERMIT_GRANTED)",
+    );
+    assert.equal(
+      await countEvents("PERMIT_GRANTED"),
+      1,
+      "1 única concessão no cenário inteiro: a do passo E10a",
+    );
+    assert.equal(
+      afterFallback.products - beforeFallback.products,
+      1,
+      "o fallback gravou exatamente 1 Product",
+    );
+    assert.equal(
+      afterFallback.offers - beforeFallback.offers,
+      1,
+      "o fallback gravou exatamente 1 Offer",
+    );
+
+    /* ------------------------------------------------------------------ */
+    /* E13) invariantes de multiloja no caminho COM bypass                 */
+    /* ------------------------------------------------------------------ */
+    assert.equal(
+      PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+      2,
+      "PUBLIC_MULTISTORE_MIN_MARKETPLACES=2 preservado",
+    );
+    for (const [label, productId] of [
+      ["commitV1Structural", v1.productId],
+      ["legacyWrite", fallback.productId],
+    ] as const) {
+      assert.ok(productId, `${label} deve devolver productId`);
+      const persisted = await prisma.product.findUniqueOrThrow({
+        where: { id: productId },
+        select: { publicationStatus: true, active: true },
+      });
+      assert.equal(
+        persisted.publicationStatus,
+        "DRAFT",
+        `${label}: 1 marketplace => DRAFT (AUTO_ACTIVE_WITH_LT_2=0)`,
+      );
+      assert.equal(
+        persisted.active,
+        false,
+        `${label}: 1 marketplace => active=false (AUTO_ACTIVE_WITH_LT_2=0)`,
+      );
+    }
+
+    evidence.push(
+      "E10 um_evento_uma_permissao_internos_zero_permissao DRAFT_inativo ok",
+    );
+  }
+
+  /* ====================================================================== */
+  /* E11) maxWrites=1 + FALHA PRÉ-COMMIT + FALLBACK => usedWrites = 1       */
+  /* ====================================================================== */
+  {
+    await resetControl();
+    await globalControl.armGlobalRollout(
+      globalControl.globalControlPool(MISSION_URL)!,
+      {
+        marketplaceId: "mercado_livre",
+        mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK",
+        enabled: true,
+        legacyFallbackEnabled: true,
+        maxWrites: 1,
+        note: "FASE 7.1 e2e: teto 1 + falha pré-commit",
+      },
+    );
+
+    await admin.query(`
+      DROP TRIGGER IF EXISTS "fase71_precommit_fault" ON "Product";
+      DROP SEQUENCE IF EXISTS fase71_fault_seq;
+      CREATE SEQUENCE fase71_fault_seq;
+      CREATE OR REPLACE FUNCTION fase71_precommit_fault() RETURNS trigger
+      LANGUAGE plpgsql AS $fn$
+      BEGIN
+        IF nextval('fase71_fault_seq') = 1 THEN
+          RAISE EXCEPTION
+            'FASE71 pre-commit transient fault: P1001 database is not accepting connections';
+        END IF;
+        RETURN NEW;
+      END $fn$;
+      CREATE TRIGGER "fase71_precommit_fault"
+        BEFORE INSERT ON "Product"
+        FOR EACH ROW EXECUTE FUNCTION fase71_precommit_fault();
+    `);
+
+    const before = await counts();
+    const product = await save("Mercado Livre", "FASE71-E11", 100);
+    const after = await counts();
+
+    await admin.query(`
+      DROP TRIGGER IF EXISTS "fase71_precommit_fault" ON "Product";
+      DROP FUNCTION IF EXISTS fase71_precommit_fault();
+      DROP SEQUENCE IF EXISTS fase71_fault_seq;
+    `);
+
+    assert.equal(
+      after.usedWrites,
+      1,
+      "maxWrites=1 + falha pré-commit + fallback => usedWrites PERMANECE 1",
+    );
+    assert.equal(await countEvents("PERMIT_GRANTED"), 1, "1 única permissão");
+    assert.equal(after.products - before.products, 1, "exatamente 1 Product");
+    assert.equal(after.offers - before.offers, 1, "exatamente 1 Offer");
+    assert.equal(await countEvents("V1_COMMITTED"), 0, "nenhum commit V1 (rollback)");
+    assert.equal(await countEvents("FALLBACK_COMMITTED"), 1, "1 commit do fallback");
+    assert.equal(await countEvents("DOUBLE_WRITE"), 0, "zero double-write");
+    assert.equal(
+      (
+        await globalControl.globalControlPool(MISSION_URL)!.query<{ s: string }>(
+          'SELECT "breakerState"::text AS "s" FROM "CatalogCutoverRollout"',
+        )
+      ).rows[0].s,
+      "CLOSED",
+      "uma falha transitória isolada não abre o breaker",
+    );
+    assert.equal(product.publicationStatus, "DRAFT");
+    evidence.push("E11 maxWrites1_precommit_fallback_usedWrites_permanece_1 ok");
+  }
+
+  /* ====================================================================== */
+  /* E12) FALHA PÓS-COMMIT => ZERO FALLBACK, ZERO DOUBLE-WRITE              */
+  /* ====================================================================== */
+  {
+    await resetControl();
+    await globalControl.armGlobalRollout(
+      globalControl.globalControlPool(MISSION_URL)!,
+      {
+        marketplaceId: "mercado_livre",
+        mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK",
+        enabled: true,
+        legacyFallbackEnabled: true,
+        maxWrites: 5,
+        note: "FASE 7.1 e2e: falha pós-commit",
+      },
+    );
+
+    /*
+     * Falha DEPOIS da fronteira de commit, no banco de verdade: um gatilho
+     * CONSTRAINT DEFERRABLE INITIALLY DEFERRED roda no COMMIT, ou seja, depois
+     * de `markCommitBoundary()` e depois de o marcador durável ter sido
+     * inserido. A transação inteira é abortada pelo banco — é a fronteira
+     * ambígua que a single-write ownership trata como "nunca fallback".
+     */
+    await admin.query(`
+      DROP TRIGGER IF EXISTS "fase71_postcommit_fault" ON "CatalogCutoverEvent";
+      DROP FUNCTION IF EXISTS fase71_postcommit_fault();
+      CREATE OR REPLACE FUNCTION fase71_postcommit_fault() RETURNS trigger
+      LANGUAGE plpgsql AS $fn$
+      BEGIN
+        IF NEW."kind" = 'V1_COMMITTED'::"CatalogCutoverEventKind" THEN
+          RAISE EXCEPTION
+            'FASE71 post-commit fault: commit rejeitado no COMMIT';
+        END IF;
+        RETURN NULL;
+      END $fn$;
+      CREATE CONSTRAINT TRIGGER "fase71_postcommit_fault"
+        AFTER INSERT ON "CatalogCutoverEvent"
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION fase71_postcommit_fault();
+    `);
+
+    const before = await counts();
+    let thrown: unknown = null;
+    try {
+      await save("Mercado Livre", "FASE71-E12", 100);
+    } catch (error) {
+      thrown = error;
+    }
+
+    await admin.query(`
+      DROP TRIGGER IF EXISTS "fase71_postcommit_fault" ON "CatalogCutoverEvent";
+      DROP FUNCTION IF EXISTS fase71_postcommit_fault();
+    `);
+
+    const after = await counts();
+
+    assert.ok(thrown, "o COMMIT rejeitado precisa aparecer como erro para quem chamou");
+    assert.equal(
+      after.products,
+      before.products,
+      "pós-commit abortado => NENHUM Product persistido",
+    );
+    assert.equal(after.offers, before.offers, "pós-commit abortado => NENHUMA Offer");
+    assert.equal(
+      await countEvents("V1_COMMITTED"),
+      0,
+      "o marcador de commit morreu com a transação (nada ficou como 'commitou')",
+    );
+    assert.equal(
+      await countEvents("FALLBACK_ATTEMPTED"),
+      0,
+      "pós-commit => NUNCA há fallback tentado",
+    );
+    assert.equal(await countEvents("FALLBACK_COMMITTED"), 0, "nenhum commit legado");
+    assert.equal(await countEvents("DOUBLE_WRITE"), 0, "zero double-write");
+    assert.equal(
+      await countEvents("AMBIGUOUS_COMMIT"),
+      1,
+      "a fronteira ambígua foi registrada",
+    );
+    assert.equal(
+      await countEvents("TRIP"),
+      1,
+      "commit ambíguo abre o breaker global (fail-closed sem novo deploy)",
+    );
+    assert.equal(
+      (
+        await globalControl.globalControlPool(MISSION_URL)!.query<{ s: string }>(
+          'SELECT "breakerState"::text AS "s" FROM "CatalogCutoverRollout"',
+        )
+      ).rows[0].s,
+      "OPEN",
+      "breaker global aberto após commit ambíguo",
+    );
+    assert.equal(
+      after.usedWrites,
+      1,
+      "a permissão já adquirida é contada uma vez (o breaker, não o teto, segura o resto)",
+    );
+    evidence.push("E12 pos_commit_zero_fallback_zero_double_write ok");
   }
 
   /* ====================================================================== */

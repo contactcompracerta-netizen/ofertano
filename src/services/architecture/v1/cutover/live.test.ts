@@ -19,9 +19,14 @@
  *      breaker; rejeição de guarda NÃO abre.
  *   H) o bypass é interno, opcional, default-off e inalcançável por request.
  *   I) agnosticismo de marketplace: nenhum nome de marketplace em código.
+ *   K) ownership com contabilidade: 1 evento => exatamente 1 permissão global,
+ *      em qualquer rota (sucesso, fallback pré-commit, pós-commit, guardas).
+ *   L) invariantes de publicação preservadas em toda rota:
+ *      PUBLIC_MULTISTORE_MIN_MARKETPLACES=2 e DRAFT/active=false com 1
+ *      marketplace (AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES=0).
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,6 +47,30 @@ const saveProductSource = readFileSync(
   "utf8",
 );
 const commitsSource = readFileSync(path.join(here, "commits.ts"), "utf8");
+
+/** Lista recursivamente arquivos com a extensão pedida (varredura estática). */
+function collectFiles(dir: string, extension: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectFiles(full, extension));
+    } else if (entry.name.endsWith(extension)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/** Oferta mínima para `hasPublicMultiStore` (invariante de publicação). */
+const oferta = (marketplace: string) => ({
+  marketplace,
+  active: true,
+  available: true,
+  status: "ACTIVE",
+  matchStatus: "EXACT" as const,
+  price: 100,
+});
 
 /* -------------------------------------------------------------------------- */
 /* EXECUTOR FAKO                                                              */
@@ -849,15 +878,6 @@ async function main(): Promise<void> {
   {
     assert.equal(PUBLIC_MULTISTORE_MIN_MARKETPLACES, 2);
 
-    const oferta = (marketplace: string) => ({
-      marketplace,
-      active: true,
-      available: true,
-      status: "ACTIVE",
-      matchStatus: "EXACT" as const,
-      price: 100,
-    });
-
     assert.equal(
       hasPublicMultiStore([oferta("MERCADO_LIVRE")]),
       false,
@@ -921,16 +941,38 @@ async function main(): Promise<void> {
       /options\.__internalSkipLiveCutoverGate\s*\n?\s*\?\s*bypassedLiveContext/,
       "o bypass só pode escolher o contexto de bypass",
     );
-    // 4) o único lugar no repositório que liga a flag é o commit V1.
-    const liga = readFileSync(
-      path.join(here, "commits.ts"),
-      "utf8",
-    ).match(/__internalSkipLiveCutoverGate:\s*true/g) ?? [];
-    assert.equal(liga.length, 1, "a flag é ligada em exatamente um lugar");
+    // 4) no repositório, a flag só é ligada em DOIS lugares, e ambos são o
+    //    dono interno da autorização do mesmo evento: o commit V1 primário e o
+    //    fallback legado. Nenhum outro módulo a liga.
+    const liga =
+      commitsSource.match(/__internalSkipLiveCutoverGate:\s*true/g) ?? [];
+    assert.equal(
+      liga.length,
+      2,
+      `a flag é ligada em exatamente dois lugares (commitV1Structural + legacyWrite), encontrado ${liga.length}`,
+    );
     assert.match(
       commitsSource,
       /async commitV1Structural[\s\S]*?__internalSkipLiveCutoverGate:\s*true/,
       "o bypass pertence a commitV1Structural",
+    );
+    assert.match(
+      commitsSource,
+      /async legacyWrite[\s\S]*?__internalSkipLiveCutoverGate:\s*true/,
+      "o fallback legado também é dono da autorização: ele não reabre o gate",
+    );
+    // Nenhum outro arquivo de produção (fora testes) liga a flag: o único dono
+    // da autorização interna é `commits.ts`.
+    const ligam = collectFiles(path.join(here, ".."), ".ts").filter(
+      (file) =>
+        !/\.test\.ts$/.test(file) &&
+        (readFileSync(file, "utf8").match(/__internalSkipLiveCutoverGate\s*:\s*true/g) ??
+          []).length > 0,
+    );
+    assert.deepEqual(
+      ligam.map((file) => path.relative(path.join(here, ".."), file)),
+      ["cutover/commits.ts"],
+      "commits.ts é o único módulo que pode ligar o bypass do gate live",
     );
     // 5) não há rota de request público able to ligá-la.
     assert.doesNotMatch(
@@ -938,6 +980,13 @@ async function main(): Promise<void> {
       /JSON\.parse[\s\S]{0,80}__internalSkip/,
       "a flag não pode vir de payload de request",
     );
+    for (const file of collectFiles(path.join(here, "../../../../app"), ".ts")) {
+      assert.equal(
+        readFileSync(file, "utf8").includes("__internalSkipLiveCutoverGate"),
+        false,
+        `${file}: nenhuma rota pública pode conhecer o bypass`,
+      );
+    }
     // 6) o bypass constrói contexto NÃO autoritativo: não pode forçar
     //    publicação nem active=true.
     assert.match(
@@ -1021,6 +1070,260 @@ async function main(): Promise<void> {
       );
       assert.equal(ctx.marketplaceId, marketplaceId);
     }
+  }
+
+  /* ====================================================================== */
+  /* K) UMA PERMISSÃO GLOBAL POR EVENTO — NUNCA A SEGUNDA                   */
+  /* ====================================================================== */
+  {
+    /*
+     * O tetos global conta ESCRITAS, não chamadas. Se o caminho de fallback
+     * voltasse a adquirir permissão, um único evento consumiria 2 slots e o
+     * `usedWrites` deixaria de ser o número de escritas reais. Estes passos
+     * contam requisições de aquisição (`permitRequests`) e o `usedWrites` no
+     * estado do rollout para cada rota de ownership.
+     */
+
+    /* K1) V1 autoritativo com sucesso => exatamente 1 permissão, 0 fallback. */
+    {
+      resetCutoverMetrics();
+      const executor = createFakeExecutor({
+        rollouts: [{ marketplaceId: "mercado_livre", maxWrites: 5, usedWrites: 0 }],
+      });
+      const ctx = await beginLiveCutoverWrite({
+        marketplaceId: "mercado_livre",
+        externalListingId: "ML-K1",
+        env: { DATABASE_URL: "postgresql://x/y" },
+        executor,
+      });
+
+      let legacyCalls = 0;
+      const outcome = await runLiveCutoverWrite<string>({
+        ctx,
+        executor,
+        v1Write: async (mark) => {
+          mark();
+          return "produto";
+        },
+        legacyWrite: async () => {
+          legacyCalls += 1;
+          return "produto-legacy";
+        },
+        onSuccess: async () => {},
+        onFailure: async () => {},
+      });
+
+      assert.equal(outcome.kind, "V1_COMMITTED");
+      assert.equal(legacyCalls, 0, "V1 commitou => o legado NUNCA escreve");
+      assert.equal(
+        executor.state.permitRequests,
+        1,
+        "caminho V1 autoritativo => exatamente 1 permissão global",
+      );
+      assert.equal(
+        executor.state.rollouts.get("mercado_livre")?.usedWrites,
+        1,
+        "1 escrita => usedWrites = 1",
+      );
+    }
+
+    /* K2) maxWrites=1 + falha transitória PRÉ-COMMIT => o fallback assume e
+     *     `usedWrites` PERMANECE 1 (nenhuma segunda permissão). */
+    {
+      resetCutoverMetrics();
+      const executor = createFakeExecutor({
+        rollouts: [{ marketplaceId: "mercado_livre", maxWrites: 1, usedWrites: 0 }],
+      });
+      const ctx = await beginLiveCutoverWrite({
+        marketplaceId: "mercado_livre",
+        externalListingId: "ML-K2",
+        env: { DATABASE_URL: "postgresql://x/y" },
+        executor,
+      });
+      assert.equal(ctx.authoritative, true, "com maxWrites=1 ainda há 1 slot");
+
+      let legacyCalls = 0;
+      const outcome = await runLiveCutoverWrite<string>({
+        ctx,
+        executor,
+        v1Write: async () => {
+          throw new Error("P1001 conexão recusada");
+        },
+        legacyWrite: async (mark) => {
+          legacyCalls += 1;
+          mark();
+          return "produto-fallback";
+        },
+        onSuccess: async () => {},
+        onFailure: async () => {},
+      });
+
+      assert.equal(outcome.kind, "LEGACY_FALLBACK_COMMITTED");
+      assert.equal(legacyCalls, 1, "o fallback assume exatamente uma vez");
+      assert.equal(
+        executor.state.permitRequests,
+        1,
+        "o fallback NÃO adquire uma segunda permissão global",
+      );
+      assert.equal(
+        executor.state.rollouts.get("mercado_livre")?.usedWrites,
+        1,
+        "maxWrites=1 + falha pré-commit + fallback => usedWrites permanece 1",
+      );
+    }
+
+    /* K3) falha PÓS-COMMIT => zero fallback (logo, zero segunda escrita). */
+    {
+      resetCutoverMetrics();
+      const executor = createFakeExecutor({
+        rollouts: [{ marketplaceId: "mercado_livre", maxWrites: 5, usedWrites: 0 }],
+      });
+      const ctx = await beginLiveCutoverWrite({
+        marketplaceId: "mercado_livre",
+        externalListingId: "ML-K3",
+        env: { DATABASE_URL: "postgresql://x/y" },
+        executor,
+      });
+
+      let legacyCalls = 0;
+      await assert.rejects(
+        runLiveCutoverWrite<string>({
+          ctx,
+          executor,
+          v1Write: async (mark) => {
+            mark();
+            throw new Error("P2014 transação falhou");
+          },
+          legacyWrite: async () => {
+            legacyCalls += 1;
+            return "produto-legacy";
+          },
+          onSuccess: async () => {},
+          onFailure: async () => {},
+        }),
+      );
+
+      assert.equal(legacyCalls, 0, "pós-commit => NUNCA há fallback (zero double-write)");
+      assert.equal(executor.state.permitRequests, 1);
+      assert.equal(executor.state.rollouts.get("mercado_livre")?.usedWrites, 1);
+    }
+
+    /* K4) códigos de guarda => zero fallback e zero segunda permissão. */
+    {
+      for (const erro of [
+        "IDENTITY_REJECT:matchStatus REJECTED",
+        "POLICY_NOT_READY:politica-multiloja",
+        "MULTISTORE_NOT_READY:PUBLIC_MULTISTORE_MIN_MARKETPLACES",
+        "INVALID_DATA:preço inválido",
+      ]) {
+        resetCutoverMetrics();
+        const executor = createFakeExecutor({
+          rollouts: [{ marketplaceId: "mercado_livre", maxWrites: 5, usedWrites: 0 }],
+        });
+        const ctx = await beginLiveCutoverWrite({
+          marketplaceId: "mercado_livre",
+          externalListingId: "ML-K4",
+          env: { DATABASE_URL: "postgresql://x/y" },
+          executor,
+        });
+
+        let legacyCalls = 0;
+        await assert.rejects(
+          runLiveCutoverWrite<string>({
+            ctx,
+            executor,
+            v1Write: async () => {
+              throw new Error(erro);
+            },
+            legacyWrite: async () => {
+              legacyCalls += 1;
+              return "produto-legacy";
+            },
+            onSuccess: async () => {},
+            onFailure: async () => {},
+          }),
+        );
+
+        assert.equal(legacyCalls, 0, `${erro} => NUNCA há fallback`);
+        assert.equal(
+          executor.state.permitRequests,
+          1,
+          `${erro} => nenhuma permissão adicional`,
+        );
+        assert.equal(executor.state.rollouts.get("mercado_livre")?.usedWrites, 1);
+      }
+    }
+
+    /*
+     * K5) O MESMO EVENTO, DOIS COMMITTS INTERNOS: o dono (V1 ou fallback) e o
+     * teto. A contabilidade do evento está no ORQUESTRADOR, e nenhum dos dois
+     * caminhos de `commits.ts` pode reabrir o gate. `permitRequests === 0` é
+     * a prova estática disso; o e2e mede o mesmo comportamento no Postgres
+     * real, com o orçamento no banco.
+     */
+    {
+      const executor = createFakeExecutor({
+        rollouts: [{ marketplaceId: "mercado_livre", maxWrites: 5, usedWrites: 0 }],
+      });
+      const ctx = bypassedContext("mercado_livre");
+      await runLiveCutoverWrite<string>({
+        ctx,
+        executor,
+        v1Write: async () => "produto",
+        legacyWrite: async () => "produto-legacy",
+        onSuccess: async () => {},
+        onFailure: async () => {},
+      });
+      assert.equal(
+        executor.state.permitRequests,
+        0,
+        "o commit interno (V1 ou fallback) nunca adquire permissão global",
+      );
+    }
+  }
+
+  /* ====================================================================== */
+  /* L) INVARIANTES DE PUBLICAÇÃO PRESERVADAS EM TODA ROTA                  */
+  /* ====================================================================== */
+  {
+    assert.equal(
+      PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+      2,
+      "PUBLIC_MULTISTORE_MIN_MARKETPLACES=2 preservado",
+    );
+    // 1 marketplace => não é multiloja pública, seja qual for o writer.
+    assert.equal(hasPublicMultiStore([oferta("MERCADO_LIVRE")]), false);
+    assert.equal(
+      hasPublicMultiStore([oferta("MERCADO_LIVRE"), oferta("SHOPEE")]),
+      true,
+      "2 marketplaces distintos => público",
+    );
+
+    /*
+     * AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES=0 não é uma condicional do
+     * writer: o DRAFT/inativo é decidido na transação canônica, e nenhuma
+     * linha depois do gate pode depender do bypass. Se alguém colar a trava ao
+     * bypass, estas três asserções quebram.
+     */
+    assert.match(
+      saveProductSource,
+      /semMultiLojaPublica\s*\?\s*\n?\s*"DRAFT"/,
+      "sem multiloja pública => DRAFT (independente do writer e do bypass)",
+    );
+    assert.match(
+      saveProductSource,
+      /const activeFinal\s*=\s*\n?\s*!semMultiLojaPublica/,
+      "sem multiloja pública => active=false (AUTO_ACTIVE_WITH_LT_2=0)",
+    );
+    assert.equal(
+      (
+        saveProductSource
+          .slice(saveProductSource.indexOf("const controlExecutor"))
+          .match(/__internalSkipLiveCutoverGate/g) ?? []
+      ).length,
+      0,
+      "nenhuma trava de segurança pode depender do bypass",
+    );
   }
 
   /* ====================================================================== */

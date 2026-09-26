@@ -17,6 +17,14 @@
  *     ANTES do commit com erro fallback-eligible. Nunca é chamado após
  *     commit V1 (single-write ownership).
  *
+ * Os três commits internalizam o gate live (FASE 7.1) com
+ * `__internalSkipLiveCutoverGate`: quem chama JÁ é o dono da autorização
+ * daquele evento, então reabrir o gate aqui consumiria um segundo permiso
+ * global para a mesma escrita. O bypass pula SOMENTE o gate — validação,
+ * identity guards, PublicationEligibility, PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+ * DRAFT/active=false, PriceHistory e idempotência continuam rodando dentro da
+ * transação canônica do saveProduct.
+ *
  * Commit point: `saveProduct` roda seu próprio prisma.$transaction
  * (linha 2513 do saveProduct.ts) — sucesso aqui = catálogo commitado.
  */
@@ -211,6 +219,26 @@ export function createRealAuthoritativeCommits(
       const saved = await saveProduct(product, null, {
         autoCreated: true,
         discoverySource: "OPPORTUNITY",
+        // FASE 7.1 — o fallback NÃO pode abrir uma segunda autorização.
+        //
+        // Este `legacyWrite` é a retentativa de um evento que JÁ detém a
+        // autorização: ela foi decidida pelo orquestrador acima (canário com o
+        // próprio orçamento, ou o gate live que já adquiriu o permiso global e
+        // cujo marcador de commit é gravado pelo MESMO cliente da transação).
+        // Reentrar no gate aqui consumiria UM SEGUNDO permiso global para o
+        // MESMO evento — o teto contaria uma escrita a mais do que a que
+        // existe — e abriria uma rota em que o caminho de fallback volta a
+        // chamar a máquina de cutover, que é exatamente o que single-write
+        // ownership proíbe.
+        //
+        // O bypass pula SOMENTE o gate live. Ele não pula — e não pode pular —
+        // validação, identity guards, PublicationEligibility,
+        // PUBLIC_MULTISTORE_MIN_MARKETPLACES, DRAFT/active=false,
+        // PriceHistory nem idempotência: tudo isso é decidido dentro da
+        // transação canônica do saveProduct, antes e independentemente deste
+        // gate. É a ÚNICA diferença entre este commit e o commitV1Structural
+        // acima, e ela também é interna: nenhum request público a alcança.
+        __internalSkipLiveCutoverGate: true,
       });
       return { productId: saved.id };
     },
