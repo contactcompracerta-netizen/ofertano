@@ -210,10 +210,11 @@ async function main() {
 
   /* --- 8. STRUCTURAL: muda titulo (FASE O) ---------------------------- */
   const titleChanged = structuredClone(priceChanged);
-  titleChanged.catalog.title = "Smartwatch Samsung Galaxy Watch 4 44mm PLUS";
+  const CHANGED_TITLE = "Smartwatch Samsung Galaxy Watch 4 44mm PLUS";
+  titleChanged.catalog.title = CHANGED_TITLE;
   const fourth = await processNormalizedListing(ctx, {
     listing: titleChanged,
-    rawPayload: node({ price: "1199.90", productName: titleChanged.catalog.title }),
+    rawPayload: node({ price: "1199.90", productName: CHANGED_TITLE }),
   });
   assert.equal(fourth.path, "STRUCTURAL", "mudanca estrutural => STRUCTURAL");
 
@@ -223,9 +224,12 @@ async function main() {
    * legitimamente STRUCTURAL (o titulo regrediu), nao um bug de idempotencia.
    * O payload precisa ser um no Shopee COMPLETO, porque replay re-normaliza
    * pelo conector e um no sem itemId seria corretamente REJECTED.
+   *
+   * Usa a constante literal (e nao `catalog.title`, que e `string | null`):
+   * o no bruto exige string, e o titulo deste cenario nunca e nulo.
    */
   const buildReplayPayload = (price: string) =>
-    node({ price, productName: titleChanged.catalog.title });
+    node({ price, productName: CHANGED_TITLE });
 
   /* --- 9. DETERMINISMO DE HASH ---------------------------------------- */
   {
