@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, cutoverPending } from './verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
 const clone = () => structuredClone(original);
 const fullPending = [...commercePending, ...architecturePending];

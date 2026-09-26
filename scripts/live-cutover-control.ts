@@ -50,10 +50,13 @@ import {
   requiredDistinctListings,
   requiredEvidenceCommits,
   runAutopilotCycle,
+  runAutopilotProbes,
   type AutopilotRow,
   type PublicationAudit,
   type StageMetrics,
 } from "@/services/architecture/v1/cutover/autopilot";
+import { reconcileCatalog } from "@/services/catalog/reconciliation";
+import { createPrismaCatalogReconciliationRepository } from "@/services/catalog/reconciliationRepository";
 import {
   armGlobalRollout,
   readGlobalRollout,
@@ -376,6 +379,12 @@ async function main(): Promise<void> {
      * FASE 7.2 — ciclo manual do controlador. É o MESMO código do cron
      * (nenhum caminho paralelo): ele existe para o operador forçar uma
      * avaliação sob demanda. Sem evidência real, ele só registra WAIT.
+     *
+     * A auditoria de publicação é o MESMO reconciliador do projeto, em
+     * `dryRun: true` — igual ao cron. Uma versão anterior deste script usava
+     * um stub `{scanned: 0, violations: 0}`, e isso era um buraco real: um
+     * `autopilot-run --yes` promoting com o gate de publicação nunca sequer
+     * olhado. "Verde porque ninguém olhou" é a pior forma de verde.
      */
     if (sub === "autopilot-run") {
       const marketplaceId = String(args["marketplace-id"] ?? "");
@@ -383,16 +392,33 @@ async function main(): Promise<void> {
         throw new Error("USAGE: autopilot-run --marketplace-id <id> --yes");
       }
       const dryRun = args["dry-run"] === true;
-      const audit: () => Promise<PublicationAudit> = async () => ({
-        scanned: 0,
-        violations: 0,
-      });
+      const audit: () => Promise<PublicationAudit> = async () => {
+        const result = await reconcileCatalog(
+          createPrismaCatalogReconciliationRepository(),
+          { dryRun: true },
+        );
+        return {
+          scanned: result.scanned,
+          violations: result.violations.length,
+        };
+      };
+      /*
+       * Sem base não há probe, e a lista fica vazia de propósito: probes são
+       * observacionais, então a ausência não muda decisão nenhuma. `--probe-
+       * base-url` existe para o operador apontar para a origem que quer ver.
+       */
+      const origin =
+        typeof args["probe-base-url"] === "string"
+          ? args["probe-base-url"]
+          : (process.env.AUTOPILOT_PROBE_BASE_URL ?? null);
+      const probes = await runAutopilotProbes(origin);
       const result = await runAutopilotCycle({
         executor,
         marketplaceId,
         enabled: !dryRun,
         allowMutations: !dryRun,
         publicationAudit: audit,
+        probes: async () => probes,
       });
       console.log(
         JSON.stringify(
@@ -409,6 +435,8 @@ async function main(): Promise<void> {
             budgetReconciled: result.budgetReconciled,
             rollout: result.rollout,
             skippedReason: result.skippedReason,
+            autoActiveWithLt2PublicMarketplaces: result.autoActiveLt2,
+            probes,
             metrics: result.metrics as StageMetrics,
           },
           null,

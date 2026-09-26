@@ -220,6 +220,60 @@ async function main(): Promise<void> {
       evidence.push("P0a autopilot nao publica nem escreve catalogo (estatico)");
       evidence.push("P0b transicao de estado e compare-and-swap por versao");
       evidence.push("P0c sem loop residente e sem cutover global");
+
+      /*
+       * A ferramenta de operador tem de auditar publicação DE VERDADE. Houve
+       * aqui um stub `{scanned: 0, violations: 0}`: o `autopilot-run --yes`
+       * promovia degrau com o gate de publicação nunca sequer consultado. Verde
+       * porque ninguém olhou é a pior forma de verde, e o conserto é invisível
+       * numa revisão de rotina — então vira guarda.
+       */
+      const ctl = readFileSync(
+        path.join(here, "..", "..", "..", "..", "..", "scripts", "live-cutover-control.ts"),
+        "utf8",
+      );
+      // Comentários explicam a história do bug; o que interessa é o código.
+      // Sem esta limpeza, a própria justificativa acusaria a si mesma.
+      const ctlCode = ctl
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      assert.ok(
+        ctlCode.includes("reconcileCatalog("),
+        "o operador tem de chamar o reconciliador de verdade",
+      );
+      assert.ok(
+        ctlCode.includes("createPrismaCatalogReconciliationRepository()"),
+        "o operador tem de usar o repositorio real",
+      );
+      assert.ok(
+        !/scanned:\s*0\s*,\s*violations:\s*0/.test(ctlCode),
+        "proibido stub de auditoria de publicacao no operador",
+      );
+      assert.ok(
+        ctlCode.includes("runAutopilotProbes("),
+        "o operador usa a MESMA definicao de probes do cron",
+      );
+      assert.ok(
+        !/const\s+PROBES\s*[:=]/.test(ctlCode),
+        "proibido uma segunda lista de probes no operador",
+      );
+      evidence.push("P0d operador audita publicacao de verdade, sem stub");
+
+      // A lista de probes mora no módulo, e só lá: duas definições divergentes
+      // seriam duas fontes de verdade sobre a saúde do site.
+      const route = readFileSync(
+        path.join(here, "..", "..", "..", "..", "..", "src", "app", "api", "cron", "cutover-autopilot", "route.ts"),
+        "utf8",
+      );
+      const routeCode = route
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      assert.ok(
+        !/const\s+PROBES\s*[:=]/.test(routeCode),
+        "a rota usa a lista do modulo, nao a sua propria",
+      );
+      assert.ok(routeCode.includes("runAutopilotProbes("));
+      evidence.push("P0e cron e operador compartilham a definicao de probes");
     }
 
     /* ==================================================================== */

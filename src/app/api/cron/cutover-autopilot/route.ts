@@ -48,8 +48,8 @@ import { createPrismaCatalogReconciliationRepository } from "@/services/catalog/
 import {
   AUTOPILOT_MIN_OBSERVATION_MS,
   runAutopilotCycleLocked,
+  runAutopilotProbes,
   type PublicationAudit,
-  type ProbeResult,
 } from "@/services/architecture/v1/cutover/autopilot";
 import { globalControlPool } from "@/services/architecture/v1/cutover/globalControl";
 
@@ -59,24 +59,6 @@ export const maxDuration = 60;
 
 /** Só este modo. `V1_PRIMARY` puro continua PROIBIDO na progressão. */
 const REQUIRED_MODE = "V1_PRIMARY_WITH_LEGACY_FALLBACK";
-
-/**
- * Probes com status ESPERADO por rota.
- *
- * `/sitemap` e `/busca` NÃO são rotas deste projeto (o sitemap é
- * `/sitemap.xml` e a busca é `/?q=` na home). Um probe ingênuo trataria esses
- * 404 como "site fora" e poderia virar decisão destrutiva por causa de uma
- * rota que nunca existiu — exatamente o que FASE V proíbe. Por isso o status
- * esperado é explícito por rota.
- */
-export const PROBES: ReadonlyArray<{ path: string; expected: number }> = [
-  { path: "/", expected: 200 },
-  { path: "/sitemap.xml", expected: 200 },
-  { path: "/robots.txt", expected: 200 },
-  { path: "/ofertas", expected: 200 },
-  { path: "/categorias", expected: 200 },
-  { path: "/?q=autopilot", expected: 200 },
-];
 
 function isEnabled(): boolean {
   return process.env.AUTOPILOT_ENABLED === "ON";
@@ -93,32 +75,20 @@ function isProduction(): boolean {
   return process.env.VERCEL_ENV === "production";
 }
 
-/**
- * Probes são OBSERVACIONAIS. Um 500 externo isolado é registrado e nada mais:
+/*
+ * A lista de probes e o executor moram em `cutover/autopilot.ts`, e não aqui,
+ * para que o cron e o operador manual sondem exatamente as mesmas rotas com o
+ * mesmo status esperado. Ver a justificativa de `AUTOPILOT_PROBES`.
+ *
+ * Probes são OBSERVACIONAIS: um 500 externo isolado é registrado e nada mais —
  * não abre breaker e não bloqueia promoção, porque as evidências que promovem
  * (double-write, paridade, orçamento, publicação) são medidas dentro do
  * sistema, não por HTTP público.
  */
-async function runProbes(): Promise<ProbeResult[]> {
-  const origin = process.env.VERCEL_URL
+function probeOrigin(): string | null {
+  return process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : null;
-  if (origin === null) {
-    return [];
-  }
-  return Promise.all(
-    PROBES.map(async (probe) => {
-      try {
-        const response = await fetch(`${origin}${probe.path}`, {
-          redirect: "manual",
-          cache: "no-store",
-        });
-        return { path: probe.path, expected: probe.expected, actual: response.status };
-      } catch {
-        return { path: probe.path, expected: probe.expected, actual: 0 };
-      }
-    }),
-  );
 }
 
 export async function GET(request: Request) {
@@ -141,7 +111,7 @@ export async function GET(request: Request) {
   const enabled = isEnabled();
   const production = isProduction();
   const allowMutations = enabled && production;
-  const probes = await runProbes();
+  const probes = await runAutopilotProbes(probeOrigin());
 
   /*
    * Auditoria de publicação: o MESMO reconciliador do projeto, em dry-run.

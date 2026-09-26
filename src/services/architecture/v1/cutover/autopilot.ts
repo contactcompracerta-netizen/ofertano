@@ -447,6 +447,72 @@ export type AutopilotRow = {
   updatedAt: Date;
 };
 
+/* -------------------------------------------------------------------------- */
+/* PROBES — OBSERVACIONAIS, NUNCA GATE (FASE V)                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Rotas sondadas com o status ESPERADO de cada uma.
+ *
+ * `/sitemap` e `/busca` NÃO são rotas deste projeto (o sitemap é `/sitemap.xml`
+ * e a busca é `/?q=` na home). Um probe ingênuo trataria esses 404 como "site
+ * fora" e poderia virar decisão destrutiva por causa de uma rota que nunca
+ * existiu — exatamente o que FASE V proíbe. Por isso o status esperado é
+ * explícito por rota.
+ *
+ * Esta lista mora AQUI, e não na rota HTTP, para que o cron e o operador
+ * manual sondem exatamente as mesmas coisas. Duas definições divergentes
+ * seriam duas fontes de verdade sobre a saúde do site.
+ */
+export const AUTOPILOT_PROBES: ReadonlyArray<{
+  path: string;
+  expected: number;
+}> = [
+  { path: "/", expected: 200 },
+  { path: "/sitemap.xml", expected: 200 },
+  { path: "/robots.txt", expected: 200 },
+  { path: "/ofertas", expected: 200 },
+  { path: "/categorias", expected: 200 },
+  { path: "/?q=autopilot", expected: 200 },
+];
+
+/**
+ * Executa os probes. OBSERVACIONAIS por contrato: um 500 externo isolado é
+ * registrado e nada mais — não abre breaker e não bloqueia promoção, porque as
+ * evidências que promovem (double-write, paridade, orçamento, publicação) são
+ * medidas dentro do sistema, não por HTTP público.
+ *
+ * `origin === null` devolve lista vazia em vez de fingir que o site está
+ * saudável: sem base não há probe, e "sem probe" é o estado honesto.
+ */
+export async function runAutopilotProbes(
+  origin: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<
+  Array<{ path: string; expected: number; actual: number }>
+> {
+  if (origin === null || origin === "") {
+    return [];
+  }
+  return Promise.all(
+    AUTOPILOT_PROBES.map(async (probe) => {
+      try {
+        const response = await fetchImpl(`${origin}${probe.path}`, {
+          redirect: "manual",
+          cache: "no-store",
+        });
+        return {
+          path: probe.path,
+          expected: probe.expected,
+          actual: response.status,
+        };
+      } catch {
+        return { path: probe.path, expected: probe.expected, actual: 0 };
+      }
+    }),
+  );
+}
+
 /*
  * Colunas sempre entre aspas: em `SELECT` um nome solto seria dobrado para
  * minúsculas (`marketplaceid`) e a consulta falharia. As MESMAS strings
