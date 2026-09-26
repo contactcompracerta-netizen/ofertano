@@ -28,6 +28,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { validateInventory } from "./migration-inventory.mjs";
 import { validateLocalTarget, scaffoldLocalSupabase, localEquivalenceSchema, verifyLocalRls } from "./local-supabase-compatibility.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -53,17 +54,27 @@ function abort(code, extra = {}) {
 
 function verifyManifest() {
   if (Object.keys(MANIFEST.baselineMigrations ?? {}).length !== 7) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact:"immutable baseline inventory"});
-  if (MANIFEST.version !== 3) abort("BOOTSTRAP_MANIFEST_DIVERGED");
+  if (MANIFEST.version !== 4) abort("BOOTSTRAP_MANIFEST_DIVERGED");
   if (sha256(fs.readFileSync(path.join(HERE, "local-legacy-tables.sql"))) !== MANIFEST.localCompatibility?.legacyTablesSQLSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "local compatibility DDL" });
   const forwardNames = Object.keys(MANIFEST.forwardMigrations);
   if (JSON.stringify(forwardNames) !== JSON.stringify([...forwardNames].sort())) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "forward order" });
-  const tracked = Object.keys({...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations}).sort();
-  const actual = fs.readdirSync(path.join(ROOT, "prisma/migrations")).filter(n => fs.existsSync(path.join(ROOT, "prisma/migrations", n, "migration.sql"))).sort();
-  if (JSON.stringify(tracked) !== JSON.stringify(actual)) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "migration inventory" });
-  if (Object.keys(MANIFEST.forwardMigrations).some(n => n <= Object.keys(MANIFEST.baselineMigrations).sort().at(-1))) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact: "migration order"});
+  const migDir = path.join(ROOT, "prisma/migrations");
+  const actualNames = fs.readdirSync(migDir).filter(n => fs.existsSync(path.join(migDir, n, "migration.sql"))).sort();
+  // Contrato do inventário (baseline / forward / retroactive).
+  // O invariante forward > lastBaseline permanece OBRIGÓRIO e inalterado;
+  // a categoria retroativa é uma exceção EXPLÍCITA, pinada e testada.
+  try {
+    validateInventory({
+      baselineMigrations: MANIFEST.baselineMigrations,
+      forwardMigrations: MANIFEST.forwardMigrations,
+      retroactiveForwardMigrations: MANIFEST.retroactiveForwardMigrations,
+      actualNames,
+      actualChecksums: Object.fromEntries(actualNames.map(n => [n, sha256(fs.readFileSync(path.join(migDir, n, "migration.sql")))])),
+    });
+  } catch (e) { abort(e.message, { artifact: "migration inventory" }); }
   if (sha256(DDL) !== MANIFEST.baselineDDLHash) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "initial-schema.sql" });
   if (sha256(fs.readFileSync(SCHEMA_PATH)) !== MANIFEST.currentSchemaSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "schema.prisma" });
-  for (const [name, sum] of Object.entries({...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations})) {
+  for (const [name, sum] of Object.entries({...MANIFEST.baselineMigrations, ...MANIFEST.forwardMigrations, ...Object.fromEntries(Object.entries(MANIFEST.retroactiveForwardMigrations ?? {}).map(([n, m]) => [n, m.checksum]))})) {
     const file = path.join(ROOT, "prisma/migrations", name, "migration.sql");
     if (!fs.existsSync(file) || sha256(fs.readFileSync(file)) !== sum) {
       abort("HISTORICAL_CHECKSUM_DIVERGED", { migration: name });

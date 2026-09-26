@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "baselineSourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
   "baselineSchemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
   "currentSchemaSHA256": "28b1db8d893b60b27ab7d1df2d876b6e695a63343dd498142b1e2ee4b093c3db",
@@ -40,5 +40,14 @@
       "Favorite",
       "PriceAlertEvent"
     ]
+  },
+  "retroactiveForwardMigrations": {
+    "20260905110000_bootstrap_legacy_objects": {
+      "checksum": "aa75db8762837e73d981afc6fd7d66c6893b966d99cf06ed8ef13c80a349a8b8",
+      "mustPrecede": "20260905120000_price_alerts",
+      "productionState": "PENDING",
+      "dualSafe": true,
+      "rationale": "Bootstrap dos objetos legados (PriceAlertType, PriceAlert, SocialPost_dayKey_key, PriceAlertEvent, Favorite, roles anon/authenticated, schema auth, auth.uid()/auth.role()) que a cadeia versionada nunca cria. Precisa ordenar ANTES de 20260905120000_price_alerts, que faz ALTER TYPE sobre PriceAlertType, mas em producao as migrations posteriores ja rodaram: por isso aceita PRE-SHAPE (fresh) e POST-SHAPE (producao) com validacao fail-closed."
+    }
   }
 }

@@ -56,3 +56,20 @@ The seven baseline files/checksums and `initial-schema.sql` remain unchanged. Fo
 Before local forward deployment, the guarded scaffold creates only the two NOLOGIN public roles, `auth.uid()`, and the two required legacy tables omitted from the pinned DDL. It rejects remote/Production/55432 targets and unsafe existing auth objects. Completed checks include legacy-aware relational diff plus RLS/grants/default privilege metadata; no runtime model is changed.
 
 `npm run test:migration-history` runs pure fail-closed tests. `npm run test:migration-history:local` exercises fresh/forward/idempotence and the local Production-like checksum rehearsal. See [migration-history-reconciliation](../../docs/migration-history-reconciliation.md) for exact hashes and the independent authoritative ledger gate and observed Prisma 7.9.0 warning telemetry. Production checksum exceptions are not accepted by the local bootstrap.
+
+## Ordem das chaves em `forensic-pins.json` (contratual)
+
+`scripts/migration-history/forensic-pins.json` é comparado com
+`JSON.stringify` em `verify-ledger-compatibility.mjs` (`FORENSIC_PINS_CHANGED`).
+Por isso a **ordem das chaves faz parte do contrato**: a ordem atual do arquivo
+precisa ser exatamente a ordem de construção de `expected`, que é
+
+    baselineMigrations  ->  forwardMigrations  ->  retroactiveForwardMigrations
+
+Reordenar o arquivo (por exemplo, ordenar alfabeticamente) faz o gate reprovar
+com `FORENSIC_PINS_CHANGED`, mesmo que todos os checksums estejam corretos.
+
+Ao adicionar uma migration retroativa, acrescente a chave **no final** do
+objeto, depois das forward. Não normalize a ordem. Isso é dívida técnica
+conhecida: um serializer order-insensitive resolveria, mas é mudança de
+contrato e fica para uma missão própria.

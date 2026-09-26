@@ -21,6 +21,12 @@ export const blockingKeyApplied = true;
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
 export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration];
+// BOOTSTRAP RETROATIVO: migration que ordena DENTRO da cadeia historica
+// (<= lastBaseline) mas ainda NAO foi executada em producao. Nao entra em
+// canonicalForwardInventory de proposito: o invariante normal "forward >
+// lastBaseline" permanece intacto, e esta migration nao o satisfaz.
+export const retroactivePending = ['20260905110000_bootstrap_legacy_objects'];
+export const canonicalRetroactiveInventory = [...retroactivePending];
 /*
  * Estados legítimos de produção para o histórico do catálogo. Nenhum conjunto
  * parcial fora desta lista é aceito: o gate continua fail-closed.
@@ -41,7 +47,7 @@ export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...ar
  * o código está no repositório mas a migration ainda não foi aplicada; depois
  * do apply, nada pendente de novo. Nenhum outro recorte é aceito.
  */
-const pendingAllowlistSets = [[], commercePending, autopilotPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1)];
+const pendingAllowlistSets = [[], commercePending, autopilotPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1), retroactivePending, [...retroactivePending, ...commercePending, ...architecturePending]];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = code => { throw new Error(code); };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -57,12 +63,13 @@ export function verifyLedgerCompatibility(snapshot, allowedPending, contract = l
   if (!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.ledger)) fail('INVALID_SNAPSHOT');
   if (!Array.isArray(allowedPending) || !pendingAllowlistSets.some(set => same(set, allowedPending))) fail('PENDING_ALLOWLIST_REQUIRED');
   const { manifest, compatibility, repositoryChecksums } = contract;
-  if (manifest.version !== 3 || compatibility.version !== 1) fail('CONTRACT_VERSION_MISMATCH');
-  const expected = { ...manifest.baselineMigrations, ...manifest.forwardMigrations };
+  if (manifest.version !== 4 || compatibility.version !== 1) fail('CONTRACT_VERSION_MISMATCH');
+  const retroChecksums = Object.fromEntries(Object.entries(manifest.retroactiveForwardMigrations ?? {}).map(([n, m]) => [n, m.checksum]));
+  const expected = { ...manifest.baselineMigrations, ...manifest.forwardMigrations, ...retroChecksums };
   if (!same(expected, pins.repositoryMigrationChecksums) || !same(compatibility.productionHistory?.knownChecksumDivergences, pins.knownDivergences) || !same(compatibility.productionHistory?.restoredExactMigrations, pins.restoredExactMigrations)) fail('FORENSIC_PINS_CHANGED');
   if (manifest.baselineDDLHash !== pins.baselineDDLChecksum || contract.baselineDDLChecksum !== pins.baselineDDLChecksum || manifest.currentSchemaSHA256 !== pins.schemaChecksum || contract.schemaChecksum !== pins.schemaChecksum) fail('REPOSITORY_SCHEMA_CONTRACT_CHANGED');
   const baselineNames = ['20260824000000_postgresql_baseline', ...knownNames, '20260905120000_price_alerts', '20260907000000_social_automation', '20260907220000_social_three_slots', '20260912000000_add_raw_marketplace_listing'];
-  if (!same(Object.keys(manifest.baselineMigrations).sort(), baselineNames.sort()) || !same(Object.keys(manifest.forwardMigrations), canonicalForwardInventory)) fail('CANONICAL_INVENTORY_CHANGED');
+  if (!same(Object.keys(manifest.baselineMigrations).sort(), baselineNames.sort()) || !same(Object.keys(manifest.forwardMigrations), canonicalForwardInventory) || !same(Object.keys(manifest.retroactiveForwardMigrations ?? {}), canonicalRetroactiveInventory)) fail('CANONICAL_INVENTORY_CHANGED');
   if (!same(Object.keys(repositoryChecksums).sort(), Object.keys(expected).sort())) fail('REPOSITORY_INVENTORY_MISMATCH');
   for (const [name, checksum] of Object.entries(expected)) if (!validChecksum(checksum) || repositoryChecksums[name] !== checksum) fail('REPOSITORY_CHECKSUM_CHANGED');
   const history = compatibility.productionHistory;

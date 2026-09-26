@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration } from './verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration, retroactivePending } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
 const clone = () => structuredClone(original);
-const fullPending = [...commercePending, ...architecturePending];
+const fullPending = [...retroactivePending, ...commercePending, ...architecturePending];
 const reject = (mutate, code, pending = fullPending) => { const s = clone(); mutate(s); assert.throws(() => verifyLedgerCompatibility(s, pending), new RegExp(code)); };
 test('forensic ledger allows exactly two known divergences and full pending without mutation', () => {
   const snapshot = clone(), before = structuredClone(snapshot);
@@ -122,7 +122,7 @@ test('baseline applied-step simulation and schema contract drift block',()=>{
 // do apply nada está. Qualquer outro recorte parcial continua bloqueado.
 test('autopilot migration alone is the only new legitimate pending set',()=>{
  const s=clone(),c=loadRepositoryContract();
- for(const n of [...commercePending,...architecturePending]){
+ for(const n of [...retroactivePending,...commercePending,...architecturePending]){
    if(n===autopilotPending[0]) continue;
    s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:c.repositoryChecksums[n], applied_steps_count:1 });
  }
@@ -139,7 +139,7 @@ test('no invented partial pending set around the autopilot migration',()=>{
    assert.throws(()=>verifyLedgerCompatibility(clone(),bogus),/PENDING_ALLOWLIST_REQUIRED/);
  // A migration do autopilot, se aplicada, tem de trazer o checksum do PIN.
  const s=clone(),c=loadRepositoryContract();
- for(const n of [...commercePending,...architecturePending]) s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:n===autopilotPending[0]?'f'.repeat(64):c.repositoryChecksums[n], applied_steps_count:1 });
+ for(const n of [...retroactivePending,...commercePending,...architecturePending]) s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:n===autopilotPending[0]?'f'.repeat(64):c.repositoryChecksums[n], applied_steps_count:1 });
  assert.throws(()=>verifyLedgerCompatibility(s,[],c),/UNEXPECTED_CHECKSUM_MISMATCH/);
  // E com o PIN correto, sem pendentes, o gate passa.
  s.ledger[s.ledger.length-1].checksum=c.repositoryChecksums[autopilotPending[0]];
