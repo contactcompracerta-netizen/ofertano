@@ -1080,3 +1080,101 @@ model CommerceCanaryAttempt {
   @@index([grantId, createdAt])
   @@index([kind, createdAt])
 }
+
+// CATALOG_V1_GLOBAL_CUTOVER — FASE 7.1 (aditivo).
+// Plano de controle GLOBAL do cutover V1 autoritativo: orçamento de escrita e
+// breaker como estado PERSISTIDO, compartilhados por todas as instâncias
+// serverless. A aquisição de uma permissão de escrita é um único UPDATE
+// condicional sobre esta linha (lock de linha do PostgreSQL), garantindo
+// usedWrites <= maxWrites GLOBAL sem depender de memória do processo.
+enum CatalogCutoverBreakerState {
+  CLOSED
+  OPEN
+}
+
+enum CatalogCutoverEventKind {
+  ARM
+  PERMIT_GRANTED
+  PERMIT_DENIED
+  TRIP
+  RESET
+  ROLLBACK
+  BUDGET_RAISED
+  V1_COMMITTED
+  V1_FAILED
+  AMBIGUOUS_COMMIT
+  FALLBACK_ATTEMPTED
+  FALLBACK_COMMITTED
+  FALLBACK_FAILED
+  PARITY_MATCH
+  PARITY_DIFFERENCE
+  DOUBLE_WRITE
+}
+
+model CatalogCutoverRollout {
+  id String @id @default(cuid())
+
+  // marketplaceId canônico do registry V1. NUNCA nome de marketplace em código.
+  marketplaceId String @unique
+
+  // CatalogWriterMode efetivo (LEGACY_ONLY | SHADOW |
+  // V1_PRIMARY_WITH_LEGACY_FALLBACK | V1_PRIMARY).
+  mode                  String  @default("LEGACY_ONLY")
+  enabled               Boolean @default(false)
+  legacyFallbackEnabled Boolean @default(true)
+
+  // Orçamento GLOBAL (nunca PROCESS_LOCAL).
+  maxWrites  Int @default(0)
+  usedWrites Int @default(0)
+
+  // Breaker global: uma instância abre, todas fail-closed, sem novo deploy.
+  breakerState     CatalogCutoverBreakerState @default(CLOSED)
+  breakerReason    String?
+  breakerTrippedAt DateTime?                  @db.Timestamptz(3)
+
+  startedAt DateTime? @db.Timestamptz(3)
+  expiresAt DateTime? @db.Timestamptz(3)
+
+  lastPermitAt           DateTime? @db.Timestamptz(3)
+  lastPermitBy           String?
+  lastObservedUsedWrites Int?
+  lastObservedAt         DateTime? @db.Timestamptz(3)
+
+  note     String?
+  metadata Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  events CatalogCutoverEvent[]
+
+  @@index([enabled, breakerState])
+  // Índice já criado na migration 20260925120000. Declarado aqui para que
+  // o schema.prisma corresponda exatamente ao banco (sem índice órfão).
+  @@index([breakerState])
+}
+
+// Trilha append-only do plano de controle. Sem segredos. Escrita restrita a
+// ações de operador e conclusões idempotentes da transação canônica.
+model CatalogCutoverEvent {
+  id                String                  @id @default(cuid())
+  rolloutId         String
+  rollout           CatalogCutoverRollout   @relation(fields: [rolloutId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  marketplaceId     String
+  kind              CatalogCutoverEventKind
+  reason            String?
+  usedWrites        Int?
+  maxWrites         Int?
+  executionId       String
+  externalListingId String?
+  metadata          Json?
+  createdAt         DateTime                @default(now()) @db.Timestamptz(3)
+
+  @@unique([executionId, kind])
+  @@index([rolloutId, createdAt])
+  @@index([marketplaceId, createdAt])
+  // Contagem GLOBAL de falhas críticas do breaker: (rollout, kind, createdAt).
+  // Índice já criado na migration 20260925120000; declarado aqui para que
+  // o schema.prisma corresponda exatamente ao banco.
+  @@index([rolloutId, kind, createdAt])
+}
