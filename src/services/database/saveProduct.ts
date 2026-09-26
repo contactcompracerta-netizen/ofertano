@@ -1,9 +1,68 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Product } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 
 import { runArchitectureV1ShadowHook } from "@/services/architecture/v1/shadow";
 import { runArchitectureV1AuthoritativeHook } from "@/services/architecture/v1/cutover";
+import {
+  beginLiveCutoverWrite,
+  completeLiveCutoverWrite,
+  runLiveCutoverWrite,
+  type LiveWriteContext,
+} from "@/services/architecture/v1/cutover/live";
+import {
+  globalControlPool,
+  recordFallbackCommittedInTransaction,
+  recordV1CommittedInTransaction,
+  type CutoverSqlExecutor,
+} from "@/services/architecture/v1/cutover/globalControl";
+import {
+  createPrismaLivePostWriteReader,
+  observeLivePostWrite,
+  type LivePostWriteObservation,
+} from "@/services/architecture/v1/cutover/liveParity";
+import { resolveMarketplaceIdFromLegacyEnum } from "@/services/architecture/v1/marketplaceRegistry";
+
+/*
+ * Marcadores duráveis de commit gravados pelo MESMO cliente de transação do
+ * catálogo. `null` = escrita não autoritativa (nada a marcar).
+ */
+type CanonicalCommitKind = "V1_COMMITTED" | "FALLBACK_COMMITTED" | null;
+
+/**
+ * Pool do plano de controle global. `null` quando não há `DATABASE_URL`, e o
+ * gate inteiro degrada para LEGACY_ONLY (fail-closed) sem tocar o catálogo.
+ */
+function liveCutoverExecutor(): CutoverSqlExecutor | null {
+  return globalControlPool(process.env.DATABASE_URL);
+}
+
+/**
+ * Contexto de escrita NÃO autoritativa para o bypass privado de replay/canário.
+ *
+ * Não consome orçamento, não toca o plano de controle e é marcado como
+ * `settled` de saída: quem o usa já é dono do próprio contexto live e não
+ * pode ter a contabilidade duplicada por uma segunda aquisição.
+ */
+function bypassedLiveContext(
+  marketplaceId: string,
+  externalListingId: string,
+): LiveWriteContext {
+  return {
+    marketplaceId,
+    externalListingId,
+    executionId: "",
+    authoritative: false,
+    mode: "LEGACY_ONLY",
+    denyReason: "ROLLOUT_ABSENT",
+    rolloutId: null,
+    legacyFallbackEnabled: false,
+    usedWrites: null,
+    maxWrites: null,
+    settled: true,
+    fallbackAttempted: false,
+  };
+}
 
 import type { ProductImport } from "@/services/importers/core/types";
 import {
@@ -116,6 +175,17 @@ export type SaveProductOptions = {
   deferPublication?: boolean;
   suppressPublicationSync?: boolean;
   rawListingContext?: RawListingPersistenceContext;
+  /*
+   * CATALOG_V1_GLOBAL_CUTOVER — bypass privado do gate live.
+   *
+   * NUNCA use em tráfego real. Existe para o REPLAY canário e para testes que
+   * já possuem o próprio contexto live: sem isto, o writer V1 chamaria
+   * saveProduct, que abriria um NOVO gate e consumiria um SEGUNDO slot do
+   * orçamento global para a mesma listagem (e poderia abrir fallback
+   * recursivamente). Com o bypass, saveProduct executa exatamente a
+   * transação canônica, sem aquisição e sem contabilidade duplicada.
+   */
+  __internalSkipLiveCutoverGate?: boolean;
 };
 
 export type DecisaoAlvoDaOferta = {
@@ -2511,7 +2581,93 @@ export async function saveProduct(
 
   const agora = new Date();
 
-  const savedProduct = await prisma.$transaction(async (tx) => {
+  /*
+   * CATALOG_V1_GLOBAL_CUTOVER — GATE GLOBAL NO FUNIL REAL.
+   *
+   * A aquisição acontece DEPOIS de toda a validação (sem externalId, preço ou
+   * URL não há escrita a autorizar) e ANTES da transação canônica. O gate
+   * decide somente ATRIBUIÇÃO e ROTA: nunca bloqueia o saveProduct e nunca
+   * altera a semântica da transação.
+   *
+   * Quando não há permissão => `authoritative:false` => exatamente UM
+   * `prisma.$transaction` canônico, idêntico ao comportamento atual
+   * (LEGACY_ONLY, fail-closed).
+   */
+  const liveGateMarketplaceId =
+    resolveMarketplaceIdFromLegacyEnum(marketplace) ??
+    marketplace.trim().toLowerCase();
+
+  const liveCtx: LiveWriteContext = options.__internalSkipLiveCutoverGate
+    ? bypassedLiveContext(liveGateMarketplaceId, externalId)
+    : await beginLiveCutoverWrite({
+        marketplaceId: liveGateMarketplaceId,
+        externalListingId: externalId,
+      });
+
+  const controlExecutor =
+    liveCtx.authoritative ? liveCutoverExecutor() : null;
+
+  /*
+   * O marcador durável de commit PRECISA ser gravado pelo MESMO cliente de
+   * transação do catálogo: o pool `pg` do global control usa outra conexão e
+   * poderia confirmar o commit do catálogo sem o marcador. Por isso o
+   * `kind` que decide qual helper usar é fixado por `runCanonicalTransaction`
+   * ANTES de abrir a transação.
+   */
+  let pendingCommitKind: CanonicalCommitKind | null = null;
+
+  const recordCommitEventInTransaction = async (
+    tx: Prisma.TransactionClient,
+  ): Promise<void> => {
+    if (
+      !liveCtx.authoritative ||
+      liveCtx.rolloutId === null ||
+      liveCtx.executionId === "" ||
+      liveCtx.usedWrites === null ||
+      liveCtx.maxWrites === null ||
+      pendingCommitKind === null
+    ) {
+      return;
+    }
+
+    const eventInput = {
+      rolloutId: liveCtx.rolloutId,
+      marketplaceId: liveCtx.marketplaceId,
+      executionId: liveCtx.executionId,
+      externalListingId: liveCtx.externalListingId,
+      usedWrites: liveCtx.usedWrites,
+      maxWrites: liveCtx.maxWrites,
+      metadata: {
+        commitPhase: "COMMITTED",
+        marketplace: liveGateMarketplaceId,
+      },
+    };
+
+    if (pendingCommitKind === "FALLBACK_COMMITTED") {
+      await recordFallbackCommittedInTransaction(tx, eventInput);
+      return;
+    }
+
+    await recordV1CommittedInTransaction(tx, eventInput);
+  };
+
+  /*
+   * Fronteira interna de commit.
+   *
+   * A marca é feita DEPOIS do marcador durável e IMEDIATAMENTE antes do
+   * `return` do callback da transação. Logo:
+   *   - rejeição ANTES dela => rollback confirmado => rollback-safe;
+   *   - rejeção DEPOIS dela => `COMMIT_UNKNOWN` => nunca há fallback.
+   * Nunca levantar depois da marca: isso converteria um rollback garantido em
+   * ambiguidade desnecessária.
+   */
+  const runCanonicalTransaction = async (
+    commitKind: CanonicalCommitKind | null,
+    markCommitBoundary: () => void,
+  ) => {
+    pendingCommitKind = commitKind;
+
+    return prisma.$transaction(async (tx) => {
     let ofertaPeloCodigo =
       await tx.marketplaceOffer.findUnique({
         where: {
@@ -3256,15 +3412,21 @@ export async function saveProduct(
     if (
       options.deferPublication
     ) {
-      return tx.product.update({
-        where: {
-          id: saved.id,
-        },
-        data: {
-          publicationStatus: "DRAFT",
-          active: false,
-        },
-      });
+      const deferred =
+        await tx.product.update({
+          where: {
+            id: saved.id,
+          },
+          data: {
+            publicationStatus: "DRAFT",
+            active: false,
+          },
+        });
+
+      await recordCommitEventInTransaction(tx);
+      markCommitBoundary();
+
+      return deferred;
     }
 
     if (
@@ -3277,23 +3439,122 @@ export async function saveProduct(
        * Produto novo ja esta DRAFT por deferPublication.
        * Produto existente continua no estado em que estava.
        */
-      return tx.product.findUniqueOrThrow({
-        where: {
-          id: saved.id,
-        },
-      });
+      const untouched =
+        await tx.product.findUniqueOrThrow({
+          where: {
+            id: saved.id,
+          },
+        });
+
+      await recordCommitEventInTransaction(tx);
+      markCommitBoundary();
+
+      return untouched;
     }
 
-    return sincronizarMelhorOfertaDoProduto(
-      tx,
-      saved.id,
+    const synchronized =
+      await sincronizarMelhorOfertaDoProduto(
+        tx,
+        saved.id,
+        {
+          ofertaIdComDesconto: oferta.id,
+          descontoDaOferta:
+            obterDescontoProduto(product),
+        },
+      );
+
+    await recordCommitEventInTransaction(tx);
+    markCommitBoundary();
+
+    return synchronized;
+    });
+  };
+
+  /*
+   * Read-back pós-commit. SÓ depois que o Prisma confirmou o commit da
+   * transação canônica: antes disso veríamos estado pré-commit e acusaríamos
+   * um falso positivo de paridade. Só para escrita AUTORITATIVA — no legado
+   * não há nada a provar, e o gate nunca deve custar I/O quando não concede.
+   */
+  const observeCommitted = async (
+    saved: Product,
+  ): Promise<LivePostWriteObservation | null> => {
+    if (!liveCtx.authoritative) {
+      return null;
+    }
+
+    return observeLivePostWrite(
+      createPrismaLivePostWriteReader(prisma),
       {
-        ofertaIdComDesconto: oferta.id,
-        descontoDaOferta:
-          obterDescontoProduto(product),
+        marketplace,
+        marketplaceId: liveGateMarketplaceId,
+        externalListingId: externalId,
+        expectedProductId: saved.id,
+        intendedPrice: product.price,
+        // O caminho estrutural grava `oldPrice` exatamente como recebido.
+        intendedOldPrice: product.oldPrice ?? null,
+        intendedStock: product.stock ?? null,
+        // `disponivel` na transação canônica: sem estoque => disponível.
+        intendedAvailable:
+          product.stock === null || product.stock > 0,
       },
     );
-  });
+  };
+
+  /*
+   * Um ÚNICO orquestrador para as duas rotas possíveis. `v1Write` e
+   * `legacyWrite` são a MESMA transação canônica: é exatamente essa
+   * paridade por construção que torna o V1 estruturalmente equivalente ao
+   * caminho legado. O fallback, quando acontece, é a única retentativa
+   * idempotente dessa mesma transação após rollback confirmado.
+   *
+   * A fronteira NUNCA é marcada fora do callback da transação: ela é marcada
+   * com Statements internos, logo antes de cada `return`.
+   */
+  let fallbackSaved: Product | null = null;
+
+  const savedProduct: Product = await runLiveCutoverWrite<Product>({
+    ctx: liveCtx,
+    executor: controlExecutor,
+    v1Write: (mark) =>
+      runCanonicalTransaction("V1_COMMITTED", mark),
+    legacyWrite: async (mark) => {
+      const saved = await runCanonicalTransaction(
+        "FALLBACK_COMMITTED",
+        mark,
+      );
+      fallbackSaved = saved;
+      return saved;
+    },
+    onSuccess: async (result) => {
+      await completeLiveCutoverWrite(liveCtx, {
+        ok: true,
+        executor: controlExecutor,
+        commitPhase: "COMMITTED",
+        observation: await observeCommitted(result),
+      });
+    },
+    onFailure: async (failure) => {
+      /*
+       * Quando o fallback COMMITOU, a transação canônica também está no
+       * disco: a paridade é devida e a escrita do V1 primário é que falhou.
+       * Quando o fallback não commitou, não existe commit para observar e a
+       * fronteira ambígua (se houver) fecha o breaker global.
+       */
+      await completeLiveCutoverWrite(liveCtx, {
+        ok: false,
+        executor: controlExecutor,
+        commitPhase: failure.commitPhase,
+        failureCode: failure.failureCode,
+        observation: fallbackSaved
+          ? await observeCommitted(fallbackSaved)
+          : null,
+        fallbackCommitted: failure.fallbackCommitted,
+        fallbackFailureCode: failure.fallbackFailureCode,
+        fallbackCommitPhase: failure.fallbackCommitPhase,
+      });
+    },
+  }).then((outcome) => outcome.result);
 
   if (options.rawListingContext) {
     try {

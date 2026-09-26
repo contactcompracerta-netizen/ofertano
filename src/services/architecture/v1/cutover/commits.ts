@@ -106,6 +106,19 @@ export function createRealAuthoritativeCommits(
         // hasPublicMultiStore (>=2 marketplaces públicos) — guarda CENTRAL
         // dentro do saveProduct (permitirAtivacaoProdutoAutoCriado).
         // 1 marketplace => produto permanece DRAFT/inativo (AUTO_ACTIVE_LT2=0).
+        //
+        // CATALOG_V1_GLOBAL_CUTOVER — o chamador JÁ detém a autorização do
+        // cutover (orçamento próprio desta execução). Abrir o gate live aqui
+        // faria o MESMO evento.authorização ser adquirido uma segunda vez
+        // dentro do saveProduct: dois slots do orçamento global para uma
+        // listagem, e uma rota de fallback que pode se chamar de novo.
+        // O bypass pula SOMENTE essa segunda aquisição de permissão. Ele não
+        // pula — e não pode pular — validação, identity guards,
+        // PublicationEligibility, PUBLIC_MULTISTORE_MIN_MARKETPLACES,
+        // DRAFT/active=false, PriceHistory nem idempotência: tudo isso é
+        // decidido dentro da transação canônica do saveProduct, antes e
+        // independentemente deste gate. Jamais em tráfego real.
+        __internalSkipLiveCutoverGate: true,
       });
       return { productId: saved.id };
     },
