@@ -118,10 +118,11 @@ Gate forense rodado sobre o ledger REAL de produção (14 linhas):
 | Campo | Valor |
 | --- | --- |
 | Branch | `feat/catalog-v1-live-cutover-control-20260925` (base `6e3fd01`) |
-| Push | `6e3fd01..33751cf` fast-forward em `main` (sem force) + branch nova |
-| `githubCommitSha` | `33751cff9434fbb2b7cd42879b1439420f244a5c` (idêntico ao HEAD local) |
+| Push | `6e3fd01..33751cf` (código) e `..065a506` (relatório + ferramenta de operador) em `main` — ambos fast-forward, sem force |
+| Deploy do canário | `githubCommitSha=33751cff9434fbb2b7cd42879b1439420f244a5c` (código do gate live) |
+| Deploy em serving | `githubCommitSha=065a5060036d9430f0b428b48759f238197d95ca` (idêntico ao HEAD; acrescenta só o relatório e a ferramenta de operador, sem mudança de runtime) |
 | `githubCommitRef` | `main` (integração Git do Vercel) |
-| Estado | READY / production |
+| Estado | READY / production (alias `ofertano.vercel.app` → `oferta**no**-dhu5s6cny`) |
 | LIVE flags | nenhuma env de cutover no projeto de produção (32 env vars auditadas) |
 
 O gate live **não tem env flag**: sem linha de rollout ele é fail-closed para
@@ -198,4 +199,6 @@ npx tsx scripts/live-cutover-control.ts trip --marketplace-id mercado_livre --re
 4. Projetos Vercel de worktree (`commerce-canary-control-plane`,
    `catalog-v1-release`, `catalog-v1-real-shadow-20260924`,
    `oferta**no**-wt-cutover`) acusaram ERROR neste push. Já estavam em ERROR
-   antes do push e não são produção.
+   antes do push e não são produção. O build de PREVIEW do próprio push também
+   falhou em 0 ms (duplo disparo main+branch), mas o build de PRODUCTION foi
+   READY e é o que serve `ofertano.vercel.app`.
