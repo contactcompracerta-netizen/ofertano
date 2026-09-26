@@ -10,17 +10,33 @@ export const commercePending = ['20260917120000_commerce_intelligence_foundation
 // FASE 7.2: a migration do autopilot e ADITIVA (2 enums + 3 tabelas) e entra
 // na MESMA cadeia do cutover, porque o estado do autopilot vive no mesmo plano
 // de controle. Nao muda nenhuma migracao ja aplicada.
-export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', '20260926120000_catalog_cutover_autopilot'];
+export const autopilotPending = ['20260926120000_catalog_cutover_autopilot'];
+export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', ...autopilotPending];
 export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending];
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
 export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending];
-// Estados legítimos de produção para o histórico do catálogo: nada pendente,
-// só o commerce, só o catálogo, tudo, e os dois pontos intermediários do
-// cutover (as duas migrations do plano de controle, e só a segunda delas —
-// que é exatamente o estado de produção enquanto o 20260925120000 já foi
-// aplicado e o 20260925130000 ainda não).
-const pendingAllowlistSets = [[], commercePending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1)];
+/*
+ * Estados legítimos de produção para o histórico do catálogo. Nenhum conjunto
+ * parcial fora desta lista é aceito: o gate continua fail-closed.
+ *
+ *   []                                    nada pendente (produção atual)
+ *   commercePending                       só o commerce
+ *   autopilotPending                      SÓ a migration do autopilot: o
+ *                                         estado real entre o push e o apply
+ *   architecturePending                   só o catálogo inteiro
+ *   commercePending + architecturePending tudo
+ *   cutoverPending                        só as três do plano de cutover
+ *   [cutoverPending[1]]                   o ponto intermediário da FASE 7.1
+ *                                         (120000 aplicada, 130000 pendente)
+ *   architecturePending.slice(0, -1)      o ponto intermediário da FASE 7.1
+ *                                         (só a 130000 aplicada)
+ *
+ * `autopilotPending` e `[]` são os dois estados que a FASE 7.2 realmente produz:
+ * o código está no repositório mas a migration ainda não foi aplicada; depois
+ * do apply, nada pendente de novo. Nenhum outro recorte é aceito.
+ */
+const pendingAllowlistSets = [[], commercePending, autopilotPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1)];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = code => { throw new Error(code); };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

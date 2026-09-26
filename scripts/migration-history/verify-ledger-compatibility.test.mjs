@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending } from './verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, cutoverPending } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
 const clone = () => structuredClone(original);
 const fullPending = [...commercePending, ...architecturePending];
@@ -65,4 +65,33 @@ test('coordinated compatibility and snapshot rewrite cannot redefine forensic pi
 test('baseline applied-step simulation and schema contract drift block',()=>{
  reject(s=>{s.ledger[1].applied_steps_count=0;},'APPLIED_STEPS_DIVERGED');
  const c=loadRepositoryContract();c.schemaChecksum='a'.repeat(64);assert.throws(()=>verifyLedgerCompatibility(clone(),commercePending,c),/REPOSITORY_SCHEMA_CONTRACT_CHANGED/);
+});
+
+// FASE 7.2: os dois estados reais que a aplicação da migration do autopilot
+// produz. Antes do apply só a migration do autopilot está pendente; depois
+// do apply nada está. Qualquer outro recorte parcial continua bloqueado.
+test('autopilot migration alone is the only new legitimate pending set',()=>{
+ const s=clone(),c=loadRepositoryContract();
+ for(const n of [...commercePending,...architecturePending]){
+   if(n===autopilotPending[0]) continue;
+   s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:c.repositoryChecksums[n], applied_steps_count:1 });
+ }
+ const r=verifyLedgerCompatibility(s,autopilotPending,c);
+ assert.deepEqual(r.pending,autopilotPending);
+ assert.equal(r.warnings.length,2);
+ assert.equal(r.ledgerMutation,false);
+ // e, aplicando a ultima, volta a 'nada pendente'
+ s.ledger.push({ ...s.ledger[0], migration_name:autopilotPending[0], checksum:c.repositoryChecksums[autopilotPending[0]], applied_steps_count:1 });
+ assert.deepEqual(verifyLedgerCompatibility(s,[],c).pending,[]);
+});
+test('no invented partial pending set around the autopilot migration',()=>{
+ for(const bogus of [[...autopilotPending,'20260925130000_catalog_cutover_global_control_timestamptz'],['20260926120000_catalog_cutover_autopilot_x'],[...autopilotPending,...commercePending]])
+   assert.throws(()=>verifyLedgerCompatibility(clone(),bogus),/PENDING_ALLOWLIST_REQUIRED/);
+ // A migration do autopilot, se aplicada, tem de trazer o checksum do PIN.
+ const s=clone(),c=loadRepositoryContract();
+ for(const n of [...commercePending,...architecturePending]) s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:n===autopilotPending[0]?'f'.repeat(64):c.repositoryChecksums[n], applied_steps_count:1 });
+ assert.throws(()=>verifyLedgerCompatibility(s,[],c),/UNEXPECTED_CHECKSUM_MISMATCH/);
+ // E com o PIN correto, sem pendentes, o gate passa.
+ s.ledger[s.ledger.length-1].checksum=c.repositoryChecksums[autopilotPending[0]];
+ assert.deepEqual(verifyLedgerCompatibility(s,[],c).pending,[]);
 });
