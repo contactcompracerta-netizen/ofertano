@@ -23,8 +23,22 @@ async function countOf(label: string, run: () => Promise<number>) {
   }
 }
 
+function arg(name: string, fallback = ""): string {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : fallback;
+}
+
 async function main() {
-  const out: Record<string, unknown> = { MODE: "READ_ONLY" };
+  /*
+   * O rotulo da fase deixa o artefato auditavel: rodar o MESMO script antes e
+   * depois produz dois JSONs comparáveis, e qualquer divergência aparece.
+   */
+  const phase = arg("phase", "UNLABELED").toUpperCase();
+  const out: Record<string, unknown> = {
+    MODE: "READ_ONLY",
+    PHASE: phase,
+    SCRIPT: "fase8-snapshot-readonly",
+  };
 
   /* --- FASE A: snapshot de volume ------------------------------------- */
   Object.assign(
@@ -86,12 +100,12 @@ async function main() {
       updatedAt: row.updatedAt,
     }));
     const ml = autopilot.find((row) => row.marketplaceId === "mercado_livre");
-    out.ML_AUTOPILOT_STATE_BEFORE = ml?.state ?? null;
-    out.ML_STAGE_BEFORE = ml?.stage ?? null;
-    out.ML_ENABLED_BEFORE = ml?.enabled ?? null;
-    out.ML_BREAKER_BEFORE = ml?.tripReason ?? null;
-    out.ML_TRIPPED_AT_BEFORE = ml?.trippedAt ?? null;
-    out.ML_LAST_RUN_AT_BEFORE = ml?.lastRunAt ?? null;
+    out[`ML_AUTOPILOT_STATE_${phase}`] = ml?.state ?? null;
+    out[`ML_STAGE_${phase}`] = ml?.stage ?? null;
+    out[`ML_ENABLED_${phase}`] = ml?.enabled ?? null;
+    out[`ML_BREAKER_${phase}`] = ml?.tripReason ?? null;
+    out[`ML_TRIPPED_AT_${phase}`] = ml?.trippedAt ?? null;
+    out[`ML_LAST_RUN_AT_${phase}`] = ml?.lastRunAt ?? null;
 
     /* Teto/uso de escritas vivem no StageMetric por (marketplaceId, stage). */
     const stageMetric = ml
@@ -99,8 +113,8 @@ async function main() {
           where: { marketplaceId: ml.marketplaceId, stage: ml.stage },
         })
       : null;
-    out.ML_MAX_WRITES_BEFORE = stageMetric?.maxWrites ?? null;
-    out.ML_USED_WRITES_BEFORE = stageMetric?.usedWrites ?? null;
+    out[`ML_MAX_WRITES_${phase}`] = stageMetric?.maxWrites ?? null;
+    out[`ML_USED_WRITES_${phase}`] = stageMetric?.usedWrites ?? null;
   } catch (error) {
     out.ML_AUTOPILOT_ERROR = error instanceof Error ? error.name : "UNKNOWN";
   }

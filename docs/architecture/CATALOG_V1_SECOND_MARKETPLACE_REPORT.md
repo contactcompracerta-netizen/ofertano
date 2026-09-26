@@ -241,14 +241,38 @@ Demais: `test:architecture-v1` (21/21 PASS), `test:cutover` (10/10 PASS),
 
 ## 14. FASE Y — deploy
 
-`SECOND_MARKETPLACE_SHADOW_ENABLED=OFF` no primeiro deploy; shadow habilitada
-**somente** na etapa seguinte, com `ARCHITECTURE_V1_SHADOW_MARKETPLACE_IDS=shopee`.
+**Deploy NÃO executado: falta credencial.** O projeto Vercel está ligado
+(`ofertano` / `prj_KcIMFLniTVvZGIGh1OCIkSE8SsND`), mas neste ambiente:
+
+- `VERCEL_TOKEN` = **UNSET**
+- `~/.vercel` (credencial da CLI) = **inexistente**
+- CLI `vercel` não instalada no projeto
+
+Sem token não há como autenticar, e inventar um caminho de deploy seria
+pior que não deployar. O código está **pronto e empurrado** em
+`origin/fase8/second-marketplace-shadow` (`01f5ab3`); basta o merge + as
+variáveis de ambiente.
+
+Sequência prevista (a mesma que o código já suporta):
+
+1. `SECOND_MARKETPLACE_SHADOW_ENABLED=OFF` no primeiro deploy.
+   Confirmar `githubCommitSha`, produção 200, `AUTO_ACTIVE_LT2=0`,
+   autopilot do ML saudável.
+2. Só então `ARCHITECTURE_V1_SHADOW_ENABLED=true` +
+   `ARCHITECTURE_V1_SHADOW_MARKETPLACE_IDS=shopee`.
+
+Produção **não foi tocada** e segue idêntica: probes em `/`, `/robots.txt` e
+`/sitemap.xml` retornam **200**.
 
 ---
 
 ## 15. Bloqueadores
 
-`SECOND_MARKETPLACE_BLOCKER=NONE`
+`SECOND_MARKETPLACE_BLOCKER=NONE` (a integração está completa e validada).
+
+`DEPLOY_BLOCKER=VERCEL_TOKEN_UNAVAILABLE` — bloqueia apenas a FASE Y, e é
+condição de parada prevista: credencial nova a ser fornecida pelo usuário.
+Nada mais ficou pendente.
 
 Limitação conhecida e honesta: a API de afiliados da Shopee **não expõe GTIN**,
 `stock` nem eixos de variante. Por isso a identidade cross-market com o
