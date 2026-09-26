@@ -282,8 +282,51 @@ async function main() {
     flags,
   );
   report.AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES = 0;
-  report.SHOPEE_PUBLIC_OFFERS = 0;
-  report.SHOPEE_PUBLICATION_LEAKS = 0;
+  /*
+   * MEDIDO, NÃO CHUMBADO.
+   *
+   * Uma versão anterior deste script escrevia `SHOPEE_PUBLIC_OFFERS = 0`
+   * como literal. Isso é perigoso: se a shadow vazasse uma oferta pública,
+   * o relatório continuaria dizendo zero. Um verde que não pode ficar
+   * vermelho não é prova nenhuma.
+   *
+   * Aqui a contagem é lida do BANCO (somente SELECT). O canário roda com
+   * repositório em memória, então estruturalmente não escreve nada — mas é
+   * justamente por isso que a verificação tem de vir de fora do processo.
+   */
+  try {
+    const prismaModule = await import("../lib/prisma");
+    const prisma = prismaModule.default;
+    const shopeePublicOffers = await prisma.$queryRaw<Array<{ total: number }>>`
+      SELECT COUNT(*)::int AS total
+        FROM "MarketplaceOffer"
+       WHERE marketplace::text = 'SHOPEE'
+         AND active = true
+         AND available = true
+         AND "matchStatus" = 'EXACT'
+         AND price > 0`;
+    report.SHOPEE_PUBLIC_OFFERS_MEASURED_NOW = shopeePublicOffers[0]?.total ?? null;
+    /*
+     * "Leak" = oferta pública de Shopee que NÃO existia antes da shadow.
+     * O baseline (3 ofertas legadas) foi medido no snapshot BEFORE82.
+     * Qualquer oferta nova criada pela shadow apareceria como delta > 0.
+     */
+    const LEGACY_SHOPEE_PUBLIC_OFFERS_BASELINE = 3;
+    report.SHOPEE_PUBLIC_OFFERS_BASELINE = LEGACY_SHOPEE_PUBLIC_OFFERS_BASELINE;
+    const measuredNow = Number(report.SHOPEE_PUBLIC_OFFERS_MEASURED_NOW ?? 0);
+    report.SHOPEE_PUBLIC_OFFERS_CREATED_BY_SHADOW = Math.max(
+      0,
+      measuredNow - LEGACY_SHOPEE_PUBLIC_OFFERS_BASELINE,
+    );
+    report.SHOPEE_PUBLICATION_LEAKS =
+      report.SHOPEE_PUBLIC_OFFERS_CREATED_BY_SHADOW;
+    await prisma.$disconnect();
+  } catch (error) {
+    report.SHOPEE_PUBLIC_OFFERS_MEASURED_NOW = null;
+    report.SHOPEE_PUBLICATION_LEAKS = null;
+    report.SHOPIE_MEASURE_ERROR =
+      error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN";
+  }
 
   const unique = Number(report.RAW_UNIQUE_LISTINGS_NEW_SOURCE);
   report.SECOND_MARKETPLACE_SHADOW_READY =
