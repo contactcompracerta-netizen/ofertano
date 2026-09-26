@@ -27,6 +27,8 @@ export * from "./runner";
 export * from "./globalControl";
 export * from "./live";
 export * from "./liveParity";
+/* FASE 7.2 — autopilot de progressão 1 -> 5 -> 25 -> 100 (estado no banco). */
+export * from "./autopilot";
 
 import type { LegacyShadowSaveContext } from "../shadow/adapter";
 import type { LegacyPublicationOutcome } from "../shadow/parityEngine";

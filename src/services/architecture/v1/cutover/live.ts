@@ -29,6 +29,8 @@
 
 
 
+import { randomUUID } from "node:crypto";
+
 import type { CutoverBreakerReason } from "./breaker";
 import { SAFE_V1_ERROR_LIMIT } from "./breaker";
 import { allowsLegacyFallbackForCode, classifyV1Failure } from "./classifier";
@@ -192,6 +194,45 @@ export async function beginLiveCutoverWrite(input: {
       outcome.maxWrites ?? rollout?.maxWrites ?? 0,
     );
     metrics.incLiveLegacyOnly(marketplaceId);
+
+    /*
+     * FASE 7.2 — `budgetSkipped` OBSERVÁVEL.
+     *
+     * Esgotar o orçamento é o comportamento SEGURO e esperado do canário: a
+     * listagem segue pelo legado, sem perda e sem double-write. Mas uma
+     * exaustão INVISÍVEL é indistinguível de "nenhum tráfego chegou", e o
+     * autopilot não pode promover um estágio sem saber que o tráfego foi de
+     * fato recusado pelo teto. Por isso a negação por orçamento vira um evento
+     * de ledger.
+     *
+     * Restrições (por que isto é seguro e por que é restrito):
+     *   - SOMENTE `BUDGET_EXHAUSTED`. `ROLLOUT_ABSENT` (não há plano de
+     *     controle), `ROLLOUT_DISABLED`, `MODE_NOT_AUTHORITATIVE` e
+     *     `BREAKER_OPEN` já são visíveis em outras linhas do ledger e não
+     *     gerariam escrita extra no caminho legado;
+     *   - NENHUMA escrita no catálogo: é bookkeeping puro, best-effort, em
+     *     transação própria (`recordGlobalEventSafely` nunca lança). Uma
+     *     falha de I/O aqui NÃO pode derrubar a listagem;
+     *   - o caminho legado continua sendo UMA transação canônica, sem
+     *     marcadores de commit e sem breaker.
+     *
+     * O `executionId` é por TENTATIVA (não por execução autoritativa): uma
+     * negação não tem execução autoritativa, e duas tentativas de escrita da
+     * mesma listing são dois eventos reais distintos.
+     */
+    if (outcome.reason === "BUDGET_EXHAUSTED" && rollout) {
+      await recordGlobalEventSafely(executor, {
+        rolloutId: rollout.id,
+        marketplaceId,
+        executionId: `budgetskip:${randomUUID()}`,
+        kind: "PERMIT_DENIED",
+        reason: "BUDGET_EXHAUSTED",
+        usedWrites: outcome.usedWrites ?? rollout.usedWrites,
+        maxWrites: outcome.maxWrites ?? rollout.maxWrites,
+        externalListingId,
+        metadata: { denyReason: outcome.reason, safeRoute: "LEGACY_ONLY" },
+      });
+    }
 
     // `BUDGET_EXCEEDED` é violação do teto global, não simples exaustão.
     if (outcome.reason === "BUDGET_EXCEEDED" && rollout) {

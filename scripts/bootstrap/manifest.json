@@ -2,7 +2,7 @@
   "version": 3,
   "baselineSourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
   "baselineSchemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
-  "currentSchemaSHA256": "3cfb0937c851c2b0a931cf12ec7e418ad4b8f27be5ade9ec7214abd37b8a80e4",
+  "currentSchemaSHA256": "9428a36b50357f424b7c405a55afffba17d1c6d38fc72db14d1ab0cbeeeec5e4",
   "baselineDDLHash": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
   "baselineMigrations": {
     "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
@@ -20,7 +20,8 @@
     "20260918100000_commerce_canary_control_plane": "602c71cd59d03f1bd4a23e12e3e31f010e8d25c9f510eefa12148164600428f0",
     "20260924080000_catalog_architecture_v1": "5e1ff01571575e22d660cd7a19c5fcc10bb0af8c0a7b5ee66b34f6718c1b1e04",
     "20260925120000_catalog_cutover_global_control": "43693f7ce4ef74d1a3d4e72f2ca784f70dba6009a043a4b77def7b43353b412c",
-    "20260925130000_catalog_cutover_global_control_timestamptz": "fbc149446da6a22b7fea7905e618c95887709e2f7a76c8bf7364d2162e4422f3"
+    "20260925130000_catalog_cutover_global_control_timestamptz": "fbc149446da6a22b7fea7905e618c95887709e2f7a76c8bf7364d2162e4422f3",
+    "20260926120000_catalog_cutover_autopilot": "832f4399ea595c5a1ed0fad15a0d345aa7ae7dab18e8523f5e6e060ac0510778"
   },
   "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain",
   "localCompatibility": {

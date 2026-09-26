@@ -17,7 +17,7 @@
     "postinstall": "prisma generate",
     "test:commerce": "npx tsx src/services/commerce-intelligence/foundation.test.ts",
     "test:architecture-v1": "npx tsx src/services/architecture/v1/hashing.test.ts && npx tsx src/services/architecture/v1/ingestion/pipeline.test.ts && npx tsx src/services/architecture/v1/ingestion/reprocess.test.ts && npx tsx src/services/architecture/v1/ingestion/importRun.test.ts && npx tsx src/services/architecture/v1/freshness.test.ts && npx tsx src/services/architecture/v1/publication/publicationEligibility.test.ts && npx tsx src/services/architecture/v1/observability/outcomeClassifier.test.ts && npx tsx src/services/architecture/v1/catalogProjection.test.ts && npx tsx src/services/architecture/v1/fake/multiMarketplaceContract.test.ts && npx tsx src/services/architecture/v1/extensibility.test.ts && npx tsx src/services/architecture/v1/priceHistoryNoDuplicate.test.ts && npx tsx src/services/architecture/v1/shadow/flags.test.ts && npx tsx src/services/architecture/v1/shadow/adapter.test.ts && npx tsx src/services/architecture/v1/shadow/parityEngine.test.ts && npx tsx src/services/architecture/v1/shadow/shadowProcessor.test.ts && npx tsx src/services/architecture/v1/shadow/runner.test.ts",
-  "test:cutover": "npx tsx src/services/architecture/v1/cutover/flags.test.ts && npx tsx src/services/architecture/v1/cutover/policy.test.ts && npx tsx src/services/architecture/v1/cutover/classifier.test.ts && npx tsx src/services/architecture/v1/cutover/idempotency.test.ts && npx tsx src/services/architecture/v1/cutover/ownership.test.ts && npx tsx src/services/architecture/v1/cutover/writer.test.ts && npx tsx src/services/architecture/v1/cutover/commits.test.ts && npx tsx src/services/architecture/v1/cutover/runner.test.ts && npx tsx src/services/architecture/v1/cutover/live.test.ts",
+  "test:cutover": "npx tsx src/services/architecture/v1/cutover/flags.test.ts && npx tsx src/services/architecture/v1/cutover/policy.test.ts && npx tsx src/services/architecture/v1/cutover/classifier.test.ts && npx tsx src/services/architecture/v1/cutover/idempotency.test.ts && npx tsx src/services/architecture/v1/cutover/ownership.test.ts && npx tsx src/services/architecture/v1/cutover/writer.test.ts && npx tsx src/services/architecture/v1/cutover/commits.test.ts && npx tsx src/services/architecture/v1/cutover/runner.test.ts && npx tsx src/services/architecture/v1/cutover/live.test.ts && npx tsx src/services/architecture/v1/cutover/autopilot.test.ts",
     "test:commerce:shadow": "npx tsx src/services/commerce-intelligence/shadow/shadow.test.ts",
     "test:commerce:shadow:local": "npx tsx src/services/commerce-intelligence/shadow/shadow.integration.test.ts",
     "test:commerce:control-plane": "npm run test:commerce:control-plane:unit && npm run test:commerce:control-plane:integration && npm run test:commerce:control-plane:multiprocess",
@@ -29,7 +29,8 @@
     "test:migration-history:local": "node scripts/bootstrap/migration-history.integration.mjs",
     "test:cutover:global-budget": "npx tsx src/services/architecture/v1/cutover/globalBudget.concurrency.test.ts",
     "test:cutover:live-e2e": "npx tsx src/services/architecture/v1/cutover/live.e2e.test.ts",
-    "test:cutover:global-control": "npm run test:cutover:global-budget && npm run test:cutover:live-e2e"
+    "test:cutover:autopilot": "npx tsx src/services/architecture/v1/cutover/autopilot.concurrency.test.ts",
+    "test:cutover:global-control": "npm run test:cutover:global-budget && npm run test:cutover:live-e2e && npm run test:cutover:autopilot"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

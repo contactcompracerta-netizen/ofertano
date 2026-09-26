@@ -2616,6 +2616,36 @@ export async function saveProduct(
    */
   let pendingCommitKind: CanonicalCommitKind | null = null;
 
+  /*
+   * FASE 7.2 — RASTRO DA ESCRITA (observação, nunca autorização).
+   *
+   * O taxonomy de caminho (NOOP / OFFER_ONLY / STRUCTURAL) do writer V1 é
+   * baseado em hash, e o caminho live NÃO calcula hash: ele entra pelo
+   * saveProduct canônico. Inventar um hash aqui custaria CPU no caminho
+   * quente e mentiria sobre o que foi lido. Então o rastro usa apenas fatos
+   * JÁ disponíveis dentro da transação canônica:
+   *
+   *   produtoCriadoAgora  => Product novo: o matching pesado de identidade
+   *                          rodou de fato (STRUCTURAL).
+   *   ofertaExistiaAntes  => sem Product novo e com oferta já existente:
+   *                          só o estado comercial da oferta foi reconciliado
+   *                          (OFFER_ONLY), e, se o preço nem mudou, nada
+   *                          observável mudou (NOOP).
+   *   nenhum dos dois      => oferta criada sob Product existente: nem
+   *                          STRUCTURAL nem OFFER_ONLY (UNKNOWN).
+   *
+   * É OBSERVAÇÃO: não muda uma linha do catálogo, não participa de nenhuma
+   * decisão de publicação e não abre nem fecha nada. Serve para o autopilot
+   * distinguir EXECUÇÕES de AMOSTRAS REAIS DISTINTAS (FASE L/M).
+   */
+  let pendingWriteTrace: {
+    writePath: "STRUCTURAL" | "OFFER_ONLY" | "NOOP" | "UNKNOWN";
+    productId: string;
+    offerId: string;
+    seller: string | null;
+    priceChanged: boolean;
+  } | null = null;
+
   const recordCommitEventInTransaction = async (
     tx: Prisma.TransactionClient,
   ): Promise<void> => {
@@ -2640,6 +2670,20 @@ export async function saveProduct(
       metadata: {
         commitPhase: "COMMITTED",
         marketplace: liveGateMarketplaceId,
+        // Observação do caminho da escrita (FASE 7.2). `null` quando o rastro
+        // não pôde ser montado: o marcador continua válido, só não afirma
+        // nada sobre o caminho.
+        ...(pendingWriteTrace === null
+          ? {}
+          : {
+              writePath: pendingWriteTrace.writePath,
+              productId: pendingWriteTrace.productId,
+              offerId: pendingWriteTrace.offerId,
+              seller: pendingWriteTrace.seller,
+              // FASE M: um OFFER_ONLY com `priceChanged=true` DEVE ter
+              // exatamente 1 entrada nova de PriceHistory; com false, nenhuma.
+              priceChanged: pendingWriteTrace.priceChanged,
+            }),
       },
     };
 
@@ -2690,6 +2734,10 @@ export async function saveProduct(
             },
           })
         : null;
+
+    // FASE 7.2: factual do COMEÇO da transação canônica. Depois do trecho de
+    // reanexação `ofertaPeloCodigo` pode virar null e a informação se perde.
+    const ofertaExistiaAntesDaTransacao = ofertaPeloCodigo !== null;
 
     const decisaoAlvo = decidirAlvoDaOferta({
       targetProductId: options.targetProductId,
@@ -3402,6 +3450,30 @@ export async function saveProduct(
         },
       });
     }
+
+    /*
+     * FASE 7.2: fecha o rastro de observação antes de qualquer um dos três
+     * retornos que gravam o marcador durável. É o último ponto em que
+     * `produtoCriadoAgora`, `mudouPreco`, `saved` e `oferta` estão todos no
+     * escopo — e antes de `markCommitBoundary()`, que é a fronteira de
+     * commit. Nada aqui escreve no catálogo.
+     */
+    pendingWriteTrace = {
+      writePath: produtoCriadoAgora
+        ? "STRUCTURAL"
+        : ofertaExistiaAntesDaTransacao
+          ? mudouPreco
+            ? "OFFER_ONLY"
+            : "NOOP"
+          : "UNKNOWN",
+      productId: saved.id,
+      offerId: oferta.id,
+      seller:
+        typeof product.seller === "string" && product.seller.trim() !== ""
+          ? product.seller
+          : null,
+      priceChanged: mudouPreco,
+    };
 
     /*
      * PUBLICACAO CONTROLADA MULTI LOJA

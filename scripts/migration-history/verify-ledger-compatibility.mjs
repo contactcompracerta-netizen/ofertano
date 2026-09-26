@@ -7,7 +7,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const commercePending = ['20260917120000_commerce_intelligence_foundation', '20260918100000_commerce_canary_control_plane'];
 // CATALOG_ARCHITECTURE_V1 (aditivo): nova migration forward canônica.
-export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz'];
+// FASE 7.2: a migration do autopilot e ADITIVA (2 enums + 3 tabelas) e entra
+// na MESMA cadeia do cutover, porque o estado do autopilot vive no mesmo plano
+// de controle. Nao muda nenhuma migracao ja aplicada.
+export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', '20260926120000_catalog_cutover_autopilot'];
 export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending];
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];

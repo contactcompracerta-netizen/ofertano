@@ -1,16 +1,18 @@
 /**
- * CATALOG_ARCHITECTURE_V1 — FASE 7.1: CONTROLE DO PLANO GLOBAL (operador).
+ * CATALOG_ARCHITECTURE_V1 — FASE 7.1/7.2: CONTROLE DO PLANO GLOBAL (operador).
  *
  * Ferramenta de operador para o gate live. É o ÚNICO caminho previsto para
  * armar, inspecionar, abrir e fechar o breaker global — e ela usa exatamente
- * as funções auditadas de `globalControl.ts`, nunca SQL próprio.
+ * as funções auditadas de `globalControl.ts`/`autopilot.ts`, nunca SQL próprio.
  *
  * O que ela NÃO faz:
  *   - não escreve no catálogo (nunca toca Product/Offer/PriceHistory);
  *   - não corta tráfego: armar é o ato explícito que AUTORIZA o V1 a ser o
  *     writer autoritativo daquele marketplaceId, com teto de escritas;
  *   - não dá deploy: o breaker fecha sem novo deploy porque o estado vive
- *     no banco e é lido em TODA aquisição de permissão.
+ *     no banco e é lido em TODA aquisição de permissão;
+ *   - não promove degrau: `arm --max-writes` é sempre um ato MANUAL. Quem
+ *     promove sozinho é o autopilot, e só com evidência real.
  *
  * INVARIANTES (não configuráveis aqui):
  *   - a configuração é por `marketplaceId`; este script não tem nenhuma regra
@@ -19,20 +21,39 @@
  *     tocados: o gate decide ATRIBUIÇÃO e ROTA, nunca publicação;
  *   - `CATALOG_V1_GLOBAL_CUTOVER` continua NO: existe rollback, não cutover.
  *
- * Trava dura: sem `--yes`, nada é escrito. `status` é sempre read-only.
+ * Trava dura: sem `--yes`, nada é escrito. `status`, `autopilot-status` e
+ * `history` são sempre read-only.
  *
  * Uso:
  *   npx tsx scripts/live-cutover-control.ts status
+ *   npx tsx scripts/live-cutover-control.ts autopilot-status
+ *   npx tsx scripts/live-cutover-control.ts history --marketplace-id mercado_livre
  *   npx tsx scripts/live-cutover-control.ts arm --marketplace-id mercado_livre \
  *     --mode V1_PRIMARY_WITH_LEGACY_FALLBACK --max-writes 1 --yes
  *   npx tsx scripts/live-cutover-control.ts trip  --marketplace-id mercado_livre \
  *     --reason V1_ERRORS_ABOVE_LIMIT --yes
  *   npx tsx scripts/live-cutover-control.ts close --marketplace-id mercado_livre --yes
+ *   npx tsx scripts/live-cutover-control.ts pause   --marketplace-id mercado_livre --yes
+ *   npx tsx scripts/live-cutover-control.ts resume  --marketplace-id mercado_livre --yes
+ *   npx tsx scripts/live-cutover-control.ts autopilot-run --marketplace-id mercado_livre --yes
  */
 import "dotenv/config";
 
 import { Client } from "pg";
 
+import {
+  applyOperatorAction,
+  AUTOPILOT_LADDER,
+  AUTOPILOT_MAX_EVIDENCE_COMMITS,
+  AUTOPILOT_MIN_DISTINCT_LISTINGS,
+  readAutopilot,
+  requiredDistinctListings,
+  requiredEvidenceCommits,
+  runAutopilotCycle,
+  type AutopilotRow,
+  type PublicationAudit,
+  type StageMetrics,
+} from "@/services/architecture/v1/cutover/autopilot";
 import {
   armGlobalRollout,
   readGlobalRollout,
@@ -138,6 +159,7 @@ async function printStatus(executor: Executor): Promise<void> {
   for (const { marketplaceId } of rollouts) {
     console.log(`--- ${marketplaceId} ---`);
     show(await readGlobalRollout(executor, marketplaceId));
+    showAutopilot(await readAutopilot(executor, marketplaceId));
   }
   if (rollouts.length === 0) {
     console.log("  (nenhum) => todo marketplace esta em LEGACY_ONLY");
@@ -151,6 +173,155 @@ async function printStatus(executor: Executor): Promise<void> {
   console.log("eventos:", JSON.stringify(totals));
 }
 
+function showAutopilot(row: AutopilotRow | null): void {
+  if (row === null) {
+    console.log("  autopilot: (nenhum) => progressão automática desligada");
+    return;
+  }
+  console.log(
+    JSON.stringify(
+      {
+        autopilot: {
+          state: row.state,
+          stage: row.stage,
+          enabled: row.enabled,
+          version: row.version,
+          cooldownUntil: row.cooldownUntil.toISOString(),
+          minObservationMs: row.minObservationMs,
+          stageStartedAt: row.stageStartedAt.toISOString(),
+          lastRunAt: row.lastRunAt?.toISOString() ?? null,
+          lastDecision: row.lastDecision,
+          lastReason: row.lastReason,
+          tripReason: row.tripReason,
+          completedAt: row.completedAt?.toISOString() ?? null,
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+/** FASE 7.2: estado da escada + o que ainda falta para o próximo degrau. */
+async function printAutopilotStatus(executor: Executor): Promise<void> {
+  const rollouts = (
+    await executor.query<{ "marketplaceId": string }>(
+      'SELECT "marketplaceId" FROM "CatalogCutoverRollout" ORDER BY "marketplaceId"',
+    )
+  ).rows;
+
+  console.log(
+    JSON.stringify(
+      {
+        escada: AUTOPILOT_LADDER,
+        tetoMaxWrites: AUTOPILOT_LADDER[AUTOPILOT_LADDER.length - 1],
+        pisoListingsDistintas: AUTOPILOT_MIN_DISTINCT_LISTINGS,
+        maxEvidenciaCommits: AUTOPILOT_MAX_EVIDENCE_COMMITS,
+        catalogV1GlobalCutover: "NO",
+      },
+      null,
+      2,
+    ),
+  );
+
+  for (const { marketplaceId } of rollouts) {
+    const row = await readAutopilot(executor, marketplaceId);
+    const rollout = await readGlobalRollout(executor, marketplaceId);
+    console.log(`--- ${marketplaceId} ---`);
+    showAutopilot(row);
+    if (row === null) {
+      continue;
+    }
+    const metrics = (
+      await executor.query<Record<string, unknown>>(
+        `SELECT * FROM "CatalogCutoverStageMetric" WHERE "marketplaceId" = $1 ORDER BY "stage"`,
+        [marketplaceId],
+      )
+    ).rows;
+    console.log(
+      "  evidenciaPorEstagio:",
+      JSON.stringify(
+        metrics.map((m) => {
+          const out: Record<string, unknown> = { stage: m.stage };
+          for (const key of [
+            "startedAt",
+            "completedAt",
+            "maxWrites",
+            "usedWrites",
+            "v1Attempts",
+            "v1Committed",
+            "v1Noop",
+            "fallbackUsed",
+            "budgetSkipped",
+            "doubleWrites",
+            "duplicates",
+            "parityMatches",
+            "parityDifferences",
+            "publicationViolations",
+            "policyBlocked",
+            "systemErrors",
+            "breakerTrips",
+            "pathStructural",
+            "pathOfferOnly",
+            "pathUnknown",
+            "uniqueExternalListings",
+            "uniqueProducts",
+            "uniqueSellers",
+            "fastOfferReviewPending",
+          ]) {
+            out[key] = m[key] instanceof Date ? m[key].toISOString() : m[key];
+          }
+          return out;
+        }),
+        null,
+        2,
+      ),
+    );
+    console.log(
+      "  proximoDegrau:",
+      JSON.stringify({
+        requiredDistinctListings: requiredDistinctListings(row.stage),
+        requiredEvidenceCommits: requiredEvidenceCommits(row.stage),
+        tetoDoRollout: rollout?.maxWrites ?? null,
+      }),
+    );
+  }
+}
+
+/** FASE 7.2: histórico append-only das decisões do controlador. */
+async function printHistory(executor: Executor, marketplaceId: string): Promise<void> {
+  const runs = (
+    await executor.query<Record<string, unknown>>(
+      `SELECT "createdAt", "stateBefore"::text, "stateAfter"::text, "decision"::text,
+              "stageBefore", "stageAfter", "maxWrites", "usedWrites",
+              "versionBefore", "versionAfter", "promoted", "reason", "blockers",
+              "executionId", "metrics"
+         FROM "CatalogCutoverAutopilotRun"
+        WHERE "marketplaceId" = $1
+        ORDER BY "createdAt" DESC
+        LIMIT 50`,
+      [marketplaceId],
+    )
+  ).rows;
+
+  console.log(`historico: ${runs.length} execucao(oes) mais recente(s)`);
+  for (const run of runs) {
+    const createdAt = run.createdAt instanceof Date ? run.createdAt : null;
+    console.log(
+      `  ${createdAt === null ? "?" : createdAt.toISOString()} ` +
+        `${String(run.stateBefore)} -> ${String(run.stateAfter)} ` +
+        `[${String(run.decision)}] ` +
+        `stage ${String(run.stageBefore)}->${String(run.stageAfter)} ` +
+        `maxWrites=${String(run.maxWrites)} usedWrites=${String(run.usedWrites)} ` +
+        `v=${String(run.versionBefore)}->${String(run.versionAfter)} ` +
+        `promoted=${String(run.promoted)} :: ${String(run.reason ?? "")}`,
+    );
+    if (run.blockers !== null && run.blockers !== undefined) {
+      console.log(`      blockers: ${JSON.stringify(run.blockers)}`);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const { sub, args } = parse(process.argv.slice(2));
   const url = controlUrl();
@@ -162,9 +333,88 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (sub === "autopilot-status") {
+      await printAutopilotStatus(executor);
+      return;
+    }
+
+    if (sub === "history") {
+      const marketplaceId = String(args["marketplace-id"] ?? "");
+      if (marketplaceId === "") {
+        throw new Error("USAGE: history --marketplace-id <id>");
+      }
+      await printHistory(executor, marketplaceId);
+      return;
+    }
+
     if (args.yes !== true) {
       console.error("ABORTADO: escrita exige --yes. (Use `status` para leitura.)");
       process.exitCode = 1;
+      return;
+    }
+
+    if (sub === "pause" || sub === "resume") {
+      const marketplaceId = String(args["marketplace-id"] ?? "");
+      if (marketplaceId === "") {
+        throw new Error(
+          `USAGE: ${sub} --marketplace-id <id> --yes`,
+        );
+      }
+      const before = await readAutopilot(executor, marketplaceId);
+      showAutopilot(before);
+      showAutopilot(
+        await applyOperatorAction(executor, {
+          marketplaceId,
+          action: sub,
+          reason: typeof args.reason === "string" ? args.reason : null,
+        }),
+      );
+      return;
+    }
+
+    /*
+     * FASE 7.2 — ciclo manual do controlador. É o MESMO código do cron
+     * (nenhum caminho paralelo): ele existe para o operador forçar uma
+     * avaliação sob demanda. Sem evidência real, ele só registra WAIT.
+     */
+    if (sub === "autopilot-run") {
+      const marketplaceId = String(args["marketplace-id"] ?? "");
+      if (marketplaceId === "") {
+        throw new Error("USAGE: autopilot-run --marketplace-id <id> --yes");
+      }
+      const dryRun = args["dry-run"] === true;
+      const audit: () => Promise<PublicationAudit> = async () => ({
+        scanned: 0,
+        violations: 0,
+      });
+      const result = await runAutopilotCycle({
+        executor,
+        marketplaceId,
+        enabled: !dryRun,
+        allowMutations: !dryRun,
+        publicationAudit: audit,
+      });
+      console.log(
+        JSON.stringify(
+          {
+            marketplaceId: result.marketplaceId,
+            state: result.state,
+            stage: result.stage,
+            decision: result.decision.kind,
+            reason: result.decision.reason,
+            blockers: result.decision.blockers,
+            promoted: result.promoted,
+            tripped: result.tripped,
+            lostRace: result.lostRace,
+            budgetReconciled: result.budgetReconciled,
+            rollout: result.rollout,
+            skippedReason: result.skippedReason,
+            metrics: result.metrics as StageMetrics,
+          },
+          null,
+          2,
+        ),
+      );
       return;
     }
 

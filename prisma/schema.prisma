@@ -1178,3 +1178,141 @@ model CatalogCutoverEvent {
   // o schema.prisma corresponda exatamente ao banco.
   @@index([rolloutId, kind, createdAt])
 }
+
+// CATALOG_ARCHITECTURE_V1 — FASE 7.2: AUTOPILOT DE PROGRESSÃO (1 -> 5 -> 25 -> 100).
+//
+// O estado da progressão é PERSISTIDO porque o objetivo é progredir sem
+// operador presente: o processo que observa o tráfego real em Vercel é
+// destruído a cada requisição e pode existir em N instâncias simultâneas.
+// `version` é o versionamento otimista que torna a transição de estado um
+// compare-and-swap: `WHERE "version" = $lido` faz o perdedor de uma corrida
+// afetar ZERO linhas e abortar sem promover.
+enum CatalogCutoverAutopilotState {
+  WAITING_1
+  VALIDATING_1
+  WAITING_5
+  VALIDATING_5
+  WAITING_25
+  VALIDATING_25
+  WAITING_100
+  VALIDATING_100
+  COMPLETED
+  PAUSED
+  TRIPPED
+}
+
+enum CatalogCutoverAutopilotDecision {
+  INIT
+  NOOP
+  WAIT
+  PROMOTE
+  TRIP
+  PAUSE
+  RESUME
+}
+
+/// Uma linha por marketplaceId canônico do registry V1. Sem linha "todos os
+/// marketplaces": CATALOG_V1_GLOBAL_CUTOVER=NO.
+model CatalogCutoverAutopilot {
+  id            String                        @id @default(cuid())
+  marketplaceId String                        @unique
+  state         CatalogCutoverAutopilotState  @default(WAITING_1)
+  /// Teto de escritas do estágio atual (1 | 5 | 25 | 100). 100 é TETO.
+  stage         Int                           @default(1)
+  /// Interruptor DURÁVEL do operador (só `applyOperatorAction` o muda).
+  /// O interruptor de IMPLANTAÇÃO é `AUTOPILOT_ENABLED`, lido a cada execução
+  /// e NUNCA persistido — por isso o default é true: o primeiro deploy é feito
+  /// com OFF e, se o OFF fosse gravado aqui, o autopilot morreria para sempre
+  /// depois do ON. Fail-safe = env desligado OU operador desligou.
+  enabled       Boolean                       @default(true)
+  /// Cooldown PERSISTENTE: a promoção exige tempo mínimo E evidência real.
+  cooldownUntil DateTime                      @db.Timestamptz(3)
+  /// 24h: cobre um ciclo diário de tráfego orgânico do Mercado Livre (burst
+  /// ~06:10 UTC). É o PISO de observação, não um alvo de calendário.
+  minObservationMs Int                         @default(86400000)
+  version       Int                           @default(0)
+  stageStartedAt DateTime                     @db.Timestamptz(3)
+
+  lastRunAt    DateTime?                      @db.Timestamptz(3)
+  lastDecision CatalogCutoverAutopilotDecision?
+  lastReason   String?
+  tripReason   String?
+  trippedAt    DateTime?                      @db.Timestamptz(3)
+  completedAt  DateTime?                      @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([state, cooldownUntil])
+}
+
+/// Log append-only de UMA execução do controlador: decisão, blockers e a
+/// evidência completa que a justificou. `executionId` único torna a
+/// reexecução idempotente.
+model CatalogCutoverAutopilotRun {
+  id            String                         @id @default(cuid())
+  marketplaceId String
+  stateBefore   CatalogCutoverAutopilotState?
+  stateAfter    CatalogCutoverAutopilotState?
+  decision      CatalogCutoverAutopilotDecision
+  stageBefore   Int?
+  stageAfter    Int?
+  maxWrites     Int?
+  usedWrites    Int?
+  versionBefore Int?
+  versionAfter  Int?
+  promoted      Boolean                        @default(false)
+  executionId   String                         @unique
+  reason        String?
+  blockers      Json?
+  evidence      Json?
+  metrics       Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([marketplaceId, createdAt])
+  @@index([promoted, decision])
+}
+
+/// Agregado por estágio (FASE K), RECALCULADO do ledger append-only e gravado
+/// por UPSERT (marketplaceId, stage): é derivado, logo não pode divergir.
+model CatalogCutoverStageMetric {
+  id            String @id @default(cuid())
+  marketplaceId String
+  stage         Int
+
+  startedAt   DateTime? @db.Timestamptz(3)
+  completedAt DateTime? @db.Timestamptz(3)
+  maxWrites   Int?
+  usedWrites  Int       @default(0)
+
+  v1Attempts            Int @default(0)
+  v1Committed           Int @default(0)
+  v1Noop                Int @default(0)
+  fallbackUsed          Int @default(0)
+  budgetSkipped         Int @default(0)
+  doubleWrites          Int @default(0)
+  duplicates            Int @default(0)
+  parityMatches         Int @default(0)
+  parityDifferences     Int @default(0)
+  publicationViolations Int @default(0)
+  policyBlocked         Int @default(0)
+  systemErrors          Int @default(0)
+  breakerTrips          Int @default(0)
+
+  pathStructural Int @default(0)
+  pathOfferOnly  Int @default(0)
+  pathUnknown    Int @default(0)
+
+  /// Amostras REAIS distintas (FASE L): 100 replays da mesma listing não contam.
+  uniqueExternalListings Int @default(0)
+  uniqueProducts         Int @default(0)
+  uniqueSellers          Int @default(0)
+  fastOfferReviewPending Int @default(0)
+
+  metadata  Json?
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([marketplaceId, stage])
+}
