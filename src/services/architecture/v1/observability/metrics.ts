@@ -20,6 +20,23 @@ export const CATALOG_METRIC_NAMES = [
   "publication_blocked_total",
   "raw_reprocess_total",
   "duplicate_prevented_total",
+
+  /*
+   * FASE 8 (SEGUNDO MARKETPLACE) — métricas aditivas, por marketplaceId.
+   * Nenhuma delas é regra: existem para responder "o conector da segunda fonte
+   * está saudável?" e "o shadow está vazando publicação?".
+   */
+  "connector_collect_total",
+  "connector_collect_failed_total",
+  "normalized_listing_total",
+  "raw_write_total",
+  "hash_noop_total",
+  "hash_offer_only_total",
+  "hash_structural_total",
+  "identity_reject_total",
+  "cross_market_match_total",
+  "hard_conflict_total",
+  "shadow_publication_excluded_total",
 ] as const;
 
 export type CatalogMetricName = (typeof CATALOG_METRIC_NAMES)[number];

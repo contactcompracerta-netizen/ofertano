@@ -22,7 +22,6 @@
 
 import {
   PUBLIC_MULTISTORE_MIN_MARKETPLACES,
-  countDistinctPublicMarketplaces,
   isUsablePublicOffer,
 } from "../../../publicVisibility/multiStoreVisibility";
 import type { PublicOfferLike } from "../../../publicVisibility/multiStoreVisibility";
@@ -31,6 +30,8 @@ import {
   classifyFreshness,
 } from "../freshness";
 import type { FreshnessStateV1, FreshnessTimestampsV1 } from "../freshness";
+import { countPublicMarketplacesWithWeight } from "./shadowWeight";
+import type { ShadowFlags } from "../shadow/flags";
 
 export type IdentityStatusEvidenceV1 = "EXACT" | "NON_EXACT" | "UNKNOWN";
 export type FreshnessEvidenceV1 = FreshnessStateV1 | "UNKNOWN";
@@ -51,6 +52,12 @@ export interface PublicationEligibilityInputV1 {
   /** Quando fornecidos, aplica o contrato de frescor (FASE L). */
   freshnessTimestamps?: FreshnessTimestampsV1;
   identityStatusOverride?: IdentityStatusEvidenceV1;
+  /**
+   * FASE J: flags da shadow usadas para pesar cada marketplace. Quando
+   * omitidas, sao lidas do ambiente (fail-closed). Uma oferta de fonte SHADOW
+   * NUNCA entra em publicMarketplaceCount.
+   */
+  shadowFlags?: ShadowFlags;
 }
 
 export interface PublicationEligibilityVerdictV1 {
@@ -96,7 +103,10 @@ export function evaluatePublicationEligibility(
       eligible: true,
       reasonCodes: [PUBLICATION_REASON_CODES.MANUAL_PRODUCT],
       evidence: {
-        publicMarketplaceCount: countDistinctPublicMarketplaces(offers),
+        publicMarketplaceCount: countPublicMarketplacesWithWeight(
+          offers,
+          input.shadowFlags,
+        ),
         validOfferCount: offers.filter(isUsablePublicOffer).length,
         identityStatus: deriveIdentityStatus(offers),
         freshness: "UNKNOWN",
@@ -108,9 +118,16 @@ export function evaluatePublicationEligibility(
   }
 
   const validOffers = offers.filter(isUsablePublicOffer);
-  const publicMarketplaceCount = new Set(
-    validOffers.map((o) => o.marketplace.trim()).filter(Boolean),
-  ).size;
+  /*
+   * FASE J — a contagem publica PESA cada marketplace. Uma oferta de fonte
+   * SHADOW conta como oferta valida para o produto, mas NAO aumenta
+   * publicMarketplaceCount. Sem esta linha, Mercado Livre + Shopee SHADOW
+   * virariam "2 marketplaces" e publicariam um produto single-store.
+   */
+  const publicMarketplaceCount = countPublicMarketplacesWithWeight(
+    validOffers,
+    input.shadowFlags,
+  );
 
   const identityStatus =
     identityStatusOverride ?? deriveIdentityStatus(offers);

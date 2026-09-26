@@ -1,6 +1,13 @@
 import type { Prisma } from "@prisma/client";
 
 /*
+ * FASE J — peso de publicação por fonte (ver architecture/v1/publication/shadowWeight).
+ * O import é seguro: shadowWeight só depende de módulos folha (registry/flags),
+ * então não há ciclo com este arquivo.
+ */
+import { filterPublicOffers } from "@/services/architecture/v1/publication/shadowWeight";
+
+/*
  * VISIBILIDADE PÚBLICA — MULTI LOJA REAL
  *
  * Regra única de visibilidade pública de produtos do Ofertano:
@@ -70,6 +77,37 @@ export function countDistinctPublicMarketplaces(
   ).size;
 }
 
+/*
+ * CATALOG_ARCHITECTURE_V1 — FASE J (peso de publicação por fonte).
+ *
+ * O funil público (Home, produto, sitemap, favoritos, categorias) é o
+ * ÚNICO lugar que decide se um produto é multi-loja. Ele precisa respeitar o
+ * peso de cada fonte: uma oferta de marketplace SHADOW não pode transformar
+ * 1 marketplace público em 2.
+ *
+ * A regra é genérica e vem da CONFIGURAÇÃO (allowlist da shadow), nunca de
+ * um `if marketplace === "..."`. Um marketplace novo entra ou sai da shadow
+ * sem alterar este arquivo.
+ */
+function publicOffersOnly(
+  offers: PublicOfferLike[],
+): PublicOfferLike[] {
+  return filterPublicOffers(offers);
+}
+
+// Conta marketplaces DISTINTOS que PESAM na publicação pública (FASE J).
+// Fonte SHADOW é excluída da contagem, mas a oferta em si continua válida.
+export function countPublicMarketplaces(
+  offers: PublicOfferLike[],
+): number {
+  return new Set(
+    publicOffersOnly(offers)
+      .filter(isUsablePublicOffer)
+      .map((offer) => offer.marketplace.trim())
+      .filter(Boolean),
+  ).size;
+}
+
 // Aceita um Product com `offers` já carregado ou uma lista crua de ofertas.
 export function hasPublicMultiStore(
   offers: PublicOfferLike[] | {
@@ -78,7 +116,7 @@ export function hasPublicMultiStore(
 ): boolean {
   const lista = Array.isArray(offers) ? offers : (offers.offers ?? []);
   return (
-    countDistinctPublicMarketplaces(lista) >=
+    countPublicMarketplaces(lista) >=
     PUBLIC_MULTISTORE_MIN_MARKETPLACES
   );
 }

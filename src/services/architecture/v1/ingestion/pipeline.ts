@@ -83,6 +83,7 @@ export async function processNormalizedListing(
   );
 
   ctx.metrics.inc("ingestion_received_total", { marketplaceId: listing.marketplaceId });
+  ctx.metrics.inc("normalized_listing_total", { marketplaceId: listing.marketplaceId });
 
   const hashes = computeHashPair(listing, rawPayload, brandFallback);
 
@@ -105,6 +106,10 @@ export async function processNormalizedListing(
       ctx.metrics.inc("catalog_hash_changed_total", {
         marketplaceId: listing.marketplaceId,
       });
+      ctx.metrics.inc("hash_structural_total", { marketplaceId: listing.marketplaceId });
+      if (upsert.created) {
+        ctx.metrics.inc("raw_write_total", { marketplaceId: listing.marketplaceId });
+      }
       ctx.metrics.inc(
         upsert.created ? "ingestion_changed_total" : "ingestion_noop_total",
         { marketplaceId: listing.marketplaceId },
@@ -123,6 +128,11 @@ export async function processNormalizedListing(
       ctx.metrics.inc("offer_hash_changed_total", {
         marketplaceId: listing.marketplaceId,
       });
+      /*
+       * FASE O: OFFER_ONLY nao roda matching pesado. O canario mede que o
+       * preco sozinho nao dispara trabalho estrutural.
+       */
+      ctx.metrics.inc("hash_offer_only_total", { marketplaceId: listing.marketplaceId });
       ctx.metrics.inc("ingestion_changed_total", { marketplaceId: listing.marketplaceId });
       if (ctx.onOfferOnly) {
         await ctx.onOfferOnly({
@@ -135,6 +145,7 @@ export async function processNormalizedListing(
     }
     case "NOOP": {
       ctx.metrics.inc("ingestion_noop_total", { marketplaceId: listing.marketplaceId });
+      ctx.metrics.inc("hash_noop_total", { marketplaceId: listing.marketplaceId });
       ctx.metrics.inc("duplicate_prevented_total", {
         marketplaceId: listing.marketplaceId,
       });
