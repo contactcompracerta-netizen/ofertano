@@ -11,7 +11,8 @@
 ```
 FASE_7_2_STATUS=DEPLOYED + ARMED (degrau 1, cooldown de 24h em curso)
 BASE_SHA=a132fdc10c9fed0f44d9375ac4c56027d0d98cff
-FINAL_SHA=c2d5c13afbc3d4e92c3a5e298b69ae7aa74bf637
+FINAL_SHA=<HEAD> (o commit deste relatório; ver "Deploy")
+RUNTIME_SHA=c2d5c13afbc3d4e92c3a5e298b69ae7aa74bf637
 PRODUCTION_SHA=c2d5c13afbc3d4e92c3a5e298b69ae7aa74bf637
 AUTOPILOT_ENABLED=ON (Production; só mercado_livre)
 CURRENT_STAGE=WAITING_1
@@ -36,6 +37,15 @@ PUBLICATION_GATE_PRESERVED=PASS
 escada está implementada e provada contra o banco, com as quatro promoções
 contadas exatamente. **Não** significa que a escada já terminou em produção — ver
 a seção "A escada em produção leva ~9 dias, por projeto".
+
+> **Sobre `FINAL_SHA` e `PRODUCTION_SHA`.** `RUNTIME_SHA`/`PRODUCTION_SHA` são o
+> SHA do **código de runtime**, e é o que importa: `c2d5c13` é o último commit que
+> muda uma linha de comportamento. O commit que acrescenta este relatório é
+> **docs-only** (um arquivo em `docs/architecture/`, zero linhas de runtime), e
+> o bundle servido é idêntico. `FINAL_SHA` fica como `<HEAD>` de propósito: um
+> arquivo não pode conter o SHA do commit que o contém, e escrever um SHA
+> literal ali seria mentir na primeira edição e ficar errado em todas as
+> seguintes.
 
 ## O que o autopilot é
 
@@ -369,8 +379,9 @@ checksum do repositório.
 | Campo | Valor |
 | --- | --- |
 | Branch | `main` |
-| Push | `a132fdc..c2d5c13`, 5 commits, todos fast-forward, **sem force** |
-| `githubCommitSha` em produção | `c2d5c13afbc3d4e92c3a5e298b69ae7aa74bf637` (build Git, READY) |
+| Push | `a132fdc..HEAD`, 6 commits, todos fast-forward, **sem force** |
+| `RUNTIME_SHA` (última mudança de runtime) | `c2d5c13afbc3d4e92c3a5e298b69ae7aa74bf637` |
+| `githubCommitSha` em produção | `c2d5c13…` (build Git READY; o commit do relatório é docs-only e não muda o bundle) |
 | `githubCommitRef` | `main` |
 | Estado | READY / production, alias `ofertano.vercel.app` (deploy da CLI `ofertano-msng4twtb`) |
 | `AUTOPILOT_ENABLED` | `OFF` → confirmado → `ON` (Production) |
