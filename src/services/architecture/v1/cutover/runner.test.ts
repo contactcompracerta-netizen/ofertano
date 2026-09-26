@@ -20,7 +20,11 @@ import {
   type AuthoritativeCanaryResultV1,
 } from "./runner";
 import { readAuthoritativeFlags, type AuthoritativeFlags } from "./flags";
-import { getCutoverMetrics, resetCutoverMetrics } from "./metrics";
+import {
+  emptyCutoverCounters,
+  getCutoverMetrics,
+  resetCutoverMetrics,
+} from "./metrics";
 import { getCutoverBreaker, resetCutoverBreaker } from "./breaker";
 import {
   createInMemoryImportRunRepository,
@@ -431,15 +435,10 @@ async function main(): Promise<void> {
         metrics: {
           byMarketplace: {
             mercado_livre: {
+              ...emptyCutoverCounters(),
               v1_authoritative_attempt_total: 1,
               v1_authoritative_success_total: 1,
-              v1_authoritative_failure_total: 0,
-              legacy_fallback_total: 0,
-              legacy_fallback_success_total: 0,
               authoritative_parity_match_total: 1,
-              authoritative_parity_difference_total: 0,
-              cutover_breaker_total: 0,
-              cutover_write_budget_skipped_total: 0,
             },
           },
         },
