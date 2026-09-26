@@ -1312,11 +1312,6 @@ export async function runAutopilotCycle(
   const mode = rollout.mode as CatalogWriterMode;
   if (!lostRace && !tripped) {
     const stageMax = current.stage;
-    /*
-     * Reconciliação do orçamento: o ESTADO manda. Se o teto do rollout não
-     * corresponde ao estágio persistido (promoção interrompida no meio, ou
-     * intervenção manual), o ciclo o corrige — inclusive ao voltar de PAUSED.
-     */
     const needsRearm =
       rollout.maxWrites !== stageMax ||
       (promoted && rollout.usedWrites > 0);
@@ -1350,8 +1345,16 @@ export async function runAutopilotCycle(
 
   const effectiveRollout = await readGlobalRollout(executor, marketplaceId);
 
+  /*
+   * `maxWrites` aqui é o teto QUE VALIA durante a janela medida, ou seja
+   * `rollout.maxWrites` ANTES de qualquer rearm. Passar o
+   * `effectiveRollout.maxWrites` (pós-rearm) gravaria na linha do estágio 1 o
+   * teto 5, e a linha do estágio 25 o teto 100: cada estágio mentiria sobre o
+   * próprio teto. A janela é medida por `maxWrites = <estágio>` na CTE, e é
+   * esse o número que a linha tem de carregar.
+   */
   await persistStageMetrics(executor, marketplaceId, metrics, {
-    maxWrites: effectiveRollout?.maxWrites ?? rollout.maxWrites,
+    maxWrites: rollout.maxWrites,
     completedAt: promoted ? now : null,
   });
 

@@ -1074,8 +1074,12 @@ async function main(): Promise<void> {
       evidence.push("P8b nenhuma promocao pulou degrau");
 
       // Métricas por estágio persistidas e sem divergência.
-      const persisted = await admin.query<{ stage: number }>(
-        'SELECT "stage" FROM "CatalogCutoverStageMetric" WHERE "marketplaceId" = $1 ORDER BY "stage"',
+      const persisted = await admin.query<{
+        stage: number;
+        maxWrites: number;
+        usedWrites: number;
+      }>(
+        'SELECT "stage", "maxWrites", "usedWrites" FROM "CatalogCutoverStageMetric" WHERE "marketplaceId" = $1 ORDER BY "stage"',
         [MARKETPLACE],
       );
       assert.deepEqual(
@@ -1083,7 +1087,26 @@ async function main(): Promise<void> {
         [1, 5, 25, 100],
         "métricas de todos os estágios persistidas",
       );
+      /*
+       * Cada linha carrega o teto QUE VALIA na janela dela. Houve aqui um bug em
+       * que a linha do estágio 1 recebia o teto 5, porque o rearm acontece
+       * ANTES da gravação da métrica. Uma tabela de métricas que mente sobre o
+       * próprio teto é pior do que uma tabela vazia: ela é consultada para
+       * decidir, e parece confiável.
+       */
+      for (const row of persisted.rows) {
+        assert.equal(
+          row.maxWrites,
+          row.stage,
+          `estágio ${String(row.stage)} não pode carregar o teto de outro estágio`,
+        );
+        assert.ok(
+          row.usedWrites >= 0 && row.usedWrites <= row.stage,
+          `estágio ${String(row.stage)} com usedWrites fora de 0..${String(row.stage)}`,
+        );
+      }
       evidence.push("P8c metricas por estagio persistidas para 1,5,25,100");
+      evidence.push("P8d cada metrica carrega o teto do SEU estagio");
     }
 
     /* ==================================================================== */
