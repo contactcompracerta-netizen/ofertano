@@ -42,6 +42,25 @@ import {
 import { resolveMarketplaceIdFromLegacyEnum } from "../services/architecture/v1/marketplaceRegistry";
 import { computeRawHash } from "../services/architecture/v1/hashing";
 
+/**
+ * FASE P — SELEÇÃO DA CANDIDATA QUE CORRESPONDE À VERDADE.
+ *
+ * A versão anterior do harness usava `candidates[0]`, o que só coincide com a
+ * verdade por acaso. Hoje os 6/6 batem justamente porque a verdade ocupa a
+ * primeira posição; o número estava certo, a MEDIÇÃO estava frágil.
+ *
+ * Esta função é pura e isolada para que o comportamento errado seja testável
+ * sem banco: basta uma lista em que a verdade é a SEGUNDA candidata.
+ *
+ * A verdade entra aqui DEPOIS da geração — `generateCandidates` nunca a recebe.
+ */
+export function selectTruthCandidate<T extends { candidateKey: string }>(
+  candidates: T[],
+  truthKeys: string[],
+): T | undefined {
+  return candidates.find((c) => truthKeys.includes(c.candidateKey));
+}
+
 type Row = {
   productId: string;
   name: string;
@@ -219,16 +238,29 @@ async function main() {
     let decisionDetail: unknown = null;
     if (found) {
       /*
-       * Decide sobre o candidato REALMENTE ENCONTRADO — não sobre uma ponta da
-       * "verdade". Uma versão anterior podia escolher a própria ponta do probe
-       * e relatar REJECT/SAME_MARKETPLACE, que é artefato do harness e não
-       * diz nada sobre a política.
+       * FASE P — HARNESS CORRIGIDO.
+       *
+       * Este bloco ANTES dizia "decide sobre o candidato realmente encontrado"
+       * e na verdade lia `gen.candidates[0]`. As duas coisas so coincidem
+       * quando a verdade e a primeira candidata. No dia em que a verdade for a
+       * segunda, o harness mediria a policy de um produto ERRADO e publicaria
+       * um numero que nao corresponde a nada.
+       *
+       * Hoje os 6/6 batem, entao a correcao e semantica: os numeros nao mudam.
+       * Ainda assim, um harness que mede a coisa errada quando o mundo muda e
+       * exatamente o tipo de medicao que a missao proibe.
+       *
+       * A verdade continua sendo usada SO AQUI, depois da geracao: o
+       * `generateCandidates` acima nunca a recebe.
        */
-      const foundCandidate = gen.candidates[0];
-      const candRow = foundCandidate
+      const truthCandidate = selectTruthCandidate(gen.candidates, [
+        targetKey,
+        targetKey2,
+      ]);
+      const candRow = truthCandidate
         ? rows.find((r) => {
             const mid = resolveMarketplaceIdFromLegacyEnum(r.marketplace) ?? r.marketplace.toLowerCase();
-            return `${mid}:${r.externalId}` === foundCandidate.candidateKey;
+            return `${mid}:${r.externalId}` === truthCandidate.candidateKey;
           })
         : undefined;
       if (candRow) {
@@ -297,13 +329,19 @@ async function main() {
     titleOnlyKeys += keys.length;
     const targetKey = `${resolveMarketplaceIdFromLegacyEnum(pair.a.marketplace) ?? pair.a.marketplace.toLowerCase()}:${pair.a.externalId}`;
     const targetKey2 = `${resolveMarketplaceIdFromLegacyEnum(pair.b.marketplace) ?? pair.b.marketplace.toLowerCase()}:${pair.b.externalId}`;
-    const found = gen.candidates.some((c) => c.candidateKey === targetKey || c.candidateKey === targetKey2);
+    const truthCandidate = selectTruthCandidate(gen.candidates, [
+      targetKey,
+      targetKey2,
+    ]);
+    const found = truthCandidate !== undefined;
     if (found) titleOnlyFound += 1;
     let dec: string | null = null;
-    if (found && gen.candidates[0]) {
+    if (found && truthCandidate) {
+      // FASE P: avalia a candidata QUE CORRESPONDE A VERDADE (ver bloco do
+      // cenário completo acima). `candidates[0]` media o produto errado.
       const candRow = rows.find((r) => {
         const mid = resolveMarketplaceIdFromLegacyEnum(r.marketplace) ?? r.marketplace.toLowerCase();
-        return `${mid}:${r.externalId}` === gen.candidates[0].candidateKey;
+        return `${mid}:${r.externalId}` === truthCandidate.candidateKey;
       });
       if (candRow) {
         dec = evaluateIdentityConfidence(stripped, toNormalized(candRow)).confidence;
@@ -344,11 +382,18 @@ async function main() {
   console.log(JSON.stringify(out, null, 2));
 }
 
-main()
-  .catch((e) => {
-    console.error("BLIND_REDISCOVERY_FAILED", e instanceof Error ? e.message.slice(0, 300) : "UNKNOWN");
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+/*
+ * Só executa como ENTRYPOINT. O teste do harness importa `selectTruthCandidate`
+ * para provar a seleção da candidata correta sem banco; sem esta guarda, o
+ * import dispararia a execução read-only contra o banco de produção.
+ */
+if (process.argv[1]?.includes("blind-rediscovery") ?? false) {
+  main()
+    .catch((e) => {
+      console.error("BLIND_REDISCOVERY_FAILED", e instanceof Error ? e.message.slice(0, 300) : "UNKNOWN");
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
