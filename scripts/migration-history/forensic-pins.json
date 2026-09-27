@@ -20,7 +20,8 @@
     "20260926120000_catalog_cutover_autopilot": "832f4399ea595c5a1ed0fad15a0d345aa7ae7dab18e8523f5e6e060ac0510778",
     "20260926220000_candidate_blocking_keys": "84d0b473c49d9fbc5b3fada515a62367c44cf2df32a600219a3efbff9b292a10",
     "20260927100000_schema_reconciliation": "d85c069b5dbdcbbd3c75cae9d0b7be722dc3acea4e620e6332782a01d2c905b6",
-    "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0"
+    "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0",
+    "20260927180000_social_post_index_reconciliation": "f886a7113da3e3e5d552a9ddb76627ef8e7fbea3ff982df2ddd621c8fa07b632"
   },
   "knownDivergences": {
     "20260824120000_analytics_intelligence": {

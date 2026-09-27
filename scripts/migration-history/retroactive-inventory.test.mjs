@@ -1,3 +1,4 @@
+import { withSocialReconciliationApplied } from './social-reconciliation-test-fixture.mjs';
 /**
  * Testes DISCRIMINANTES do contrato de inventário de migrations.
  *
@@ -161,7 +162,7 @@ test('repository manifest reflects applied bootstrap in baseline', () => {
  */
 test('EXPECTED_PENDING_SET_IS_DERIVED_FROM_MANIFEST', () => {
   const { verifyLedgerCompatibility, loadRepositoryContract, retroactivePending, commercePending, architecturePending, schemaReconciliationPending, priceAlertReconciliationPending } = verifyMod;
-  const fixture = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
+  const fixture = withSocialReconciliationApplied(JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8')));
   const man = loadRepositoryContract().manifest;
   const seen = new Set(fixture.ledger.map(r => r.migration_name));
 

@@ -1,9 +1,10 @@
+import { withSocialReconciliationApplied } from './social-reconciliation-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration, retroactivePending, schemaReconciliationPending, priceAlertReconciliationPending } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
-const clone = () => structuredClone(original);
+const clone = () => withSocialReconciliationApplied(original);
 const fullPending = [...retroactivePending, ...commercePending, ...architecturePending, ...schemaReconciliationPending, ...priceAlertReconciliationPending];
 const reject = (mutate, code, pending = fullPending) => { const s = clone(); mutate(s); assert.throws(() => verifyLedgerCompatibility(s, pending), new RegExp(code)); };
 test('forensic ledger allows exactly two known divergences and full pending without mutation', () => {
@@ -158,7 +159,7 @@ test('price alert reconciliation is pinned and only its exact pending states are
   assert.deepEqual(priceAlertReconciliationPending,['20260927120000_price_alert_schema_reconciliation']);
   assert.equal(c.manifest.forwardMigrations['20260927120000_price_alert_schema_reconciliation'],
                c.repositoryChecksums['20260927120000_price_alert_schema_reconciliation']);
-  assert.equal(Object.keys(c.manifest.forwardMigrations).at(-1),'20260927120000_price_alert_schema_reconciliation');
+  assert.equal(Object.keys(c.manifest.forwardMigrations).at(-2),'20260927120000_price_alert_schema_reconciliation');
   // 2) PREVIEW: schema_reconciliation ja aplicada, so a de PriceAlert pendente.
   const p=clone();
   for(const n of [...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending])
