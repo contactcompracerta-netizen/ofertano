@@ -51,6 +51,40 @@ function realReposReset(): ShadowRepositoryBundle {
 }
 
 async function main(): Promise<void> {
+  // The production boundary supplies time before normalization, once per observation.
+  {
+    const repos = realReposReset();
+    const captured: string[] = [];
+    const upsert = repos.raw.upsertListing.bind(repos.raw);
+    repos.raw.upsertListing = async (listing, hashes, options) => {
+      captured.push(listing.metadata.collectedAt);
+      return upsert(listing, hashes, options);
+    };
+    const flags = flagsWith({
+      enabled: true, marketplaceIds: ["mercado_livre"], dryRun: false,
+      persistRaw: true, persistHashes: true, maxWrites: 100,
+    });
+    let calls = 0;
+    const now = () => {
+      calls++;
+      return "2026-01-02T03:04:05.678Z";
+    };
+    resetShadowMetrics();
+    const first = await processShadowListing({ flags, realRepos: repos, now }, baseInput);
+    assert.equal(first.error, null);
+    assert.equal(calls, 1);
+    assert.equal(captured[0], "2026-01-02T03:04:05.678Z");
+    await processShadowListing({ flags, realRepos: repos, now }, {
+      ...baseInput, externalId: "ML-2", collectedAt: "2025-01-01T00:00:00.000Z",
+    });
+    assert.equal(calls, 1, "explicit observation time bypasses the clock");
+    assert.equal(captured[1], "2025-01-01T00:00:00.000Z");
+    const before = Date.now();
+    await processShadowListing({ flags, realRepos: repos }, { ...baseInput, externalId: "ML-3" });
+    assert.ok(Date.parse(captured[2]) >= before);
+    assert.ok(Date.parse(captured[2]) <= Date.now());
+  }
+
   // --- Disabled => skipped, zero escrita ----------------------------------
   {
     resetShadowMetrics();

@@ -27,6 +27,7 @@ import { CatalogMetrics } from "../observability/metrics";
 import {
   buildShadowListingFromSaveContext,
   type LegacyShadowSaveContext,
+  type NowProvider,
 } from "./adapter";
 import {
   classifyShadowParity,
@@ -81,6 +82,8 @@ export type ShadowIngestInput = LegacyShadowSaveContext & {
 };
 
 export type ShadowProcessorDeps = {
+  /** Relógio da borda; o adapter recebe somente dados observados. */
+  now?: NowProvider;
   flags?: ShadowFlags;
   metrics?: ShadowMetrics;
   /** Repos REAIS (Prisma). Quando ausente e a shadow precisa escrever, o
@@ -194,7 +197,10 @@ export async function processShadowListing(
       },
     });
 
-  const listing = buildShadowListingFromSaveContext(input);
+  const listing = buildShadowListingFromSaveContext({
+    ...input,
+    collectedAt: input.collectedAt ?? (deps.now ?? (() => new Date().toISOString()))(),
+  });
   if (!listing) {
     // Marketplace resolvido acima, mas a conectora negou — inalcançável em
     // condições normais; mantido por fail-closed.

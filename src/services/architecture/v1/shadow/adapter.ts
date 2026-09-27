@@ -106,13 +106,14 @@ function collectGtin(
 
 /**
  * Constrói a listing V1 a partir do contexto observável do saveProduct.
- * Retorna null quando o marketplace não é resolvível (fail-closed).
+ * Transformação pura: collectedAt deve ser fornecido pela borda.
+ * Retorna null sem collectedAt ou marketplace resolvível (fail-closed).
  */
 export function buildShadowListingFromSaveContext(
   input: LegacyShadowSaveContext,
 ): NormalizedMarketplaceListingV1 | null {
   const marketplaceId = resolveMarketplaceIdFromLegacyEnum(input.marketplace);
-  if (!marketplaceId) {
+  if (!marketplaceId || input.collectedAt == null) {
     return null;
   }
 
@@ -174,7 +175,7 @@ export function buildShadowListingFromSaveContext(
     },
     metadata: {
       sourceUpdatedAt: null,
-      collectedAt: input.collectedAt ?? new Date().toISOString(),
+      collectedAt: input.collectedAt,
       rawHash: "",
       payloadVersion: DEFAULT_PAYLOAD_VERSION,
     },

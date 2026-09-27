@@ -7,15 +7,18 @@
  *  - determinismo independente de chamadas.
  */
 import assert from "node:assert/strict";
+import { mock } from "node:test";
 import {
   buildShadowListingFromRawRow,
   buildShadowListingFromSaveContext,
+  withCollectedAt,
 } from "./adapter";
 import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
 
 // --- Marketplace desconhecido => null (fail-closed) ------------------------
 {
   const listing = buildShadowListingFromSaveContext({
+    collectedAt: "2026-01-02T03:04:05.678Z",
     marketplace: "MERCADO_DO_FUTURO",
     externalId: "x1",
     sourceUrl: "https://example.com/x1",
@@ -27,6 +30,7 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
 // --- Mapeamento correto de um contexto de save -----------------------------
 {
   const listing = buildShadowListingFromSaveContext({
+    collectedAt: "2026-01-02T03:04:05.678Z",
     marketplace: "MERCADO_LIVRE",
     externalId: "ML123",
     sourceUrl: "https://produto.mercadolivre.com.br/ML123",
@@ -60,6 +64,7 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
 // --- Availability derivada --------------------------------------------------
 {
   const unavailable = buildShadowListingFromSaveContext({
+    collectedAt: "2026-01-02T03:04:05.678Z",
     marketplace: "SHOPEE",
     externalId: "S1",
     sourceUrl: "https://shopee.com.br/S1",
@@ -73,6 +78,7 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
   );
 
   const semPreco = buildShadowListingFromSaveContext({
+    collectedAt: "2026-01-02T03:04:05.678Z",
     marketplace: "SHOPEE",
     externalId: "S2",
     sourceUrl: "https://shopee.com.br/S2",
@@ -125,6 +131,7 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
 // --- Determinismo (mesmo input, mesmo contrato) ------------------------------
 {
   const a = buildShadowListingFromSaveContext({
+    collectedAt: "2026-01-02T03:04:05.678Z",
     marketplace: "AMAZON",
     externalId: "ASIN123",
     sourceUrl: "https://amazon.com.br/dp/ASIN123",
@@ -134,6 +141,7 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
   });
   const rawA = JSON.stringify(a);
   const b = buildShadowListingFromSaveContext({
+    collectedAt: "2026-01-02T03:04:05.678Z",
     marketplace: "AMAZON",
     externalId: "ASIN123",
     sourceUrl: "https://amazon.com.br/dp/ASIN123",
@@ -147,6 +155,42 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
     rawB,
     "mesmo contexto => mesmo contrato normalizado (sem timestamps de observação)",
   );
+}
+
+// Missing observation time is rejected, never synthesized by the builder.
+{
+  const context = {
+    marketplace: "AMAZON",
+    externalId: "ASIN123",
+    sourceUrl: "https://amazon.com.br/dp/ASIN123",
+    price: 89.9,
+  };
+  // Advance a controlled clock: the old implicit fallback fails this test.
+  mock.timers.enable({ apis: ["Date"], now: 0 });
+  try {
+    const before = JSON.stringify(buildShadowListingFromSaveContext(context));
+    mock.timers.tick(1000);
+    assert.equal(JSON.stringify(buildShadowListingFromSaveContext(context)), before);
+    assert.equal(buildShadowListingFromSaveContext(context), null);
+  } finally {
+    mock.timers.reset();
+  }
+  const observed = { ...context, collectedAt: "2026-01-02T03:04:05.678Z" };
+  const listing = buildShadowListingFromSaveContext(observed);
+  assert.ok(listing);
+  assert.equal(listing.metadata.collectedAt, observed.collectedAt);
+  const expected = JSON.stringify(listing);
+  for (let i = 0; i < 1000; i++) {
+    assert.equal(JSON.stringify(buildShadowListingFromSaveContext({ ...observed })), expected);
+    assert.equal(buildShadowListingFromSaveContext(context), null);
+  }
+  let calls = 0;
+  const stamped = withCollectedAt(listing, () => {
+    calls++;
+    return "2026-01-02T03:04:05.678Z";
+  });
+  assert.equal(stamped.metadata.collectedAt, "2026-01-02T03:04:05.678Z");
+  assert.equal(calls, 1);
 }
 
 console.log("shadow/adapter.test.ts PASS");
