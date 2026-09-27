@@ -74,6 +74,8 @@ function main() {
     const lat: number[] = [];
     let candTotal = 0;
     let maxCand = 0;
+    let ambiguousBlocks = 0;
+    const skipTotals: Record<string, number> = {};
     for (let i = 0; i < LOOKUPS; i += 1) {
       const p = pool[(i * 37) % pool.length];
       const probe = buildFakeListing({
@@ -89,6 +91,10 @@ function main() {
       lat.push(performance.now() - t0);
       candTotal += res.candidates.length;
       maxCand = Math.max(maxCand, res.candidates.length);
+      ambiguousBlocks += res.ambiguousBlocks;
+      for (const [reason, n] of Object.entries(res.skipStats)) {
+        skipTotals[reason] = (skipTotals[reason] ?? 0) + n;
+      }
     }
     lat.sort((a, b) => a - b);
     const tLook0 = performance.now();
@@ -118,6 +124,13 @@ function main() {
       avgCandidates: Number((candTotal / LOOKUPS).toFixed(2)),
       maxCandidatesObserved: maxCand,
       capRespected: maxCand <= MAX_CANDIDATES_PER_LISTING,
+      /*
+       * FASE P: estas duas linhas são o que torna o workload audível. Sem
+       * elas, um tamanho que mede 0 candidatas por pular chaves ambíguas é
+       * indistinguível de um tamanho que mede trabalho real.
+       */
+      AMBIGUOUS_BLOCK_COUNT: ambiguousBlocks,
+      SKIP_STATS: skipTotals,
       approxIndexMemMB: Number(((index.size() * 160) / (1024 * 1024)).toFixed(1)),
       cartesianComparisons: comparisons,
       cartesianMs: Number(cartMs.toFixed(2)),
@@ -131,7 +144,21 @@ function main() {
   const growth = Number(first.catalogSize) > 0
     ? Number(last.lookupP95Ms) / Math.max(Number(first.lookupP95Ms), 0.0001)
     : 0;
-  out.P95_GROWTH_10K_TO_1M = Number(growth.toFixed(2));
+
+  /*
+   * FASE P (FASE 19) — O rótulo de growth anterior dizia "10K_TO_1M", mas o
+   * tamanho FINAL é o último elemento de BENCH_SIZES, cujo default é 100000
+   * (100k) e NÃO 1M. Um rótulo que afirma um tamanho não testado é uma
+   * afirmação falsa, mesmo com o número certo. O rótulo agora é DERIVADO dos
+   * tamanhos efetivamente medidos: nenhum tamanho é inventado, nenhum é
+   * omitido, e o cálculo do growth é o mesmo de antes (inalterado).
+   */
+  const growthFromSize = Number(first.catalogSize);
+  const growthToSize = Number(last.catalogSize);
+  out.P95_GROWTH_FIRST_TO_LAST = Number(growth.toFixed(2));
+  out.P95_GROWTH_FROM_SIZE = growthFromSize;
+  out.P95_GROWTH_TO_SIZE = growthToSize;
+  out.P95_GROWTH_LABEL = `${growthFromSize}->${growthToSize}`;
   out.INDEXED_LOOKUP_IS_FLAT =
     growth < 5 ? "PASS (p95 não cresce de forma linear com o catálogo)" : "FAIL";
   out.CARTESIAN_GROWTH = "O(listings x products) — evitado por construção";
@@ -139,6 +166,37 @@ function main() {
     Number(last.maxCandidatesObserved) <= MAX_CANDIDATES_PER_LISTING
       ? "PASS"
       : "FAIL";
+
+  /*
+   * FASE P (FASE 9) — FIDELIDADE DO BENCHMARK.
+   *
+   * Descoberta medida, não suposição: com o pool sintético deste script, o
+   * número de candidatos por probe é 0 nos tamanhos DEFAULT (10k e 100k).
+   *
+   * Causa: `generateCandidates` NUNCA alarga um bucket ambíguo. Quando
+   * `bucketSize > MAX_CANDIDATES_PER_LISTING` a chave é pulada
+   * (AMBIGUOUS_BLOCK) e o generator tenta a próxima chave mais específica. O
+   * probe deste benchmark é title-only, e o pool sintético só produz chaves
+   * `brand|category|family` e `brand|family` (o token `modelo N` é único por
+   * item, logo nunca vira chave compartilhada). Então, assim que o catálogo
+   * passa de ~`MAX x nº de combinações(brand,family)`, TODA chave do probe fica
+   * ambígua e o generator devolve 0 candidatas.
+   *
+   * Consequência honesta: `lookupP95Ms` mede o custo de uma busca que NÃO
+   * materializa candidatas. Isso sustenta "o probe do índice é plano", mas NÃO
+   * sustenta "a geração de candidatos é plana" — materialização, dedup,
+   * pre-filter e cap nunca são exercitados nesses tamanhos.
+   *
+   * `VERDICT=PASS` e `INDEXED_LOOKUP_IS_FLAT=PASS` continuam válidos no que
+   * medem; o benchmark NÃO foi alterado (mesmos thresholds, mesmas métricas,
+   * mesma carga sintética). O que muda é que o workload degenerado passa a
+   * ser VISÍVEL em vez de silenciosamente reportado como PASS.
+   */
+  const measuredNonEmpty = rows.every((r) => Number(r.avgCandidates) > 0);
+  out.WORKLOAD_MEASURED_NON_EMPTY_CANDIDATES = measuredNonEmpty;
+  out.WORKLOAD_NOTE = measuredNonEmpty
+    ? "todos os tamanhos mediram candidatos nao nulos: o workload exercita a materializacao."
+    : "ATENCAO: algum tamanho mediu 0 candidatas. Ver AMBIGUOUS_BLOCK_COUNT por linha: o gerator pulou chaves ambiguas e o p95 mede busca sem materializar candidatas. O verdict continua valido para o que mede, mas NAO sustenta que a geracao de candidatas seja plana neste tamanho.";
 
   console.log(JSON.stringify(out, null, 2));
 }
