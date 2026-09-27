@@ -53,7 +53,7 @@ function abort(code, extra = {}) {
 }
 
 function verifyManifest() {
-  if (Object.keys(MANIFEST.baselineMigrations ?? {}).length !== 7) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact:"immutable baseline inventory"});
+  if (Object.keys(MANIFEST.baselineMigrations ?? {}).length !== 8) abort("BOOTSTRAP_MANIFEST_DIVERGED", {artifact:"immutable baseline inventory"});
   if (MANIFEST.version !== 4) abort("BOOTSTRAP_MANIFEST_DIVERGED");
   if (sha256(fs.readFileSync(path.join(HERE, "local-legacy-tables.sql"))) !== MANIFEST.localCompatibility?.legacyTablesSQLSHA256) abort("BOOTSTRAP_MANIFEST_DIVERGED", { artifact: "local compatibility DDL" });
   const forwardNames = Object.keys(MANIFEST.forwardMigrations);

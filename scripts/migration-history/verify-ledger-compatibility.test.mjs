@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration, retroactivePending } from './verify-ledger-compatibility.mjs';
+import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration, retroactivePending, schemaReconciliationPending, priceAlertReconciliationPending } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
 const clone = () => structuredClone(original);
-const fullPending = [...retroactivePending, ...commercePending, ...architecturePending];
+const fullPending = [...retroactivePending, ...commercePending, ...architecturePending, ...schemaReconciliationPending, ...priceAlertReconciliationPending];
 const reject = (mutate, code, pending = fullPending) => { const s = clone(); mutate(s); assert.throws(() => verifyLedgerCompatibility(s, pending), new RegExp(code)); };
 test('forensic ledger allows exactly two known divergences and full pending without mutation', () => {
   const snapshot = clone(), before = structuredClone(snapshot);
@@ -120,18 +120,22 @@ test('baseline applied-step simulation and schema contract drift block',()=>{
 // FASE 7.2: os dois estados reais que a aplicação da migration do autopilot
 // produz. Antes do apply só a migration do autopilot está pendente; depois
 // do apply nada está. Qualquer outro recorte parcial continua bloqueado.
-test('autopilot migration alone is the only new legitimate pending set',()=>{
+test('autopilot plus schema reconciliation is the legitimate pending set',()=>{
  const s=clone(),c=loadRepositoryContract();
  for(const n of [...retroactivePending,...commercePending,...architecturePending]){
    if(n===autopilotPending[0]) continue;
    s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:c.repositoryChecksums[n], applied_steps_count:1 });
  }
- const r=verifyLedgerCompatibility(s,autopilotPending,c);
- assert.deepEqual(r.pending,autopilotPending);
+ const r=verifyLedgerCompatibility(s,[...autopilotPending,...schemaReconciliationPending,...priceAlertReconciliationPending],c);
+ assert.deepEqual(r.pending,[...autopilotPending,...schemaReconciliationPending,...priceAlertReconciliationPending]);
  assert.equal(r.warnings.length,2);
  assert.equal(r.ledgerMutation,false);
  // e, aplicando a ultima, volta a 'nada pendente'
  s.ledger.push({ ...s.ledger[0], migration_name:autopilotPending[0], checksum:c.repositoryChecksums[autopilotPending[0]], applied_steps_count:1 });
+ assert.deepEqual(verifyLedgerCompatibility(s,[...schemaReconciliationPending,...priceAlertReconciliationPending],c).pending,[...schemaReconciliationPending,...priceAlertReconciliationPending]);
+ s.ledger.push({ ...s.ledger[0], migration_name:schemaReconciliationPending[0], checksum:c.repositoryChecksums[schemaReconciliationPending[0]], applied_steps_count:1 });
+  assert.deepEqual(verifyLedgerCompatibility(s,priceAlertReconciliationPending,c).pending,priceAlertReconciliationPending);
+  s.ledger.push({ ...s.ledger[0], migration_name:priceAlertReconciliationPending[0], checksum:c.repositoryChecksums[priceAlertReconciliationPending[0]], applied_steps_count:1 });
  assert.deepEqual(verifyLedgerCompatibility(s,[],c).pending,[]);
 });
 test('no invented partial pending set around the autopilot migration',()=>{
@@ -139,9 +143,52 @@ test('no invented partial pending set around the autopilot migration',()=>{
    assert.throws(()=>verifyLedgerCompatibility(clone(),bogus),/PENDING_ALLOWLIST_REQUIRED/);
  // A migration do autopilot, se aplicada, tem de trazer o checksum do PIN.
  const s=clone(),c=loadRepositoryContract();
- for(const n of [...retroactivePending,...commercePending,...architecturePending]) s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:n===autopilotPending[0]?'f'.repeat(64):c.repositoryChecksums[n], applied_steps_count:1 });
+ for(const n of [...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending,...priceAlertReconciliationPending]) s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:n===autopilotPending[0]?'f'.repeat(64):c.repositoryChecksums[n], applied_steps_count:1 });
  assert.throws(()=>verifyLedgerCompatibility(s,[],c),/UNEXPECTED_CHECKSUM_MISMATCH/);
  // E com o PIN correto, sem pendentes, o gate passa.
- s.ledger[s.ledger.length-1].checksum=c.repositoryChecksums[autopilotPending[0]];
+ s.ledger.find(r=>r.migration_name===autopilotPending[0]).checksum=c.repositoryChecksums[autopilotPending[0]];
  assert.deepEqual(verifyLedgerCompatibility(s,[],c).pending,[]);
+});
+
+// FASE 8.4 — reconciliacao de PriceAlert. O gate aceita EXATAMENTE os estados
+// nomeados abaixo e continua rejeitando qualquer recorte parcial inventado.
+test('price alert reconciliation is pinned and only its exact pending states are accepted',()=>{
+  const c=loadRepositoryContract();
+  // 1) Inventario canonico: a migration existe, com checksum pinado, e e a ultima.
+  assert.deepEqual(priceAlertReconciliationPending,['20260927120000_price_alert_schema_reconciliation']);
+  assert.equal(c.manifest.forwardMigrations['20260927120000_price_alert_schema_reconciliation'],
+               c.repositoryChecksums['20260927120000_price_alert_schema_reconciliation']);
+  assert.equal(Object.keys(c.manifest.forwardMigrations).at(-1),'20260927120000_price_alert_schema_reconciliation');
+  // 2) PREVIEW: schema_reconciliation ja aplicada, so a de PriceAlert pendente.
+  const p=clone();
+  for(const n of [...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending])
+    p.ledger.push({ ...p.ledger[0], migration_name:n, checksum:c.repositoryChecksums[n], applied_steps_count:1 });
+  const rp=verifyLedgerCompatibility(p,priceAlertReconciliationPending,c);
+  assert.deepEqual(rp.pending,priceAlertReconciliationPending);
+  assert.equal(rp.ledgerMutation,false);
+  // 3) PRODUCAO antes do deploy: exatamente as duas pendentes.
+  const q=clone();
+  for(const n of [...retroactivePending,...commercePending,...architecturePending])
+    q.ledger.push({ ...q.ledger[0], migration_name:n, checksum:c.repositoryChecksums[n], applied_steps_count:1 });
+  const rq=verifyLedgerCompatibility(q,[...schemaReconciliationPending,...priceAlertReconciliationPending],c);
+  assert.deepEqual(rq.pending,[...schemaReconciliationPending,...priceAlertReconciliationPending]);
+  assert.equal(rq.warnings.length,2);
+  // 4) Apos o deploy: nada pendente.
+  for(const n of [...schemaReconciliationPending,...priceAlertReconciliationPending])
+    q.ledger.push({ ...q.ledger[0], migration_name:n, checksum:c.repositoryChecksums[n], applied_steps_count:1 });
+  assert.deepEqual(verifyLedgerCompatibility(q,[],c).pending,[]);
+  // 5) Nenhum recorte parcial inventado e aceito.
+  // a ordem importa: as DUAS pendentes em ordem invertida nao e um estado legitimo
+  for(const bogus of [[...priceAlertReconciliationPending,'20260927100000_schema_reconciliation'],
+                      [...priceAlertReconciliationPending,...commercePending],
+                      ['20260927120000_price_alert_schema_reconciliation_x']])
+    assert.throws(()=>verifyLedgerCompatibility(clone(),bogus),/PENDING_ALLOWLIST_REQUIRED/);
+});
+// 6) Checksum alterado da migration nova bloqueia: o gate nao aceita o PIN reescrito.
+test('price alert reconciliation checksum is not silently rewritable',()=>{
+  const c=loadRepositoryContract();
+  const s=clone();
+  for(const n of [...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending,...priceAlertReconciliationPending])
+    s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:'d'.repeat(64), applied_steps_count:1 });
+  assert.throws(()=>verifyLedgerCompatibility(s,[]),/UNEXPECTED_CHECKSUM_MISMATCH/);
 });

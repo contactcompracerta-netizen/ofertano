@@ -18,14 +18,25 @@ export const architecturePending = ['20260924080000_catalog_architecture_v1', ..
 // nenhum pendingAllowlistSet: nao esta pendente, esta aplicada.
 export const blockingKeyMigration = ['20260926220000_candidate_blocking_keys'];
 export const blockingKeyApplied = true;
+export const schemaReconciliationPending = ["20260927100000_schema_reconciliation"];
+// FASE 8.4: reconciliacao ADITIVA do drift historico de PriceAlert. Corrige
+// exatamente 4 objetos (variante TARGET_PRICE do enum, coluna targetPrice,
+// indice (active, updatedAt) e a FK productId) que 20260905120000_price_alerts
+// presumiu existirem e nunca criou. E ADITIVA e fail-closed: objeto correto e
+// preservado, objeto incompativel aborta a migration.
+export const priceAlertReconciliationPending = ['20260927120000_price_alert_schema_reconciliation'];
+// Estados de PRODUCAO nomeados e explicitos (FASE 8.4). Nenhum recorte parcial
+// inventado e aceito: sao exatamente estes e os historicos ja listados.
+export const productionPendingBeforeDeploy = [...schemaReconciliationPending, ...priceAlertReconciliationPending];
+export const previewPendingBeforeDeploy = [...priceAlertReconciliationPending];
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
-export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration];
+export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration, ...schemaReconciliationPending, ...priceAlertReconciliationPending];
 // BOOTSTRAP RETROATIVO: migration que ordena DENTRO da cadeia historica
 // (<= lastBaseline) mas ainda NAO foi executada em producao. Nao entra em
 // canonicalForwardInventory de proposito: o invariante normal "forward >
 // lastBaseline" permanece intacto, e esta migration nao o satisfaz.
-export const retroactivePending = ['20260905110000_bootstrap_legacy_objects'];
+export const retroactivePending = [];
 export const canonicalRetroactiveInventory = [...retroactivePending];
 /*
  * Estados legítimos de produção para o histórico do catálogo. Nenhum conjunto
@@ -47,7 +58,7 @@ export const canonicalRetroactiveInventory = [...retroactivePending];
  * o código está no repositório mas a migration ainda não foi aplicada; depois
  * do apply, nada pendente de novo. Nenhum outro recorte é aceito.
  */
-const pendingAllowlistSets = [[], commercePending, autopilotPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1), retroactivePending, [...retroactivePending, ...commercePending, ...architecturePending]];
+const pendingAllowlistSets = [previewPendingBeforeDeploy, productionPendingBeforeDeploy, schemaReconciliationPending, [...autopilotPending, ...schemaReconciliationPending], [...autopilotPending, ...schemaReconciliationPending, ...priceAlertReconciliationPending], [...commercePending, ...architecturePending, ...schemaReconciliationPending], [...commercePending, ...architecturePending, ...schemaReconciliationPending, ...priceAlertReconciliationPending], [], commercePending, autopilotPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1), retroactivePending, [...retroactivePending, ...commercePending, ...architecturePending]];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = code => { throw new Error(code); };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -68,7 +79,7 @@ export function verifyLedgerCompatibility(snapshot, allowedPending, contract = l
   const expected = { ...manifest.baselineMigrations, ...manifest.forwardMigrations, ...retroChecksums };
   if (!same(expected, pins.repositoryMigrationChecksums) || !same(compatibility.productionHistory?.knownChecksumDivergences, pins.knownDivergences) || !same(compatibility.productionHistory?.restoredExactMigrations, pins.restoredExactMigrations)) fail('FORENSIC_PINS_CHANGED');
   if (manifest.baselineDDLHash !== pins.baselineDDLChecksum || contract.baselineDDLChecksum !== pins.baselineDDLChecksum || manifest.currentSchemaSHA256 !== pins.schemaChecksum || contract.schemaChecksum !== pins.schemaChecksum) fail('REPOSITORY_SCHEMA_CONTRACT_CHANGED');
-  const baselineNames = ['20260824000000_postgresql_baseline', ...knownNames, '20260905120000_price_alerts', '20260907000000_social_automation', '20260907220000_social_three_slots', '20260912000000_add_raw_marketplace_listing'];
+  const baselineNames = ['20260824000000_postgresql_baseline', ...knownNames, '20260905110000_bootstrap_legacy_objects', '20260905120000_price_alerts', '20260907000000_social_automation', '20260907220000_social_three_slots', '20260912000000_add_raw_marketplace_listing'];
   if (!same(Object.keys(manifest.baselineMigrations).sort(), baselineNames.sort()) || !same(Object.keys(manifest.forwardMigrations), canonicalForwardInventory) || !same(Object.keys(manifest.retroactiveForwardMigrations ?? {}), canonicalRetroactiveInventory)) fail('CANONICAL_INVENTORY_CHANGED');
   if (!same(Object.keys(repositoryChecksums).sort(), Object.keys(expected).sort())) fail('REPOSITORY_INVENTORY_MISMATCH');
   for (const [name, checksum] of Object.entries(expected)) if (!validChecksum(checksum) || repositoryChecksums[name] !== checksum) fail('REPOSITORY_CHECKSUM_CHANGED');

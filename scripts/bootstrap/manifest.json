@@ -8,6 +8,7 @@
     "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
     "20260824120000_analytics_intelligence": "d3f5730289acf1090f48dfd24446850c60733db919aa35d5911ed9c557cf0d6b",
     "20260828220000_admin_push_subscription": "cdc619b7a8b5539ef19814d8fd0a42e0fee4818890acb364f97e2964c319a358",
+    "20260905110000_bootstrap_legacy_objects": "7e7c562e9deb2a1270f4eaa00043b23f98f76fbaccba175ac3cd8a12f11eb5f7",
     "20260905120000_price_alerts": "a2104e350087766f6d89a7e0799298dbc3751490ebc76671e48fe21b402038b4",
     "20260907000000_social_automation": "d129b25d47fa2fff8932a18f0bc0e3878810087c49d9f6300046d5a263d1e4ef",
     "20260907220000_social_three_slots": "86e8f930c010586fa5607e95ed605bce914c48690b58296fd978a00f39f89fa9",
@@ -22,11 +23,13 @@
     "20260925120000_catalog_cutover_global_control": "43693f7ce4ef74d1a3d4e72f2ca784f70dba6009a043a4b77def7b43353b412c",
     "20260925130000_catalog_cutover_global_control_timestamptz": "fbc149446da6a22b7fea7905e618c95887709e2f7a76c8bf7364d2162e4422f3",
     "20260926120000_catalog_cutover_autopilot": "832f4399ea595c5a1ed0fad15a0d345aa7ae7dab18e8523f5e6e060ac0510778",
-    "20260926220000_candidate_blocking_keys": "84d0b473c49d9fbc5b3fada515a62367c44cf2df32a600219a3efbff9b292a10"
+    "20260926220000_candidate_blocking_keys": "84d0b473c49d9fbc5b3fada515a62367c44cf2df32a600219a3efbff9b292a10",
+    "20260927100000_schema_reconciliation": "d85c069b5dbdcbbd3c75cae9d0b7be722dc3acea4e620e6332782a01d2c905b6",
+    "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0"
   },
   "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain",
   "localCompatibility": {
-    "legacyTablesSQLSHA256": "fe81e1893be6da4988e12cfdc7f2718e6982f54c64bfe0ca5a9ed4c46500e30e",
+    "legacyTablesSQLSHA256": "37cc793b2369e767ca7dbd3189a485ddb670637521f3ac40ce3dfc2df3a69f7b",
     "sourceBlobs": {
       "Favorite": "c38acb4275f6a4336c3745e3d6a484ff85117986",
       "PriceAlertEvent": "dec41069809cbf22fff39baae1bbca54275f3603"
@@ -41,13 +44,5 @@
       "PriceAlertEvent"
     ]
   },
-  "retroactiveForwardMigrations": {
-    "20260905110000_bootstrap_legacy_objects": {
-      "checksum": "7e7c562e9deb2a1270f4eaa00043b23f98f76fbaccba175ac3cd8a12f11eb5f7",
-      "mustPrecede": "20260905120000_price_alerts",
-      "productionState": "PENDING",
-      "dualSafe": true,
-      "rationale": "Bootstrap dos objetos legados (PriceAlertType, PriceAlert, SocialPost_dayKey_key, PriceAlertEvent, Favorite, roles anon/authenticated, schema auth, auth.uid()/auth.role()) que a cadeia versionada nunca cria. Precisa ordenar ANTES de 20260905120000_price_alerts, que faz ALTER TYPE sobre PriceAlertType, mas em producao as migrations posteriores ja rodaram: por isso aceita PRE-SHAPE (fresh) e POST-SHAPE (producao) com validacao fail-closed."
-    }
-  }
+  "retroactiveForwardMigrations": {}
 }

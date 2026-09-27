@@ -60,3 +60,5 @@ BEGIN
       ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS "Favorite_userId_idx" ON "Favorite"("userId");

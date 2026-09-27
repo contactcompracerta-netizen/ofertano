@@ -125,7 +125,7 @@ test('retroactive must not also be an ordinary forward', () => {
 });
 
 // o manifest real do repositório deve satisfazer o contrato
-test('repository manifest satisfies the retroactive contract', () => {
+test('repository manifest reflects applied bootstrap in baseline', () => {
   const man = JSON.parse(fs.readFileSync(new URL('../bootstrap/manifest.json', import.meta.url), 'utf8'));
   const dir = new URL('../../prisma/migrations/', import.meta.url);
   const actualNames = fs.readdirSync(dir, { withFileTypes: true })
@@ -139,7 +139,12 @@ test('repository manifest satisfies the retroactive contract', () => {
     retroactiveForwardMigrations: man.retroactiveForwardMigrations,
     actualNames, actualChecksums,
   });
-  assert.ok(r.retroactive.includes('20260905110000_bootstrap_legacy_objects'));
+  assert.ok(!r.retroactive.includes('20260905110000_bootstrap_legacy_objects'));
+  assert.equal(
+    man.baselineMigrations['20260905110000_bootstrap_legacy_objects'],
+    '7e7c562e9deb2a1270f4eaa00043b23f98f76fbaccba175ac3cd8a12f11eb5f7'
+  );
+  assert.deepEqual(Object.keys(man.retroactiveForwardMigrations ?? {}), []);
   assert.ok(!Object.keys(man.forwardMigrations).some(n => n <= r.lastBaseline));
 });
 
@@ -155,7 +160,7 @@ test('repository manifest satisfies the retroactive contract', () => {
  * pending calculado, e a ordem errada e detectada.
  */
 test('EXPECTED_PENDING_SET_IS_DERIVED_FROM_MANIFEST', () => {
-  const { verifyLedgerCompatibility, loadRepositoryContract, retroactivePending, commercePending, architecturePending } = verifyMod;
+  const { verifyLedgerCompatibility, loadRepositoryContract, retroactivePending, commercePending, architecturePending, schemaReconciliationPending, priceAlertReconciliationPending } = verifyMod;
   const fixture = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
   const man = loadRepositoryContract().manifest;
   const seen = new Set(fixture.ledger.map(r => r.migration_name));
@@ -165,19 +170,17 @@ test('EXPECTED_PENDING_SET_IS_DERIVED_FROM_MANIFEST', () => {
   const derived = Object.keys({ ...man.baselineMigrations, ...man.forwardMigrations, ...Object.fromEntries(Object.entries(man.retroactiveForwardMigrations).map(([n, m]) => [n, m.checksum])) })
     .filter(n => !seen.has(n)).sort();
   // a retroativa ordena PRIMEIRO porque 20260905110000 < 20260917120000 e pending e .sort()
-  const expectedPending = [...retroactivePending, ...commercePending, ...architecturePending];
+  const expectedPending = [...retroactivePending, ...commercePending, ...architecturePending, ...schemaReconciliationPending, ...priceAlertReconciliationPending];
   assert.deepEqual(derived, expectedPending);
 
   // 2) o gate concorda com o calculo derivado.
   const r = verifyLedgerCompatibility(structuredClone(fixture), derived, loadRepositoryContract());
   assert.deepEqual(r.pending, derived);
 
-  // 3) REMOVER a bootstrap do manifest muda o pending -> o gate rejeita.
-  const withoutRetro = loadRepositoryContract();
-  delete withoutRetro.manifest.retroactiveForwardMigrations[RETRO];
-  // Falha fechado — e pelo motivo certo: manifest e pins forenses divergem
-  // (o pin ainda declara a bootstrap), antes mesmo de comparar o pending.
-  assert.throws(() => verifyLedgerCompatibility(structuredClone(fixture), derived, withoutRetro),
+  // 3) REMOVER a bootstrap aplicada do baseline -> o gate rejeita.
+  const withoutBootstrap = loadRepositoryContract();
+  delete withoutBootstrap.manifest.baselineMigrations[RETRO];
+  assert.throws(() => verifyLedgerCompatibility(structuredClone(fixture), derived, withoutBootstrap),
     new RegExp('FORENSIC_PINS_CHANGED'));
 
   // 4) ORDEM ERRADA e detectada: a mesma lista fora de ordem falha.

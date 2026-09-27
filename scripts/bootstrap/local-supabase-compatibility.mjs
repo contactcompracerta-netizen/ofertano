@@ -59,6 +59,14 @@ export function localEquivalenceSchema(schemaPath) {
   let schema = fs.readFileSync(schemaPath, 'utf8');
   assert(schema.includes('model Product {') && schema.includes('model PriceAlert {'), 'LOCAL_EQUIVALENCE_SCHEMA_DIVERGED');
   schema = schema.replace('model Product {', 'model Product {\n  localFavorites Favorite[] @relation("LocalFavoriteProduct")').replace('model PriceAlert {', 'model PriceAlert {\n  localEvents PriceAlertEvent[] @relation("LocalPriceAlertEvent")');
+  // THIRD legacy prerequisite: the enum variant "TARGET_PRICE".
+  // 20260905120000_price_alerts deliberately KEEPS this legacy label
+  // ("o valor legado TARGET_PRICE continua existindo") while adding 'TARGET'.
+  // schema.prisma declares only the application-facing labels, so the canonical
+  // database shape carries one extra enum variant that must be declared here
+  // for the equivalence diff to be meaningful. Mirrors production exactly.
+  assert(/enum PriceAlertType \{\s*ANY_DROP\s+TARGET\s*\}/.test(schema), 'LOCAL_EQUIVALENCE_SCHEMA_DIVERGED');
+  schema = schema.replace('enum PriceAlertType {\n  ANY_DROP\n  TARGET\n}', 'enum PriceAlertType {\n  ANY_DROP\n  TARGET_PRICE\n  TARGET\n}');
   schema += `\nmodel Favorite {
   id String @id
   userId String

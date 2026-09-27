@@ -80,6 +80,14 @@
       "finished_at": "2026-09-18T00:00:01.000Z",
       "rolled_back_at": null,
       "applied_steps_count": 1
+    },
+    {
+      "migration_name": "20260905110000_bootstrap_legacy_objects",
+      "checksum": "7e7c562e9deb2a1270f4eaa00043b23f98f76fbaccba175ac3cd8a12f11eb5f7",
+      "started_at": "2026-09-27T13:32:57.000Z",
+      "finished_at": "2026-09-27T13:32:57.681Z",
+      "rolled_back_at": null,
+      "applied_steps_count": 1
     }
   ]
 }
