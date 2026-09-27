@@ -18,7 +18,7 @@
     "20260925130000_catalog_cutover_global_control_timestamptz": "fbc149446da6a22b7fea7905e618c95887709e2f7a76c8bf7364d2162e4422f3",
     "20260926120000_catalog_cutover_autopilot": "832f4399ea595c5a1ed0fad15a0d345aa7ae7dab18e8523f5e6e060ac0510778",
     "20260926220000_candidate_blocking_keys": "84d0b473c49d9fbc5b3fada515a62367c44cf2df32a600219a3efbff9b292a10",
-    "20260905110000_bootstrap_legacy_objects": "aa75db8762837e73d981afc6fd7d66c6893b966d99cf06ed8ef13c80a349a8b8"
+    "20260905110000_bootstrap_legacy_objects": "7e7c562e9deb2a1270f4eaa00043b23f98f76fbaccba175ac3cd8a12f11eb5f7"
   },
   "knownDivergences": {
     "20260824120000_analytics_intelligence": {

@@ -266,14 +266,53 @@ END $$;
 -- 8) SCHEMA auth — mesma classe do gap 7. Aditivo, no-op em produção.
 CREATE SCHEMA IF NOT EXISTS "auth";
 
--- 9) FUNÇÕES auth.uid()/auth.role() — a policy só é VALIDADA na criação,
---    não executada; o que importa é a ASSINATURA (uuid), igual à do Supabase.
---    ATENÇÃO: corpos são stubs deliberados. A autenticação real em produção é
---    feita pelo Supabase, que tem as suas próprias versões.
-CREATE OR REPLACE FUNCTION "auth"."uid"() RETURNS uuid AS $$
-  SELECT NULL::uuid;
-$$ LANGUAGE sql STABLE;
+-- 9) FUNÇÕES auth.uid()/auth.role()
+-- Em PostgreSQL limpo, cria stubs.
+-- Em Supabase, valida as funções existentes e não as sobrescreve.
 
-CREATE OR REPLACE FUNCTION "auth"."role"() RETURNS text AS $$
-  SELECT current_user::text;
-$$ LANGUAGE sql STABLE;
+DO $bootstrap_auth$
+DECLARE
+  uid_oid oid;
+  role_oid oid;
+BEGIN
+  uid_oid := to_regprocedure('auth.uid()');
+
+  IF uid_oid IS NULL THEN
+    EXECUTE 'CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS ''SELECT NULL::uuid''';
+  ELSIF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    JOIN pg_language l ON l.oid = p.prolang
+    WHERE p.oid = uid_oid
+      AND n.nspname = 'auth'
+      AND p.proname = 'uid'
+      AND p.pronargs = 0
+      AND p.prorettype = 'uuid'::regtype
+      AND p.provolatile = 's'
+      AND l.lanname = 'sql'
+  ) THEN
+    RAISE EXCEPTION 'auth.uid() incompatible';
+  END IF;
+
+  role_oid := to_regprocedure('auth.role()');
+
+  IF role_oid IS NULL THEN
+    EXECUTE 'CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS ''SELECT current_user::text''';
+  ELSIF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    JOIN pg_language l ON l.oid = p.prolang
+    WHERE p.oid = role_oid
+      AND n.nspname = 'auth'
+      AND p.proname = 'role'
+      AND p.pronargs = 0
+      AND p.prorettype = 'text'::regtype
+      AND p.provolatile = 's'
+      AND l.lanname = 'sql'
+  ) THEN
+    RAISE EXCEPTION 'auth.role() incompatible';
+  END IF;
+END
+$bootstrap_auth$;
