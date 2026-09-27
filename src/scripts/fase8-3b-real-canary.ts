@@ -34,6 +34,7 @@ import {
 } from "../services/architecture/v1/types/normalizedListingV1";
 import { resolveMarketplaceIdFromLegacyEnum } from "../services/architecture/v1/marketplaceRegistry";
 import { computeRawHash } from "../services/architecture/v1/hashing";
+import { countAutoActiveBelowMin } from "./phasePPublicationInvariants";
 
 const KEYWORDS = ["smartwatch","fone de ouvido bluetooth","carregador","cabo","mouse","teclado","cadeira gamer","monitor","impressora","panela"];
 const SHOPEE_PUBLIC_OFFERS_BASELINE = 3;
@@ -294,12 +295,38 @@ async function main() {
     out.NEVER_PUBLISHED_BY_GENERATOR = true;
   }
 
-  const lt2 = await prisma.$queryRaw<Array<{ total: number }>>`
-    SELECT COUNT(*)::int AS total FROM "Product" p WHERE p."autoCreated" = true AND p.active = true
-     AND (SELECT COUNT(DISTINCT o.marketplace::text) FROM "MarketplaceOffer" o
-           WHERE o."productId" = p.id AND o.active = true AND o."matchStatus" = 'EXACT'
-             AND o.available = true AND o.status NOT IN ('UNAVAILABLE','ERROR') AND o.price > 0) < 2`;
-  out.AUTO_ACTIVE_LT2 = lt2[0]?.total ?? null;
+  /*
+   * FASE P (FASE 9) — o predicado aqui era SQL cru (COUNT DISTINCT sem peso de
+   * shadow), enquanto o gate de produção pesa a sombra. Com a sombra ativa, um
+   * produto ML+SHOPEE vale 1 marketplace para o gate de produção, mas 2 para
+   * este SQL — o canário reportava 0 violações onde o gate real vê 1.
+   * Agora o número usa o mesmo código do gate; o antigo vira diagnóstico.
+   */
+  const lt2Rows = await prisma.$queryRaw<
+    Array<{ productId: string; marketplace: string; active: boolean; available: boolean; status: string; matchStatus: string; price: number | null }>
+  >`
+    SELECT p.id AS "productId", o.marketplace::text AS marketplace,
+           o.active, o.available, o.status::text AS status,
+           o."matchStatus"::text AS "matchStatus", o.price
+      FROM "Product" p
+      JOIN "MarketplaceOffer" o ON o."productId" = p.id
+     WHERE p."autoCreated" = true AND p.active = true`;
+
+  const lt2ByProduct = new Map<string, typeof lt2Rows>();
+  for (const row of lt2Rows) {
+    const list = lt2ByProduct.get(row.productId) ?? [];
+    list.push(row);
+    lt2ByProduct.set(row.productId, list);
+  }
+  const lt2 = countAutoActiveBelowMin(
+    [...lt2ByProduct.entries()].map(([productId, offers]) => ({ productId, offers })),
+    flags,
+  );
+  out.AUTO_ACTIVE_LT2 = lt2.belowWeighted;
+  out.AUTO_ACTIVE_LT2_UNWEIGHTED = lt2.belowUnweighted;
+  if (lt2.belowWeightedProductIds.length > 0) {
+    out.AUTO_ACTIVE_LT2_PRODUCT_IDS = lt2.belowWeightedProductIds;
+  }
 
   console.log(JSON.stringify(out, null, 2));
 }

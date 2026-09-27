@@ -10,6 +10,8 @@
  */
 
 import prisma from "../lib/prisma";
+import { readShadowFlags, maskShadowFlags } from "../services/architecture/v1/shadow/flags";
+import { countAutoActiveBelowMin } from "./phasePPublicationInvariants";
 
 async function countOf(label: string, run: () => Promise<number>) {
   try {
@@ -137,6 +139,44 @@ async function main() {
               AND o.price > 0
          ) < 2`;
     out.AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES = autoActive[0]?.total ?? null;
+    /*
+     * FASE P (FASE 9) — o SQL acima é a métrica HISTÓRICA (sem peso de
+     * shadow). O gate real de publicação usa peso, então ela é mantida como
+     * diagnóstico explícito e o número autoritativo passa a ser calculado com
+     * o MESMO código do gate (ver phasePPublicationInvariants.ts). Sem isto o
+     * snapshot reportava 0 violações para um produto que o gate de produção
+     * consideraria single-store.
+     */
+    out.AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES_UNWEIGHTED =
+      autoActive[0]?.total ?? null;
+
+    const autoActiveRows = await prisma.$queryRaw<
+      Array<{ productId: string; marketplace: string; active: boolean; available: boolean; status: string; matchStatus: string; price: number | null }>
+    >`
+      SELECT p.id AS "productId", o.marketplace::text AS marketplace,
+             o.active, o.available, o.status::text AS status,
+             o."matchStatus"::text AS "matchStatus", o.price
+        FROM "Product" p
+        JOIN "MarketplaceOffer" o ON o."productId" = p.id
+       WHERE p."autoCreated" = true AND p.active = true`;
+
+    const byProduct = new Map<string, typeof autoActiveRows>();
+    for (const row of autoActiveRows) {
+      const list = byProduct.get(row.productId) ?? [];
+      list.push(row);
+      byProduct.set(row.productId, list);
+    }
+    const flags = readShadowFlags();
+    const lt2 = countAutoActiveBelowMin(
+      [...byProduct.entries()].map(([productId, offers]) => ({ productId, offers })),
+      flags,
+    );
+    out.AUTO_ACTIVE_WITH_LT_2_PUBLIC_MARKETPLACES = lt2.belowWeighted;
+    out.SHADOW_FLAGS_EFFECTIVE = maskShadowFlags(flags);
+    out.SHADOW_ANY_ACTIVE = flags.enabled && flags.marketplaceIds.length > 0;
+    if (lt2.belowWeightedProductIds.length > 0) {
+      out.AUTO_ACTIVE_LT2_PRODUCT_IDS = lt2.belowWeightedProductIds;
+    }
   } catch (error) {
     out.AUTO_ACTIVE_LT2_ERROR =
       error instanceof Error ? error.name : "UNKNOWN";

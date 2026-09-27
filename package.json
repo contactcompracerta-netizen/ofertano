@@ -41,7 +41,8 @@
     "fase8-3b:backfill": "tsx --env-file=.env.local src/scripts/fase8-3b-blocking-key-backfill.ts",
     "fase8-3b:lookup-proof": "tsx --env-file=.env.local src/scripts/fase8-3b-indexed-lookup-proof.ts",
     "fase8-3b:canary": "tsx --env-file=.env.local src/scripts/fase8-3b-real-canary.ts",
-    "fase8-3b:benchmark": "tsx src/scripts/fase8-3b-benchmark.ts"
+    "fase8-3b:benchmark": "tsx src/scripts/fase8-3b-benchmark.ts",
+    "test:phase-p": "tsx --test src/scripts/phasePPublicationInvariants.test.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
