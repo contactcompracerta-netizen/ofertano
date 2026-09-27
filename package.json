@@ -43,7 +43,8 @@
     "fase8-3b:canary": "tsx --env-file=.env.local src/scripts/fase8-3b-real-canary.ts",
     "fase8-3b:benchmark": "tsx src/scripts/fase8-3b-benchmark.ts",
     "test:phase-p": "tsx --test src/scripts/phasePPublicationInvariants.test.ts",
-    "test:phase-p:publication": "tsx --test src/services/publicVisibility/phasePPublicVisibility.test.ts src/scripts/phasePPublicationReconcile.test.ts src/scripts/fase8-3-blindRediscoveryHarness.test.ts && tsx src/services/publicVisibility/multiStoreVisibility.test.ts"
+    "test:phase-p:publication": "tsx --test src/services/publicVisibility/phasePPublicVisibility.test.ts src/scripts/phasePPublicationReconcile.test.ts src/scripts/fase8-3-blindRediscoveryHarness.test.ts && tsx src/services/publicVisibility/multiStoreVisibility.test.ts",
+    "fase8:publication-reconcile": "tsx --env-file=.env.local src/scripts/phase-p-publication-reconcile.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
