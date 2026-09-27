@@ -1,25 +1,35 @@
 /*
  * ============================================================================
- * BLOQUEADO — NAO EXECUTAR NO ESTADO ATUAL (FASE 8.3B)
+ * FASE 8.3B — BACKFILL DE CANDIDATE BLOCKING KEYS (ESTADO ATUAL)
  * ============================================================================
- * A migration `20260926220000_candidate_blocking_keys` (CandidateBlockingKey)
- * foi APLICADA e VALIDADA no banco real — e depois REMOVIDA deste repositório.
+ * CORREÇÃO DOCUMENTAL (FASE P, 2026-09-27): o cabeçalho anterior deste arquivo
+ * afirmava que a migration `20260926220000_candidate_blocking_keys` "foi
+ * APLICADA e VALIDADA no banco real — e depois REMOVIDA deste repositório",
+ * e que a tabela "NÃO é recreate aqui". Isso era VERDADEIRO na época em que
+ * foi escrito e hoje é FALSO. Estado factual verificado nesta data:
  *
- * Motivo: `test:migration-history` mantém uma ALLOWLIST de migrações pendentes
- * e rejeita qualquer migration fora dela (`PENDING_ALLOWLIST_REQUIRED` /
- * `UNEXPECTED_CHECKSUM_MISMATCH`). Registrar a nova migration nessa allowlist
- * é mexer num teste que é CONTRATO DE SEGURANÇA, e a missão proíbe
- * deixar o gate quebrado. Remover era a saída honesta; a alternativa seria
- * afrouxar o gate.
+ *   - a migration EXISTE em disco: prisma/migrations/20260926220000_candidate_blocking_keys/
+ *   - ela está no manifesto do bootstrap (scripts/bootstrap/manifest.json) e
+ *     no pin forense (scripts/migration-history/forensic-pins.json);
+ *   - ela está na allowlist do ledger (verify-ledger-compatibility.mjs →
+ *     `blockingKeyMigration`) e no ledger real de produção;
+ *   - em PRODUÇÃO ela está APLICADA e NÃO revertida
+ *     (`_prisma_migrations.finished_at` preenchido, `rolled_back_at` nulo);
+ *   - a tabela existe em produção com 428 chaves para 22 produtos, os 5
+ *     índices declarados presentes, e `model CandidateBlockingKey` está em
+ *     prisma/schema.prisma.
  *
- * O que JÁ FOI PROVADO com a tabela real (artefatos preservados no relatório):
- *   - NO_CARTESIAN_PRODUCT_SCAN=PASS (EXPLAIN: Index Scan em
- *     CandidateBlockingKey_keyType_normalizedValue_strength_idx)
- *   - backfill idempotente nos canários 1 -> 10 -> 100 -> 500
- *   - DERIVED_KEYS_MARKED_STRONG=0 em todos os canários
+ * Portanto o bloqueio NÃO é "a migration está ausente". O backfill continua
+ * bloqueado por PROCESSO E GATES — decisão explícita de execução, não uma
+ * limitação técnica do schema:
  *
- * PRÓXIMO PASSO (fora do escopo desta missão): registrar a migration na
- * allowlist do ledger e reaplicar. A tabela NÃO é recreate aqui.
+ *   1. o dry-run (`--apply` ausente; ver `dryRun = !hasFlag("apply")` abaixo)
+ *      precisa ser revisado e aprovado por uma pessoa;
+ *   2. a execução é uma escrita real em produção e exige missão própria.
+ *
+ * NADA aqui foi reabilitado: a única mudança nesta commit é o texto. O
+ * comportamento de execução, o default dry-run, o teto `--limit` e as
+ * garantias de idempotência permanecem idênticos.
  * ============================================================================
  */
 /**
