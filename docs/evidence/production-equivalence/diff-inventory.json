@@ -1,0 +1,84 @@
+{
+  "sourceGitSHA": "0171d81464d32748ee0575be218431c2d32a2043",
+  "sourceBranch": "fase8/second-marketplace-shadow",
+  "sourceDumpSHA256": "97b37997e2a5e2d7b2eb0dc354dc2372d329f8b3e0999a91275f1870ec439c41",
+  "diffSHA256": "8d98db8dc6389e95c324dce62e84c45deafd0208e034a33bbba349731ecbf371",
+  "comparison": "PRODUCTION_CLONE_MINUS_TWO_EXTERNAL_FKS_TO_LOCAL_EQUIVALENCE_SCHEMA",
+  "complete": true,
+  "completenessProof": {
+    "method": "The preserved pre-reconciliation production dump was restored into a newly owned 127.0.0.1:55433 clone, exactly the two known cross-schema FKs were removed, and the diff was recomputed twice: once against prisma/schema.prisma (the original exit-2 baseline) and once against the local equivalence schema (the preserved comparison).",
+    "directBaselineItems": 17,
+    "explainedByPreExistingLocalEquivalence": 5,
+    "itemsRequiringThisClassification": 12,
+    "arithmetic": "17 direct-baseline diff items = 12 inventoried below + 5 already covered by the pre-existing localEquivalenceSchema (see preExistingLocalEquivalenceCovered). No unexplained object remains.",
+    "independentReproduction": [
+      "node scripts/migration-history/verify-production-schema-equivalence.mjs",
+      "restore sourceDumpSHA256 dump into an owned 55433 clone, drop notifications_user_id_fkey and price_alerts_user_id_fkey, then prisma migrate diff --to-schema prisma/schema.prisma --exit-code"
+    ]
+  },
+  "preExistingLocalEquivalenceCovered": {
+    "note": "Objects the raw prisma/schema.prisma diff proposes to remove that are NOT new findings: they are already represented by the pre-existing localEquivalenceSchema (scripts/bootstrap/local-supabase-compatibility.mjs) and are proven by a category A fresh bootstrap with local diff zero. They are therefore not part of the production overlay and not re-classified here.",
+    "objects": [
+      "table Favorite",
+      "table PriceAlertEvent",
+      "enum variant PriceAlertType.TARGET_PRICE",
+      "Favorite foreign key on (productId)",
+      "PriceAlertEvent foreign key on (alertId)"
+    ]
+  },
+  "categories": {
+    "UNMANAGED_LEGACY_TABLES": {
+      "classification": "UNMANAGED_LEGACY_TABLE",
+      "resolution": "REPRESENTED_IN_PRODUCTION_OVERLAY_NEVER_DROPPED",
+      "tables": [
+        "notifications",
+        "price_alerts"
+      ]
+    },
+    "LEGACY_RETAINED_PHYSICAL_EXTENSION": {
+      "classification": "LEGACY_RETAINED_PHYSICAL_EXTENSION",
+      "resolution": "REPRESENTED_IN_PRODUCTION_OVERLAY_NEVER_DROPPED",
+      "table": "PriceAlert",
+      "columns": [
+        "armed",
+        "lastEvaluatedAt",
+        "lastEvaluatedHadExact",
+        "lastEvaluatedPrice",
+        "lastTriggeredAt",
+        "lastTriggeredPrice"
+      ],
+      "productionNonNullRowsPerColumn": 0,
+      "priceAlertTotalRows": 0
+    },
+    "UNVERSIONED_DRIFT_RETROACTIVE_BOOTSTRAP_ARTIFACT": {
+      "classification": "REAL_DRIFT",
+      "resolution": "CORRECTED_BY_FORWARD_MIGRATION_20260927180000_social_post_index_reconciliation",
+      "name": "SocialPost_dayKey_key",
+      "definition": "CREATE INDEX \"SocialPost_dayKey_key\" ON public.\"SocialPost\" USING btree (\"dayKey\")",
+      "indisunique": false,
+      "indisprimary": false,
+      "indisvalid": true,
+      "indisready": true,
+      "predicate": null,
+      "expressions": null,
+      "indnkeyatts": 1,
+      "indnatts": 1,
+      "indkey": "2",
+      "indoption": "0",
+      "origin": "20260905110000_bootstrap_legacy_objects creates this non-unique index solely so the historical DROP INDEX in 20260907220000_social_three_slots finds a target; the retroactive bootstrap re-ran it after the three-slot migration had already dropped the unique index, leaving a leftover.",
+      "notAcceptedInOverlay": true,
+      "canonicalIndexPresent": "SocialPost_dayKey_slot_key",
+      "productionDaysWithMultiplePosts": 14
+    }
+  },
+  "dependentForeignKeysInCompleteDiff": [
+    "notifications_price_alert_id_fkey",
+    "notifications_product_id_fkey",
+    "price_alerts_product_id_fkey"
+  ],
+  "crossSchemaForeignKeysRemovedOnCloneOnly": [
+    "notifications_user_id_fkey",
+    "price_alerts_user_id_fkey"
+  ],
+  "note": "The three dependent internal FKs belong to the two proposed table removals; they are inventoried, preserved, and represented in the production overlay. The only object classified as real drift is the stale non-unique SocialPost dayKey index, which was corrected by a fail-closed forward migration. No table, column, row or historical migration was dropped."
+}
