@@ -27,7 +27,7 @@ import {
 } from "@/services/multistore-v2";
 import type { SearchBudget } from "@/services/multistore-v2/timeBudget";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
-import { countDistinctNonEmptyMarketplaces, hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
+import { hasPublicMultiStore, meetsPublicMultiStoreMarketplaceCount } from "@/services/publicVisibility/multiStoreVisibility";
 
 function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -180,6 +180,19 @@ async function searchCatalog(query: string) {
         },
         select: {
           marketplace: true,
+          // FASE P: necessário para isUsablePublicOffer decidir a
+          // visibilidade no gate central. O campo mais perigoso é
+          // `active`: a checagem é `active === false`, então uma coluna
+          // NÃO selecionada chega como `undefined` e PASSA — uma oferta
+          // inativa entraria como pública. O mesmo vale para
+          // `matchStatus` (a checagem só rejeita quando o valor está
+          // definido e não é "EXACT"). `available`/`status`/`price` já
+          // fail-closed sozinhos, mas vêm juntos porque a função os usa.
+          active: true,
+          matchStatus: true,
+          available: true,
+          status: true,
+          price: true,
         },
       },
     },
@@ -428,9 +441,8 @@ export async function searchCatalogOrDiscover(
 
       const visibleProducts = v2.products
         .filter(isSearchVisible)
-        .filter(
-          (product) =>
-            countDistinctNonEmptyMarketplaces(product.offers) >= 2,
+        .filter((product) =>
+          meetsPublicMultiStoreMarketplaceCount(product.offers),
         );
       const persistenceEnabled = isPublicSearchPersistenceEnabled();
 
@@ -492,7 +504,7 @@ export async function searchCatalogOrDiscover(
       } else if (v2.views.length > 0 && visibleProducts.length > 0) {
         const visibleIndexes = new Set(
           v2.products.map((product, index) =>
-            countDistinctNonEmptyMarketplaces(product.offers) >= 2
+            meetsPublicMultiStoreMarketplaceCount(product.offers)
               ? index
               : -1,
           ),
@@ -525,7 +537,18 @@ export async function searchCatalogOrDiscover(
    * LEGACY — isolado para rollback via MULTISTORE_ENGINE=legacy
    */
   const existing = await searchCatalog(search);
-  const existingMultiStore = existing.filter((product) => storeCount(product) >= 2);
+  /*
+   * FASE P — a busca pública é uma das SUPERFÍCIES de leitura, então a
+   * decisão final de visibilidade precisa ser o gate central ponderado, não
+   * uma contagem local. `storeCount` contava marketplaces distintos crus:
+   * sem peso de shadow e sem exigir oferta válida. Com Shopee em SHADOW, um
+   * produto MERCADO_LIVRE + SHOPEE (peso real = 1) saía da busca como
+   * multi-loja público.
+   *
+   * `storeCount` continua existindo abaixo, mas só como ORDENACAO e como
+   * heurística de "catálogo completo" — nenhuma delas decide visibilidade.
+   */
+  const existingMultiStore = existing.filter(hasPublicMultiStore);
   const marketplacesAtivas = listarDiscoveryAdaptersAtivos().length;
   const catalogCompleto =
     Boolean(existingMultiStore[0]) &&
@@ -593,6 +616,11 @@ export async function searchCatalogOrDiscover(
               },
               select: {
                 marketplace: true,
+                // FASE P: o gate central (hasPublicMultiStore) decide
+                // visibilidade com isUsablePublicOffer, que precisa tambem de
+                // active/matchStatus. Sem eles a checagem seria fail-open.
+                active: true,
+                matchStatus: true,
                 available: true,
                 status: true,
                 price: true,

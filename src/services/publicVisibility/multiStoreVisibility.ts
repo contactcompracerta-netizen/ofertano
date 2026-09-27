@@ -5,7 +5,11 @@ import type { Prisma } from "@prisma/client";
  * O import é seguro: shadowWeight só depende de módulos folha (registry/flags),
  * então não há ciclo com este arquivo.
  */
-import { filterPublicOffers } from "@/services/architecture/v1/publication/shadowWeight";
+import {
+  countPublicMarketplacesWithWeight,
+  filterPublicOffers,
+  toCanonicalMarketplaceId,
+} from "@/services/architecture/v1/publication/shadowWeight";
 
 /*
  * VISIBILIDADE PÚBLICA — MULTI LOJA REAL
@@ -103,7 +107,15 @@ export function countPublicMarketplaces(
   return new Set(
     publicOffersOnly(offers)
       .filter(isUsablePublicOffer)
-      .map((offer) => offer.marketplace.trim())
+      /*
+       * FASE P — identidade CANONICA, nao grafia crua. O banco persiste o
+       * enum em MAIUSCULAS ("SHOPEE") e a shadow allowlist usa o
+       * marketplaceId canonico ("shopee"). Contar pela grafia permitia que a
+       * mesma fonte contasse duas vezes, e que uma fonte SHADOW passasse
+       * pelo filtro. A canonicalizacao vive em shadowWeight (o unico ponto
+       * onde shadow e publico se separam); aqui so aggregator com ela.
+       */
+      .map((offer) => toCanonicalMarketplaceId(offer.marketplace))
       .filter(Boolean),
   ).size;
 }
@@ -117,6 +129,30 @@ export function hasPublicMultiStore(
   const lista = Array.isArray(offers) ? offers : (offers.offers ?? []);
   return (
     countPublicMarketplaces(lista) >=
+    PUBLIC_MULTISTORE_MIN_MARKETPLACES
+  );
+}
+
+/*
+ * FASE P — gate PONDERADO SEM VALIDADE DE OFERTA.
+ *
+ * `hasPublicMultiStore` é o gate de visibilidade de um PRODUTO PERSISTIDO, e
+ * por isso exige ofertas válidas (ativa/EXACT/disponível/preço). A busca
+ * pública, porém, também decide visibilidade sobre candidatos de DISCOVERY
+ * (clusters do motor Multi Loja V2), cujo tipo `CanonicalOffer` não carrega
+ * `available`/`status`/`matchStatus`. Aplicar `hasPublicMultiStore` lá seria
+ * fail-closed por acidente — TODO cluster seria considerado sem oferta válida.
+ *
+ * Esta função é a MESMA política (peso de shadow + o mesmo mínimo), exposta
+ * para essa forma de entrada. Não é uma implementação paralela: delega aos
+ * mesmos dois símbolos, e o mínimo é a MESMA constante. O que muda é apenas
+ * qual requisito a forma de entrada consegue expressar — nunca o peso.
+ */
+export function meetsPublicMultiStoreMarketplaceCount(
+  offers: Array<{ marketplace: string }>,
+): boolean {
+  return (
+    countPublicMarketplacesWithWeight(offers) >=
     PUBLIC_MULTISTORE_MIN_MARKETPLACES
   );
 }
