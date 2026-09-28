@@ -192,7 +192,9 @@ export async function runMarketplacePublicSync(
   const authorization = authorizePublicSync(
     config.marketplaceId,
     options.allowlistOverride,
+    process.env,
   );
+
   if (!authorization.authorized) {
     report.WRITER_MODE = authorization.reason;
     report.ERROR = `WRITER_NOT_AUTHORIZED: ${authorization.reason}`;
