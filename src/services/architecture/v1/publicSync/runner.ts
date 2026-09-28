@@ -28,6 +28,7 @@ import { resolvePurchaseLinks, noPurchaseLinks } from "./purchaseLinks";
 import { selectWinningOffer } from "./offerWriter";
 import { authorizePublicSync, type PublicSyncAllowlist } from "./flags";
 import type {
+  KnownBinding,
   PublicOfferDraftV1,
   PublicSyncConfig,
   PublicSyncDeps,
@@ -54,6 +55,32 @@ function rawPayloadReader(
   const candidate = connector as Partial<RawPayloadPreserving>;
   return typeof candidate.rawPayloadFor === "function"
     ? (id: string) => candidate.rawPayloadFor!(id)
+    : null;
+}
+
+/**
+ * Capacidade OPCIONAL de conector: buscar UMA listagem ja conhecida pelo seu
+ * identificador de fonte, de forma deterministica.
+ *
+ * Mesmo desenho estrutural de `RawPayloadPreserving`, e pela mesma razao: a
+ * busca por palavra-chave e uma busca por RANKING e nao serve como canal de
+ * refresh. Um conector que sabe consultar a fonte por identificador expoe este
+ * metodo; um que nao sabe, simplemente nao expoe, e as bindings certificadas
+ * so sao vistas se a varredura por palavra-chave as trouxer — comportamento
+ * antigo, correto, apenas menos confiavel.
+ */
+type BoundListingFetching = {
+  fetchByExternalId(
+    externalListingId: string,
+  ): Promise<NormalizedMarketplaceListingV1 | null>;
+};
+
+function boundListingFetcher(
+  connector: MarketplaceConnector,
+): ((externalListingId: string) => Promise<NormalizedMarketplaceListingV1 | null>) | null {
+  const candidate = connector as Partial<BoundListingFetching>;
+  return typeof candidate.fetchByExternalId === "function"
+    ? (id: string) => candidate.fetchByExternalId!(id)
     : null;
 }
 
@@ -88,6 +115,15 @@ function emptyReport(config: PublicSyncConfig, dryRun: boolean): PublicSyncRepor
     AMBIGUOUS_EXACT: 0,
     NO_CANDIDATES: 0,
     NO_EXACT: 0,
+
+    CERTIFIED_BINDINGS: 0,
+    BINDING_REFRESH_MATCHED: 0,
+    BINDING_REFRESH_WRITES: 0,
+    BINDING_REFRESH_NOOP: 0,
+    BINDING_NOT_SEEN: 0,
+    BINDING_REFRESH_SKIPPED_BUDGET: 0,
+    BINDING_STATUS: [],
+    NEW_DISCOVERY_LISTINGS: 0,
     MISSING_AFFILIATE_LINK: 0,
     INVALID_LINK: 0,
     WOULD_WRITE: 0,
@@ -114,11 +150,13 @@ function toOfferDraft(
   listing: NormalizedMarketplaceListingV1,
   productId: string,
   links: ReturnType<typeof resolvePurchaseLinks>,
+  /** Chave externa a gravar. Padrao: a da listagem. */
+  externalId?: string,
 ): PublicOfferDraftV1 {
   return {
     marketplaceId: listing.marketplaceId,
     productId,
-    externalId: listing.externalListingId,
+    externalId: externalId ?? listing.externalListingId,
     title: listing.catalog.title,
     seller: typeof listing.seller.name === "string" ? listing.seller.name : null,
     image: listing.catalog.primaryImageUrl ?? listing.catalog.images[0] ?? null,
@@ -205,6 +243,50 @@ export async function runMarketplacePublicSync(
   const listings = collected.slice(0, maxListings);
   report.LISTINGS_COLLECTED = listings.length;
 
+  /*
+   * 1b. ASSOCIACOES CERTIFICADAS (modelo B).
+   *
+   * Uma listing cuja (marketplace, externalId) JA esta associada a um Product
+   * por um gate certificado nao precisa ter sua identidade re-derivada a cada
+   * coleta: o que a fonte precisa e devolver ATUALIZACOES DE OFERTA para a MESMA
+   * associacao. Isso e refresh, nao criacao de associacao.
+   *
+   * Por que isso e seguro e nao um atalho perigoso: o productId NAO vem da
+   * fonte nem do titulo — vem do indice `@@unique([marketplace, externalId])`
+   * de uma oferta que o gate central ja aceitou. Uma listing SEM binding nao
+   * ganha acesso a este caminho: ela cai no caminho de descoberta e precisa de
+   * EXACT unico. Nenhum Product e criado aqui.
+   *
+   * Uma binding que a coleta NAO devolveu e NOT_SEEN: nao desassocia, nao
+   * apaga e nao rebaixa. freshness e informacao; demotion e decisao.
+   */
+  let certified: KnownBinding[] = [];
+  if (deps.knownBindings) {
+    try {
+      certified = await deps.knownBindings.listCertified(config.marketplaceId);
+    } catch {
+      // Falha aqui NAO pode virar lista vazia em silencio: isso degradaria o
+      // refresh para descoberta sem aviso, e o relatorio diria "0 bindings
+      // certificadas" como se fosse um fato do catalogo, quando na verdade e um
+      // erro de leitura. Registramos e seguimos, que continua fail-closed.
+      report.ERROR = report.ERROR ?? "KNOWN_BINDINGS_UNAVAILABLE";
+    }
+  }
+  report.CERTIFIED_BINDINGS = certified.length;
+  const seenBinding = new Set<string>();
+  const bindingStatus = new Map<string, PublicSyncReportV1["BINDING_STATUS"][number]>();
+  for (const binding of certified) {
+    bindingStatus.set(binding.externalId, {
+      externalId: binding.externalId,
+      productId: binding.productId,
+      certifiedMatchStatus: binding.matchStatus,
+      seen: false,
+      previousPrice: binding.currentPrice,
+      refreshedPrice: null,
+      action: "NOT_SEEN",
+    });
+  }
+
   const readRaw = rawPayloadReader(config.connector);
   const resolverDeps: IdentityResolverDeps = {
     keys: deps.keys,
@@ -213,15 +295,158 @@ export async function runMarketplacePublicSync(
     brandLexicon: config.brandLexicon,
   };
 
+  /*
+   * Refresh de UMA binding certificada. Devolve true se a listagem foi vista
+   * (com ou sem gravacao). Concentrado aqui porque o refresh e alcancavel por
+   * dois caminhos — a busca deterministica por externalId e a varredura por
+   * palavra-chave — e os dois precisam ser a MESMA operacao, com as mesmas
+   * garantias: nunca re-derivar identidade, nunca criar Product, nunca
+   * sobrescrever um link seguro com ausencia de link.
+   */
+  const refreshBinding = async (
+    binding: KnownBinding,
+    listing: NormalizedMarketplaceListingV1,
+  ): Promise<boolean> => {
+    seenBinding.add(binding.externalId);
+    const status = bindingStatus.get(binding.externalId);
+    if (status) status.seen = true;
+    report.BINDING_REFRESH_MATCHED += 1;
+
+    // Preco invalido nao e atualizacao de oferta: e ausencia de dado. Nao
+    // grava, e sobretudo nao apaga o preco vigente.
+    if (!Number.isFinite(listing.commerce.price) || listing.commerce.price <= 0) {
+      return true;
+    }
+
+    const rawPayload = readRaw ? readRaw(listing.externalListingId) : null;
+    const links =
+      rawPayload === null || rawPayload === undefined
+        ? noPurchaseLinks()
+        : resolvePurchaseLinks(config.purchaseLinks.extract(rawPayload));
+    if (links.affiliateState === "MISSING") report.MISSING_AFFILIATE_LINK += 1;
+    if (links.affiliateState === "INVALID" || links.sourceState === "INVALID") {
+      report.INVALID_LINK += 1;
+    }
+
+    /*
+     * A chave externa do draft e a CERTIFICADA (`binding.externalId`), nao a
+     * `externalListingId` da listagem.
+     *
+     * Nao e vaidade de formato. A `externalListingId` do conector e
+     * "<shopId>.<itemId>", enquanto o `externalId` gravado pelas ofertas
+     * certificadas e o itemId sozinho. Deixar o refresh gravar a forma do
+     * conector REESCREVERIA a chave de uma oferta ja certificada, e essa chave e
+     * o que sustenta `@@unique([marketplace, externalId])`. Uma atualizacao de
+     * preco nao pode trocar a identidade com que a oferta foi gravada.
+     */
+    const draft = toOfferDraft(
+      listing,
+      binding.productId,
+      links,
+      binding.externalId,
+    );
+    // O status de identidade e o CERTIFICADO e ja persistido. O refresh nao
+    // promove nem rebaixa identidade — ele so move preco, disponibilidade e
+    // link de uma associacao que ja existe.
+    report.WOULD_WRITE += 1;
+    try {
+      const result = await deps.writer.commit(draft, { dryRun, mode: "REFRESH" });
+      if (result.action === "NOOP") {
+        report.BINDING_REFRESH_NOOP += 1;
+        if (status) {
+          status.action = "REFRESH_NOOP";
+          status.refreshedPrice = listing.commerce.price;
+        }
+      } else {
+        report.BINDING_REFRESH_WRITES += 1;
+        if (!dryRun) report.WRITES += 1;
+        if (result.action === "UPDATE") report.WRITES_UPDATED += 1;
+        if (status) {
+          status.action = "REFRESH_UPDATED";
+          status.refreshedPrice = listing.commerce.price;
+        }
+      }
+    } catch {
+      // Falha de gravacao e por binding: nao publica, segue, e registra.
+      report.ERROR = report.ERROR ?? "COMMIT_FAILED";
+    }
+    return true;
+  };
+
+  /*
+   * 1c. REFRESH DETERMINISTICO das bindings certificadas.
+   *
+   * Antes de depender da varredura por palavra-chave, pedimos cada binding
+   * CERTIFICADA pelo seu identificador. A busca por palavra-chave e uma busca
+   * por RANKING e a ordem muda entre chamadas: medida nesta conta, o mesmo
+   * codigo com a mesma varredura reencontrou 3/3 bindings numa execucao e 0/3
+   * na seguinte. Um refresh que depende de ranking nao e um refresh, e uma
+   * variacao de preco que as vezes simplesmente nao acontece.
+   *
+   * Conector SEM `fetchByExternalId` nao tem o que fazer aqui: cai no
+   * comportamento antigo, em que a binding so e vista se a varredura trouxer.
+   */
+  const fetchKnown = boundListingFetcher(config.connector);
+  if (fetchKnown) {
+    // O teto vale para o refresh tambem. Sem isto, `--limit=1` seria um canario
+    // de 1 item na varredura e de TODAS as bindings no refresh — e o relatorio
+    // chamaria de canario o que nao foi. O que sobra por falta de orcamento e
+    // contabilizado a parte, para nao se confundir com NOT_SEEN.
+    let budget = maxListings;
+    for (const binding of certified) {
+      if (budget <= 0) {
+        report.BINDING_REFRESH_SKIPPED_BUDGET += 1;
+        continue;
+      }
+      budget -= 1;
+      try {
+        const listing = await fetchKnown(binding.externalId);
+        if (listing === null) continue; // NOT_SEEN: nao desassocia, nao apaga
+        if (config.connector.validate(listing).length > 0) continue;
+        report.LISTINGS_VALID += 1;
+        await refreshBinding(binding, listing);
+      } catch {
+        // Falha de FONTE em uma binding nao impede as demais. Fail-closed:
+        // sem dado novo, o preco vigente permanece.
+        report.ERROR = report.ERROR ?? "BOUND_FETCH_FAILED";
+      }
+    }
+  }
+
   // 2. validacao + identity, listing a listing. Os drafts aceitos sao
   // acumulados por (productId) para que a selecao determinista (FASE 9.10)
   // happenca sobre TODAS as listings aceitas do mesmo Product.
   const draftsByProduct = new Map<string, PublicOfferDraftV1[]>();
 
   for (const listing of listings) {
+    // Ja tratada pelo pre-pass deterministico? Sai ANTES de contar validacao e
+    // link, senao a mesma offerta seria contabilizada duas vezes.
+    if (seenBinding.has(listing.externalListingId)) continue;
+
     // validate(): rejeicao de payload e rejeicao de DADOS, nao erro de sistema.
     if (config.connector.validate(listing).length > 0) continue;
     report.LISTINGS_VALID += 1;
+
+    /* ---------------- CAMINHO B: binding certificada ------------------ */
+    // Os links NAO sao resolvidos aqui: `refreshBinding` resolve para o
+    // caminho de refresh, e o bloco de descoberta resolve para o caminho C.
+    // Resolver antes dos dois contaria a mesma offerta duas vezes.
+    // Uma listagem cuja externalId ja esta associada vai para refresh, com o
+    // MESMO productId certificado — nunca para a identidade. Ja tratada no
+    // pre-pass deterministico? Entao nao e contada de novo.
+    const binding = deps.knownBindings
+      ? await deps.knownBindings
+          .find(config.marketplaceId, listing.externalListingId)
+          .catch(() => null)
+      : null;
+
+    if (binding !== null) {
+      await refreshBinding(binding, listing);
+      continue;
+    }
+
+    /* ---------------- CAMINHO C: descoberta ------------------------- */
+    report.NEW_DISCOVERY_LISTINGS += 1;
 
     let probe: ProbeIdentityResultV1;
     try {
@@ -274,7 +499,6 @@ export async function runMarketplacePublicSync(
       rawPayload === null || rawPayload === undefined
         ? noPurchaseLinks()
         : resolvePurchaseLinks(config.purchaseLinks.extract(rawPayload));
-
     if (links.affiliateState === "MISSING") report.MISSING_AFFILIATE_LINK += 1;
     if (links.affiliateState === "INVALID" || links.sourceState === "INVALID") {
       report.INVALID_LINK += 1;
@@ -293,7 +517,7 @@ export async function runMarketplacePublicSync(
     report.WOULD_WRITE += 1;
 
     try {
-      const result = await deps.writer.commit(winner, { dryRun });
+      const result = await deps.writer.commit(winner, { dryRun, mode: "CREATE" });
       if (result.action === "CREATE") report.WRITES_CREATED += 1;
       else if (result.action === "UPDATE") report.WRITES_UPDATED += 1;
       else report.WRITES_NOOP += 1;
@@ -303,6 +527,11 @@ export async function runMarketplacePublicSync(
       report.ERROR = report.ERROR ?? "COMMIT_FAILED";
     }
   }
+
+  report.BINDING_STATUS = [...bindingStatus.values()];
+  report.BINDING_NOT_SEEN = [...bindingStatus.values()].filter(
+    (b) => !seenBinding.has(b.externalId),
+  ).length;
 
   return report;
 }

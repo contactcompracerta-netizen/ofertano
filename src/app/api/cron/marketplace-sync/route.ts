@@ -30,6 +30,7 @@ import { runMarketplacePublicSync } from "@/services/architecture/v1/publicSync/
 import { createPrismaPublicOfferCommitter } from "@/services/architecture/v1/publicSync/offerWriter";
 import {
   createBlockingKeyLookup,
+  createKnownBindingLookup,
   createProductListingLoader,
   evaluateIdentityConfidence,
 } from "@/services/architecture/v1/publicSync/prismaDeps";
@@ -113,6 +114,7 @@ export async function GET(request: Request) {
         keys: createBlockingKeyLookup(prisma),
         products: createProductListingLoader(prisma),
         evaluate: evaluateIdentityConfidence,
+        knownBindings: createKnownBindingLookup(prisma),
         writer: createPrismaPublicOfferCommitter(prisma),
       },
       { dryRun: dry, maxListings },
@@ -136,6 +138,13 @@ export async function GET(request: Request) {
         AMBIGUOUS_EXACT: report.AMBIGUOUS_EXACT,
         NO_CANDIDATES: report.NO_CANDIDATES,
         NO_EXACT: report.NO_EXACT,
+        CERTIFIED_BINDINGS: report.CERTIFIED_BINDINGS,
+        BINDING_REFRESH_MATCHED: report.BINDING_REFRESH_MATCHED,
+        BINDING_REFRESH_WRITES: report.BINDING_REFRESH_WRITES,
+        BINDING_REFRESH_NOOP: report.BINDING_REFRESH_NOOP,
+        BINDING_NOT_SEEN: report.BINDING_NOT_SEEN,
+        BINDING_REFRESH_SKIPPED_BUDGET: report.BINDING_REFRESH_SKIPPED_BUDGET,
+        NEW_DISCOVERY_LISTINGS: report.NEW_DISCOVERY_LISTINGS,
         MISSING_AFFILIATE_LINK: report.MISSING_AFFILIATE_LINK,
         INVALID_LINK: report.INVALID_LINK,
         WOULD_WRITE: report.WOULD_WRITE,
@@ -144,6 +153,7 @@ export async function GET(request: Request) {
         WRITES_UPDATED: report.WRITES_UPDATED,
         WRITES_NOOP: report.WRITES_NOOP,
         PRODUCTS_CREATED: report.PRODUCTS_CREATED,
+        BINDING_STATUS: report.BINDING_STATUS,
         COLLECT_CALLS: report.COLLECT_CALLS,
         COLLECT_PARTIAL: report.COLLECT_PARTIAL,
         ERROR: report.ERROR,

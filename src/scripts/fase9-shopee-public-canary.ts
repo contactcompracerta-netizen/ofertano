@@ -29,6 +29,7 @@ import { runMarketplacePublicSync } from "../services/architecture/v1/publicSync
 import { createPrismaPublicOfferCommitter } from "../services/architecture/v1/publicSync/offerWriter";
 import {
   createBlockingKeyLookup,
+  createKnownBindingLookup,
   createProductListingLoader,
   evaluateIdentityConfidence,
 } from "../services/architecture/v1/publicSync/prismaDeps";
@@ -52,6 +53,8 @@ const has = (name: string) => process.argv.includes(`--${name}`);
 const APPLY = has("apply");
 const LIMIT = Number.parseInt(argOf("limit") ?? "25", 10);
 const OUT = argOf("out");
+const PAGE_SIZE = Number.parseInt(argOf("page-size") ?? "0", 10);
+const MAX_PAGES = Number.parseInt(argOf("max-pages") ?? "0", 10);
 const QUERIES = (argOf("queries") ?? "")
   .split(",")
   .map((q) => q.trim())
@@ -135,8 +138,12 @@ async function main() {
     ...(QUERIES.length > 0 ? { keywords: QUERIES } : {}),
     maxListings: LIMIT,
     brandLexicon: new Set<string>(),
-    pageSize: 20,
-    maxPages: 1,
+    // pageSize/maxPages ficam no padrao medido da factory (50 x 5), que e a
+    // unica combinacao comprovada a alcancar as 3 bindings certificadas. Fixar
+    // aqui um valor menor desativaria o refresh sem avisar. Ver
+    // H-refresh-config-search.txt.
+    ...(PAGE_SIZE > 0 ? { pageSize: PAGE_SIZE } : {}),
+    ...(MAX_PAGES > 0 ? { maxPages: MAX_PAGES } : {}),
   });
 
   const startedAt = new Date().toISOString();
@@ -146,6 +153,7 @@ async function main() {
       keys: createBlockingKeyLookup(prisma),
       products: createProductListingLoader(prisma),
       evaluate: evaluateIdentityConfidence,
+      knownBindings: createKnownBindingLookup(prisma),
       writer: createPrismaPublicOfferCommitter(prisma),
     },
     { dryRun: !APPLY, maxListings: LIMIT },
@@ -180,6 +188,15 @@ async function main() {
     AMBIGUOUS_EXACT: report.AMBIGUOUS_EXACT,
     NO_CANDIDATES: report.NO_CANDIDATES,
     NO_EXACT: report.NO_EXACT,
+
+    // dois caminhos
+    CERTIFIED_BINDINGS: report.CERTIFIED_BINDINGS,
+    BINDING_REFRESH_MATCHED: report.BINDING_REFRESH_MATCHED,
+    BINDING_REFRESH_WRITES: report.BINDING_REFRESH_WRITES,
+    BINDING_REFRESH_NOOP: report.BINDING_REFRESH_NOOP,
+    BINDING_NOT_SEEN: report.BINDING_NOT_SEEN,
+    BINDING_REFRESH_SKIPPED_BUDGET: report.BINDING_REFRESH_SKIPPED_BUDGET,
+    NEW_DISCOVERY_LISTINGS: report.NEW_DISCOVERY_LISTINGS,
     MISSING_AFFILIATE_LINK: report.MISSING_AFFILIATE_LINK,
     INVALID_LINK: report.INVALID_LINK,
     WOULD_WRITE: report.WOULD_WRITE,
@@ -206,6 +223,8 @@ async function main() {
     DELTA_SHOPEE_OFFERS: after.SHOPEE_OFFERS - before.SHOPEE_OFFERS,
 
     // detalhe por probe, sem payload e sem link completo
+    BINDING_STATUS: report.BINDING_STATUS,
+
     PROBES: report.PROBES.map((p) => ({
       externalListingId: p.externalListingId,
       keys: p.blockingKeys.length,

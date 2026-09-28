@@ -29,6 +29,7 @@ import { resolveLegacyEnumValue } from "../marketplaceRegistry";
 import { sincronizarMelhorOfertaDoProduto } from "../../../database/saveProduct";
 import { toCanonicalMarketplaceId } from "../publication/shadowWeight";
 import type {
+  OfferCommitContext,
   OfferCommitResultV1,
   PublicOfferCommitter,
   PublicOfferDraftV1,
@@ -88,7 +89,7 @@ const OBSERVABLE_FIELDS = [
   "active",
 ] as const;
 
-export type CommitContext = { dryRun: boolean };
+export type CommitContext = OfferCommitContext;
 
 /**
  * Constroi o `data` de escrita a partir de um draft aceito.
@@ -96,22 +97,33 @@ export type CommitContext = { dryRun: boolean };
  *   - com link seguro  -> ACTIVE (compravel)
  *   - sem link seguro  -> PENDING_AFFILIATE (existe e compara preco, mas nao
  *                        e apresentada como compravel; nenhum link e inventado)
+ *
+ * Em `REFRESH`, o link EFETIVO e o novo quando seguro, e o JA GRAVADO quando a
+ * coleta nao trouxe um. Uma coleta parcial nao pode apagar um link valido nem
+ * rebaixar ACTIVE -> PENDING_AFFILIATE: ausencia de informacao na fonte nao e
+ * motivo para perder dado bom. O status e recalculado sobre o link efetivo,
+ * nunca sobre o link ausente.
  */
-function buildOfferData(draft: PublicOfferDraftV1) {
-  const hasAffiliate = Boolean(draft.affiliateLink?.trim());
+function buildOfferData(
+  draft: PublicOfferDraftV1,
+  existing?: { affiliateLink: string | null; sourceUrl: string | null },
+) {
+  const affiliateLink =
+    draft.affiliateLink?.trim() || existing?.affiliateLink || null;
+  const sourceUrl = draft.sourceUrl?.trim() || existing?.sourceUrl || null;
   return {
     externalId: draft.externalId,
     title: draft.title,
     seller: draft.seller,
     image: draft.image,
     price: draft.price,
-    sourceUrl: draft.sourceUrl,
-    affiliateLink: draft.affiliateLink,
+    sourceUrl,
+    affiliateLink,
     available: draft.available,
     active: true,
     matchStatus: draft.matchStatus,
     discoverySource: draft.discoverySource,
-    status: hasAffiliate ? ("ACTIVE" as const) : ("PENDING_AFFILIATE" as const),
+    status: affiliateLink ? ("ACTIVE" as const) : ("PENDING_AFFILIATE" as const),
     isBest: false,
   };
 }
@@ -183,7 +195,19 @@ export function createPrismaPublicOfferCommitter(
         }
       }
 
-      const data = buildOfferData(draft);
+      // Em REFRESH, a oferta JA existe neste Product por definição (o
+      // runner só chega aqui com um productId certificado e já persistido).
+      // O link vigente entra como base para preservar o que a coleta não
+      // trouxer.
+      const data = buildOfferData(
+        draft,
+        existing === null
+          ? undefined
+          : {
+              affiliateLink: (existing.affiliateLink as string | null) ?? null,
+              sourceUrl: (existing.sourceUrl as string | null) ?? null,
+            },
+      );
 
       if (existing === null) {
         if (context.dryRun) {

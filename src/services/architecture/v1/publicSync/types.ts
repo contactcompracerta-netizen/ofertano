@@ -165,12 +165,67 @@ export type IdentityEvaluator = (
   right: NormalizedMarketplaceListingV1,
 ) => IdentityDecisionV1;
 
+/* ------------------------------------------------------------------ */
+/* ASSOCIAÇÃO JÁ CERTIFICADA — KNOWN BINDING (FASE 9, modelo B)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Associação JÁ CERTIFICADA entre uma listing da fonte e um Product.
+ *
+ * Existe para o caso em que a identidade do PRODUTO já foi resolvida e
+ * persistida por um caminho certificado, e a API só precisa devolver
+ * ATUALIZAÇÕES DE OFERTA (preço, disponibilidade, link) para a MESMA listing.
+ *
+ * Isso NAO é uma.IdentityPolicy frouxa: é o oposto. Reaproveitar a
+ * associação evita re-derivar identidade a cada coleta, quando a fonte não
+ * expõe o atributo estruturado que a policy exige. A distinção é rígida:
+ *
+ *   - `find` só responde para (marketplace, externalId) JÁ persistido, e
+ *     devolve o productId que o gate central já validou;
+ *   - uma listing SEM binding não ganha_product por$this canal: ela cai no
+ *     caminho de descoberta e precisa de EXACT_unique.
+ *
+ * `matchStatus` é o status certificado armazenado. O refresh NUNCA promove um
+ * status fraco para EXACT: carrega o que está gravado.
+ */
+export interface KnownBinding {
+  productId: string;
+  externalId: string;
+  /** status de identidade certificado e já persistido. */
+  matchStatus: string;
+  /** preço vigente, para diagnóstico e freshness. */
+  currentPrice: number | null;
+  /** link de afiliado vigente, para preservar quando a coleta não trouxer. */
+  affiliateLink: string | null;
+  /** última vez que a fonte devolveu esta listing, se registrado. */
+  lastSeenAt: Date | null;
+}
+
+export interface KnownBindingLookup {
+  /** Associação certificada por (marketplace, externalId), ou null. */
+  find(
+    marketplaceId: string,
+    externalListingId: string,
+  ): Promise<KnownBinding | null>;
+  /**
+   * Todas as associações certificadas da fonte, para reportar freshness.
+   * Uma binding ausente da coleta é NOT_SEEN — e NÃO desassociação, NÃO
+   * delete e NÃO demotion. freshness é informação, a demotion é decisão.
+   */
+  listCertified(marketplaceId: string): Promise<KnownBinding[]>;
+}
+
 export interface PublicSyncDeps {
   keys: BlockingKeyLookup;
   products: ProductListingLoader;
   evaluate: IdentityEvaluator;
   /** writer canônico de oferta (injetado para teste). */
   writer: PublicOfferCommitter;
+  /**
+   * Associações já certificadas. Ausente => todo listing segue o caminho de
+   * descoberta (fail-closed, zero escrita sem EXACT).
+   */
+  knownBindings?: KnownBindingLookup;
   /** relógio injetável. */
   now?: () => Date;
 }
@@ -190,6 +245,22 @@ export interface OfferCommitResultV1 {
   changedFields: string[];
 }
 
+export type OfferWriteMode = "CREATE" | "REFRESH";
+
+export interface OfferCommitContext {
+  dryRun: boolean;
+  /**
+   * `REFRESH` atualiza uma oferta JÁ EXISTENTE no MESMO Product.
+   *
+   * Nesse modo o writer PRESERVA o link de afiliado e o `status` vigentes
+   * quando a coleta não trouxer um link seguro. Sem essa preservação, um
+   * refresh parcial apagaria um link válido e rebaixaria `ACTIVE` para
+   * `PENDING_AFFILIATE` — perda de dado causada por ausência de informação,
+   * que é o oposto de fail-closed.
+   */
+  mode: OfferWriteMode;
+}
+
 /**
  * Committer de oferta. A implementação real é o caminho canônico de banco;
  * testes injetam um dublê.
@@ -197,7 +268,7 @@ export interface OfferCommitResultV1 {
 export interface PublicOfferCommitter {
   commit(
     draft: PublicOfferDraftV1,
-    context: { dryRun: boolean },
+    context: OfferCommitContext,
   ): Promise<OfferCommitResultV1>;
 }
 
@@ -229,6 +300,40 @@ export interface PublicSyncReportV1 {
   AMBIGUOUS_EXACT: number;
   NO_CANDIDATES: number;
   NO_EXACT: number;
+
+  /* ---------------------------------------------------------------- */
+  /* DOIS CAMINHOS (modelo B e C)                                      */
+  /* ---------------------------------------------------------------- */
+
+  /** Associações certificadas da fonte no início da execução. */
+  CERTIFIED_BINDINGS: number;
+  /** listings cuja externalId bateu com uma associação certificada. */
+  BINDING_REFRESH_MATCHED: number;
+  /** dessas, quantas realmente tinham dados de oferta a atualizar. */
+  BINDING_REFRESH_WRITES: number;
+  /** dessas, quantas já estavam idênticas (idempotência real). */
+  BINDING_REFRESH_NOOP: number;
+  /** bindings certificadas que a coleta NÃO devolveu. NÃO é desassociação. */
+  BINDING_NOT_SEEN: number;
+  /**
+   * bindings certificadas que o teto desta execucao nao deixou refreshing.
+   * Diferente de NOT_SEEN: aqui a binding existe e seria refreshavel, mas o
+   * orcamento acabou. Contabilizado a parte para que um canario limitado nunca
+   * pareca um catalogo completo.
+   */
+  BINDING_REFRESH_SKIPPED_BUDGET: number;
+  /** detalhamento por binding (sem payload e sem link completo). */
+  BINDING_STATUS: Array<{
+    externalId: string;
+    productId: string;
+    certifiedMatchStatus: string;
+    seen: boolean;
+    previousPrice: number | null;
+    refreshedPrice: number | null;
+    action: "REFRESH_UPDATED" | "REFRESH_NOOP" | "NOT_SEEN";
+  }>;
+  /** caminho de descoberta (listings sem binding). */
+  NEW_DISCOVERY_LISTINGS: number;
 
   MISSING_AFFILIATE_LINK: number;
   INVALID_LINK: number;

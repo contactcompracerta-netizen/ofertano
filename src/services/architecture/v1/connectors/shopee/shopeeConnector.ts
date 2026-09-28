@@ -287,44 +287,67 @@ export class ShopeeMarketplaceConnector implements MarketplaceConnector {
     }
   }
 
-  private static keywordOfCursor(cursor: string | null): string {
-    if (!cursor) return "";
+  /**
+   * Le a posicao (palavra-chave, pagina) do cursor.
+   * Cursor ausente ou invalido comeca em (0, 1) — fail-closed para o inicio,
+   * nunca para o fim: comecar no fim faria uma varredura parecer completa sem
+   * ter lido nada.
+   */
+  private static positionOfCursor(
+    cursor: string | null,
+  ): { keywordIndex: number; page: number } {
+    if (!cursor) return { keywordIndex: 0, page: 1 };
     try {
-      const parsed = JSON.parse(cursor) as { keywordIndex?: number };
-      return String(parsed.keywordIndex ?? 0);
+      const parsed = JSON.parse(cursor) as {
+        keywordIndex?: number;
+        page?: number;
+      };
+      const keywordIndex = Number(parsed.keywordIndex);
+      const page = Number(parsed.page);
+      return {
+        keywordIndex:
+          Number.isFinite(keywordIndex) && keywordIndex >= 0 ? keywordIndex : 0,
+        page: Number.isFinite(page) && page >= 1 ? page : 1,
+      };
     } catch {
-      return "0";
+      return { keywordIndex: 0, page: 1 };
     }
   }
 
-  /** Cursor opaco: indice da palavra-chave. */
-  private static cursorFor(keywordIndex: number): string {
-    return JSON.stringify({ keywordIndex });
+  /**
+   * Cursor opaco: par (indice da palavra-chave, pagina).
+   *
+   * A pagina precisa estar no cursor porque a API de afiliados e uma busca por
+   * RANKING e uma offerta certificada pode estar varias paginas abaixo da
+   * primeira. Medido: com `page: 1` fixo e `pageSize=50`, 0 das 3 bindings
+   * certificadas eram alcancadas; a 5 paginas, 3/3.
+   */
+  private static cursorFor(keywordIndex: number, page: number): string {
+    return JSON.stringify({ keywordIndex, page });
   }
 
   /**
-   * Coleta paginada por palavra-chave. Uma pagina por palavra-chave por
-   * execucao (guarda de canario); o proximo cursor avanca a palavra-chave.
+   * Coleta paginada por (palavra-chave, pagina).
+   *
+   * Cada chamada devolve UMA pagina de UMA palavra-chave, e o proximo cursor
+   * avanca a pagina; ao esgotar `maxPages`, avanca a palavra-chave. Isso torna
+   * a profundidade de varredura um fato observavel no relatorio
+   * (`COLLECT_CALLS`), em vez de um campo declarado e nunca usado.
    */
   async collect(fromCursor: string | null = null): Promise<CollectedListingBatch> {
     if (this.keywords.length === 0) {
       return { items: [], nextCursor: null, snapshotComplete: true };
     }
 
-    const startIndex = Number.parseInt(
-      ShopeeMarketplaceConnector.keywordOfCursor(fromCursor),
-      10,
-    );
-    const keywordIndex =
-      Number.isFinite(startIndex) && startIndex >= 0
-        ? Math.min(startIndex, this.keywords.length - 1)
-        : 0;
+    const position = ShopeeMarketplaceConnector.positionOfCursor(fromCursor);
+    const keywordIndex = Math.min(position.keywordIndex, this.keywords.length - 1);
+    const page = position.page;
     const keyword = this.keywords[keywordIndex];
 
     const query = `{
       productOfferV2(
         keyword: ${JSON.stringify(keyword)},
-        page: 1,
+        page: ${page},
         limit: ${this.pageSize}
       ) {
         nodes {
@@ -368,15 +391,27 @@ export class ShopeeMarketplaceConnector implements MarketplaceConnector {
       items.push(normalized);
     }
 
+    // `hasNextPage` e a palavra da API sobre haver mais resultados; `maxPages`
+    // e o nosso teto de varredura. Se a API diz que acabou, acreditamos nela e
+    // passamos a proxima palavra-chave em vez de gastar chamada em paginas
+    // vazias.
+    const hasNextPage =
+      response.data?.productOfferV2?.pageInfo?.hasNextPage === true;
+    const morePages = hasNextPage && page < this.maxPages;
     const isLastKeyword = keywordIndex >= this.keywords.length - 1;
-    this.cursor = isLastKeyword
-      ? null
-      : ShopeeMarketplaceConnector.cursorFor(keywordIndex + 1);
+
+    if (morePages) {
+      this.cursor = ShopeeMarketplaceConnector.cursorFor(keywordIndex, page + 1);
+    } else if (!isLastKeyword) {
+      this.cursor = ShopeeMarketplaceConnector.cursorFor(keywordIndex + 1, 1);
+    } else {
+      this.cursor = null;
+    }
 
     return {
       items,
       nextCursor: this.cursor,
-      snapshotComplete: isLastKeyword,
+      snapshotComplete: this.cursor === null,
     };
   }
 
@@ -520,6 +555,89 @@ export class ShopeeMarketplaceConnector implements MarketplaceConnector {
    */
   rawPayloadFor(externalListingId: string): unknown | null {
     return this.rawByExternalId.get(String(externalListingId)) ?? null;
+  }
+
+  /**
+   * BUSCA DETERMINISTICA de UMA listagem ja conhecida.
+   *
+   * Este e o canal do caminho de REFRESH. Ele existe porque a busca por
+   * palavra-chave e uma busca por RANKING, cuja ordem muda entre chamadas: uma
+   * listagem certificada pode estar na pagina 1 numa execucao e na pagina 5 (ou
+   * nao aparecer) na seguinte. Medido nesta conta: a varredura por palavra-chave
+   * reencontrou as 3 bindings certificadas em uma execucao e nenhuma em outra,
+   * com o MESMO codigo e a MESMA varredura.
+   *
+   * `productOfferV2` aceita `itemId` (e `shopId`) como argumento, o que
+   * transforma a leitura em deterministica: 1 chamada, sem ranking, sem deriva.
+   * Medido: `LOOKUP_DETERMINISTICO=3/3`.
+   *
+   * Devolve `null` quando a listagem nao existe mais na fonte. Isso e
+   * NOT_SEEN, nao desassociacao: quem decide sobre desassociar ou rebaixar e o
+   * gate central, nunca este metodo.
+   */
+  async fetchByExternalId(
+    externalListingId: string,
+  ): Promise<NormalizedMarketplaceListingV1 | null> {
+    /*
+     * O identificador PERSISTIDO e o itemId sozinho ("58215116714"), e nao o
+     * par "<shopId>.<itemId>" que o conector usa como `externalListingId` na
+     * varredura. Sao dois espacos de chave diferentes para a MESMA listagem, e a
+     * busca determinista precisa aceitar a chave que esta no banco — senao o
+     * refresh silenciosamente nunca encontra nada.
+     *
+     * Aceitamos as duas formas. Com shopId ele e um filtro a mais; sem ele a
+     * API responde pelo itemId (medido: `ITEMID_ONLY=3/3`). Valor que nao for
+     * um itemId devolve null, em vez de tentar adivinhar.
+     */
+    const raw = String(externalListingId).trim();
+    const composite = /^(\d+)\.(\d+)$/.exec(raw);
+    const bare = composite === null ? /^(\d+)$/.exec(raw) : null;
+    if (composite === null && bare === null) return null;
+    const itemId = composite === null ? bare![1] : composite[2];
+    const shopFilter = composite === null ? "" : `, shopId: ${composite[1]}`;
+
+    const query = `{
+      productOfferV2(itemId: ${itemId}${shopFilter}, page: 1, limit: 5) {
+        nodes {
+          itemId
+          shopId
+          productName
+          shopName
+          price
+          priceMin
+          priceMax
+          imageUrl
+          productLink
+          offerLink
+          ratingStar
+          sales
+          priceDiscountRate
+          productCatIds
+        }
+        pageInfo { page limit hasNextPage scrollId }
+      }
+    }`;
+
+    const response = await this.executeGraphql(query);
+    if (response.errors?.length) {
+      const first = response.errors[0];
+      const message =
+        first.extensions?.message?.trim() || first.message?.trim() || "";
+      throw new ShopeeConnectorError(
+        "GRAPHQL_ERROR",
+        `API Shopee retornou erro no lookup deterministico: ${message.slice(0, 200)}`,
+      );
+    }
+
+    const nodes = response.data?.productOfferV2?.nodes ?? [];
+    // A API pode devolver vizinhos; so aceitamos a listagem pedida.
+    const node = nodes.find((n) => String(n.itemId ?? "").trim() === itemId);
+    if (node === undefined) return null;
+
+    const normalized = this.tryNormalize(node);
+    if (normalized === null) return null;
+    this.rawByExternalId.set(normalized.externalListingId, node);
+    return normalized;
   }
 
   /**

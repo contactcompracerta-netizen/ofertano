@@ -32,16 +32,44 @@ export const SHOPEE_PURCHASE_LINKS: PurchaseLinkSource =
     source: "productLink",
   });
 
-/** Palavras-chave genericas de coleta. */
+/**
+ * Palavras-chave de coleta da Shopee.
+ *
+ * São termos de BUSCA da API de afiliados. Nada aqui e identidade de produto:
+ * nenhum destes valores chega ao `IdentityPolicy`, porque o blocking key e
+ * derivado do titulo que a FONTE devolve, nao da palavra que pedimos. Trocar
+ * esta lista nao afrouxa nenhuma regra de identidade.
+ *
+ * POR QUE A LISTA E CURTA E A VARREDURA E FUNDA (medido, nao palpite):
+ *
+ * A API de afiliados e uma busca por RANKING, sem identificador estavel: a
+ * ordem dos resultados muda entre chamadas, e reencontrar uma listagem
+ * especifica depende de varrer fundo o suficiente. Medido nas 3 bindings
+ * certificadas, com `pageSize=50`:
+ *
+ *     maxPages=1 -> 0/3    maxPages=2 -> 1/3    maxPages=4 -> 2/3
+ *     maxPages=5 -> 3/3
+ *
+ * Com `pageSize=20` (padrao anterior) nenhuma das 3 era alcancavel em 5
+ * paginas. Os termos amplos que existiam antes ("smartwatch", "power bank",
+ * "teclado mecanico") foram medidos em 200 listings / 1129 pares candidatos /
+ * 0 EXACT: a API nao expoe identidade estruturada, entao eles so custavam cota.
+ * Ver `15-targeted-rediscovery.json`.
+ *
+ * Estes termos continuam valendo pelo caminho de DESCOBERTA e podem ser
+ * reintroduzidos aqui a qualquer momento. Esta lista define o ALCANCE da
+ * varredura, nunca o direito de publicar.
+ */
 export const SHOPEE_DEFAULT_KEYWORDS: readonly string[] = [
-  "carregador iphone",
-  "fone bluetooth",
+  // reencontram as associacoes ja certificadas (o refresh depende delas)
+  "carregador 20w iphone tipo c",
+  "fone xiaomi redmi buds",
   "mouse sem fio",
-  "teclado mecanico",
-  "smartwatch",
-  "power bank",
-  "fone de ouvido",
 ];
+
+/** Profundidade de pagina que efetivamente alcanca as bindings certificadas. */
+export const SHOPEE_REFRESH_PAGE_SIZE = 50;
+export const SHOPEE_REFRESH_MAX_PAGES = 5;
 
 /**
  * Monta a configuracao do runner para a Shopee.
@@ -56,8 +84,9 @@ export function shopeePublicSyncConfig(options: {
 }): PublicSyncConfig {
   const connector = new ShopeeMarketplaceConnector({
     keywords: [...(options.keywords ?? SHOPEE_DEFAULT_KEYWORDS)],
-    pageSize: options.pageSize ?? 20,
-    maxPages: options.maxPages ?? 1,
+    // Medido: e a unica combinacao testada que alcanca 3/3 bindings.
+    pageSize: options.pageSize ?? SHOPEE_REFRESH_PAGE_SIZE,
+    maxPages: options.maxPages ?? SHOPEE_REFRESH_MAX_PAGES,
   });
 
   return {

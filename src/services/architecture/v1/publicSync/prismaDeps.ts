@@ -13,11 +13,16 @@
 
 import type { PrismaClient } from "@prisma/client";
 import { NORMALIZED_LISTING_V1, UNKNOWN, type NormalizedMarketplaceListingV1 } from "../types/normalizedListingV1";
-import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
+import { resolveLegacyEnumValue, resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
 import { computeRawHash } from "../hashing";
 import { evaluateIdentityConfidence } from "../identity/identityConfidence";
 import { toCanonicalMarketplaceId } from "../publication/shadowWeight";
-import type { BlockingKeyLookup, ProductListingLoader } from "./types";
+import type {
+  BlockingKeyLookup,
+  KnownBinding,
+  KnownBindingLookup,
+  ProductListingLoader,
+} from "./types";
 
 /** Teto de candidatos por chave, coerente com o canario certificado. */
 export const PUBLIC_SYNC_MAX_CANDIDATES_PER_KEY = 20;
@@ -186,3 +191,72 @@ export function createBlockingKeyLookup(
 
 /** Avaliador certificado, exposto para injecao explicita no runner. */
 export { evaluateIdentityConfidence };
+
+/* ------------------------------------------------------------------ */
+/* ASSOCIACOES JA CERTIFICADAS (modelo B)                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Associações JÁ CERTIFICADAS, lidas por (marketplace, externalId).
+ *
+ * Esta porta e o que separa "refresh de uma associação existente" de
+ * "descoberta de um match novo". Ela devolve o `productId` que o gate
+ * central JÁ validou e persistiu; o runner nunca o deriva de título e nunca o
+ * inventa.
+ *
+ * Consulta por indice (`@@unique([marketplace, externalId])`), sem scan.
+ */
+export function createKnownBindingLookup(prisma: PrismaClient): KnownBindingLookup {
+  const toBinding = (row: {
+    productId: string;
+    externalId: string | null;
+    matchStatus: string;
+    price: number | null;
+    affiliateLink: string | null;
+    lastCheckedAt: Date | null;
+  }): KnownBinding => ({
+    productId: row.productId,
+    externalId: String(row.externalId ?? ""),
+    matchStatus: row.matchStatus,
+    currentPrice: row.price ?? null,
+    affiliateLink: row.affiliateLink,
+    lastSeenAt: row.lastCheckedAt,
+  });
+
+  const select = {
+    productId: true,
+    externalId: true,
+    matchStatus: true,
+    price: true,
+    affiliateLink: true,
+    lastCheckedAt: true,
+  } as const;
+
+  const canonical = (marketplaceId: string) => {
+    const legacy = resolveLegacyEnumValue(marketplaceId);
+    return legacy;
+  };
+
+  return {
+    async find(marketplaceId, externalListingId) {
+      const legacy = canonical(marketplaceId);
+      if (legacy === null) return null;
+      const row = await prisma.marketplaceOffer.findFirst({
+        where: { marketplace: legacy as never, externalId: externalListingId },
+        select,
+      });
+      return row === null ? null : toBinding(row);
+    },
+
+    async listCertified(marketplaceId) {
+      const legacy = canonical(marketplaceId);
+      if (legacy === null) return [];
+      const rows = await prisma.marketplaceOffer.findMany({
+        where: { marketplace: legacy as never },
+        select,
+        orderBy: { externalId: "asc" },
+      });
+      return rows.map(toBinding);
+    },
+  };
+}
