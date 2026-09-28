@@ -525,9 +525,9 @@ export function evaluateIdentityConfidence(
   /*
    * GTIN compartido é DEFINITIVO e dispensa os eixos críticos.
    *
-   * O GTIN identifica a variante FÍSICA具体: um celular de 256GB e um de
+   * O GTIN identifica a variante FÍSICA concreta: um celular de 256GB e um de
    * 512GB têm GTINs diferentes. Logo, GTIN igual já prova que é a mesma
-   * variante — exigir "model" además disso só produziria REVIEW para dados
+   * variante — exigir "model" além disso só produziria REVIEW para dados
    * que são na verdade mais fortes do que a policy exige.
    *
    * Consequência que importa: isto NÃO é uma exceção por marketplace. É a
