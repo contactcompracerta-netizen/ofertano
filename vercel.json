@@ -24,6 +24,10 @@
     {
       "path": "/api/cron/cutover-autopilot",
       "schedule": "17 12 * * *"
+    },
+    {
+      "path": "/api/cron/marketplace-sync?marketplace=shopee&dry=false&limit=1000",
+      "schedule": "23 8 * * *"
     }
   ]
 }
