@@ -264,7 +264,8 @@ export async function runMarketplacePublicSync(
   if (deps.knownBindings) {
     try {
       certified = await deps.knownBindings.listCertified(config.marketplaceId);
-    } catch {
+    } catch (e) {
+      console.error("[runner] KNOWN_BINDINGS_UNAVAILABLE", String(e).slice(0, 200));
       // Falha aqui NAO pode virar lista vazia em silencio: isso degradaria o
       // refresh para descoberta sem aviso, e o relatorio diria "0 bindings
       // certificadas" como se fosse um fato do catalogo, quando na verdade e um
@@ -366,7 +367,8 @@ export async function runMarketplacePublicSync(
           status.refreshedPrice = listing.commerce.price;
         }
       }
-    } catch {
+    } catch (e) {
+      console.error("[runner] COMMIT_FAILED for", binding.externalId, String(e).slice(0, 200));
       // Falha de gravacao e por binding: nao publica, segue, e registra.
       report.ERROR = report.ERROR ?? "COMMIT_FAILED";
     }
@@ -405,7 +407,8 @@ export async function runMarketplacePublicSync(
         if (config.connector.validate(listing).length > 0) continue;
         report.LISTINGS_VALID += 1;
         await refreshBinding(binding, listing);
-      } catch {
+      } catch (e) {
+      console.error("[runner] COMMIT_FAILED for", binding.externalId, String(e).slice(0, 200));
         // Falha de FONTE em uma binding nao impede as demais. Fail-closed:
         // sem dado novo, o preco vigente permanece.
         report.ERROR = report.ERROR ?? "BOUND_FETCH_FAILED";
@@ -451,7 +454,8 @@ export async function runMarketplacePublicSync(
     let probe: ProbeIdentityResultV1;
     try {
       probe = await resolveProbeIdentity(listing, resolverDeps);
-    } catch {
+    } catch (e) {
+      console.error("[runner] COMMIT_FAILED for", listing.externalListingId, String(e).slice(0, 200));
       // Erro inesperado na resolucao: nao publica esta listing, segue a proxima.
       report.ERROR = report.ERROR ?? "IDENTITY_RESOLVE_FAILED";
       continue;
@@ -522,7 +526,8 @@ export async function runMarketplacePublicSync(
       else if (result.action === "UPDATE") report.WRITES_UPDATED += 1;
       else report.WRITES_NOOP += 1;
       if (!dryRun && result.changed) report.WRITES += 1;
-    } catch {
+    } catch (e) {
+      console.error("[runner] COMMIT_FAILED for", winner.externalId, String(e).slice(0, 200));
       // Falha de DB e por ITEM: nao publica, segue, e registra.
       report.ERROR = report.ERROR ?? "COMMIT_FAILED";
     }

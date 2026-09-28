@@ -56,6 +56,9 @@ function capability(partial: Partial<ConnectorCapabilities>): ConnectorCapabilit
 /**
  * Registro canônico. marketplaceId estável em lowercase_snake.
  * Este é o ÚNICO lugar da base com nomes de marketplace; o núcleo nunca os lê.
+ *
+ * Capacidades reflectem o que o CONECTOR V1 REALMENTE implementa, nao o que
+ * a fonte teoricamente poderia. Marketplaces sem conector V1 usam defaults.
  */
 export const MARKETPLACE_REGISTRY_V1: ReadonlyArray<MarketplaceConfigV1> = [
   {
@@ -84,7 +87,9 @@ export const MARKETPLACE_REGISTRY_V1: ReadonlyArray<MarketplaceConfigV1> = [
     displayName: "Magazine Luiza",
     legacyEnumValue: "MAGAZINE_LUIZA",
     publicEligible: true,
-    capabilities: capability({ gtin: true, pixPrice: true }),
+    // Conector V1 real: stock=false (parser fixo 1), shipping=false,
+    // variants=false, gtin=false (sku apenas), pixPrice=false
+    capabilities: capability({ stock: false, variants: false, gtin: false, pixPrice: false }),
   },
   {
     marketplaceId: "casas_bahia",

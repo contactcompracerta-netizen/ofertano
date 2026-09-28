@@ -1,19 +1,17 @@
 /**
- * CATALOG_ARCHITECTURE_V1 — PUBLIC SYNC WRITER FLAGS (FASE 9.30).
+ * CATALOG_ARCHITECTURE_V1 — PUBLIC SYNC WRITER FLAGS (FASE 9.30 / FASE 19).
  *
  * O writer público de marketplace é fail-closed por default e NÃO é
  * liberado por allowlist ampla. Cada marketplace é autorizado
  * explicitamente e com um MODO declarado.
  *
  * MODOS:
- *   OFF         — nunca escreve. Default.
- *   V1_PRIMARY  — escreve pelo caminho canônico V1 (upsert de
- *                 MarketplaceOffer + sincronização de publication gate).
- *
- * Existe `OFF` e `V1_PRIMARY` porque um conector API novo não tem
- * necessidade de fallback legado: o V1 é o caminho primário e suficiente.
- * A porta `OFF` existe para rollback instantâneo de configuração (FASE 9.38)
- * sem tocar em dado nenhum.
+ *   OFF                          — nunca escreve. Default.
+ *   V1_PRIMARY                   — escreve pelo caminho canônico V1 (upsert de
+ *                                  MarketplaceOffer + sincronização de publication gate).
+ *   V1_PRIMARY_WITH_LEGACY_FALLBACK — V1 é owner primário; em erro elegível
+ *                                  (pre-commit) o legado pode escrever.
+ *                                  NUNCA dual-write no mesmo item.
  *
  * A allowlist é AUTHORITATIVA e explícita: adicionar uma fonte nova é um
  * ato deliberado, não um efeito colateral. Mercado Livre já é público pelo
@@ -21,7 +19,7 @@
  * runner, e sua preservação é responsabilidade do caminho existente.
  */
 
-export const PUBLIC_SYNC_WRITER_MODES = ["OFF", "V1_PRIMARY"] as const;
+export const PUBLIC_SYNC_WRITER_MODES = ["OFF", "V1_PRIMARY", "V1_PRIMARY_WITH_LEGACY_FALLBACK"] as const;
 export type PublicSyncWriterMode = (typeof PUBLIC_SYNC_WRITER_MODES)[number];
 
 export type PublicSyncAllowlist = Readonly<
@@ -31,13 +29,19 @@ export type PublicSyncAllowlist = Readonly<
 /**
  * Allowlist AUTORITATIVA de escrita pública. Somente marketplaces
  * explicitamente autorizados aparecem aqui.
+ *
+ * Fase 9: Shopee (V1_PRIMARY)
+ * Fase 10: Magazine Luiza (V1_PRIMARY_WITH_LEGACY_FALLBACK)
+ *
+ * Mercado Livre NÃO está aqui — usa writer legado.
  */
 export const PUBLIC_SYNC_AUTHORITATIVE_ALLOWLIST: PublicSyncAllowlist = {
   shopee: { mode: "V1_PRIMARY" },
+  magazine_luiza: { mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK" },
 };
 
 export type PublicSyncAuthorization =
-  | { authorized: true; mode: "V1_PRIMARY" }
+  | { authorized: true; mode: "V1_PRIMARY" | "V1_PRIMARY_WITH_LEGACY_FALLBACK" }
   | { authorized: false; reason: "MARKETPLACE_NOT_IN_ALLOWLIST" | "MODE_OFF" };
 
 /**
@@ -78,6 +82,7 @@ export function isPublicSyncAuthorized(
  */
 export const PUBLIC_SYNC_CRON_ALLOWLIST: ReadonlySet<string> = new Set([
   "shopee",
+  "magazine_luiza",
 ]);
 
 /** true quando o cron pode disparar sync deste marketplace. */

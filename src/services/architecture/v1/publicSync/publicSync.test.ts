@@ -189,7 +189,7 @@ function testFlags() {
   assert.equal(isCronSyncAllowed("amazon"), false);
   // Mercado Livre ja e publico pelo caminho legado e nao e escrito por este
   // runner: sua preservacao nao depende desta allowlist.
-  assert.deepEqual(Object.keys(PUBLIC_SYNC_AUTHORITATIVE_ALLOWLIST), ["shopee"]);
+  assert.deepEqual(Object.keys(PUBLIC_SYNC_AUTHORITATIVE_ALLOWLIST).sort(), ["magazine_luiza", "shopee"]);
 }
 
 /* ------------------------------------------------------------------ */
