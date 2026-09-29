@@ -1,83 +1,145 @@
 /**
- * FASE 12 (fechamento) — CONTRASTE DAS CONTAGENS DE ROLLOUT.
+ * SEMÂNTICA DAS MÉTRICAS DE ROLLOUT.
  *
- * O teste que mais importa aqui é o negativo: provar que "integrado" NÃO vira
- * "público". Uma contagem única que somasse as duas é como o número
- * "CATALOG_V1_PUBLIC_MARKETPLACES=5" apareceu quando Amazon e AliExpress não
- * tinham uma única oferta publicada.
+ * O teste que mais importa é o de não-conflação: `CATALOG_V1_GLOBAL_CUTOVER` e
+ * `PUBLIC_SYNC_MODE_*` são mecanismos DIFERENTES. A regressão que este arquivo
+ * trava é declarar "writer OFF" só porque o cutover global está desligado,
+ * quando o public sync da fonte está autorizado.
  */
 import assert from "node:assert/strict";
 
 import {
+  LEGACY_PUBLIC_MARKETPLACES,
+  classifyPublicationStatus,
+  countLegacyWriterEnabled,
   countMarketplacesWithPublicOffers,
+  countPublicSyncWriterEnabled,
   countV1IntegratedMarketplaces,
-  countWriterEnabledMarketplaces,
+  legacyWriterEnabled,
   rolloutRows,
 } from "./rolloutStatus";
 import { PUBLIC_SYNC_SUPPORTED_SOURCES } from "./publicSync/flags";
 
 const V1 = "V1_PRIMARY_WITH_LEGACY_FALLBACK";
 
-console.log("--- 1. contagens respondem a COISAS diferentes ---");
+console.log("--- 1. public sync NÃO depende do cutover global ---");
 {
-  const integrado = countV1IntegratedMarketplaces();
-  const writerLigado = countWriterEnabledMarketplaces({});
-  // Nenhuma env => Amazon/Magalu/AliExpress OFF, Shopee legado ligado.
-  assert.equal(integrado, 4, "quatro conectores V1 no allowlist");
-  assert.equal(writerLigado, 0, "sem CUTOVER global, nenhum writer escreve");
+  // Shopee tem default legado (não-OFF) sem nenhuma env. O public sync está
+  // autorizado mesmo com o cutover global desligado — que é a configuração real
+  // de produção, já que CATALOG_V1_GLOBAL_CUTOVER é NO por decisão de produto.
+  const env = { CATALOG_V1_GLOBAL_CUTOVER: "NO" };
+  const rows = rolloutRows(env, PUBLIC_SYNC_SUPPORTED_SOURCES);
+  const shopee = rows.find((r) => r.marketplaceId === "shopee")!;
 
-  // Integrados > writer-ligado: prova que os dois números não são o mesmo.
-  assert.ok(integrado > writerLigado, "integrado e writer-enabled divergem");
+  assert.equal(shopee.publicSyncAuthorized, true, "Shopee autorizado por padrão");
+  assert.equal(shopee.publicSyncMode, "V1_PRIMARY");
+  assert.equal(legacyWriterEnabled(env), true, "cutover NO mantém legado ligado");
+  // Public sync e legado são dimensões distintas: Shopee tem a primeira,
+  // Mercado Livre tem a segunda. Nenhuma tem as duas.
+  assert.equal(shopee.legacyWriter, false, "Shopee não publica pelo legado");
+  assert.equal(countPublicSyncWriterEnabled(env), 1, "só Shopee no public sync");
+  assert.equal(countLegacyWriterEnabled(env), 1, "só ML no legado");
 }
 
-console.log("--- 2. writer habilitado exige CUTOVER global + env explicita ---");
+console.log("--- 2. cutover global DESLIGA o legado, não o public sync ---");
 {
-  const semCutover = countWriterEnabledMarketplaces({
-    PUBLIC_SYNC_MODE_SHOPEE: V1,
-  });
-  assert.equal(semCutover, 0, "CUTOVER ausente trava ate o legado");
+  const env = { CATALOG_V1_GLOBAL_CUTOVER: "YES" };
+  const rows = rolloutRows(env, PUBLIC_SYNC_SUPPORTED_SOURCES);
+  const shopee = rows.find((r) => r.marketplaceId === "shopee")!;
 
-  const comCutover = countWriterEnabledMarketplaces(
-    { CATALOG_V1_GLOBAL_CUTOVER: "YES", PUBLIC_SYNC_MODE_SHOPEE: V1 },
-  );
-  assert.equal(comCutover, 1, "com cutover, so a env explicita liga");
+  assert.equal(shopee.publicSyncAuthorized, true, "public sync sobrevive ao cutover");
+  assert.equal(legacyWriterEnabled(env), false, "cutover YES apaga o legado");
+  assert.equal(countLegacyWriterEnabled(env), 0);
+  assert.equal(countPublicSyncWriterEnabled(env), 1, "intacto");
 }
 
-console.log("--- 3. ALIEXPRESS: integrado e desligado, naosome da lista ---");
+console.log("--- 3. env explícita por fonte continua prevalecendo ---");
+{
+  const env = {
+    CATALOG_V1_GLOBAL_CUTOVER: "NO",
+    PUBLIC_SYNC_MODE_AMAZON: V1,
+  };
+  assert.equal(countPublicSyncWriterEnabled(env), 2, "Shopee + Amazon");
+  const rows = rolloutRows(env, PUBLIC_SYNC_SUPPORTED_SOURCES);
+  const amazon = rows.find((r) => r.marketplaceId === "amazon")!;
+  assert.equal(amazon.publicSyncAuthorized, true);
+  assert.equal(amazon.publicSyncMode, V1);
+}
+
+console.log("--- 4. valor de env INVÁLIDO falha fechado ---");
+{
+  const env = { CATALOG_V1_GLOBAL_CUTOVER: "NO", PUBLIC_SYNC_MODE_SHOPEE: "INVALID" };
+  const rows = rolloutRows(env, PUBLIC_SYNC_SUPPORTED_SOURCES);
+  const shopee = rows.find((r) => r.marketplaceId === "shopee")!;
+  assert.equal(shopee.publicSyncAuthorized, false);
+  assert.equal(shopee.publicSyncMode, "OFF");
+  assert.equal(shopee.publicSyncDeniedReason, "RUNTIME_MODE_OFF");
+}
+
+console.log("--- 5. ALIEXPRESS: integrado, desligado, fora do público ---");
 {
   const rows = rolloutRows({}, PUBLIC_SYNC_SUPPORTED_SOURCES);
-  const ae = rows.find((r) => r.marketplaceId === "aliexpress");
-
-  assert.ok(ae, "AliExpress continua integrado (nao foi desinstalado)");
-  assert.equal(ae!.v1Integrated, true);
-  assert.equal(ae!.writerEnabled, false);
-  assert.equal(ae!.runtimeMode, "OFF", "default OFF e o invariante");
-  assert.equal(ae!.legacyEnumValue, "ALIEXPRESS");
+  const ae = rows.find((r) => r.marketplaceId === "aliexpress")!;
+  assert.ok(ae, "conector preservado");
+  assert.equal(ae.v1Integrated, true);
+  assert.equal(ae.publicSyncAuthorized, false);
+  assert.equal(ae.publicSyncMode, "OFF", "default OFF é o invariante");
+  assert.equal(ae.publicationEligible, false, "sem writer = não pode publicar");
+  assert.equal(ae.legacyEnumValue, "ALIEXPRESS");
 }
 
-console.log("--- 4. contagem PUBLICA vem so do banco ---");
+console.log("--- 6. 'pode publicar' ≠ 'publicou' ---");
 {
-  // Amazon e AliExpress: integrados, zero oferta.
+  assert.equal(classifyPublicationStatus({
+    publicSyncAuthorized: false, legacyWriter: false, publicOfferCount: 0,
+  }), "NO_WRITER");
+
+  // Amazon: writer ligado, zero oferta. Válido e precisa ser distinguível.
+  assert.equal(classifyPublicationStatus({
+    publicSyncAuthorized: true, legacyWriter: false, publicOfferCount: 0,
+  }), "WRITER_ON_ZERO_OFFERS");
+
+  assert.equal(classifyPublicationStatus({
+    publicSyncAuthorized: true, legacyWriter: false, publicOfferCount: 12,
+  }), "PUBLISHED");
+
+  // ML: só legado. Também é writer real.
+  assert.equal(classifyPublicationStatus({
+    publicSyncAuthorized: false, legacyWriter: true, publicOfferCount: 22,
+  }), "PUBLISHED");
+
+  // REGRESSÃO QUE ESTE ESTADO EVITOU: Magalu com writer OFF mas 3 ofertas no
+  // ar. "NO_WRITER" esconderia que a fonte serve catálogo estagnado.
+  assert.equal(classifyPublicationStatus({
+    publicSyncAuthorized: false, legacyWriter: false, publicOfferCount: 3,
+  }), "PUBLISHED_NO_WRITER");
+}
+
+console.log("--- 7. contagem PUBLICA vem só do banco ---");
+{
   const ofertas = { MERCADO_LIVRE: 22, AMAZON: 0, ALIEXPRESS: 0 };
   assert.equal(countMarketplacesWithPublicOffers(ofertas), 1);
-
-  // Shopee/Magalu presentes, AliExpress continua fora.
-  const ofertas2 = { MERCADO_LIVRE: 22, SHOPEE: 3, ALIEXPRESS: 0 };
-  assert.equal(countMarketplacesWithPublicOffers(ofertas2), 2);
-
-  // Integrados que nao publicam NAO entram na contagem publica.
+  // Integrados que não publicam NÃO entram.
   assert.notEqual(
-    countMarketplacesWithPublicOffers(ofertas2),
+    countMarketplacesWithPublicOffers(ofertas),
     countV1IntegratedMarketplaces(),
-    "publico nunca deve herdar a contagem de integrado",
+    "público nunca herda a contagem de integrado",
   );
-}
+  // Filtro de visibilidade aplica antes de contar.
+  assert.equal(
+    countMarketplacesWithPublicOffers(ofertas, (m) => m === "AMAZON"),
+    0,
+  );
+  assert.ok(LEGACY_PUBLIC_MARKETPLACES.has("mercado_livre"));
 
-console.log("--- 5. filtro de visibilidade retira do publico ---");
-{
-  const ofertas = { MERCADO_LIVRE: 22, SHOPEE: 3 };
-  const soML = countMarketplacesWithPublicOffers(ofertas, (m) => m === "MERCADO_LIVRE");
-  assert.equal(soML, 1, "filtro aplica antes de contar");
+  // CONTRASTE: com o public sync de Shopee ligado e ML no legado, o número de
+  // marketplaces com writer é maior que o número que TEM oferta pública.
+  const env = { CATALOG_V1_GLOBAL_CUTOVER: "NO" };
+  const comWriter = rolloutRows(env, PUBLIC_SYNC_SUPPORTED_SOURCES).filter(
+    (r) => r.publicationEligible,
+  ).length;
+  assert.equal(comWriter, 1, "só Shopee tem writer, no ambiente sem env");
+  assert.equal(countPublicSyncWriterEnabled(env), 1);
 }
 
 console.log("rolloutStatus.test.ts PASS");

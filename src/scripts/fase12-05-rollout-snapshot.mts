@@ -1,20 +1,45 @@
 /**
- * FASE 12 (fechamento) — SNAPSHOT DE ROLLOUT, READ ONLY.
+ * SNAPSHOT DE ROLLOUT — READ ONLY, config cruzada com o banco real.
  *
- * As três contagens separadas, cruzando configuração com o banco real.
- * Nenhuma escrita.
+ * Três dimensões que costumam ser confundidas, deliberadamente separadas:
+ *   V1_INTEGRATED                 existe conector
+ *   PUBLIC_SYNC_WRITER_ENABLED    autorizado pelo public sync (source-scoped)
+ *   LEGACY_WRITER_ENABLED         caminho legado (o ÚNICO que o cutover global apaga)
+ *   MARKETPLACES_WITH_PUBLIC_OFFERS   oferta real no banco
  */
 import { writeFile } from "node:fs/promises";
 import prismaMod from "../lib/prisma";
 import {
   rolloutRows,
+  classifyPublicationStatus,
   countV1IntegratedMarketplaces,
-  countWriterEnabledMarketplaces,
+  countPublicSyncWriterEnabled,
+  countLegacyWriterEnabled,
+  legacyWriterEnabled,
   countMarketplacesWithPublicOffers,
 } from "../services/architecture/v1/rolloutStatus";
 
 const prisma = ((prismaMod as any)?.default ?? prismaMod) as any;
-const OUT = "/home/evaldo/Projetos/ofertano-forensics/aliexpress-v1/production";
+const OUT = process.env.ML_ROLLOUT_OUT ?? "/home/evaldo/Projetos/ofertano-forensics/go-live";
+const TABELA = "MARKETPLACE_STATUS_TABLE";
+
+const COLUNAS = [
+  "marketplace",
+  "v1Integrated",
+  "publicSyncMode",
+  "publicSyncAuthorized",
+  "legacyWriter",
+  "publicOfferCount",
+  "publicationStatus",
+] as const;
+
+const LARGURAS = [16, 13, 31, 21, 12, 17] as const;
+
+function linha(celulas: readonly string[]): string {
+  return celulas
+    .map((c, i) => (i === celulas.length - 1 ? c : c.padEnd(LARGURAS[i])))
+    .join(" ");
+}
 
 async function main() {
   const config = rolloutRows(process.env);
@@ -22,60 +47,70 @@ async function main() {
   /* Ofertas REAIS, por marketplace, visíveis ao público. */
   const publicas = await prisma.marketplaceOffer.groupBy({
     by: ["marketplace"],
-    where: { active: true, available: true },
+    where: { active: true, available: true, status: { notIn: ["UNAVAILABLE", "ERROR"] } },
     _count: { _all: true },
   });
 
   const porMarketplace: Record<string, number> = {};
   for (const m of publicas) porMarketplace[m.marketplace] = m._count._all;
 
-  /* Alinhar com os enums legados do registry. */
-  const porIdCanonico: Record<string, number> = {};
-  for (const row of config) {
-    porIdCanonico[row.marketplaceId] = porMarketplace[row.legacyEnumValue] ?? 0;
-  }
+  const rows = config.map((c) => {
+    const publicOfferCount = porMarketplace[c.legacyEnumValue] ?? 0;
+    const withCount = { ...c, publicOfferCount };
+    return {
+      ...withCount,
+      publicationStatus: classifyPublicationStatus(withCount),
+    };
+  });
 
-  /* Mercado Livre publica pelo caminho legado, fora deste runner. */
   const mlPublicas = porMarketplace.MERCADO_LIVRE ?? 0;
-
-  const V1_INTEGRATED_MARKETPLACES = countV1IntegratedMarketplaces();
-  const WRITER_ENABLED_MARKETPLACES = countWriterEnabledMarketplaces(process.env);
-  const MARKETPLACES_WITH_PUBLIC_OFFERS = countMarketplacesWithPublicOffers(porMarketplace);
-
   const rel = {
     gerado_em: new Date().toISOString(),
-    V1_INTEGRATED_MARKETPLACES,
-    WRITER_ENABLED_MARKETPLACES,
-    MARKETPLACES_WITH_PUBLIC_OFFERS,
-    GLOBO_CUTOVER: process.env.CATALOG_V1_GLOBAL_CUTOVER ?? "NO",
-    por_marketplace: config.map((c) => ({
-      ...c,
-      publicOffers: porIdCanonico[c.marketplaceId] ?? 0,
-    })),
+
+    V1_INTEGRATED_MARKETPLACES: countV1IntegratedMarketplaces(),
+    PUBLIC_SYNC_WRITER_ENABLED: countPublicSyncWriterEnabled(process.env),
+    LEGACY_WRITER_ENABLED: legacyWriterEnabled(process.env)
+      ? countLegacyWriterEnabled(process.env)
+      : 0,
+    MARKETPLACES_WITH_PUBLIC_OFFERS: countMarketplacesWithPublicOffers(porMarketplace),
+
+    GLOBAL_CUTOVER: process.env.CATALOG_V1_GLOBAL_CUTOVER ?? "NO (ausente)",
+    NOTA_SEMANTICA:
+      "CATALOG_V1_GLOBAL_CUTOVER apaga SÓ o caminho legado. Não inferir " +
+      "public sync OFF a partir dele: são mecanismos separados.",
+
+    por_marketplace: rows,
     legado_fora_do_runner: { MERCADO_LIVRE: mlPublicas },
-    alias_amazon: {
-      V1_INTEGRATED: "YES",
-      WRITER_ENABLED: "YES",
-      PUBLIC_OFFERS_COUNT: porIdCanonico.amazon ?? 0,
-    },
-    alias_aliexpress: {
-      ALIEXPRESS_INTEGRATION: "COMPLETE",
-      ALIEXPRESS_PUBLICATION: "BLOCKED_IDENTITY",
-      ALIEXPRESS_RUNTIME: getModeOf(config, "aliexpress"),
-      ALIEXPRESS_PUBLIC_OFFERS: porIdCanonico.aliexpress ?? 0,
-    },
-    observacao:
-      "MARKETPLACES_WITH_PUBLIC_OFFERS conta apenas ofertas ativas e " +
-      "disponiveis. Amazon e AliExpress tem 0: integracao != publicacao.",
+
+    TABELA_TEXTO: "",
   };
 
-  await writeFile(`${OUT}/rollout-snapshot.json`, JSON.stringify(rel, null, 2), "utf8");
-  console.log(JSON.stringify(rel, null, 2));
-  await prisma.$disconnect();
-}
+  rel.TABELA_TEXTO = [
+    linha(COLUNAS),
+    ...rows.map((r) =>
+      linha([
+        r.marketplaceId,
+        String(r.v1Integrated),
+        r.publicSyncMode,
+        String(r.publicSyncAuthorized),
+        String(r.legacyWriter),
+        String(r.publicOfferCount),
+        r.publicationStatus,
+      ]),
+    ),
+  ].join("\n");
 
-function getModeOf(rows: { marketplaceId: string; runtimeMode: string }[], id: string): string {
-  return rows.find((r) => r.marketplaceId === id)?.runtimeMode ?? "UNKNOWN";
+  await writeFile(`${OUT}/rollout-snapshot.json`, JSON.stringify(rel, null, 2), "utf8");
+  console.log(rel.TABELA_TEXTO);
+  console.log("");
+  console.log(
+    `V1_INTEGRATED=${rel.V1_INTEGRATED_MARKETPLACES}  ` +
+      `PUBLIC_SYNC_WRITER=${rel.PUBLIC_SYNC_WRITER_ENABLED}  ` +
+      `LEGACY_WRITER=${rel.LEGACY_WRITER_ENABLED}  ` +
+      `WITH_PUBLIC_OFFERS=${rel.MARKETPLACES_WITH_PUBLIC_OFFERS}`,
+  );
+  console.log(`GLOBAL_CUTOVER=${rel.GLOBAL_CUTOVER}`);
+  await prisma.$disconnect();
 }
 
 main().catch((e) => {
