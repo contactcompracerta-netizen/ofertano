@@ -32,6 +32,10 @@
     {
       "path": "/api/cron/marketplace-sync?marketplace=magazine_luiza&dry=false&limit=1000",
       "schedule": "25 8 * * *"
+    },
+    {
+      "path": "/api/cron/marketplace-sync?marketplace=amazon&dry=false&limit=1000",
+      "schedule": "27 8 * * *"
     }
   ]
 }
