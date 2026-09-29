@@ -9,6 +9,8 @@ export default defineConfig({
   },
 
   datasource: {
-    url: env("DIRECT_URL"),
+    // Vercel provides DATABASE_URL; DIRECT_URL is optional (for migrations)
+    // Use DATABASE_URL as fallback when DIRECT_URL is not set (e.g. Preview)
+    url: env("DIRECT_URL") ?? env("DATABASE_URL"),
   },
 });
