@@ -173,9 +173,10 @@ function testFlags() {
     mode: "V1_PRIMARY",
     source: "RUNTIME",
   });
+  // Amazon agora está na allowlist, mas sem env var => RUNTIME_MODE_OFF (fail-closed)
   assert.deepEqual(authorizePublicSync("amazon"), {
     authorized: false,
-    reason: "MARKETPLACE_NOT_IN_ALLOWLIST",
+    reason: "RUNTIME_MODE_OFF",
   });
   assert.deepEqual(authorizePublicSync("mercado_livre"), {
     authorized: false,
@@ -188,10 +189,10 @@ function testFlags() {
     reason: "MODE_OFF",
   });
   assert.equal(isCronSyncAllowed("shopee"), true);
-  assert.equal(isCronSyncAllowed("amazon"), false);
+  assert.equal(isCronSyncAllowed("amazon"), true);
   // Mercado Livre ja e publico pelo caminho legado e nao e escrito por este
   // runner: sua preservacao nao depende desta allowlist.
-  assert.deepEqual(Object.keys(PUBLIC_SYNC_SUPPORTED_SOURCES).sort(), ["magazine_luiza", "shopee"]);
+  assert.deepEqual(Object.keys(PUBLIC_SYNC_SUPPORTED_SOURCES).sort(), ["amazon", "magazine_luiza", "shopee"]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -526,9 +527,9 @@ async function testRunner() {
   let collectCalls = 0;
   const unauthorized = await runMarketplacePublicSync(
     config({
-      marketplaceId: "amazon",
+      marketplaceId: "aliexpress",
       connector: {
-        marketplaceId: "amazon",
+        marketplaceId: "aliexpress",
         capabilities: {} as never,
         async collect() {
           collectCalls += 1;
@@ -717,8 +718,33 @@ function testRuntimeGate() {
     reason: "RUNTIME_MODE_OFF",
   });
 
-  // Unknown marketplace => unauthorized
+  // Amazon supported + mode absent (default OFF) => unauthorized
   assert.deepEqual(authorizePublicSync("amazon", PUBLIC_SYNC_SUPPORTED_SOURCES, emptyEnv), {
+    authorized: false,
+    reason: "RUNTIME_MODE_OFF",
+  });
+
+  // Amazon supported + explicit OFF => unauthorized
+  assert.deepEqual(authorizePublicSync("amazon", PUBLIC_SYNC_SUPPORTED_SOURCES, { PUBLIC_SYNC_MODE_AMAZON: "OFF" }), {
+    authorized: false,
+    reason: "RUNTIME_MODE_OFF",
+  });
+
+  // Amazon + V1_PRIMARY_WITH_LEGACY_FALLBACK => authorized
+  assert.deepEqual(authorizePublicSync("amazon", PUBLIC_SYNC_SUPPORTED_SOURCES, { PUBLIC_SYNC_MODE_AMAZON: "V1_PRIMARY_WITH_LEGACY_FALLBACK" }), {
+    authorized: true,
+    mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK",
+    source: "RUNTIME",
+  });
+
+  // Amazon + invalid mode => unauthorized (fail-closed)
+  assert.deepEqual(authorizePublicSync("amazon", PUBLIC_SYNC_SUPPORTED_SOURCES, { PUBLIC_SYNC_MODE_AMAZON: "INVALID" }), {
+    authorized: false,
+    reason: "RUNTIME_MODE_OFF",
+  });
+
+  // Unknown marketplace => unauthorized
+  assert.deepEqual(authorizePublicSync("aliexpress", PUBLIC_SYNC_SUPPORTED_SOURCES, emptyEnv), {
     authorized: false,
     reason: "MARKETPLACE_NOT_IN_ALLOWLIST",
   });
@@ -751,5 +777,5 @@ function testRuntimeGate() {
   // Cron Magalu with mode OFF: zero writes (tested via runner integration)
   assert.equal(isCronSyncAllowed("magazine_luiza"), true);
   assert.equal(isCronSyncAllowed("shopee"), true);
-  assert.equal(isCronSyncAllowed("amazon"), false);
+  assert.equal(isCronSyncAllowed("amazon"), true);
 }

@@ -43,6 +43,7 @@ export type PublicSyncAllowlist = Readonly<
 export const PUBLIC_SYNC_SUPPORTED_SOURCES: PublicSyncAllowlist = {
   shopee: { mode: "V1_PRIMARY" },
   magazine_luiza: { mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK" },
+  amazon: { mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK" },
 } as const;
 
 /**
@@ -151,6 +152,7 @@ export function isPublicSyncAuthorized(
 export const PUBLIC_SYNC_CRON_ALLOWLIST: ReadonlySet<string> = new Set([
   "shopee",
   "magazine_luiza",
+  "amazon",
 ]);
 
 /** true quando o cron pode disparar sync deste marketplace. */

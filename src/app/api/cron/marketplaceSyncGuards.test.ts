@@ -72,7 +72,7 @@ test("marketplace fora da allowlist de sync => 400", async () => {
   process.env.CRON_SECRET = "test-secret";
   try {
     const response = await marketplaceSync(
-      request("?marketplace=amazon", { authorization: "Bearer test-secret" }),
+      request("?marketplace=casas_bahia", { authorization: "Bearer test-secret" }),
     );
     assert.equal(response.status, 400);
     const body = await json(response);
@@ -92,9 +92,9 @@ test("grafia do enum tambem e canonicalizada antes do allowlist", async () => {
   const previous = process.env.CRON_SECRET;
   process.env.CRON_SECRET = "test-secret";
   try {
-    // "AMAZON" e "amazon" sao a mesma fonte; ambas tem de ser recusadas.
+    // "CASAS_BAHIA" e "casas_bahia" sao a mesma fonte; ambas tem de ser recusadas.
     const response = await marketplaceSync(
-      request("?marketplace=AMAZON", { authorization: "Bearer test-secret" }),
+      request("?marketplace=CASAS_BAHIA", { authorization: "Bearer test-secret" }),
     );
     assert.equal(response.status, 400);
   } finally {
