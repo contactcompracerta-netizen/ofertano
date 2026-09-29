@@ -154,6 +154,24 @@ export function isPublicSyncAuthorized(
  * autorização de escrita e fará zero writes. Isso evita editar vercel.json
  * entre canários e produção.
  */
+/**
+ * FASE 12 (fechamento) — `aliexpress` PERMANECE aqui, e o motivo é o
+ * inverso do que parece.
+ *
+ * Esta allowlist NÃO agenda nada: o agendamento vive em `vercel.json`, e o
+ * cron do AliExpress foi REMOVIDO de lá enquanto o runtime segue `OFF`. O que
+ * esta lista faz é decidir se o endpoint `/api/cron/marketplace-sync` aceita
+ * `?marketplace=aliexpress` — que é exatamente o probe manual e o dry-run que
+ * a operação usa para revalidar a fonte antes de qualquer ativação.
+ *
+ * Remover a fonte daqui quebraria o único caminho de probe que não depende de
+ * deploy. Além disso a escrita continua fail-closed e independente: o endpoint
+ * chama `authorizePublicSync` e devolve 403 `RUNTIME_MODE_OFF` enquanto o
+ * gate estiver desligado.
+ *
+ * Invariante: estar NESTA lista nunca significa "pode escrever" — significa
+ * "existe conector V1 e dá para sondar". Autorização real = `PUBLIC_SYNC_MODE_*`.
+ */
 export const PUBLIC_SYNC_CRON_ALLOWLIST: ReadonlySet<string> = new Set([
   "shopee",
   "magazine_luiza",

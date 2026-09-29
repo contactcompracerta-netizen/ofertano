@@ -36,10 +36,6 @@
     {
       "path": "/api/cron/marketplace-sync?marketplace=amazon&dry=false&limit=1000",
       "schedule": "27 8 * * *"
-    },
-    {
-      "path": "/api/cron/marketplace-sync?marketplace=aliexpress&dry=false&limit=1000",
-      "schedule": "29 8 * * *"
     }
   ]
 }
