@@ -425,8 +425,13 @@ export class AmazonMarketplaceConnector implements MarketplaceConnector {
     if (!asinValido(listing.externalListingId)) errors.push("externalListingId não é ASIN válido");
     if (!listing.catalog.title?.trim()) errors.push("title vazio");
     if (!Number.isFinite(listing.commerce.price) || listing.commerce.price <= 0) errors.push("preco invalido");
-    if (!listing.seller?.name?.trim()) errors.push("seller ausente");
+    // Seller é opcional na descoberta (SerpApi não expõe); será preenchido no fetchByExternalId
     return errors;
+  }
+
+  // para testes: expõe rawPayloadCache
+  __testOnly_rawPayloadCache() {
+    return rawPayloadCache;
   }
 
   getCursor(): string | null {
