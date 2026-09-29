@@ -190,9 +190,17 @@ function testFlags() {
   });
   assert.equal(isCronSyncAllowed("shopee"), true);
   assert.equal(isCronSyncAllowed("amazon"), true);
+  assert.equal(isCronSyncAllowed("aliexpress"), true);
   // Mercado Livre ja e publico pelo caminho legado e nao e escrito por este
   // runner: sua preservacao nao depende desta allowlist.
-  assert.deepEqual(Object.keys(PUBLIC_SYNC_SUPPORTED_SOURCES).sort(), ["amazon", "magazine_luiza", "shopee"]);
+  // Entrar na lista aqui significa "existe conector V1" — NUNCA "pode
+  // escrever". A autorizacao real continua dependendo de `PUBLIC_SYNC_MODE_*`.
+  assert.deepEqual(Object.keys(PUBLIC_SYNC_SUPPORTED_SOURCES).sort(), [
+    "aliexpress",
+    "amazon",
+    "magazine_luiza",
+    "shopee",
+  ]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -527,9 +535,9 @@ async function testRunner() {
   let collectCalls = 0;
   const unauthorized = await runMarketplacePublicSync(
     config({
-      marketplaceId: "aliexpress",
+      marketplaceId: "casas_bahia",
       connector: {
-        marketplaceId: "aliexpress",
+        marketplaceId: "casas_bahia",
         capabilities: {} as never,
         async collect() {
           collectCalls += 1;
@@ -743,8 +751,33 @@ function testRuntimeGate() {
     reason: "RUNTIME_MODE_OFF",
   });
 
-  // Unknown marketplace => unauthorized
+  // AliExpress supported + mode absent (default OFF) => unauthorized
   assert.deepEqual(authorizePublicSync("aliexpress", PUBLIC_SYNC_SUPPORTED_SOURCES, emptyEnv), {
+    authorized: false,
+    reason: "RUNTIME_MODE_OFF",
+  });
+
+  // AliExpress supported + explicit OFF => unauthorized
+  assert.deepEqual(authorizePublicSync("aliexpress", PUBLIC_SYNC_SUPPORTED_SOURCES, { PUBLIC_SYNC_MODE_ALIEXPRESS: "OFF" }), {
+    authorized: false,
+    reason: "RUNTIME_MODE_OFF",
+  });
+
+  // AliExpress + V1_PRIMARY_WITH_LEGACY_FALLBACK => authorized
+  assert.deepEqual(authorizePublicSync("aliexpress", PUBLIC_SYNC_SUPPORTED_SOURCES, { PUBLIC_SYNC_MODE_ALIEXPRESS: "V1_PRIMARY_WITH_LEGACY_FALLBACK" }), {
+    authorized: true,
+    mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK",
+    source: "RUNTIME",
+  });
+
+  // AliExpress + invalid mode => unauthorized (fail-closed)
+  assert.deepEqual(authorizePublicSync("aliexpress", PUBLIC_SYNC_SUPPORTED_SOURCES, { PUBLIC_SYNC_MODE_ALIEXPRESS: "INVALID" }), {
+    authorized: false,
+    reason: "RUNTIME_MODE_OFF",
+  });
+
+  // Unknown marketplace => unauthorized
+  assert.deepEqual(authorizePublicSync("casas_bahia", PUBLIC_SYNC_SUPPORTED_SOURCES, emptyEnv), {
     authorized: false,
     reason: "MARKETPLACE_NOT_IN_ALLOWLIST",
   });
@@ -778,4 +811,9 @@ function testRuntimeGate() {
   assert.equal(isCronSyncAllowed("magazine_luiza"), true);
   assert.equal(isCronSyncAllowed("shopee"), true);
   assert.equal(isCronSyncAllowed("amazon"), true);
+  assert.equal(isCronSyncAllowed("aliexpress"), true);
+
+  // Marketplace SEM conector V1 nunca pode ser disparado pelo cron.
+  assert.equal(isCronSyncAllowed("casas_bahia"), false);
+  assert.equal(isCronSyncAllowed("mercado_livre"), false);
 }

@@ -44,6 +44,7 @@ export const PUBLIC_SYNC_SUPPORTED_SOURCES: PublicSyncAllowlist = {
   shopee: { mode: "V1_PRIMARY" },
   magazine_luiza: { mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK" },
   amazon: { mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK" },
+  aliexpress: { mode: "V1_PRIMARY_WITH_LEGACY_FALLBACK" },
 } as const;
 
 /**
@@ -55,9 +56,13 @@ export const PUBLIC_SYNC_SUPPORTED_SOURCES: PublicSyncAllowlist = {
  * Regras:
  *   - Se env var presente e válida: usa ela (fail-closed: inválido = OFF)
  *   - Se env var AUSENTE:
- *       * Para marketplaces NOVOS (Magalu): default OFF
+ *       * Para marketplaces NOVOS (Magalu, Amazon, AliExpress): default OFF
  *       * Para marketplaces LEGADOS já operando (Shopee): default = modo estático
  *         Isso preserva compatibilidade sem breaking change.
+ *
+ * Só `shopee` é legado-operando. Qualquer fonte adicionada depois entra com
+ * default OFF: estar na lista estática significa "existe conector V1", nunca
+ * "pode escrever". O primeiro deploy de uma fonte nova é sempre zero-write.
  */
 function resolveRuntimeMode(
   marketplaceId: string,
@@ -77,7 +82,7 @@ function resolveRuntimeMode(
   }
 
   // Env ausente: default dependendo do marketplace
-  // Magalu (novo) -> OFF; Shopee (legado) -> modo estático
+  // Magalu/Amazon/AliExpress (novos) -> OFF; Shopee (legado) -> modo estático
   const isLegacyOperating = marketplaceId === "shopee";
   return isLegacyOperating ? staticMode : "OFF";
 }
@@ -153,6 +158,7 @@ export const PUBLIC_SYNC_CRON_ALLOWLIST: ReadonlySet<string> = new Set([
   "shopee",
   "magazine_luiza",
   "amazon",
+  "aliexpress",
 ]);
 
 /** true quando o cron pode disparar sync deste marketplace. */

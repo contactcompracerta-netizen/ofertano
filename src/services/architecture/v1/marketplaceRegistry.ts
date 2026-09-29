@@ -117,7 +117,22 @@ export const MARKETPLACE_REGISTRY_V1: ReadonlyArray<MarketplaceConfigV1> = [
     displayName: "AliExpress",
     legacyEnumValue: "ALIEXPRESS",
     publicEligible: true,
-    capabilities: capability({ gtin: false, pixPrice: false, stock: false }),
+    // Conector V1 real (FASE 12), medido contra a lista `fields` real da
+    // Affiliate API: stock=false (nao expoe), shipping=false (nao expoe),
+    // variants=false (devolve UM sku_id opaco, sem eixos estruturados),
+    // gtin=false (sem EAN/UPC), incrementalUpdates=false (consulta por
+    // keyword, sem delta), fullSnapshot=false (pagina por keyword),
+    // webhook=false, pixPrice=false.
+    capabilities: capability({
+      stock: false,
+      shipping: false,
+      variants: false,
+      gtin: false,
+      incrementalUpdates: false,
+      fullSnapshot: false,
+      webhook: false,
+      pixPrice: false,
+    }),
   },
   {
     marketplaceId: "carrefour",

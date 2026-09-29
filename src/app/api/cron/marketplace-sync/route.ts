@@ -38,6 +38,7 @@ import { authorizePublicSync, isCronSyncAllowed } from "@/services/architecture/
 import { shopeePublicSyncConfig } from "@/services/architecture/v1/publicSync/connectors/shopeePublicSync";
 import { magaluPublicSyncConfig } from "@/services/architecture/v1/publicSync/connectors/magaluPublicSync";
 import { amazonPublicSyncConfig } from "@/services/architecture/v1/publicSync/connectors/amazonPublicSync";
+import { aliExpressPublicSyncConfig } from "@/services/architecture/v1/publicSync/connectors/aliexpressPublicSync";
 import { toCanonicalMarketplaceId } from "@/services/architecture/v1/publication/shadowWeight";
 import type { PublicSyncConfig } from "@/services/architecture/v1/publicSync/types";
 
@@ -61,6 +62,8 @@ const SYNC_CONFIG: Record<string, PublicSyncConfigFactory> = {
     magaluPublicSyncConfig({ ...options, brandLexicon: new Set<string>() }),
   amazon: (options) =>
     amazonPublicSyncConfig({ ...options, brandLexicon: new Set<string>() }),
+  aliexpress: (options) =>
+    aliExpressPublicSyncConfig({ ...options, brandLexicon: new Set<string>() }),
 };
 
 function unauthorized() {

@@ -2,13 +2,21 @@ import { createHmac } from "node:crypto";
 
 import type { PaginaAliExpress } from "./types";
 
-const ALIEXPRESS_ENDPOINT =
+export const ALIEXPRESS_ENDPOINT =
   "https://api-sg.aliexpress.com/sync";
 
-const ALIEXPRESS_METHOD =
+export const ALIEXPRESS_METHOD =
   "aliexpress.affiliate.productdetail.get";
 
-type ProdutoAliExpressApi = {
+/**
+ * PAYLOAD BRUTO de `aliexpress.affiliate.productdetail.get`.
+ *
+ * Exportado na FASE 12 para que o conector V1 reutilize ESTE cliente HTTP
+ * (assinatura HMAC + montagem de parâmetros + parsing) em vez de escrever uma
+ * segunda implementação. A lista `fields` pedida aqui é a MEDIDA real de
+ * capability: o que não estiver aqui, o conector declara `false`/UNKNOWN.
+ */
+export type ProdutoAliExpressApi = {
   product_id?: string | number;
 
   product_title?: string;
@@ -379,7 +387,16 @@ function obterProdutos(
   return [];
 }
 
-async function buscarProdutoApi(
+/**
+ * ÚNICA chamada de detalhe por product_id da FASE 12.
+ *
+ * `carregarPaginaAliExpress` (importador manual) e
+ * `AliExpressMarketplaceConnector.fetchByExternalId` (known-binding refresh)
+ * passam por AQUI. Uma segunda implementação de HMAC/params/parsing seria
+ * uma fonte de drift silenciosa entre o que o importador mostra e o que o
+ * public sync grava.
+ */
+export async function buscarProdutoApi(
   productId: string,
 ): Promise<ProdutoAliExpressApi> {
   const appKey =

@@ -186,7 +186,14 @@ const MARCAS_CONHECIDAS = [
   "philco",
 ];
 
-type AliExpressProduct = {
+/**
+ * PAYLOAD BRUTO de `aliexpress.affiliate.product.query`.
+ *
+ * Exportado na FASE 12 porque o conector V1 normaliza a MESMA forma de payload
+ * que o discovery consome — o campo `sku_id` é a MEDIDA que decide se
+ * `product_id` pode ser identidade física de família.
+ */
+export type AliExpressProduct = {
   product_id?: string | number;
   product_title?: string;
   product_main_image_url?: string;
@@ -1025,7 +1032,14 @@ export function obterPreco(
   );
 }
 
-function obterPrecoAnterior(
+/**
+ * Preço anterior (strike) de um produto, ou null.
+ *
+ * Exportado na FASE 12 para que o conector V1 NÃO reimplemente a escolha do
+ * preço "de antes" entre a moeda-alvo e o contexto do link. Uma segunda
+ * implementação aqui divergiria do que o importador manual mostra na tela.
+ */
+export function obterPrecoAnterior(
   produto: AliExpressProduct,
   precoAtual: number,
 ): number | null {
