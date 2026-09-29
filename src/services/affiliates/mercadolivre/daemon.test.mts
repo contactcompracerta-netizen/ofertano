@@ -193,7 +193,7 @@ async function run() {
   {
     const stores = createMemoryStores({ pendingList: [pending()] });
     await runDaemon(stores, seq([
-      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true },
+      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" },
     ]), { cycles: 1, limit: 5 });
     assert.equal(stores.applied.length, 1);
     assert.equal(stores.applied[0], "offer-1");
@@ -215,7 +215,7 @@ async function run() {
       maxConcurrent = Math.max(maxConcurrent, active);
       await new Promise((r) => setTimeout(r, 10));
       active -= 1;
-      return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true };
+      return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" };
     }, { cycles: 1, limit: 5 });
     assert.equal(stores.applied.length, 3);
     assert.equal(maxConcurrent, 1);
@@ -338,7 +338,7 @@ async function run() {
       {
         pendingStore: stores.pendingStore,
         applyStore: stores.applyStore,
-        generate: seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true }]),
+        generate: seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" }]),
         sleep: timerSleep(),
         shouldContinue: () => !stop,
       },
@@ -406,7 +406,7 @@ async function run() {
     const stores = createMemoryStores({ pendingList: [pending()] });
     await runDaemon(
       stores,
-      seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true }]),
+      seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" }]),
       { cycles: 1, limit: 5, dryRun: true },
     );
     assert.equal(stores.applied.length, 0);
@@ -426,7 +426,7 @@ async function run() {
       stores,
       async () => {
         calls += 1;
-        return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true };
+        return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" };
       },
       { cycles: 1, limit: 10, maxPerHour: 2 },
     );

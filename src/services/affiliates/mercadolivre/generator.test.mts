@@ -90,11 +90,17 @@ function run() {
     // item original NÃO desaparece do conjunto de validação...
     assert.ok(markers.includes("MLB-3608328785"));
     assert.ok(markers.includes("MLB3608328785"));
-    // ...mas o alvo resolvido também está presente (com e sem hífen).
-    assert.ok(markers.includes("MLB6339959"));
-    assert.ok(markers.includes("MLB-6339959"));
+    // O itemId resolvido (vem de item_id/wid na query) está presente.
     assert.ok(markers.includes("MLB6398917320"));
     assert.ok(markers.includes("MLB-6398917320"));
+
+    // REGRESSÃO TRAVADA AQUI: o catalogId NÃO é marcador. Aceitá-lo foi o que
+    // permitia validar link de catálogo como se fosse link do anúncio — o caso
+    // em que 12 das 22 ofertas ML de produção têm externalId != catalogId.
+    assert.ok(
+      !markers.includes("MLB6339959") && !markers.includes("MLB-6339959"),
+      "catalogId não pode provar o anúncio",
+    );
   }
 
   // OFFER_PRICE_NOT_MUTATED: as funções de resolução não tocam preço.
@@ -107,18 +113,20 @@ function run() {
     assert.equal(before.externalId, "MLB-3608328785");
   }
 
-  // AFFILIATE_VALIDATED_AGAINST_RESOLVED_TARGET: a validação considera o alvo
-  // resolvido; o MLB stale não precisa continuar aparecendo no meli.la.
+  // AFFILIATE_VALIDATED_AGAINST_RESOLVED_TARGET: a validação considera o
+  // anúncio resolvido (item_id da query), NÃO o catálogo. O MLB stale não
+  // precisa continuar aparecendo, mas o catálogo não autoriza nada.
   {
     const markers = buildAffiliateTargetMarkers(
       extractItemId(SOURCE_STALE_ITEM),
       resolveTargetMeta(RESOLVED_CATALOG),
     );
-    // Evidência: mesmo sem o MLB3608328785 na página final, o catalog
-    // resolvido MLB6339959 autoriza a validação.
-    assert.ok(markers.includes("MLB6339959"));
-    // o conjunto contém tanto o original quanto o resolvido.
+    // O anúncio resolvido (item_id=MLB6398917320) autoriza a validação.
+    assert.ok(markers.includes("MLB6398917320"));
+    // O conjunto contém o original também.
     assert.ok(markers.some((m) => m.includes("3608328785")));
+    // E o catálogo NÃO está lá.
+    assert.ok(!markers.some((m) => m.includes("6339959")));
   }
 
   console.log("ML_AFFILIATE_GENERATOR_TEST_OK");

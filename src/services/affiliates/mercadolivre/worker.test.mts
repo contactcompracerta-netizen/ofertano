@@ -104,6 +104,8 @@ async function run() {
         affiliateUrl: AFFILIATE_ML,
         sourceItemId: "MLB-1",
         validated: true,
+        targetEvidence: [{ kind: "ITEM_ID", mlb: "MLB-1", via: "path" }],
+        finalUrl: "https://www.mercadolivre.com.br/MLB-1-x",
       },
     ]);
     assert.equal(result.updatedCount, 1);
@@ -200,6 +202,8 @@ async function run() {
           affiliateUrl: AFFILIATE_ML,
           sourceItemId: "MLB-1",
           validated: true,
+          targetEvidence: [{ kind: "ITEM_ID", mlb: "MLB-1", via: "path" }],
+          finalUrl: "https://www.mercadolivre.com.br/MLB-1-x",
         },
       ],
       { dryRun: true },
@@ -220,18 +224,24 @@ async function run() {
         affiliateUrl: AFFILIATE_ML,
         sourceItemId: "MLB-1",
         validated: true,
+        targetEvidence: [{ kind: "ITEM_ID", mlb: "MLB-1", via: "path" }],
+        finalUrl: "https://www.mercadolivre.com.br/MLB-1-x",
       },
       {
         status: "SUCCESS",
         affiliateUrl: AFFILIATE_ML,
         sourceItemId: "MLB-2",
         validated: true,
+        targetEvidence: [{ kind: "ITEM_ID", mlb: "MLB-1", via: "path" }],
+        finalUrl: "https://www.mercadolivre.com.br/MLB-1-x",
       },
       {
         status: "SUCCESS",
         affiliateUrl: AFFILIATE_ML,
         sourceItemId: "MLB-3",
         validated: true,
+        targetEvidence: [{ kind: "ITEM_ID", mlb: "MLB-1", via: "path" }],
+        finalUrl: "https://www.mercadolivre.com.br/MLB-1-x",
       },
     ]);
     const stores = createMemoryStores({
@@ -248,7 +258,7 @@ async function run() {
   // 9) Cooldown aplicado (verifica que houve pausa) — sem asserção temporal frágil
   {
     const generator = makeGenerator([
-      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true },
+      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" },
     ]);
     const stores = createMemoryStores({ pendingList: [pending()] });
     const result = await runMercadoLivreWorker(
@@ -261,7 +271,7 @@ async function run() {
   // 10) Item ML válido: esperadoItemId extraído/base passado ao gerador
   {
     const generator = makeGenerator([
-      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true },
+      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true, targetEvidence: [], finalUrl: "https://www.mercadolivre.com.br/MLB-1-x" },
     ]);
     const stores = createMemoryStores({ pendingList: [pending()] });
     await runMercadoLivreWorker(

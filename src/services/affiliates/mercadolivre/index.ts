@@ -20,10 +20,31 @@ export type {
 export { runMercadoLivreWorker } from "./worker";
 export type {
   GeneratorFn,
+  HydrateItemFn,
   WorkerConfig,
   WorkerItemResult,
   WorkerRunResult,
 } from "./worker";
+
+export {
+  hydrateExactItemPermalink,
+  canonicalizarMlb,
+  permalinkProvaAnuncio,
+  AFFILIATE_INPUT_MODE_EXACT_ITEM,
+} from "./itemHydration";
+export type {
+  AffiliateInputMode,
+  ItemHydrationResult,
+} from "./itemHydration";
+
+export {
+  validateExactOfferTarget,
+  collectTargetEvidence,
+  extractCatalogMlId,
+  extractExactItemMlId,
+  extrairItemIdsDosFiltros,
+} from "./strictTarget";
+export type { StrictTargetVerdict, TargetEvidence } from "./strictTarget";
 
 export {
   createPrismaMercadoLivreApplyStore,

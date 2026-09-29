@@ -1,5 +1,15 @@
 ﻿import { mercadoLivreFetch } from "@/lib/mercadolivre";
 
+/*
+ * NOTA SOBRE `getItem` (usado pela hidratação do anúncio, seção 3 da missão
+ * ML affiliate exact target):
+ *
+ * O cliente oficial já existe e é o único lugar que fala com a API do ML. A
+ * hidratação do permalink do anúncio Chama este `getItem` em vez de criar um
+ * segundo cliente — dois clientes divergiriam em cabeçalhos, User-Agent,
+ * timeout e retry, e essa divergência só apareceria em produção.
+ */
+
 import type {
   MercadoLivreCatalogItems,
   MercadoLivreCatalogProduct,

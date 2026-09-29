@@ -1,3 +1,12 @@
+import {
+  validateExactOfferTarget,
+  type TargetEvidence,
+} from "./strictTarget";
+import {
+  AFFILIATE_INPUT_MODE_EXACT_ITEM,
+  type AffiliateInputMode,
+} from "./itemHydration";
+
 type PlaywrightModule = {
   chromium: {
     connectOverCDP(
@@ -16,6 +25,10 @@ export type GenerateOutcome =
       affiliateUrl: string;
       sourceItemId: string | null;
       validated: true;
+      /** Provas de que o destino é o anúncio da oferta. */
+      targetEvidence: TargetEvidence[];
+      /** URL final após resolver o redirecionador meli.la. */
+      finalUrl: string;
     }
   | {
       status: "CHROME_NOT_RUNNING";
@@ -32,6 +45,8 @@ export type GenerateOutcome =
   | {
       status: "VALIDATION_FAILED";
       reason: string;
+      /** true quando a recusa foi por o destino ser só página de catálogo. */
+      catalogOnly?: boolean;
     };
 
 export type MercadoLivreAffiliateInput = {
@@ -41,6 +56,17 @@ export type MercadoLivreAffiliateInput = {
   generatorUrl?: string;
   log?: (msg: string) => void;
   timeoutMs?: number;
+  /**
+   * Permalink do ANÚNCIO, vindo de `hydrateExactItemPermalink`.
+   *
+   * Quando presente, é esta URL que entra no Link Builder, no lugar da
+   * `sourceUrl` (que em produção é sempre `/p/MLB...`, página de catálogo).
+   * Sem ela o fluxo ainda funciona, mas gera link de catálogo — que a
+   * validação estrita agora recusa.
+   */
+  exactItemUrl?: string | null;
+  /** Modo de entrada efetivamente usado. Vira `AFFILIATE_INPUT_MODE`. */
+  inputMode?: AffiliateInputMode;
 };
 
 const DEFAULT_CDP_ENDPOINT = "http://127.0.0.1:9222";
@@ -138,10 +164,20 @@ export function resolveTargetMeta(url: string): ResolvedTargetMeta {
 }
 
 /**
- * Marcadores usados na validação do meli.la. Incluem o item original e o
- * alvo RESOLVIDO (catalog/item). Não exige que o MLB stale continue
- * aparecendo depois do redirect oficial. Para robustez, registra cada ID nas
- * formas com e sem hífen (o ML os exibe de forma inconsistente).
+ * Marcadores de ANÚNCIO para a validação do meli.la.
+ *
+ * Mudança de contrato: `catalogId` foi REMOVIDO dos marcadores.
+ *
+ * A versão anterior aceitava o MLB do catálogo como prova suficiente. Como as
+ * 22 ofertas ML de produção têm `sourceUrl` de catálogo e 12 delas têm
+ * `externalId != catalogId`, isso deixava passar link que identifica o produto
+ * mas não o anúncio — o preço e o vendedor exibidos seriam os de outra oferta
+ * do mesmo produto. `WRONG_PRODUCT=0` não pega esse caso; por isso a
+ * validação estrutural vive em `strictTarget.ts` e aqui só ficam marcadores
+ * de anúncio.
+ *
+ * `resolved.itemId` continua: ele vem de `item_id`/`wid` na query do catálogo,
+ * que é o anúncio. `resolved.catalogId` não: é o catálogo.
  */
 export function buildAffiliateTargetMarkers(
   originalItemId: string | null,
@@ -156,7 +192,7 @@ export function buildAffiliateTargetMarkers(
     set.add(up.replace(/MLB-?/, "MLB"));
   };
   add(originalItemId);
-  add(resolved.catalogId);
+  // Só o item resolvido. NÃO adicionar resolved.catalogId: ver acima.
   add(resolved.itemId);
   return [...set];
 }
@@ -533,12 +569,21 @@ async function findExpectedMlb(
   return false;
 }
 
+/**
+ * Segue o link e procura o MLB esperado no destino.
+ *
+ * Devolve a URL FINAL, não só o veredito booleano. O `meli.la` é um
+ * redirecionador: o que precisa ser validado é onde ele chega, e a
+ * validação estrita (`validateExactOfferTarget`) só pode ser aplicada sobre a
+ * URL final. Devolver `boolean` obrigaria a validar a URL do redirecionador, o
+ * que não prova nada — e é exatamente a brecha que o catálogo aproveitava.
+ */
 async function diagnoseValidationInNewPage(
   context: import("playwright").BrowserContext,
   affiliateUrl: string,
   expectedItems: string[],
   log: (msg: string) => void,
-): Promise<boolean> {
+): Promise<{ found: boolean; finalUrl: string }> {
   const page = await context.newPage();
   const hops: string[] = [];
 
@@ -561,11 +606,19 @@ async function diagnoseValidationInNewPage(
   let found = false;
   const end = Date.now() + 15000;
   let last = "";
+  // Toda URL observada, inclusive a que a página terminou. A validação estrita
+  // vai checar as candidatas na ordem: a que tiver MLB do anúncio vence.
+  const candidatas: string[] = [];
+  const observar = (u: string) => {
+    const clean = u.split("#")[0];
+    if (clean && !candidatas.includes(clean)) candidatas.push(clean);
+  };
   try {
     await page
       .goto(affiliateUrl, { waitUntil: "domcontentloaded", timeout: 30000 })
       .catch(() => {});
     recordHop(page.url());
+    observar(page.url());
     last = page.url();
 
     while (Date.now() < end && !page.isClosed()) {
@@ -573,6 +626,7 @@ async function diagnoseValidationInNewPage(
       const cur = page.url();
       if (cur && cur !== last) {
         recordHop(cur);
+        observar(cur);
         last = cur;
       }
       if (await findExpectedMlb(page, expectedItems)) {
@@ -581,11 +635,14 @@ async function diagnoseValidationInNewPage(
       }
       await sleep(1200);
     }
+    observar(page.url());
   } finally {
     await page.close().catch(() => {});
   }
 
-  return found;
+  // Preferir a última URL observada; é onde o redirecionador parou.
+  const finalUrl = candidatas[candidatas.length - 1] ?? affiliateUrl;
+  return { found, finalUrl };
 }
 
 /**
@@ -702,6 +759,35 @@ export async function generateMercadoLivreAffiliateLink(
     };
   }
 
+  /*
+   * Entrada do Link Builder.
+   *
+   * `exactItemUrl` (permalink do anúncio, via `getItem`) tem precedência sobre
+   * `sourceUrl`. A diferença não é cosmética: em produção todas as 22 ofertas
+   * têm `sourceUrl` de catálogo, e 12 têm `externalId != catalogId`. Alimentar
+   * o gerador com o catálogo produz link que não identifica o anúncio, e a
+   * validação estrita passa a recusá-lo — corretamente, mas tarde demais se a
+   * entrada preferida fosse o catálogo.
+   *
+   * A preferência é declarada, não presumida: sem `exactItemUrl` o modo é
+   * `CATALOG_URL_FALLBACK`, e o log deixa isso explícito.
+   */
+  const exactItemUrl = input.exactItemUrl?.trim() || "";
+  const linkBuilderSourceUrl = exactItemUrl || sourceUrl;
+  const inputMode: AffiliateInputMode = exactItemUrl
+    ? AFFILIATE_INPUT_MODE_EXACT_ITEM
+    : ("CATALOG_URL_FALLBACK" as AffiliateInputMode);
+  log(`AFFILIATE_INPUT_MODE=${inputMode}`);
+
+  if (exactItemUrl && !isOfficialMercadoLivreUrl(exactItemUrl)) {
+    return {
+      status: "GENERATION_FAILED",
+      reason:
+        "exactItemUrl fora do domínio oficial do Mercado Livre. " +
+        "Nada foi gerado.",
+    };
+  }
+
   let browser: import("playwright").Browser | undefined;
   let context: import("playwright").BrowserContext | undefined;
 
@@ -736,7 +822,7 @@ export async function generateMercadoLivreAffiliateLink(
     // entrada do Link Builder e como alvo da validação. NÃO muta a oferta.
     let resolved: ResolvedSource | null = null;
     try {
-      resolved = await resolveSourceUrl(context, sourceUrl, log);
+      resolved = await resolveSourceUrl(context, linkBuilderSourceUrl, log);
     } catch (err) {
       if (isTransientNavError(err)) {
         log("SOURCE_RESOLUTION=TRANSIENT");
@@ -746,12 +832,15 @@ export async function generateMercadoLivreAffiliateLink(
     }
     if (resolved === null) {
       // URL inválida (não http/https).
-      if (!isResolvableHttpUrl(sourceUrl)) {
-        return { status: "GENERATION_FAILED", reason: "sourceUrl inválida (apenas http/https)" };
+      if (!isResolvableHttpUrl(linkBuilderSourceUrl)) {
+        return {
+          status: "GENERATION_FAILED",
+          reason: "URL de entrada inválida (apenas http/https)",
+        };
       }
       return {
         status: "GENERATION_FAILED",
-        reason: "sourceUrl não pôde ser resolvida via CDP.",
+        reason: "URL de entrada não pôde ser resolvida via CDP.",
       };
     }
     // Redirect saiu do domínio oficial do ML → rejeitado (não segue externa).
@@ -817,7 +906,10 @@ export async function generateMercadoLivreAffiliateLink(
     }
     await field.click();
     await field.fill(linkBuilderInput);
-    log(`[input] URL inserida no campo (${linkBuilderInput === sourceUrl ? "ORIGINAL" : "RESOLVED"}).`);
+    log(
+      `[input] URL inserida no campo (modo=${inputMode}, ` +
+        `${linkBuilderInput === sourceUrl ? "ORIGINAL" : "RESOLVED"}).`,
+    );
 
     const btn = await waitForGenerateButton(page);
     if (!btn) {
@@ -833,34 +925,66 @@ export async function generateMercadoLivreAffiliateLink(
     }
 
     const affiliateUrl = diag.capturedUrl;
-    // Valida o meli.la contra o alvo RESOLVIDO (catalog/item) + item original.
     const targetMarkers = buildAffiliateTargetMarkers(expectedItemId, resolvedMeta);
-    const validated = await diagnoseValidationInNewPage(
+    const { found: validated, finalUrl } = await diagnoseValidationInNewPage(
       context,
       affiliateUrl,
       targetMarkers,
       log,
     );
 
-    if (validated) {
+    // Validação ESTRITA sobre a URL de destino final.
+    //
+    // `validated` acima é a verificação frouxa (o MLB aparece em algum lugar
+    // da página). Ela é necessária, mas não suficiente: a página de catálogo
+    // mostra o MLB de vários anúncios ao mesmo tempo, então "o MLB aparece na
+    // página" é verdadeiro mesmo quando o link leva a outro anúncio.
+    //
+    // Este passo exige que a URL de destino carregue o MLB do anúncio da
+    // oferta. `CATALOG_ID_ONLY` não passa — é a condição que valeria para as
+    // 12 ofertas com externalId != catalogId.
+    const estrito = validateExactOfferTarget(finalUrl, expectedItemId);
+    log(
+      estrito.ok
+        ? `STRICT_TARGET=OK (${estrito.evidence.map((e) => e.via).join(",")})`
+        : `STRICT_TARGET=REJECTED catalogOnly=${estrito.catalogOnly}`,
+    );
+
+    if (validated && estrito.ok) {
       return {
         status: "SUCCESS",
         affiliateUrl,
         sourceItemId: expectedItemId,
         validated: true,
+        targetEvidence: estrito.evidence,
+        finalUrl,
       };
     }
 
-    if (!diag.isNew) {
+    if (estrito.ok) {
+      // Evidência estrita presente mas a varredura de página não confirmou.
+      // Não gravar: sem a confirmação o link pode não ser o gerado agora.
       return {
         status: "VALIDATION_FAILED",
-        reason: `Link afiliado não corresponde ao anúncio esperado. Esperado ${expectedItemId}. O link capturado já existia na página antes de Gerar.`,
+        reason:
+          `Destino estrito ok, mas o MLB esperado não foi confirmado na ` +
+          `página renderizada. Nada gravado.`,
       };
     }
+
+    // O motivo estrito vem primeiro: ele diz exatamente por que o link não
+    // serve, e é a informação necessária para diagnosticar a diferença entre
+    // "o Link Builder errou" e "o ML só oferece página de catálogo".
+    const motivo =
+      (diag.isNew
+        ? "Link gerado mas destino não prova o anúncio. "
+        : "Link capturado já existia na página antes de Gerar. ") +
+      `Esperado ${expectedItemId}. ${estrito.reason} Nada gravado.`;
 
     return {
       status: "VALIDATION_FAILED",
-      reason: `Link afiliado foi gerado mas não confirmado. Esperado ${expectedItemId}.`,
+      reason: motivo,
+      catalogOnly: estrito.catalogOnly,
     };
   } catch (err) {
     const msg = (err as Error)?.message || String(err);

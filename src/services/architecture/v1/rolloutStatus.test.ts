@@ -88,7 +88,44 @@ console.log("--- 5. ALIEXPRESS: integrado, desligado, fora do público ---");
   assert.equal(ae.legacyEnumValue, "ALIEXPRESS");
 }
 
-console.log("--- 6. 'pode publicar' ≠ 'publicou' ---");
+console.log("--- 6. env local ausente NÃO é o runtime de produção ---");
+{
+  /*
+   * REGRESSÃO QUE ESTE CASO EVITA.
+   *
+   * Rodando o snapshot local sem as envs de produção, Magalu aparece
+   * `PUBLISHED_NO_WRITER`: tem 3 ofertas no ar e writer OFF. A conclusão
+   * natural — "o writer de Magalu está desligado, precisa ser restaurado" —
+   * é ERRADA. A env `PUBLIC_SYNC_MODE_MAGAZINE_LUIZA` existe em produção e
+   * está marcada como secret, então `vercel env ls` mostra o nome e o
+   * snapshot local resolve OFF por ausência, não por configuração.
+   *
+   * Medido: em produção, `?marketplace=magazine_luiza` responde 200 com
+   * `writerMode=V1_PRIMARY_WITH_LEGACY_FALLBACK`. Sem esta distinção
+   * declarada, um relatório local levaria a "corrigir" um writer que está
+   * ligado — o caminho para desligar algo que funciona.
+   */
+  const semEnv = rolloutRows({}, PUBLIC_SYNC_SUPPORTED_SOURCES);
+  const magaluSemEnv = semEnv.find((r) => r.marketplaceId === "magazine_luiza")!;
+  assert.equal(magaluSemEnv.publicSyncAuthorized, false, "local: env ausente => OFF");
+
+  const comEnv = rolloutRows(
+    { PUBLIC_SYNC_MODE_MAGAZINE_LUIZA: V1 },
+    PUBLIC_SYNC_SUPPORTED_SOURCES,
+  );
+  const magaluComEnv = comEnv.find((r) => r.marketplaceId === "magazine_luiza")!;
+  assert.equal(magaluComEnv.publicSyncAuthorized, true, "produção: env presente => ON");
+  assert.equal(magaluComEnv.publicSyncMode, V1);
+
+  // O número de ofertas públicas é o mesmo nos dois casos: a diferença é
+  // inteiramente de autorização, o que confirma que não é oferta faltando.
+  const comOfertas = comEnv
+    .map((r) => classifyPublicationStatus({ ...r, publicOfferCount: 3 }))
+    .includes("PUBLISHED");
+  assert.equal(comOfertas, true, "com a env de produção, Magalu é PUBLISHED");
+}
+
+console.log("--- 7. 'pode publicar' ≠ 'publicou' ---");
 {
   assert.equal(classifyPublicationStatus({
     publicSyncAuthorized: false, legacyWriter: false, publicOfferCount: 0,
@@ -115,7 +152,7 @@ console.log("--- 6. 'pode publicar' ≠ 'publicou' ---");
   }), "PUBLISHED_NO_WRITER");
 }
 
-console.log("--- 7. contagem PUBLICA vem só do banco ---");
+console.log("--- 8. contagem PUBLICA vem só do banco ---");
 {
   const ofertas = { MERCADO_LIVRE: 22, AMAZON: 0, ALIEXPRESS: 0 };
   assert.equal(countMarketplacesWithPublicOffers(ofertas), 1);
