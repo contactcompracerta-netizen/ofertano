@@ -665,6 +665,12 @@ async function main() {
         /ALIEXPRESS_SOURCE_(BLOCKED|UNUSABLE|ERROR)/,
         `a mensagem tem que dizer que a FONTE falhou (veio: ${erro.message})`,
       );
+      /*
+       * O runner reporta `ERROR: COLLECT_FAILED: <erro.name>`. Um `name` com
+       * "ErrorError" ou com a mensagem inteira dentro tornaria o alerta do
+       * cron ilegível — que é justamente quando ele precisa ser legível.
+       */
+      assert.equal(erro.name, "AliExpressSourceError");
     } finally {
       if (savedKey !== undefined) process.env.ALIEXPRESS_APP_KEY = savedKey;
       if (savedSecret !== undefined) process.env.ALIEXPRESS_APP_SECRET = savedSecret;

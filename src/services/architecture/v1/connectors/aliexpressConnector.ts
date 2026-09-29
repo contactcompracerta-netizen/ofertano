@@ -536,12 +536,17 @@ export class AliExpressMarketplaceConnector implements MarketplaceConnector {
      */
     const outcome = result.searchOutcome;
     if (outcome === "BLOCKED" || outcome === "UNUSABLE" || outcome === "ERROR") {
+      /*
+       * `name` é o que o runner reporta em `ERROR: COLLECT_FAILED: <name>`,
+       * então precisa ser estável e legível. O `outcome` já está no
+       * beginning da mensagem; aqui basta identificar a classe da falha.
+       */
       const erro = new Error(
         `ALIEXPRESS_SOURCE_${outcome}: ${
           (result.error ?? "sem detalhe").slice(0, 200)
         } (scanned=${result.scanned}, blocked=${(result.blockedSources ?? []).join(",") || "-"}, unusable=${(result.unusableSources ?? []).join(",") || "-"})`,
       );
-      erro.name = `AliExpressSource${outcome.charAt(0) + outcome.slice(1).toLowerCase()}Error`;
+      erro.name = "AliExpressSourceError";
       throw erro;
     }
 
