@@ -525,6 +525,26 @@ export class AliExpressMarketplaceConnector implements MarketplaceConnector {
     const agora = this.now();
     const items: NormalizedMarketplaceListingV1[] = [];
 
+    /*
+     * `buscarAliExpress` NÃO LANÇA: fonte bloqueada, indisponível ou com erro
+     * volta como resultado com `searchOutcome` e `candidates: []`. Sem esta
+     * checagem, uma API fora do ar (ou sem permissão) seria reportada como
+     * "zero anúncios coletados" — indistinguível de uma busca que realmente
+     * não achou nada, e o canário passaria verde sobre uma coleta morta.
+     *
+     * `EMPTY_VALID` NÃO é falha: a API respondeu e não tinha o que devolver.
+     */
+    const outcome = result.searchOutcome;
+    if (outcome === "BLOCKED" || outcome === "UNUSABLE" || outcome === "ERROR") {
+      const erro = new Error(
+        `ALIEXPRESS_SOURCE_${outcome}: ${
+          (result.error ?? "sem detalhe").slice(0, 200)
+        } (scanned=${result.scanned}, blocked=${(result.blockedSources ?? []).join(",") || "-"}, unusable=${(result.unusableSources ?? []).join(",") || "-"})`,
+      );
+      erro.name = `AliExpressSource${outcome.charAt(0) + outcome.slice(1).toLowerCase()}Error`;
+      throw erro;
+    }
+
     for (const candidate of result.candidates) {
       if (candidate.status !== "FOUND") continue;
       // Reconstrói o payload do discovery em forma de produto da API, para

@@ -13,7 +13,8 @@
  * O foco deste arquivo é o que é PERIGOSO no AliExpress specifically:
  *   - identidade `product_id` (família) vs `sku_id` (variante);
  *   - o gate de variante (128GB vs 256GB, 110V vs 220V, Pro vs Pro Max);
- *   - fail-closed de link: sem `promotion_link` não publica oferta nova.
+ *   - fail-closed de link: sem `promotion_link` não publica oferta nova;
+ *   - fonte morta tem que FALAR, não parecer "zero anúncios".
  */
 import assert from "node:assert/strict";
 
@@ -626,6 +627,48 @@ async function main() {
     const connector = makeConnector();
     assert.equal(await connector.fetchByExternalId("123"), null);
     assert.equal(await connector.fetchByExternalId(""), null);
+  }
+
+  /* --- 16. FONTE MORTA FALA (a armadilha do canário silencioso) --------- */
+  /*
+   * `buscarAliExpress` NÃO LANÇA: credencial revogada, API fora do ar ou
+   * permissão perdida voltam como `searchOutcome: BLOCKED | UNUSABLE | ERROR`
+   * com `candidates: []`.
+   *
+   * Se o conector engolisse isso, um canário reportaria
+   * `LISTINGS_COLLECTED=0, ERROR=null` — o MESMO número de uma busca que
+   * rodou bem e não achou nada. O verde seria indistinguível de uma coleta
+   * morta, que é exatamente a falha que o canário existe para pegar.
+   *
+   * Aqui a rede é desligada de propósito (sem credencial => a API não
+   * autoriza), então o caso real de "fonte morta" é reproduzido.
+   */
+  {
+    const savedKey = process.env.ALIEXPRESS_APP_KEY;
+    const savedSecret = process.env.ALIEXPRESS_APP_SECRET;
+    delete process.env.ALIEXPRESS_APP_KEY;
+    delete process.env.ALIEXPRESS_APP_SECRET;
+    try {
+      const connector = makeConnector();
+      let erro: unknown = null;
+      try {
+        await connector.collect();
+      } catch (e) {
+        erro = e;
+      }
+      assert.ok(
+        erro instanceof Error,
+        "fonte bloqueada tem que lançar, não devolver batch vazia",
+      );
+      assert.match(
+        erro.message,
+        /ALIEXPRESS_SOURCE_(BLOCKED|UNUSABLE|ERROR)/,
+        `a mensagem tem que dizer que a FONTE falhou (veio: ${erro.message})`,
+      );
+    } finally {
+      if (savedKey !== undefined) process.env.ALIEXPRESS_APP_KEY = savedKey;
+      if (savedSecret !== undefined) process.env.ALIEXPRESS_APP_SECRET = savedSecret;
+    }
   }
 
   console.log("aliexpressConnector.contract.test.ts PASS");
