@@ -31,7 +31,19 @@ function offer(
   return {
     productId: input.productId ?? "prod-1",
     externalId: input.externalId ?? input.id,
-    sourceUrl: input.sourceUrl ?? SOURCE_ML,
+    /*
+     * LISTING-FIRST: a `sourceUrl` de oferta ML precisa PROVAR o `externalId`
+     * (ITEM_ID de anúncio). O default abaixo deriva a URL pública do próprio
+     * `externalId` para que a prova feche; `SOURCE_ML` continua disponível
+     * para os cenários que testam link copiado / não-comprável.
+     */
+    sourceUrl:
+      input.sourceUrl ??
+      (String(input.marketplace) === "MERCADO_LIVRE"
+        ? `https://produto.mercadolivre.com.br/${String(
+            input.externalId ?? input.id,
+          ).replace(/^MLB/, "MLB-")}-smartphone-_JM`
+        : SOURCE_ML),
     affiliateLink: input.affiliateLink ?? null,
     title: input.title ?? "Smartphone X",
     image: input.image ?? "https://img.example/x.jpg",
@@ -331,7 +343,7 @@ async function run() {
   const sourceAsAffiliate = offer({
     id: "ml-copy",
     marketplace: "MERCADO_LIVRE",
-    externalId: "MLB-COPY",
+    externalId: "MLB8765432401",
     price: 700,
     affiliateLink: SOURCE_ML,
     sourceUrl: SOURCE_ML,
@@ -371,7 +383,7 @@ async function run() {
   const ml = offer({
     id: "ml-apply",
     marketplace: "MERCADO_LIVRE",
-    externalId: "MLB-APPLY",
+    externalId: "MLB8765432402",
     price: 810,
     affiliateLink: null,
   });
@@ -388,19 +400,19 @@ async function run() {
     id: "ml-other",
     productId: "prod-2",
     marketplace: "MERCADO_LIVRE",
-    externalId: "MLB-OTHER",
+    externalId: "MLB8765432403",
     price: 100,
     affiliateLink: null,
   });
   const pending = opportunity({
     id: "opp-apply",
-    externalId: "MLB-APPLY",
+    externalId: "MLB8765432402",
     status: "WAITING_AFFILIATE",
   });
   const otherOpportunity = opportunity({
     id: "opp-other",
     productId: "prod-2",
-    externalId: "MLB-OTHER",
+    externalId: "MLB8765432403",
     status: "WAITING_AFFILIATE",
   });
   const store = createMemoryApplyStore({
@@ -443,16 +455,21 @@ async function run() {
 }
 
 {
+  /*
+   * LISTING-FIRST: o caso isola o mismatch de PRODUCT. O `externalId` tem que ser
+   * um ITEM_ID de anúncio válido, senão o gate de identidade dispara antes
+   * (`CATALOG_PRODUCT_NOT_LISTING`) e o teste passaria a medir outra coisa.
+   */
   const ml = offer({
     id: "ml-mismatch",
     productId: "prod-1",
     marketplace: "MERCADO_LIVRE",
-    externalId: "MLB-1",
+    externalId: "MLB8765432404",
   });
   const foreign = opportunity({
     id: "opp-foreign",
     productId: "prod-2",
-    externalId: "MLB-1",
+    externalId: "MLB8765432404",
   });
   assert.equal(opportunityAlteraOutroProduct(foreign, ml), true);
   assert.equal(

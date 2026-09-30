@@ -7,6 +7,7 @@ import {
 
 import type { CanonicalOffer, CanonicalProduct, MarketplaceCode } from "./types";
 import { marketplaceLabel } from "./canonicalize";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 import type { SearchDeadline } from "./timeBudget";
 import {
   countDistinctMarketplaces,
@@ -59,9 +60,26 @@ function toProductImport(
     return null;
   }
 
+  /*
+   * LISTING-FIRST: o caminho multistore-v2 tambem escreve
+   * MarketplaceOffer. Exige a mesma identidade de listing comprovada.
+   */
+  if (
+    offer.marketplace === "MERCADO_LIVRE" &&
+    !isValidMercadoLivreListingIdentity({
+      externalId: offer.externalId,
+      listingItemId: offer.externalId,
+      sourceUrl: offer.url,
+      origin: "listing",
+    })
+  ) {
+    return null;
+  }
+
   return {
     marketplace: toMarketplaceName(offer.marketplace),
     externalId: offer.externalId,
+    catalogProductId: offer.catalogProductId ?? null,
     url: offer.url,
     affiliateLink: offer.affiliateLink,
     title: offer.title,
@@ -156,6 +174,23 @@ function buildRawListingContext(
   const sourceUrl = offer.url.trim();
 
   if (!externalId || !sourceUrl) {
+    return undefined;
+  }
+
+  /*
+   * O espelho V1 herda a identidade. Catalogo nunca alimenta a listagem
+   * crua: senao o catalog id volta como externalListingId e contamina o
+   * writer do cutover.
+   */
+  if (
+    offer.marketplace === "MERCADO_LIVRE" &&
+    !isValidMercadoLivreListingIdentity({
+      externalId,
+      listingItemId: externalId,
+      sourceUrl,
+      origin: "listing",
+    })
+  ) {
     return undefined;
   }
 

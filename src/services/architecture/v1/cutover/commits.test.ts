@@ -18,6 +18,13 @@ import {
 import type { V1WriteContext } from "./writer";
 import type { NormalizedMarketplaceListingV1 } from "../types/normalizedListingV1";
 
+/*
+ * LISTING-FIRST: ITEM_ID de anuncio real + URL publica que o comprova.
+ */
+const ML_LISTING_ITEM_ID = "MLB8765432701";
+const ML_LISTING_URL =
+  "https://produto.mercadolivre.com.br/MLB-8765432701-produto-teste";
+
 function listing(
   marketplaceId: string,
   overrides: Partial<NormalizedMarketplaceListingV1> = {},
@@ -26,7 +33,14 @@ function listing(
     contractVersion: "normalized-listing/v1",
     source: "test",
     marketplaceId,
-    externalListingId: "EXT-1",
+    /*
+     * LISTING-FIRST: `externalListingId` e a chave de identidade da oferta. Para
+     * MERCADO_LIVRE tem que ser um ITEM_ID de anuncio real (`^MLB\d{8,}$`)
+     * comprovado pela `sourceUrl`; `EXT-1` so vale para marketplaces sem o
+     * contrato de listing (a identidade ML e fail-closed em `commits.ts`).
+     */
+    externalListingId:
+      marketplaceId === "mercado_livre" ? ML_LISTING_ITEM_ID : "EXT-1",
     seller: { externalSellerId: null, name: "Loja Teste" },
     identity: { gtin: [], mpn: null, manufacturerModel: null, brand: "Marca", model: null },
     catalog: {
@@ -129,11 +143,11 @@ async function main(): Promise<void> {
   // --- buildProductImportFromV1Context: marketplace-agnostic --------------------------------
   {
     const l = listing("mercado_livre");
-    const ctx = ctxFor(l, "https://produto.mercadolivre.com.br/EXT-1");
+    const ctx = ctxFor(l, ML_LISTING_URL);
     const product = buildProductImportFromV1Context(ctx);
     assert.equal(product.marketplace, "Mercado Livre", "display name sem identidade");
-    assert.equal(product.externalId, "EXT-1");
-    assert.equal(product.url, "https://produto.mercadolivre.com.br/EXT-1");
+    assert.equal(product.externalId, ML_LISTING_ITEM_ID);
+    assert.equal(product.url, ML_LISTING_URL);
     assert.equal(product.price, 100);
     assert.equal(product.title, "Produto Teste");
     assert.equal(product.image, "https://img.test/1.jpg");
@@ -153,7 +167,7 @@ async function main(): Promise<void> {
     });
     const commits = createRealAuthoritativeCommits(prisma as never);
     const l = listing("mercado_livre");
-    const result = await commits.commitV1FastOffer(ctxFor(l, "https://x/EXT-1"));
+    const result = await commits.commitV1FastOffer(ctxFor(l, ML_LISTING_URL));
     assert.equal(result.productId, "prod-1");
     assert.equal(prisma.state.priceHistoryCreated, 0, "preço igual => sem entrada nova");
     assert.ok(prisma.state.lastUpdated, "offer atualizado (stock/availability)");
@@ -183,7 +197,7 @@ async function main(): Promise<void> {
         promotion: null,
       },
     });
-    const result = await commits.commitV1FastOffer(ctxFor(l, "https://x/EXT-1"));
+    const result = await commits.commitV1FastOffer(ctxFor(l, ML_LISTING_URL));
     assert.equal(result.productId, "prod-1");
     assert.equal(prisma.state.priceHistoryCreated, 1, "mudança real => 1 entrada");
   }
@@ -194,7 +208,7 @@ async function main(): Promise<void> {
     const commits = createRealAuthoritativeCommits(prisma as never);
     const l = listing("mercado_livre");
     await assert.rejects(
-      commits.commitV1FastOffer(ctxFor(l, "https://x/EXT-1")),
+      commits.commitV1FastOffer(ctxFor(l, ML_LISTING_URL)),
       /INVALID_DATA:fast-offer-sem-oferta-existente/,
       "sem oferta => estrutura mudou => fail-closed",
     );

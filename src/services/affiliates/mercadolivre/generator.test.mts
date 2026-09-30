@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   buildAffiliateTargetMarkers,
+  decideAffiliateTarget,
   decideResolvedSource,
   extractCatalogId,
   extractItemId,
@@ -90,11 +91,68 @@ function run() {
     // item original NÃO desaparece do conjunto de validação...
     assert.ok(markers.includes("MLB-3608328785"));
     assert.ok(markers.includes("MLB3608328785"));
-    // ...mas o alvo resolvido também está presente (com e sem hífen).
-    assert.ok(markers.includes("MLB6339959"));
-    assert.ok(markers.includes("MLB-6339959"));
+    // ...e o ITEM_ID do destino resolvido também está presente (com e sem hífen).
     assert.ok(markers.includes("MLB6398917320"));
     assert.ok(markers.includes("MLB-6398917320"));
+
+    /*
+     * LISTING-FIRST: o catalogId do destino NÃO é marcador válido.
+     *
+     * `catalogId` identifica um PRODUTO DE CATÁLOGO, que agrega N anúncios.
+     * Aceitá-lo como prova autorizava gravar como `affiliateLink` um link que
+     * abre a página de catálogo, potencialmente já com outro anúncio
+     * selecionado — trocando vendedor e preço sem nenhuma escrita em
+     * `externalId`, deixando o erro invisível.
+     */
+    assert.equal(
+      markers.includes("MLB6339959"),
+      false,
+      "catalogId não pode ser marcador de affiliate target",
+    );
+    assert.equal(
+      markers.includes("MLB-6339959"),
+      false,
+      "catalogId (com hífen) não pode ser marcador de affiliate target",
+    );
+    assert.equal(
+      markers.some((marker) => marker.includes("6339959")),
+      false,
+      "nenhum marcador pode carregar o catalogId do destino",
+    );
+  }
+
+  // CATALOG_ID_ONLY_TARGET_REJECTED / EXPECTED_ITEM_ID_TARGET_ACCEPTED
+  {
+    const resolved = resolveTargetMeta(RESOLVED_CATALOG);
+
+    // O item_id resolvido é o MESMO anúncio esperado: aceito.
+    const sameListing = decideAffiliateTarget("MLB6398917320", resolved);
+    assert.equal(sameListing.ok, true, sameListing.reason);
+
+    /*
+     * O destino seleciona OUTRO anúncio (MLB6398917320 ≠ MLB3608328785).
+     * Fail-closed: gravar esse link trocaria vendedor e preço.
+     */
+    const otherListing = decideAffiliateTarget("MLB3608328785", resolved);
+    assert.equal(otherListing.ok, false);
+    assert.ok(otherListing.reason.length > 0);
+
+    // Alvo que é só catálogo, sem item_id do anúncio: rejeitado.
+    const catalogOnly = decideAffiliateTarget("MLB6398917320", {
+      catalogId: "MLB6339959",
+      itemId: null,
+    });
+    assert.equal(catalogOnly.ok, false);
+    assert.ok(
+      catalogOnly.reason.includes("CATALOG PRODUCT != MARKETPLACE OFFER"),
+      `motivo da recusa de catálogo-only deve ser explícito, veio: ${catalogOnly.reason}`,
+    );
+
+    // Item_id de anúncio desconhecido/inválido: fail-closed.
+    const noExpected = decideAffiliateTarget(null, resolved);
+    assert.equal(noExpected.ok, false);
+    const malformed = decideAffiliateTarget("MLB-1", resolved);
+    assert.equal(malformed.ok, false);
   }
 
   // OFFER_PRICE_NOT_MUTATED: as funções de resolução não tocam preço.
@@ -114,10 +172,10 @@ function run() {
       extractItemId(SOURCE_STALE_ITEM),
       resolveTargetMeta(RESOLVED_CATALOG),
     );
-    // Evidência: mesmo sem o MLB3608328785 na página final, o catalog
-    // resolvido MLB6339959 autoriza a validação.
-    assert.ok(markers.includes("MLB6339959"));
-    // o conjunto contém tanto o original quanto o resolvido.
+    // Evidência: o MLB stale não precisa estar na página final; o ITEM_ID do
+    // anúncio resolvido autoriza a validação...
+    assert.ok(markers.includes("MLB6398917320"));
+    // ...e o conjunto contém tanto o original quanto o resolvido.
     assert.ok(markers.some((m) => m.includes("3608328785")));
   }
 

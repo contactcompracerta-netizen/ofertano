@@ -22,6 +22,9 @@ import {
   type LivePostWriteObservation,
 } from "@/services/architecture/v1/cutover/liveParity";
 import { resolveMarketplaceIdFromLegacyEnum } from "@/services/architecture/v1/marketplaceRegistry";
+import {
+  assertMercadoLivreListingIdentity,
+} from "@/services/mercadoLivre/listingIdentity";
 
 /*
  * Marcadores duráveis de commit gravados pelo MESMO cliente de transação do
@@ -2511,6 +2514,33 @@ export async function saveProduct(
     );
   }
 
+  /*
+   * LISTING-FIRST (gate central de writer).
+   *
+   * Toda oferta MERCADO_LIVRE passa por aqui antes do upsert. Produto de
+   * catálogo, MLBU, URL /p/ e URL que aponta outra listing são recusados
+   * com fail-closed: nunca gravamos externalId que não seja o ITEM_ID do
+   * anúncio, nem sourceUrl que não prove aquele ITEM_ID.
+   *
+   * CATALOG PRODUCT != MARKETPLACE OFFER
+   */
+  const catalogProductId =
+    product.catalogProductId?.trim() || null;
+
+  if (marketplace === "MERCADO_LIVRE") {
+    assertMercadoLivreListingIdentity(
+      {
+        externalId,
+        listingItemId: externalId,
+        sourceUrl,
+        origin: "listing",
+        price: product.price,
+        sellerId: product.seller,
+      },
+      "saveProduct",
+    );
+  }
+
   const linkAmazonAutomatico =
     marketplace === "AMAZON"
       ? criarLinkAfiliadoAmazon(
@@ -3306,6 +3336,7 @@ export async function saveProduct(
 
         update: {
           externalId,
+          catalogProductId,
           sourceUrl,
 
           affiliateLink,
@@ -3368,6 +3399,7 @@ export async function saveProduct(
           marketplace,
 
           externalId,
+          catalogProductId,
           sourceUrl,
 
           affiliateLink,

@@ -60,6 +60,14 @@ import {
   normalizeListingId,
 } from "./mercadolivreIds";
 import {
+  classifyMercadoLivreListingIdentity,
+  extractMercadoLivreCatalogProductId,
+  isMercadoLivreCatalogSourceUrl,
+  isValidMercadoLivreListingIdentity,
+  mercadoLivreSourceUrlProvesListing,
+  resolveMercadoLivreListingSourceUrl,
+} from "@/services/mercadoLivre/listingIdentity";
+import {
   traceMlAcquisition,
   traceMlSourceEnd,
   traceMlSourceStart,
@@ -119,18 +127,6 @@ type CatalogAttribute = {
   value_name?: string;
 };
 
-type CatalogBuyBox = {
-  item_id?: string;
-  price?: number;
-  original_price?: number | null;
-  permalink?: string;
-  seller_id?: number;
-  status?: string;
-  condition?: string;
-  currency_id?: string;
-  thumbnail?: string;
-};
-
 type CatalogProduct = {
   id?: string;
 
@@ -145,52 +141,6 @@ type CatalogProduct = {
   pictures?: CatalogPicture[];
 
   attributes?: CatalogAttribute[];
-
-  buy_box_winner?: CatalogBuyBox | null;
-};
-
-type CatalogOffer = {
-  item_id?: string;
-  id?: string;
-
-  seller_id?: number;
-
-  price?: number;
-  original_price?: number | null;
-
-  category_id?: string;
-  currency_id?: string;
-
-  condition?: string;
-  status?: string;
-
-  permalink?: string;
-  thumbnail?: string;
-  secure_thumbnail?: string;
-
-  listing_type_id?: string;
-
-  official_store_id?: number | null;
-
-  tags?: string[];
-
-  shipping?: {
-    free_shipping?: boolean;
-    local_pick_up?: boolean;
-    store_pick_up?: boolean;
-    mode?: string;
-    logistic_type?: string;
-  };
-};
-
-type CatalogItemsResponse = {
-  paging?: {
-    total?: number;
-    offset?: number;
-    limit?: number;
-  };
-
-  results?: CatalogOffer[];
 };
 
 type SiteSearchItem = MercadoLivreListingItem;
@@ -280,6 +230,12 @@ type CandidateEvaluation = MarketplaceFilterEvent & {
     candidate: DiscoveryCandidate;
     relevance: number;
   };
+  catalogProductId?: string | null;
+  /*
+   * Proveniencia da lane que produziu a avaliacao. `CATALOG` e
+   * terminal para fins de oferta: nunca chega ao `externalId`.
+   */
+  origin?: "LISTING" | "CATALOG";
 };
 
 function limitarQuantidade(
@@ -699,226 +655,6 @@ function capacidadeCompativel(
 
   return true;
 }
-function obterMarca(
-  produto: CatalogProduct,
-): string | null {
-  const atributo =
-    produto.attributes?.find(
-      (item) =>
-        item.id === "BRAND",
-    );
-
-  return (
-    atributo?.value_name?.trim() ||
-    null
-  );
-}
-
-function obterImagem(
-  produto: CatalogProduct,
-): string | null {
-  const imagem =
-    produto.pictures?.find(
-      (item) =>
-        item.secure_url ||
-        item.url,
-    );
-
-  return (
-    imagem?.secure_url ||
-    imagem?.url ||
-    null
-  );
-}
-
-function normalizarCodigoItem(
-  valor: string,
-): string {
-  return valor
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "")
-    .trim();
-}
-
-function criarUrlPublicaItem(
-  itemId: string,
-): string | null {
-  const codigo =
-    normalizarCodigoItem(itemId);
-
-  const match =
-    codigo.match(/^MLB(\d+)$/);
-
-  if (!match?.[1]) {
-    return null;
-  }
-
-  return (
-    `https://produto.mercadolivre.com.br/MLB-${match[1]}`
-  );
-}
-
-function obterUrlOfertaIndividual(
-  oferta: CatalogOffer,
-): string | null {
-  const itemId =
-    oferta.item_id?.trim();
-
-  if (!itemId) {
-    return null;
-  }
-
-  const permalink =
-    oferta.permalink?.trim();
-
-  if (permalink) {
-    try {
-      const url = new URL(permalink);
-
-      const host = url.hostname
-        .toLowerCase()
-        .replace(/^www\./, "");
-
-      const hostMercadoLivre =
-        host === "mercadolivre.com.br" ||
-        host.endsWith(".mercadolivre.com.br") ||
-        host === "mercadolibre.com" ||
-        host.endsWith(".mercadolibre.com");
-
-      if (hostMercadoLivre) {
-        /*
-         * /p/ é catálogo genérico e não representa
-         * a publicação individual escolhida.
-         */
-        if (!/^\/p\//i.test(url.pathname)) {
-          const codigoItem =
-            normalizarCodigoItem(itemId);
-
-          const codigoUrl =
-            normalizarCodigoItem(
-              `${url.pathname}${url.search}`,
-            );
-
-          if (
-            codigoItem &&
-            codigoUrl.includes(codigoItem)
-          ) {
-            return url.toString();
-          }
-        }
-      }
-    } catch {
-      // Continua para o fallback seguro pelo ITEM_ID.
-    }
-  }
-
-  /*
-   * O endpoint /products/{CATALOG_ID}/items pode devolver
-   * um ITEM_ID real sem permalink. Nesses casos usamos
-   * a rota pública individual derivada do próprio ITEM_ID.
-   *
-   * Nunca usamos a URL /p/ do catálogo como oferta.
-   */
-  return criarUrlPublicaItem(
-    itemId,
-  );
-}
-
-function escolherOferta(
-  ofertas: CatalogOffer[],
-): CatalogOffer | null {
-  const validas =
-    ofertas.filter(
-      (oferta) => {
-        if (
-          typeof oferta.item_id !==
-            "string" ||
-          !oferta.item_id.trim()
-        ) {
-          return false;
-        }
-
-        /*
-         * A oferta precisa ter ITEM_ID e produzir uma URL
-         * individual. Se o Mercado Livre omitir permalink,
-         * usamos a rota pública derivada do ITEM_ID.
-         */
-        if (!obterUrlOfertaIndividual(oferta)) {
-          return false;
-        }
-
-        if (
-          typeof oferta.price !==
-            "number" ||
-          !Number.isFinite(
-            oferta.price,
-          ) ||
-          oferta.price <= 0
-        ) {
-          return false;
-        }
-
-        if (
-          oferta.status === "inactive" ||
-          oferta.status === "closed"
-        ) {
-          return false;
-        }
-
-        if (
-          oferta.currency_id &&
-          oferta.currency_id !== "BRL"
-        ) {
-          return false;
-        }
-
-        if (
-          oferta.condition &&
-          oferta.condition !== "new"
-        ) {
-          return false;
-        }
-
-        return true;
-      },
-    );
-
-  if (validas.length === 0) {
-    return null;
-  }
-
-  return [...validas].sort(
-    (a, b) =>
-      (a.price ??
-        Number.POSITIVE_INFINITY) -
-      (b.price ??
-        Number.POSITIVE_INFINITY),
-  )[0];
-}
-
-function ofertaDoBuyBoxDoCatalogo(
-  produto: CatalogProduct,
-): CatalogOffer | null {
-  const winner = produto.buy_box_winner;
-  const itemId = winner?.item_id?.trim();
-
-  if (!winner || !itemId) {
-    return null;
-  }
-
-  return {
-    item_id: itemId,
-    id: itemId,
-    seller_id: winner.seller_id,
-    price: winner.price,
-    original_price: winner.original_price ?? null,
-    currency_id: winner.currency_id,
-    condition: winner.condition ?? "new",
-    status: winner.status ?? "active",
-    permalink: winner.permalink,
-    thumbnail: winner.thumbnail,
-  };
-}
 
 async function descobrirDominio(
   query: string,
@@ -1199,6 +935,12 @@ function evaluationStrength(item: CandidateEvaluation): number {
   const candidateRelevance = item.kept?.relevance ?? item.lexicalScore ?? 0;
 
   return (
+    /*
+     * Proveniencia LISTING ganha de CATALOG: o mesmo id pode aparecer
+     * nas duas lanes (catalogo e anuncio compartilham a forma MLB+digits)
+     * e a evidencia de anuncio e sempre a mais forte.
+     */
+    Number(item.origin !== "CATALOG") * 4_000 +
     Number(Boolean(item.kept)) * 1_000 +
     Number(Boolean(item.kept && item.kept.relevance > 0.5)) * 500 +
     candidateRelevance * 100 +
@@ -1243,6 +985,8 @@ function recusarCandidato(
   stage: string,
   reason: string,
   lexicalScore: number,
+  catalogProductId: string | null = null,
+  origin: "LISTING" | "CATALOG" = "LISTING",
 ): CandidateEvaluation {
   return {
     title,
@@ -1251,6 +995,8 @@ function recusarCandidato(
     status: "DROPPED",
     reason,
     lexicalScore,
+    catalogProductId,
+    origin,
   };
 }
 
@@ -1539,10 +1285,29 @@ function converterItemBusca(
     ? fromPermalink.listingIds[0] ?? ""
     : normalizeListingId(rawId) ?? fromPermalink.listingIds[0] ?? "";
   const itemId = listingFromRaw;
+
+  /*
+   * catalog_product_id e METADADO estrutural. Ele nunca substitui o
+   * listingItemId e nunca pode virar `externalId`.
+   */
+  const catalogProductId =
+    extractMercadoLivreCatalogProductId(
+      (item as { catalog_product_id?: string | null }).catalog_product_id ??
+        null,
+    ) ??
+    fromPermalink.catalogIds.find(
+      (id) => id !== itemId,
+    ) ??
+    null;
+
+  /*
+   * sourceUrl precisa representar a LISTING concreta. URL /p/ de catalogo
+   * e recusada; quando o permalink nao prova o item_id, derivamos a rota
+   * publica individual do proprio ITEM_ID.
+   */
   const sourceUrl =
-    permalink ||
-    (itemId ? `https://www.mercadolivre.com.br/item/${itemId}` : "");
-  const externalId = itemId || sourceUrl;
+    resolveMercadoLivreListingSourceUrl(permalink, itemId) ?? "";
+  const externalId = itemId;
   const lexical =
     pontuarCoberturaLexicalPonderada(query, titulo);
 
@@ -1553,6 +1318,7 @@ function converterItemBusca(
       "normalize",
       "Item sem titulo e sem id/url.",
       lexical.score,
+      catalogProductId,
     );
   }
 
@@ -1563,6 +1329,43 @@ function converterItemBusca(
       "catalog-only",
       "Identidade MLBU sem listing MLB compravel.",
       lexical.score,
+      catalogProductId,
+    );
+  }
+
+  /*
+   * LISTING-FIRST: so uma listing concreta comprovada vira oferta.
+   * Sem ITEM_ID real + URL que prove aquele ITEM_ID, ZERO WRITE.
+   */
+  const listingIdentity = classifyMercadoLivreListingIdentity({
+    listingItemId: itemId,
+    sourceUrl,
+    origin: "listing",
+  });
+
+  if (!listingIdentity.valid) {
+    return recusarCandidato(
+      titulo,
+      itemId,
+      "listing-identity",
+      `LISTING_FIRST: ${listingIdentity.rejection}. ` +
+        "Catalogo nao e oferta; exige anuncio concreto com ITEM_ID.",
+      lexical.score,
+      catalogProductId,
+    );
+  }
+
+  if (
+    isMercadoLivreCatalogSourceUrl(permalink) &&
+    !mercadoLivreSourceUrlProvesListing(permalink, itemId)
+  ) {
+    return recusarCandidato(
+      titulo,
+      itemId,
+      "catalog-source-url",
+      "LISTING_FIRST: permalink de catalogo /p/ nao identifica a oferta.",
+      lexical.score,
+      catalogProductId,
     );
   }
 
@@ -1571,7 +1374,7 @@ function converterItemBusca(
       avaliarTituloParaDiscovery(query, titulo, externalId);
 
     if (recusaTitulo) {
-      return recusaTitulo;
+      return {...recusaTitulo, catalogProductId};
     }
   }
 
@@ -1596,6 +1399,7 @@ function converterItemBusca(
         "price",
         "Item sem preco compravel.",
         lexical.score,
+        catalogProductId,
       );
     }
   }
@@ -1607,6 +1411,7 @@ function converterItemBusca(
       "currency",
       `Moeda ${item.currency_id} fora do marketplace MLB.`,
       lexical.score,
+      catalogProductId,
     );
   }
 
@@ -1629,6 +1434,7 @@ function converterItemBusca(
         "condition",
         `Condicao ${item.condition} nao e oferta nova compravel.`,
         lexical.score,
+        catalogProductId,
       );
     }
 
@@ -1649,6 +1455,7 @@ function converterItemBusca(
         "condition",
         `Condicao ${item.condition} nao e compatível com a consulta.`,
         lexical.score,
+        catalogProductId,
       );
     }
   }
@@ -1671,8 +1478,10 @@ function converterItemBusca(
     externalId,
     stage: "candidate",
     status: "KEPT",
-    reason: "Item compravel preservado pelo Discovery.",
+    reason: "Listing concreta preservada pelo Discovery.",
     lexicalScore: lexical.score,
+    catalogProductId,
+    origin: "LISTING",
     kept: {
       relevance: lexical.score,
       candidate: {
@@ -1680,6 +1489,13 @@ function converterItemBusca(
         marketplaceName: "Mercado Livre",
         externalId,
         sourceUrl,
+        listingItemId: itemId,
+        catalogProductId,
+        origin: "LISTING",
+        sellerId:
+          typeof item.seller?.id === "number"
+            ? String(item.seller.id)
+            : null,
         affiliateLink: null,
         title: titulo,
         image: item.thumbnail?.trim() || null,
@@ -1726,6 +1542,7 @@ async function carregarCandidato(
         "catalog-status",
         `Produto de catalogo ${produto.status}.`,
         0,
+        productId,
       );
     }
 
@@ -1740,6 +1557,7 @@ async function carregarCandidato(
         "normalize",
         "Produto de catalogo sem titulo.",
         0,
+        productId,
       );
     }
 
@@ -1789,178 +1607,35 @@ async function carregarCandidato(
       }
     }
 
-    const listingFromPermalink = extractMercadoLivreIdentitiesFromUrl(
-      produto.permalink ?? "",
-    );
-    const listingIdFromCatalog =
-      listingFromPermalink.listingIds.find((id) => !isUserProductId(id)) ??
-      null;
-
-    let oferta =
-      escolherOferta(
-        [
-          ofertaDoBuyBoxDoCatalogo(
-            produto,
-          ),
-        ].filter(
-          (item): item is CatalogOffer =>
-            Boolean(item),
-        ),
-      );
-
     /*
-     * Sem buy_box_winner, tentamos /items. 404
-     * "No winners found" nao pode derrubar o
-     * Discovery inteiro.
+     * LISTING-FIRST (gate estrutural): produto de catalogo NUNCA vira
+     * MarketplaceOffer.
+     *
+     * O que fica permitido aqui e exatamente o que a missao permite:
+     * enriquecimento, matching auxiliar, catalogo interno e atributos
+     * estruturais. Nao existe mais "pegar o cheapest item" nem "usar o
+     * buy_box atual e fingir que era a oferta descoberta": os dois mudam
+     * seller/preco e destroem a identidade do anuncio.
+     *
+     * O catalogo mantem o productId como METADADO (catalogProductId) para
+     * correlacionar o anuncio encontrado em seguida, mas o candidato
+     * termina DROPPED.
      */
-    if (!oferta) {
-      try {
-        const ofertas =
-          (await mercadoLivreFetch(
-            `/products/${productId}/items`,
-          )) as CatalogItemsResponse;
+    const catalogProductId =
+      extractMercadoLivreCatalogProductId(productId) ??
+      extractMercadoLivreCatalogProductId(produto.permalink ?? "") ??
+      productId.trim();
 
-        oferta = escolherOferta(
-          ofertas.results ?? [],
-        );
-      } catch (error) {
-        console.warn(
-          `Produto ${productId} sem ofertas disponíveis:`,
-          error instanceof Error
-            ? error.message
-            : error,
-        );
-      }
-    }
-
-    if (!oferta && listingIdFromCatalog && mode === "MULTILOJA") {
-      const listingUrl = criarUrlPublicaItem(listingIdFromCatalog);
-      if (listingUrl) {
-        return {
-          title: titulo,
-          externalId: listingIdFromCatalog,
-          stage: "candidate",
-          status: "KEPT",
-          reason: "Listing extraido do catalogo/user-product sem winner da API.",
-          lexicalScore: lexical.score,
-          kept: {
-            relevance: lexical.score,
-            candidate: {
-              marketplace: "MERCADO_LIVRE",
-              marketplaceName: "Mercado Livre",
-              externalId: listingIdFromCatalog,
-              sourceUrl: listingUrl,
-              affiliateLink: null,
-              title: titulo,
-              image: obterImagem(produto),
-              price: produto.buy_box_winner?.price ?? null,
-              oldPrice: null,
-              category: null,
-              brand: obterMarca(produto),
-              seller: null,
-              status: "FOUND",
-              error: null,
-            },
-          },
-        };
-      }
-    }
-
-    if (!oferta) {
-      return recusarCandidato(
-        titulo,
-        productId,
-        "offer-select",
-        "Nenhuma oferta compravel (preco, URL, status, moeda ou condicao).",
-        lexical.score,
-      );
-    }
-
-    const itemIdRaw = oferta.item_id?.trim() ?? "";
-    const itemId =
-      normalizeListingId(itemIdRaw) ??
-      listingIdFromCatalog ??
-      "";
-
-    const sourceUrl =
-      obterUrlOfertaIndividual(
-        oferta,
-      );
-
-    if (!itemId || !sourceUrl) {
-      return recusarCandidato(
-        titulo,
-        productId,
-        "url",
-        "Oferta sem item_id ou URL individual.",
-        lexical.score,
-      );
-    }
-
-    const preco =
-      oferta.price!;
-
-    const precoAntigo =
-      typeof oferta.original_price ===
-          "number" &&
-        Number.isFinite(
-          oferta.original_price,
-        ) &&
-        oferta.original_price >
-          preco
-        ? oferta.original_price
-        : null;
-
-    return {
-      title: titulo,
-      externalId: itemId,
-      stage: "candidate",
-      status: "KEPT",
-      reason: "Oferta de catalogo compravel preservada pelo Discovery.",
-      lexicalScore: lexical.score,
-      kept: {
-        relevance: lexical.score,
-        candidate: {
-          marketplace:
-            "MERCADO_LIVRE",
-          marketplaceName:
-            "Mercado Livre",
-          externalId:
-            itemId,
-          sourceUrl,
-          affiliateLink:
-            null,
-          title:
-            titulo,
-          image:
-            obterImagem(
-              produto,
-            ),
-          price:
-            preco,
-          oldPrice:
-            precoAntigo,
-          category:
-            oferta.category_id ??
-            null,
-          brand:
-            obterMarca(
-              produto,
-            ),
-          seller:
-            typeof oferta.seller_id ===
-              "number"
-              ? String(
-                  oferta.seller_id,
-                )
-              : null,
-          status:
-            "FOUND",
-          error:
-            null,
-        },
-      },
-    };
+    return recusarCandidato(
+      titulo,
+      productId,
+      "catalog-only",
+      "LISTING_FIRST/CATALOG_PRODUCT_NOT_LISTING: produto de catalogo e " +
+        "enriquecimento, nunca oferta. Exige anuncio concreto com ITEM_ID.",
+      lexical.score,
+      catalogProductId,
+      "CATALOG",
+    );
   } catch (error) {
     console.error(
       `Falha ao analisar produto ${productId}:`,
@@ -2067,9 +1742,26 @@ function inferMercadoLivreSearchOutcome(input: {
     "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE"
   >;
   listingSourcesTried: string[];
+  blockedListingSources: string[];
 }): MarketplaceDiscoveryResult["searchOutcome"] {
   if (input.candidatoCount > 0) {
     return "SEARCH_COMPLETED";
+  }
+
+  /*
+   * FAIL CLOSED: as fontes de ANUNCIO foram bloqueadas e nao existe
+   * fallback para produto de catalogo. Melhor zero oferta do que uma
+   * oferta de seller/preco errado.
+   */
+  if (
+    input.listingSourcesTried.length > 0 &&
+    input.blockedListingSources.length > 0 &&
+    input.blockedListingSources.length >= input.listingSourcesTried.length &&
+    !input.sourceOutcomes.some(
+      (item) => item === "SUCCESS" || item === "EMPTY_VALID",
+    )
+  ) {
+    return "LISTING_SOURCE_BLOCKED";
   }
 
   if (input.sourceOutcomes.some((item) => item === "BLOCKED")) {
@@ -2330,6 +2022,37 @@ export async function buscarMercadoLivreComFontes(
     minimalEvidenceCache.set(evaluation, supported);
     return supported;
   };
+  /*
+   * Gate final LISTING-FIRST (fail closed).
+   *
+   * Nenhum candidato sai daqui sem passar por
+   * `isValidMercadoLivreListingIdentity`: ITEM_ID concreto + origem
+   * listing + sourceUrl que prova aquele ITEM_ID. Qualquer coisa que
+   * veio de produto de catalogo e descartada com zero write.
+   *
+   * A origem usada aqui e a PROVENIENCIA REAL da lane, nunca uma
+   * constante: uma lane de catalogo que se comporte errado (devolvendo
+   * `status: "KEPT"` com um id numerico e uma URL `produto.`) continua
+   * sendo rejeitada, porque `origin: "CATALOG"` e terminal.
+   */
+  const candidatosComListingReal = (
+    kept: CandidateEvaluation[],
+  ): DiscoveryCandidate[] =>
+    kept
+      .filter((item) => item.origin !== "CATALOG")
+      .flatMap((item) => (item.kept ? [item.kept.candidate] : []))
+      .filter((candidate) =>
+        isValidMercadoLivreListingIdentity({
+          externalId: candidate.externalId,
+          listingItemId: candidate.listingItemId ?? candidate.externalId,
+          sourceUrl: candidate.sourceUrl,
+          origin:
+            candidate.origin === "CATALOG"
+              ? "catalog"
+              : "listing",
+        }),
+      );
+
   let scanned = 0;
   const sourceOutcomes: Array<
     "SUCCESS" | "EMPTY_VALID" | "BLOCKED" | "ERROR" | "UNUSABLE"
@@ -2385,10 +2108,24 @@ export async function buscarMercadoLivreComFontes(
       },
       run,
     );
+  /*
+   * LISTING-FIRST: cobertura de OFERTA so conta o que pode virar oferta.
+   *
+   * Uma avaliacao de proveniencia CATALOG e terminal no gate final
+   * (`candidatosComListingReal`), logo ela nunca produz oferta. Contar
+   * aqui faria o goal de cobertura ser satisfeito com 2 produtos de
+   * catalogo, abortando o lote e SKIPANDO o fallback publico — o resultado
+   * seria `EMPTY_VALID` com zero oferta e nenhuma tentativa de buscar
+   * anuncio. "catalogo nunca compoe cobertura de oferta".
+   */
+  const isOfferEligibleEvaluation = (
+    item: CandidateEvaluation,
+  ): boolean =>
+    item.origin !== "CATALOG" &&
+    Boolean(item.kept) &&
+    hasMinimalQueryEvidence(item);
   const supportedEvaluationCount = (): number =>
-    evaluations.filter(
-      (item) => item.kept && hasMinimalQueryEvidence(item),
-    ).length;
+    evaluations.filter(isOfferEligibleEvaluation).length;
   const targetUsable =
     queryCore.brand || queryCore.hasStrongIdentity
       ? 1
@@ -2466,8 +2203,20 @@ export async function buscarMercadoLivreComFontes(
         return;
       }
 
+      /*
+       * LISTING-FIRST: o dedup por id so pode ser formado por avaliacoes que
+       * realmente podem virar oferta.
+       *
+       * Incluir aqui uma avaliacao de proveniencia CATALOG faz a lane de
+       * catalogo "reservar" um id e descarta silenciosamente o ANUNCIO real
+       * que vier depois com o mesmo id (`seen.has(itemId)` -> `continue`).
+       * O resultado seria perder uma oferta legitima enquanto o produto de
+       * catalogo, terminal, nao entra em `candidates` — oferta zero sem
+       * motivo. Catalogo nao pode reivindicar identidade de anuncio.
+       */
       const seen = new Set(
         evaluations
+          .filter((item) => item.origin !== "CATALOG")
           .map((item) => item.externalId.trim())
           .filter(Boolean),
       );
@@ -2827,7 +2576,7 @@ export async function buscarMercadoLivreComFontes(
                 (attempt) =>
                   attempt.terminal === "KEPT" &&
                   attempt.evaluation &&
-                  hasMinimalQueryEvidence(attempt.evaluation),
+                  isOfferEligibleEvaluation(attempt.evaluation),
               ).length >=
             targetUsable;
           const registerSupportedEvaluation = (
@@ -2883,13 +2632,30 @@ export async function buscarMercadoLivreComFontes(
                       attempt.terminal = "DROPPED";
                       return;
                     }
-                    attempt.evaluation = evaluation;
+                    /*
+                     * LISTING-FIRST: a proveniencia e a da LANE, nunca a que a
+                     * fonte se declara.
+                     *
+                     * A lane de catalogo e terminal para fins de oferta. O
+                     * carimbo `origin: "CATALOG"` e obrigatorio porque o gate
+                     * final filtra por `item.origin !== "CATALOG"`: sem o
+                     * carimbo, `undefined !== "CATALOG"` passa e um PRODUTO DE
+                     * CATALOGO vira oferta sempre que a fonte devolver
+                     * `status: "KEPT"`, um id com forma de MLB e uma URL
+                     * `produto.mercadolivre.com.br/MLB...` que parece de
+                     * listing. CATALOG PRODUCT != MARKETPLACE OFFER.
+                     */
+                    const catalogEvaluation: CandidateEvaluation = {
+                      ...evaluation,
+                      origin: "CATALOG",
+                    };
+                    attempt.evaluation = catalogEvaluation;
                     const hasUsableKept =
-                      evaluation.kept &&
-                      hasMinimalQueryEvidence(evaluation);
+                      catalogEvaluation.kept &&
+                      hasMinimalQueryEvidence(catalogEvaluation);
                     attempt.terminal = hasUsableKept ? "KEPT" : "DROPPED";
                     if (hasUsableKept) {
-                      registerSupportedEvaluation(evaluation);
+                      registerSupportedEvaluation(catalogEvaluation);
                     }
                   } catch (error) {
                     if (batchAbort.signal.aborted) {
@@ -2897,6 +2663,7 @@ export async function buscarMercadoLivreComFontes(
                       return;
                     }
                     attempt.terminal = "ERROR";
+                    /* Mesmo no erro a proveniencia e da lane de catalogo. */
                     attempt.evaluation = recusarCandidato(
                       attempt.title,
                       attempt.productId,
@@ -2905,6 +2672,8 @@ export async function buscarMercadoLivreComFontes(
                         ? error.message.slice(0, 180)
                         : "Falha ao carregar produto de catalogo.",
                       0,
+                      null,
+                      "CATALOG",
                     );
                   } finally {
                     attempt.finishedAt = Date.now();
@@ -3002,8 +2771,8 @@ export async function buscarMercadoLivreComFontes(
         events: consolidated,
       });
 
-      const kept = consolidated.filter(hasMinimalQueryEvidence);
-      const candidatos = kept
+      const kept = consolidated
+        .filter(hasMinimalQueryEvidence)
         .sort((first, second) => {
           const firstRelevance = first.kept?.relevance ?? 0;
           const secondRelevance = second.kept?.relevance ?? 0;
@@ -3017,8 +2786,8 @@ export async function buscarMercadoLivreComFontes(
             (second.kept?.candidate.price ?? Number.POSITIVE_INFINITY)
           );
         })
-        .slice(0, limit)
-        .map((item) => item.kept!.candidate);
+        .slice(0, limit);
+      const candidatos = candidatosComListingReal(kept);
 
       rastrearResumoMercadoLivre({
         query,
@@ -3036,6 +2805,9 @@ export async function buscarMercadoLivreComFontes(
         candidatoCount: candidatos.length,
         sourceOutcomes,
         listingSourcesTried,
+        blockedListingSources: listingSourcesTried.filter((source) =>
+          blockedSources.includes(source),
+        ),
       });
 
       rastrearResumoAquisicaoMercadoLivre({
@@ -3050,7 +2822,10 @@ export async function buscarMercadoLivreComFontes(
       return {
         marketplace: "MERCADO_LIVRE",
         query,
-        success: searchOutcome !== "ERROR" && searchOutcome !== "BLOCKED",
+        success:
+          searchOutcome !== "ERROR" &&
+          searchOutcome !== "BLOCKED" &&
+          searchOutcome !== "LISTING_SOURCE_BLOCKED",
         candidates: candidatos,
         scanned,
         error: null,
@@ -3059,6 +2834,7 @@ export async function buscarMercadoLivreComFontes(
         unusableSources,
         sourcesTried,
         searchOutcome,
+        discoveryMode: "LISTING_FIRST",
       };
     };
 
@@ -3264,16 +3040,20 @@ export async function buscarMercadoLivreComFontes(
     const mensagem =
       error instanceof Error ? error.message : "Erro desconhecido.";
 
+    const blockedListingSources = listingSourcesTried.filter((source) =>
+      blockedSources.includes(source),
+    );
+
     if (supportedEvaluationCount() > 0) {
-      const consolidated = consolidateEvaluations(evaluations);
-      const kept = consolidated.filter(hasMinimalQueryEvidence);
-      const candidatos = kept
-        .slice(0, limit)
-        .map((item) => item.kept!.candidate);
+      const kept = consolidateEvaluations(evaluations)
+        .filter(hasMinimalQueryEvidence)
+        .slice(0, limit);
+      const candidatos = candidatosComListingReal(kept);
       const searchOutcome = inferMercadoLivreSearchOutcome({
         candidatoCount: candidatos.length,
         sourceOutcomes,
         listingSourcesTried,
+        blockedListingSources,
       });
 
       return {
@@ -3288,6 +3068,7 @@ export async function buscarMercadoLivreComFontes(
         unusableSources,
         sourcesTried,
         searchOutcome,
+        discoveryMode: "LISTING_FIRST",
       };
     }
 
@@ -3311,7 +3092,12 @@ export async function buscarMercadoLivreComFontes(
       blockedSources,
       unusableSources,
       sourcesTried,
-      searchOutcome: "ERROR",
+      searchOutcome:
+        blockedListingSources.length > 0 &&
+        blockedListingSources.length >= listingSourcesTried.length
+          ? "LISTING_SOURCE_BLOCKED"
+          : "ERROR",
+      discoveryMode: "LISTING_FIRST",
     };
   }
 }

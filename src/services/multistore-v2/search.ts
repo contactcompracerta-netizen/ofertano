@@ -47,6 +47,7 @@ import { extractSanitizedIdentity } from "./sanitizedIdentity";
 import { classifyQueryMode } from "./queryIdentity";
 import { detectDistinctiveConflict } from "./distinctiveAnchors";
 import { extractSoldItemNucleus } from "./productConcepts";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 export { buildSearchPlan };
 import { rankCanonicalProducts } from "./rank";
 import {
@@ -330,10 +331,27 @@ function toRawCandidate(candidate: DiscoveryCandidate): RawCandidate | null {
     ? provided
     : null;
 
+  /*
+   * LISTING-FIRST: candidato ML sem listing concreta comprovada nao entra
+   * no grafo. `externalId` nunca pode ser URL nem catalog id.
+   */
+  if (
+    candidate.marketplace === "MERCADO_LIVRE" &&
+    !isValidMercadoLivreListingIdentity({
+      externalId,
+      listingItemId: candidate.listingItemId ?? externalId,
+      sourceUrl: url,
+      origin: "listing",
+    })
+  ) {
+    return null;
+  }
+
   return {
     marketplace: candidate.marketplace,
     marketplaceName: candidate.marketplaceName,
     externalId,
+    catalogProductId: candidate.catalogProductId ?? null,
     title,
     price: candidate.price,
     url,

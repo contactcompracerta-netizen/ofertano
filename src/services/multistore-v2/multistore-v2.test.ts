@@ -1293,10 +1293,18 @@ async function runAcquisitionContract() {
           foundCandidate({
             marketplace: "MERCADO_LIVRE",
             marketplaceName: "Mercado Livre",
-            externalId: "mlb-aff-timeout",
+            /*
+             * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID de
+             * anúncio real (`^MLB\d{8,}$`) e a `sourceUrl` precisa provar esse
+             * mesmo id. `mlb-aff-timeout`/`MLB-520` não são ids de anúncio, e o
+             * gate descartaria o candidato — que é justamente o que este caso
+             * precisa que NÃO aconteça.
+             */
+            externalId: "MLB8765432113",
             title: "Headphone JBL Tune 520BT",
             price: 189,
-            sourceUrl: "https://produto.mercadolivre.com.br/MLB-520",
+            sourceUrl:
+              "https://produto.mercadolivre.com.br/MLB-8765432113-jbl-tune-520bt",
             affiliateLink: null,
           }),
         ],
@@ -1348,10 +1356,16 @@ async function runAcquisitionContract() {
           foundCandidate({
             marketplace: "MERCADO_LIVRE",
             marketplaceName: "Mercado Livre",
-            externalId: "mlb-tech",
+            /*
+             * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID de
+             * anúncio real (`^MLB\d{8,}$`) e a `sourceUrl` precisa provar esse
+             * mesmo id. `mlb-tech`/`MLB-520b` não são ids de anúncio.
+             */
+            externalId: "MLB8765432114",
             title: "Headphone JBL Tune 520BT",
             price: 189,
-            sourceUrl: "https://produto.mercadolivre.com.br/MLB-520b",
+            sourceUrl:
+              "https://produto.mercadolivre.com.br/MLB-8765432114-jbl-tune-520bt",
           }),
         ],
         error: null,

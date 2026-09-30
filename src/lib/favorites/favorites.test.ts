@@ -239,6 +239,16 @@ async function main() {
             offers: [
               {
                 marketplace: "MERCADO_LIVRE",
+                /*
+                 * LISTING-FIRST: oferta ML só é pública com `externalId` = ITEM_ID
+                 * de anúncio e `sourceUrl` que prove esse id. Sem os dois, o gate
+                 * é fail-closed e o produto não é Multi Loja público — que é
+                 * exatamente o motivo de `hasPublicMultiStore` não enxergar este
+                 * fixture.
+                 */
+                externalId: "MLB8765432301",
+                sourceUrl:
+                  "https://produto.mercadolivre.com.br/MLB-8765432301-produto",
                 available: true,
                 status: "ACTIVE",
                 price: 1,
@@ -378,6 +388,10 @@ async function main() {
           offers: [
             {
               marketplace: "MERCADO_LIVRE",
+              /* LISTING-FIRST: identidade de anúncio comprovada (ver acima). */
+              externalId: "MLB8765432302",
+              sourceUrl:
+                "https://produto.mercadolivre.com.br/MLB-8765432302-produto",
               available: true,
               status: "ACTIVE",
               price: 10,

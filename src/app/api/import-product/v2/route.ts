@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 import { publicarProdutoComMultiloja } from "@/services/multiloja/publishWithMultiloja";
 import { importarProduto } from "@/services/importers";
 import type { ProductImport } from "@/services/importers/core/types";
+import {
+  extractMercadoLivreCatalogProductId,
+  isMercadoLivreCatalogSourceUrl,
+  mercadoLivreSourceUrlProvesListing,
+  normalizeMercadoLivreListingItemId,
+  resolveMercadoLivreListingSourceUrl,
+} from "@/services/mercadoLivre/listingIdentity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,11 +125,6 @@ function isMercadoLivreUrl(rawUrl: string): boolean {
   }
 }
 
-function obterIdMercadoLivreDaUrl(rawUrl: string): string | null {
-  const match = rawUrl.match(/\bMLB[-_ ]?(\d{7,})\b/i);
-  return match?.[1] ? `MLB${match[1]}` : null;
-}
-
 function numeroPositivo(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value
@@ -158,21 +160,64 @@ function criarProdutoDoChrome(
     );
   }
 
-  const externalId = textoSeguro(snapshot.externalId, 32)?.toUpperCase() ?? null;
-
-  if (!externalId || !/^MLB\d{7,}$/.test(externalId)) {
+  /*
+   * LISTING-FIRST: a ponte Chrome importa UM ANÚNCIO, não um produto de
+   * catálogo.
+   *
+   * Numa página `/p/MLB<catalog>` o content script lê o catalog_product_id e
+   * o buy-box pode ser de qualquer um dos N anúncios. Gravar esse id em
+   * `externalId` criaria uma oferta de catálogo: o CTA abriria a página de
+   * catálogo (não um anúncio), e preço/vendedor seriam os do anúncio sorteado.
+   *
+   * Sem prova de qual anúncio é o alvo, a resposta correta é recusar — nunca
+   * escolher o mais barato nem o atual buy box (isso troca vendedor e preço e
+   * destrói a identidade do anúncio).
+   */
+  if (isMercadoLivreCatalogSourceUrl(rawUrl)) {
     throw new ImportValidationError(
-      "A Ponte Chrome não retornou um código MLB válido.",
+      "Esta importação é de um anúncio individual. Abra o anúncio do vendedor " +
+        "no Mercado Livre e cole o link dele — páginas de catálogo (/p/...) " +
+        "não representam um anúncio e não podem virar oferta.",
     );
   }
 
-  const idDoLink = obterIdMercadoLivreDaUrl(rawUrl);
+  const listingItemId = normalizeMercadoLivreListingItemId(
+    textoSeguro(snapshot.externalId, 32),
+  );
 
-  if (idDoLink && idDoLink !== externalId) {
+  if (!listingItemId) {
     throw new ImportValidationError(
-      "O código do anúncio lido no Chrome não corresponde ao link informado.",
+      "A Ponte Chrome não retornou um código de anúncio MLB válido.",
     );
   }
+
+  const catalogProductId = extractMercadoLivreCatalogProductId(rawUrl);
+
+  /*
+   * Se o id lido no Chrome coincide com o catalog_product_id da URL, o
+   * content script leu a página de catálogo. O id tem a mesma forma de um
+   * ITEM_ID (MLB + dígitos), então só a comparação com o catálogo desambigua.
+   */
+  if (catalogProductId === listingItemId) {
+    throw new ImportValidationError(
+      "O código lido no Chrome é um código de catálogo, não de anúncio. " +
+        "Abra o anúncio do vendedor e tente novamente.",
+    );
+  }
+
+  /*
+   * A URL precisa provar o MESMO anúncio que o Chrome leu. Sem isso não há
+   * vínculo entre preço/vendedor capturados e a página que o CTA abre.
+   */
+  if (!mercadoLivreSourceUrlProvesListing(rawUrl, listingItemId)) {
+    throw new ImportValidationError(
+      "O link informado não identifica o anúncio lido no Chrome. " +
+        "Confira se o link é o do anúncio e não o de outra oferta.",
+    );
+  }
+
+  const sourceUrl =
+    resolveMercadoLivreListingSourceUrl(rawUrl, listingItemId) ?? rawUrl;
 
   const title = textoSeguro(snapshot.title, 500);
   const price = numeroPositivo(snapshot.price);
@@ -196,15 +241,22 @@ function criarProdutoDoChrome(
 
   return {
     marketplace: "Mercado Livre",
-    externalId,
-    url: rawUrl,
+    externalId: listingItemId,
+    url: sourceUrl,
+
+    /*
+     * METADADO, nunca identidade: se o anúncio pertence a um catálogo, o
+     * catalog_product_id viaja aqui para rastreabilidade. `externalId`
+     * permanece o ITEM_ID do anúncio.
+     */
+    catalogProductId,
 
     /*
      * O link individual colado pelo administrador é a oferta que será aberta
      * pelo botão do produto. A resolução de link de afiliado continua podendo
      * substituí-lo posteriormente pelo fluxo já existente.
      */
-    affiliateLink: rawUrl,
+    affiliateLink: sourceUrl,
 
     title,
     description: textoSeguro(snapshot.description, 8000),

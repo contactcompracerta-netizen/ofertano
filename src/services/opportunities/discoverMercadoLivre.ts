@@ -1,5 +1,10 @@
 import prisma from "@/lib/prisma";
 import { mercadoLivreFetch } from "@/lib/mercadolivre";
+import {
+  classifyMercadoLivreOfferContract,
+  extractMercadoLivreCatalogProductId,
+  resolveMercadoLivreListingSourceUrl,
+} from "@/services/mercadoLivre/listingIdentity";
 
 type HighlightType =
   | "PRODUCT"
@@ -49,7 +54,10 @@ type CategoryResponse = {
 };
 
 type OpportunityCandidate = {
+  /** LISTING-FIRST: sempre o ITEM_ID concreto do anuncio. */
   externalId: string;
+  /** Metadado de catalogo. Nunca substitui externalId. */
+  catalogProductId: string | null;
   sourceUrl: string;
   title: string;
   image: string | null;
@@ -156,49 +164,21 @@ function getProductImage(
   );
 }
 
-function criarUrlCatalogoParaImportacao(
-  catalogId: string,
+/**
+ * LISTING-FIRST: a URL da oportunidade e a da LISTING concreta.
+ *
+ * Antes esta funcao devolvia `/p/{CATALOG_ID}?wid={ITEM_ID}`. Isso
+ * gravava o catalog id como identidade da oportunidade e transformava a
+ * rota /p/ (catalogo) em "fonte de importacao" da oferta. `/p/` nunca
+ * representa a oferta: e recusado.
+ *
+ * A URL publica individual (`produto.mercadolivre.com.br/MLB-<id>`) e
+ * derivada do proprio ITEM_ID e mantem a identidade do anuncio.
+ */
+function criarUrlDaListing(
   itemId: string,
-): string {
-  const normalizedCatalogId =
-    catalogId.trim().toUpperCase();
-
-  const normalizedItemId =
-    itemId.trim().toUpperCase();
-
-  /*
-   * IMPORTANTE:
-   *
-   * Os highlights do Mercado Livre retornam ofertas públicas
-   * que aparecem normalmente em:
-   *
-   *   /products/{CATALOG_ID}/items
-   *
-   * mas muitos desses ITEM_ID respondem 403 tanto em:
-   *
-   *   /items/{ITEM_ID}
-   *   /items?ids={ITEM_ID}
-   *
-   * O importador de catálogo do Ofertano NÃO depende de
-   * /items/{ITEM_ID}; ele consegue montar o produto usando
-   * /products/{CATALOG_ID} + /products/{CATALOG_ID}/items.
-   *
-   * Por isso a fila recebe uma URL de CATÁLOGO, e não uma
-   * rota individual que sabemos que falhará com 403.
-   *
-   * Mantemos o wid na URL para preservar qual anúncio gerou
-   * a oportunidade. O importador atual identifica primeiro
-   * o /p/{CATALOG_ID}, portanto continuará usando o fluxo
-   * seguro de catálogo.
-   *
-   * Esta URL é fonte de importação. Ela NÃO substitui o link
-   * individual de afiliado. affiliateLink continua null.
-   */
-  return (
-    `https://www.mercadolivre.com.br/p/` +
-    `${encodeURIComponent(normalizedCatalogId)}` +
-    `?wid=${encodeURIComponent(normalizedItemId)}`
-  );
+): string | null {
+  return resolveMercadoLivreListingSourceUrl(null, itemId);
 }
 
 async function resolveCandidate(
@@ -206,8 +186,12 @@ async function resolveCandidate(
   categoryId: string,
   categoryName: string,
 ): Promise<OpportunityCandidate | null> {
+  /*
+   * LISTING-FIRST: `PRODUCT` e catalogo, `USER_PRODUCT` e MLBU. Somente
+   * `ITEM` (anuncio concreto) pode virar oportunidade/oferta.
+   */
   if (
-    highlight.type !== "PRODUCT" ||
+    highlight.type !== "ITEM" ||
     typeof highlight.id !== "string"
   ) {
     return null;
@@ -261,13 +245,24 @@ async function resolveCandidate(
     }
 
     const sourceUrl =
-      criarUrlCatalogoParaImportacao(
-        highlight.id,
-        itemId,
-      );
+      criarUrlDaListing(itemId);
+
+    if (
+      !sourceUrl ||
+      !classifyMercadoLivreOfferContract({
+        listingItemId: itemId,
+        sourceUrl,
+        origin: "listing",
+        price,
+      }).valid
+    ) {
+      return null;
+    }
 
     return {
-      externalId: highlight.id,
+      externalId: itemId,
+      catalogProductId:
+        extractMercadoLivreCatalogProductId(highlight.id),
       sourceUrl,
       title,
       image: getProductImage(
@@ -345,7 +340,7 @@ async function criarOportunidadeNaFila(
             externalId:
               opportunity.externalId,
             sourceType:
-              "PRODUCT",
+              "ITEM",
             sourceUrl:
               opportunity.sourceUrl,
             title:
@@ -416,7 +411,7 @@ export async function discoverMercadoLivreOpportunities(
   const validHighlights =
     (highlights.content ?? []).filter(
       (entry) =>
-        entry.type === "PRODUCT" &&
+        entry.type === "ITEM" &&
         typeof entry.id === "string",
     );
 

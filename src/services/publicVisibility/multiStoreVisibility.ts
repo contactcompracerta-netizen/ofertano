@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
+
 /*
  * VISIBILIDADE PÚBLICA — MULTI LOJA REAL
  *
@@ -35,7 +37,42 @@ export type PublicOfferLike = {
   status?: string;
   matchStatus?: string;
   price?: number | null;
+  /*
+   * LISTING-FIRST: em MERCADO_LIVRE, `externalId` (ITEM_ID do anúncio) e
+   * `sourceUrl` (URL que comprova aquele ITEM_ID) são obrigatórios para a
+   * oferta ser pública. Opcional no tipo porque as outras plataformas não têm
+   * essa exigência — quando AUSENTES num snapshot ML, a oferta é tratada como
+   * NÃO publicável (fail-closed): sem identidade provada não há CTA.
+   */
+  externalId?: string | null;
+  sourceUrl?: string | null;
 };
+
+/*
+ * LISTING-FIRST: rota de catálogo do Mercado Livre (`/p/...`, `/up/...`).
+ *
+ * Ela abre uma página que agrega N anúncios: não há vendedor nem preço da
+ * oferta, e o anúncio em destaque muda conforme estoque. Publicar um CTA
+ * para lá é um link de oferta ERRADO — e o usuário não tem como perceber,
+ * porque o site abriu e mostrou "um" produto.
+ */
+const ML_CATALOG_URL_SQL = { contains: "/p/", mode: "insensitive" as const };
+const ML_USER_PRODUCT_URL_SQL = {
+  contains: "/up/",
+  mode: "insensitive" as const,
+};
+
+/** Oferta ML que não é um anúncio comprovado não é publicável. */
+export function isPublicavelOfertaMercadoLivre(
+  offer: Pick<PublicOfferLike, "externalId" | "sourceUrl">,
+): boolean {
+  return isValidMercadoLivreListingIdentity({
+    externalId: offer.externalId,
+    listingItemId: offer.externalId,
+    sourceUrl: offer.sourceUrl,
+    origin: "listing",
+  });
+}
 
 export function isUsablePublicOffer(offer: PublicOfferLike): boolean {
   if (offer.active === false) {
@@ -49,6 +86,10 @@ export function isUsablePublicOffer(offer: PublicOfferLike): boolean {
     return false;
   }
 
+  if (!isOfertaPublicavelNoMarketplace(offer)) {
+    return false;
+  }
+
   return Boolean(
     offer.available &&
       offer.status !== "UNAVAILABLE" &&
@@ -56,6 +97,22 @@ export function isUsablePublicOffer(offer: PublicOfferLike): boolean {
       Number.isFinite(offer.price as number) &&
       (offer.price as number) > 0,
   );
+}
+
+/**
+ * Regra de mercado (não de flag). Separada de `isUsablePublicOffer` para que
+ * filtros de marketplace que NÃO dependem de `price`/`matchStatus` (ex.:
+ * "mostrar a grade de lojas" da página de produto) compartilhem exatamente a
+ * mesma política.
+ */
+export function isOfertaPublicavelNoMarketplace(
+  offer: Pick<PublicOfferLike, "marketplace" | "externalId" | "sourceUrl">,
+): boolean {
+  if (String(offer.marketplace) !== "MERCADO_LIVRE") {
+    return true;
+  }
+
+  return isPublicavelOfertaMercadoLivre(offer);
 }
 
 // Conta marketplaces DISTINTOS entre as ofertas válidas.
@@ -134,6 +191,16 @@ export function multiStorePublicWhere(): Prisma.ProductWhereInput {
             available: true,
             status: { notIn: ["UNAVAILABLE", "ERROR"] },
             price: { gt: 0 },
+            // LISTING-FIRST: oferta ML de catálogo não conta como oferta
+            // válida. Filtro no banco (não só em memória) porque este `where`
+            // é o que decide se o produto aparece na Home/sitemap.
+            NOT: {
+              marketplace: "MERCADO_LIVRE",
+              OR: [
+                { sourceUrl: ML_CATALOG_URL_SQL },
+                { sourceUrl: ML_USER_PRODUCT_URL_SQL },
+              ],
+            },
           },
         },
       },
@@ -150,5 +217,10 @@ export const PUBLIC_OFFER_SELECT = {
     available: true,
     status: true,
     price: true,
+    // LISTING-FIRST: sem estes dois campos a identidade de anúncio ML não
+    // pode ser avaliada em memória e a oferta seria tratada como publicável
+    // por falta de informação (fail-open).
+    externalId: true,
+    sourceUrl: true,
   },
 } as const;

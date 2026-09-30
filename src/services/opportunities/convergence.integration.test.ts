@@ -38,7 +38,18 @@ function offer(
   return {
     productId: input.productId ?? "prod-1",
     externalId: input.externalId ?? input.id,
-    sourceUrl: input.sourceUrl ?? SOURCE_ML,
+    /*
+     * LISTING-FIRST: a `sourceUrl` de oferta ML precisa PROVAR o `externalId`
+     * (ITEM_ID de anúncio). O default deriva a URL pública do próprio
+     * `externalId` para que a prova feche.
+     */
+    sourceUrl:
+      input.sourceUrl ??
+      (String(input.marketplace) === "MERCADO_LIVRE"
+        ? `https://produto.mercadolivre.com.br/${String(
+            input.externalId ?? input.id,
+          ).replace(/^MLB/, "MLB-")}-smartphone-_JM`
+        : SOURCE_ML),
     affiliateLink: input.affiliateLink ?? null,
     title: input.title ?? "Smartphone X",
     image: input.image ?? "https://img.example/x.jpg",
@@ -58,8 +69,11 @@ function opportunity(
   return {
     productId: input.productId ?? "prod-1",
     marketplace: input.marketplace ?? "MERCADO_LIVRE",
-    externalId: input.externalId ?? "MLB-1",
-    sourceUrl: input.sourceUrl ?? SOURCE_ML,
+    /* LISTING-FIRST: ITEM_ID de anúncio real (ver helper `offer`). */
+    externalId: input.externalId ?? "MLB8765432501",
+    sourceUrl:
+      input.sourceUrl ??
+      `https://produto.mercadolivre.com.br/MLB-8765432501-smartphone-_JM`,
     status: input.status ?? "WAITING_AFFILIATE",
     affiliateLink: input.affiliateLink ?? null,
     matchStatus: input.matchStatus ?? "EXACT",
@@ -190,7 +204,7 @@ async function run() {
   const ml = offer({
     id: "ml-1",
     marketplace: "MERCADO_LIVRE",
-    externalId: "MLB-1",
+    externalId: "MLB8765432501",
     price: 899,
     affiliateLink: null,
   });
@@ -305,19 +319,19 @@ async function run() {
   const pending = opportunity({
     id: "opp-apply",
     productId: "prod-1",
-    externalId: "MLB-1",
+    externalId: "MLB8765432501",
     status: "WAITING_AFFILIATE",
   });
   const otherProductMl = offer({
     id: "ml-other",
     productId: "prod-2",
     marketplace: "MERCADO_LIVRE",
-    externalId: "MLB-OTHER",
+    externalId: "MLB8765432502",
     affiliateLink: null,
   });
   const applyStore = createMemoryApplyStore({
     offers: [
-      { ...ml, id: "ml-apply", externalId: "MLB-1", affiliateLink: null },
+      { ...ml, id: "ml-apply", externalId: "MLB8765432501", affiliateLink: null },
       amazon,
       otherProductMl,
     ],

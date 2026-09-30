@@ -21,6 +21,7 @@ import type {
   ProductImport,
   MarketplaceName,
 } from "@/services/importers/core/types";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 
 import {
   NON_RETRYABLE_ENVELOPE_PREFIX,
@@ -375,6 +376,7 @@ export async function processImportQueue(
               marketplace: true,
               externalId: true,
               sourceUrl: true,
+              catalogProductId: true,
               affiliateLink: true,
               seller: true,
               price: true,
@@ -396,6 +398,39 @@ export async function processImportQueue(
         if (!externalIdReferencia) {
           throw new Error(
             `Oferta de referência ${item.marketplace} sem externalId para o produto ${item.productId}.`,
+          );
+        }
+
+        /*
+         * LISTING-FIRST: a referência NÃO pode ser reconstruída a partir de
+         * uma oferta de catálogo.
+         *
+         * Este caminho existe justamente para não raspar a loja de novo: ele
+         * copia o `externalId` e a `sourceUrl` já gravados. Se o que está
+         * gravado for um catalog_product_id, copiar consolida o defeito —
+         * cada nova comparação multiloja nasceria apontando para a página de
+         * catálogo, e o matcher compararia contra preços de anúncios
+         * sorteados.
+         *
+         * Fail-closed: interrompe o item da fila em vez de propagar. As ofertas
+         * legadas não são apagadas (classificação em
+         * classifyLegacyMercadoLivreOffer), mas catalog-only não é reimportável.
+         */
+        if (
+          String(ofertaReferencia.marketplace) ===
+          "MERCADO_LIVRE" &&
+          !isValidMercadoLivreListingIdentity({
+            externalId: externalIdReferencia,
+            listingItemId: externalIdReferencia,
+            sourceUrl: ofertaReferencia.sourceUrl,
+            origin: "listing",
+          })
+        ) {
+          throw new Error(
+            `ML_LISTING_FIRST: oferta de referência ${item.marketplace} do produto ` +
+              `${item.productId} não é um anúncio (externalId=${externalIdReferencia}, ` +
+              `sourceUrl=${ofertaReferencia.sourceUrl ?? "(vazio)"}). ` +
+              `CATALOG PRODUCT != MARKETPLACE OFFER — reconstrução de referência abortada.`,
           );
         }
 
@@ -498,6 +533,13 @@ export async function processImportQueue(
           url:
             ofertaReferencia.sourceUrl ||
             item.url,
+
+          /*
+           * METADADO apenas: o catalog_product_id do anúncio não pode
+           * reassumir a identidade da oferta.
+           */
+          catalogProductId:
+            ofertaReferencia.catalogProductId ?? null,
 
           affiliateLink:
             ofertaReferencia.affiliateLink ||

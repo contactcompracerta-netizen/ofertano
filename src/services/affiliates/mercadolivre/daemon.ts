@@ -98,6 +98,12 @@ function toneOf(
     case "SUCCESS":
       return "success";
     case "SKIP_ALREADY_AFFILIATED":
+    /*
+     * LISTING-FIRST: oferta de catálogo não é falha transitória. Não tentamos
+     * de novo (o resultado não muda com nova tentativa) e não devemos entrar
+     * em BACKOFF por causa dela.
+     */
+    case "SKIP_CATALOG_ONLY":
       return "skip";
     case "CHROME_NOT_RUNNING":
       return "chrome_offline";

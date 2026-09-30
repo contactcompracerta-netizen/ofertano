@@ -10,6 +10,11 @@ type PlaywrightModule = {
   };
 };
 
+import {
+  isMercadoLivreCatalogSourceUrl,
+  normalizeMercadoLivreListingItemId,
+} from "@/services/mercadoLivre/listingIdentity";
+
 export type GenerateOutcome =
   | {
       status: "SUCCESS";
@@ -138,10 +143,16 @@ export function resolveTargetMeta(url: string): ResolvedTargetMeta {
 }
 
 /**
- * Marcadores usados na validação do meli.la. Incluem o item original e o
- * alvo RESOLVIDO (catalog/item). Não exige que o MLB stale continue
- * aparecendo depois do redirect oficial. Para robustez, registra cada ID nas
- * formas com e sem hífen (o ML os exibe de forma inconsistente).
+ * LISTING-FIRST: marcadores de validação do link de afiliado.
+ *
+ * Só entram o ITEM_ID esperado e o ITEM_ID do destino resolvido — nunca o
+ * `catalogId`.
+ *
+ * Motivo: `catalogId` é a identidade de um PRODUTO DE CATÁLOGO, que agrega N
+ * anúncios. Aceitá-lo como prova autorizava gravar como `affiliateLink` um
+ * link que abre a página de catálogo, potencialmente já com outro anúncio
+ * selecionado. Isso troca vendedor e preço sem nenhuma escrita em
+ * `externalId` — o erro fica invisível.
  */
 export function buildAffiliateTargetMarkers(
   originalItemId: string | null,
@@ -156,10 +167,79 @@ export function buildAffiliateTargetMarkers(
     set.add(up.replace(/MLB-?/, "MLB"));
   };
   add(originalItemId);
-  add(resolved.catalogId);
   add(resolved.itemId);
   return [...set];
 }
+
+export type AffiliateTargetDecision = {
+  ok: boolean;
+  reason: string;
+};
+
+/**
+ * Decide se o alvo resolvido pelo Link Builder é o MESMO anúncio da oferta.
+ *
+ * Fail-closed. `ok = true` exige:
+ *   - `expectedItemId` normalizável como ITEM_ID de anúncio (MLB + 8+ dígitos);
+ *   - o destino resolvido NÃO ser uma página de catálogo sem item_id; e
+ *   - quando o destino expõe `item_id`, ele ser igual ao `expectedItemId`.
+ *
+ * Um redirect oficial de `/MLB-<id>` para `/p/MLB<catalog>?item_id=MLB<outro>`
+ * é REJEITADO: o destino seleciona outro anúncio (outro vendedor, outro
+ * preço). Aceitar isso é a definição de link de afiliado apontando para a
+ * oferta errada.
+ */
+export function decideAffiliateTarget(
+  expectedItemId: string | null,
+  resolved: ResolvedTargetMeta,
+): AffiliateTargetDecision {
+  const expected = normalizeMercadoLivreListingItemId(expectedItemId);
+
+  if (!expected) {
+    return {
+      ok: false,
+      reason:
+        "ITEM_ID de anúncio desconhecido ou inválido: o worker não pode " +
+        "redescober qual anúncio estava por trás de um catalogId.",
+    };
+  }
+
+  const resolvedItemId = normalizeMercadoLivreListingItemId(resolved.itemId);
+
+  if (!resolvedItemId) {
+    if (resolved.catalogId) {
+      return {
+        ok: false,
+        reason:
+          `O destino resolvido é uma página de catálogo (${resolved.catalogId}) ` +
+          `sem item_id do anúncio ${expected}. ` +
+          `CATALOG PRODUCT != MARKETPLACE OFFER.`,
+      };
+    }
+
+    /*
+     * Sem catalogId e sem itemId na query: não há prova de que o destino seja
+     * aquele anúncio. Fail-closed.
+     */
+    return {
+      ok: false,
+      reason: `O destino resolvido não expõe o item_id do anúncio ${expected}.`,
+    };
+  }
+
+  if (resolvedItemId !== expected) {
+    return {
+      ok: false,
+      reason:
+        `O destino resolvido aponta para outro anúncio (${resolvedItemId}) ` +
+        `e não para ${expected}. Link de afiliado rejeitado: mudaria ` +
+        `vendedor e preço da oferta.`,
+    };
+  }
+
+  return { ok: true, reason: `alvo confere com o anúncio ${expected}` };
+}
+
 
 export type ResolvedSource = {
   requestedUrl: string;
@@ -692,13 +772,43 @@ export async function generateMercadoLivreAffiliateLink(
   const sourceUrl = input.sourceUrl.trim();
   const cdpEndpoint = input.cdpEndpoint?.trim() || DEFAULT_CDP_ENDPOINT;
   const generatorUrl = input.generatorUrl?.trim() || DEFAULT_GENERATOR_URL;
+
+  /*
+   * LISTING-FIRST: o ITEM_ID do anúncio vem do chamador (a oferta já sabe
+   * qual anúncio é). O worker NUNCA descobre sozinho qual anúncio estava por
+   * trás de um catalogId.
+   *
+   * Aceitar o MLB extraído de uma URL `/p/MLB<catalog>` seria exatamente a
+   * redescoberta proibida: o catálogo não diz qual anúncio é o alvo, e o Link
+   * Builder devolveria o buy-box do momento — outro vendedor, outro preço.
+   */
+  const sourceUrlIsCatalog = isMercadoLivreCatalogSourceUrl(sourceUrl);
+  if (sourceUrlIsCatalog) {
+    return {
+      status: "GENERATION_FAILED",
+      reason:
+        `sourceUrl é uma página de catálogo (${sourceUrl}). ` +
+        `CATALOG PRODUCT != MARKETPLACE OFFER: cole o link do anúncio.`,
+    };
+  }
+
   const expectedItemId =
-    input.expectedItemId?.trim() || extractItemId(sourceUrl);
+    normalizeMercadoLivreListingItemId(input.expectedItemId) ??
+    (input.expectedItemId?.trim() || extractItemId(sourceUrl));
 
   if (!expectedItemId) {
     return {
       status: "GENERATION_FAILED",
       reason: `Não foi possível extrair MLB da URL fornecida: ${sourceUrl}`,
+    };
+  }
+
+  if (!normalizeMercadoLivreListingItemId(expectedItemId)) {
+    return {
+      status: "GENERATION_FAILED",
+      reason:
+        `expectedItemId inválido (${expectedItemId}): o worker exige um ` +
+        `ITEM_ID de anúncio (MLB + 8+ dígitos), nunca um catalog_product_id.`,
     };
   }
 
@@ -774,6 +884,21 @@ export async function generateMercadoLivreAffiliateLink(
       catalogId: resolved.catalogId ?? null,
       itemId: resolved.itemId ?? null,
     };
+
+    /*
+     * LISTING-FIRST: o destino tem que ser o MESMO anúncio. Um redirect
+     * oficial que troca o anúncio (por exemplo para a página de catálogo com
+     * outro `item_id` selecionado) aborta aqui — antes de digitar no Link
+     * Builder, antes de capturar link, antes de gravar.
+     */
+    const targetDecision = decideAffiliateTarget(expectedItemId, resolvedMeta);
+    if (!targetDecision.ok) {
+      log(`TARGET_REJECTED=${targetDecision.reason}`);
+      return {
+        status: "VALIDATION_FAILED",
+        reason: targetDecision.reason,
+      };
+    }
 
     let page = context.pages().find((p) => !p.isClosed());
     if (!page) {

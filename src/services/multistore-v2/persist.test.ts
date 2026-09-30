@@ -181,14 +181,14 @@ async function runCoveragePublicationCases() {
       {
         marketplace: "MERCADO_LIVRE",
         marketplaceName: "Mercado Livre",
-        externalId: "ml-zx100",
+        externalId: "MLB8765432120",
         title: "Headphone MarcaX ZX100",
-        url: "https://loja.example/ml-zx100",
+        url: "https://produto.mercadolivre.com.br/MLB-8765432120-marcax-zx100",
         image: "https://loja.example/img.jpg",
         price: 99,
         oldPrice: null,
         brand: "MarcaX",
-        affiliateLink: "https://aff.example/ml-zx100",
+        affiliateLink: "https://aff.example/MLB-8765432120-marcax-zx100",
         attributes: {},
         seller: null,
       },
@@ -204,14 +204,14 @@ async function runCoveragePublicationCases() {
       {
         marketplace: "MERCADO_LIVRE",
         marketplaceName: "Mercado Livre",
-        externalId: "ml-zx100-ok",
+        externalId: "MLB8765432121",
         title: "Headphone MarcaX ZX100",
-        url: "https://loja.example/ml-zx100-ok",
+        url: "https://produto.mercadolivre.com.br/MLB-8765432121-marcax-zx100",
         image: "https://loja.example/img.jpg",
         price: 99,
         oldPrice: null,
         brand: "MarcaX",
-        affiliateLink: "https://aff.example/ml-zx100-ok",
+        affiliateLink: "https://aff.example/MLB-8765432121-marcax-zx100",
         attributes: {},
         seller: null,
       },
@@ -412,6 +412,19 @@ async function runCoveragePublicationCases() {
       marketplace,
       marketplaceName,
       externalId,
+      /*
+       * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID de
+       * anúncio real (`^MLB\d{8,}$`) e a `sourceUrl` precisa PROVAR esse mesmo
+       * id. Ids de fixture no formato `ml-*` são recusados pelo gate, então
+       * cada anúncio ML recebe um id numérico e a URL pública correspondente.
+       */
+      sourceUrl:
+        marketplace === "MERCADO_LIVRE"
+          ? `https://produto.mercadolivre.com.br/${externalId.replace(
+              /^MLB/,
+              "MLB-",
+            )}-marcax-zx100`
+          : `https://loja.example/${externalId}`,
       title: "Headphone MarcaX ZX100 Bluetooth",
       price,
     });
@@ -424,7 +437,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-ok", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432200", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => emptySearch("AMAZON", query)),
@@ -445,7 +458,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-multi-ok", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432201", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -478,7 +491,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-timeout", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432202", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async (request) => {
@@ -510,7 +523,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-blocked", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432203", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
@@ -528,7 +541,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-error", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432204", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => {
@@ -550,7 +563,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-multi", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432205", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -603,7 +616,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-3b", 150)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432206", 150)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -644,7 +657,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-4e", 150)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432207", 150)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -693,7 +706,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-notrun", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432208", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => notRunSearch("AMAZON", query)),
@@ -774,7 +787,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-cheap", 99)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432209", 99)],
         error: null,
       })),
       fakeAdapter("SHOPEE", "Shopee", async () => ({
@@ -827,7 +840,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-cheap-to", 99)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432210", 99)],
         error: null,
       })),
       fakeAdapter("SHOPEE", "Shopee", async () => ({
@@ -872,7 +885,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-public", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432211", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => blockedSearch("AMAZON", query)),
@@ -896,7 +909,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "ml-public-multi", 199)],
+        candidates: [found("MERCADO_LIVRE", "Mercado Livre", "MLB8765432212", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -1062,7 +1075,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [foundOffer("MERCADO_LIVRE", "Mercado Livre", "ml-zx100", 199)],
+        candidates: [foundOffer("MERCADO_LIVRE", "Mercado Livre", "MLB8765432213", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -1122,7 +1135,7 @@ async function runCoveragePublicationCases() {
         query,
         success: true,
         scanned: 1,
-        candidates: [foundOffer("MERCADO_LIVRE", "Mercado Livre", "ml-zx100", 199)],
+        candidates: [foundOffer("MERCADO_LIVRE", "Mercado Livre", "MLB8765432213", 199)],
         error: null,
       })),
       fakeAdapter("AMAZON", "Amazon", async () => ({
@@ -1832,9 +1845,14 @@ async function runMlUnknownAffiliateCase() {
       {
         marketplace: "MERCADO_LIVRE",
         marketplaceName: "Mercado Livre",
-        externalId: "MLB-cabide",
+        /*
+         * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID de
+         * anúncio real (`^MLB\d{8,}$`) e a url precisa provar esse mesmo id.
+         * `MLB-cabide` não é um id de anúncio.
+         */
+        externalId: "MLB8765432111",
         title: "Kit Cabides Veludo De Roupa Antideslizante Slim Adulto 50 Un",
-        url: "https://produto.mercadolivre.com.br/MLB-cabide",
+        url: "https://produto.mercadolivre.com.br/MLB-8765432111-kit-cabides",
         image: "https://loja.example/img.jpg",
         price: 42,
         oldPrice: null,

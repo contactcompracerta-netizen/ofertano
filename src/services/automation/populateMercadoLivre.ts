@@ -1,5 +1,10 @@
 ﻿import prisma from "@/lib/prisma";
 import { mercadoLivreFetch } from "@/lib/mercadolivre";
+import {
+  extractMercadoLivreCatalogProductId,
+  isValidMercadoLivreListingIdentity,
+  resolveMercadoLivreListingSourceUrl,
+} from "@/services/mercadoLivre/listingIdentity";
 
 const LIMITE_PADRAO = 5;
 const LIMITE_MAXIMO = 10;
@@ -32,6 +37,7 @@ type CatalogProduct = {
 
 type CatalogOffer = {
   item_id?: string;
+  seller_id?: number;
   price?: number;
   original_price?: number | null;
   status?: string;
@@ -46,8 +52,12 @@ type CatalogItemsResponse = {
 };
 
 type AutomaticCandidate = {
+  /** LISTING-FIRST: sempre o ITEM_ID concreto do anuncio. */
   externalId: string;
+  /** Metadado de catalogo. Nunca substitui externalId. */
+  catalogProductId: string | null;
   sourceUrl: string;
+  sellerId: string | null;
   title: string;
   image: string | null;
   categoryId: string | null;
@@ -123,60 +133,35 @@ function calcularDesconto(
   );
 }
 
-function escolherOferta(
+/**
+ * LISTING-FIRST: mantem a ordem em que o Mercado Livre devolveu os anuncios.
+ *
+ * Nao existe mais "escolher o mais barato": essa escolha e artificial,
+ * muda seller/preco e destroi a identidade do anuncio. A ordem da fonte e
+ * a ordem do anuncio real.
+ */
+function escolherAnuncioReal(
   ofertas: CatalogOffer[],
 ): CatalogOffer | null {
-  const validas = ofertas.filter(
-    (oferta) =>
-      typeof oferta.item_id === "string" &&
-      typeof oferta.price === "number" &&
-      Number.isFinite(oferta.price) &&
-      oferta.price > 0 &&
-      oferta.status !== "inactive" &&
-      oferta.status !== "closed",
-  );
+  for (const oferta of ofertas) {
+    const itemId =
+      oferta.item_id?.trim();
 
-  if (validas.length === 0) {
-    return null;
+    if (
+      !itemId ||
+      typeof oferta.price !== "number" ||
+      !Number.isFinite(oferta.price) ||
+      oferta.price <= 0 ||
+      oferta.status === "inactive" ||
+      oferta.status === "closed"
+    ) {
+      continue;
+    }
+
+    return oferta;
   }
 
-  /*
-   * Priorizamos produtos realmente em oferta.
-   * Quando não houver preço antigo válido,
-   * ainda permitimos produto disponível.
-   */
-  return validas.sort(
-    (primeira, segunda) => {
-      const descontoPrimeira =
-        typeof primeira.original_price === "number" &&
-        primeira.original_price > primeira.price!
-          ? (primeira.original_price - primeira.price!) /
-            primeira.original_price
-          : 0;
-
-      const descontoSegunda =
-        typeof segunda.original_price === "number" &&
-        segunda.original_price > segunda.price!
-          ? (segunda.original_price - segunda.price!) /
-            segunda.original_price
-          : 0;
-
-      if (
-        descontoPrimeira !==
-        descontoSegunda
-      ) {
-        return (
-          descontoSegunda -
-          descontoPrimeira
-        );
-      }
-
-      return (
-        primeira.price! -
-        segunda.price!
-      );
-    },
-  )[0];
+  return null;
 }
 
 function obterImagem(
@@ -302,26 +287,40 @@ async function resolverProduto(
       return null;
     }
 
-    const oferta =
-      escolherOferta(
+    /*
+     * LISTING-FIRST: o catalogo nunca define a oferta.
+     *
+     * O endpoint `/products/{id}/items` pode devolver varios anuncios. O
+     * preco mais barato NAO e a oferta descoberta: ele troca seller/preco
+     * e destroi a identidade. Se nenhum item_id real vier com URL propria,
+     * o resultado correto e zero write.
+     */
+    const anuncio =
+      escolherAnuncioReal(
         respostaOfertas.results ?? [],
       );
 
-    if (!oferta) {
+    if (!anuncio) {
       return null;
     }
 
     const externalId =
-      productId.trim();
+      anuncio.item_id?.trim() ?? "";
+
+    const catalogProductId =
+      extractMercadoLivreCatalogProductId(productId);
 
     const sourceUrl =
-      `https://www.mercadolivre.com.br/p/${productId}`;
+      resolveMercadoLivreListingSourceUrl(
+        anuncio.permalink,
+        externalId,
+      ) ??
+      "";
 
     const price =
-      oferta.price;
+      anuncio.price;
 
     if (
-      !externalId ||
       typeof price !== "number" ||
       !Number.isFinite(price) ||
       price <= 0
@@ -329,27 +328,42 @@ async function resolverProduto(
       return null;
     }
 
+    if (
+      !isValidMercadoLivreListingIdentity({
+        listingItemId: externalId,
+        sourceUrl,
+        origin: "listing",
+      })
+    ) {
+      return null;
+    }
+
     const oldPrice =
-      typeof oferta.original_price === "number" &&
+      typeof anuncio.original_price === "number" &&
       Number.isFinite(
-        oferta.original_price,
+        anuncio.original_price,
       ) &&
-      oferta.original_price > price
-        ? oferta.original_price
+      anuncio.original_price > price
+        ? anuncio.original_price
         : null;
 
     return {
       externalId,
+      catalogProductId,
       sourceUrl,
+      sellerId:
+        typeof anuncio.seller_id === "number"
+          ? String(anuncio.seller_id)
+          : null,
       title,
 
       image: obterImagem(
         produto,
-        oferta,
+        anuncio,
       ),
 
       categoryId:
-        oferta.category_id?.trim() ||
+        anuncio.category_id?.trim() ||
         null,
 
       categoryName,
@@ -415,8 +429,13 @@ export async function populateMercadoLivre(
         const item of
           highlights.content ?? []
       ) {
+        /*
+         * LISTING-FIRST: so `ITEM` (anuncio concreto) pode virar oferta.
+         * `PRODUCT` e catalogo; `USER_PRODUCT` e MLBU. Ambos seguem
+         * existindo como enriquecimento, nunca como oferta.
+         */
         if (
-          item.type !== "PRODUCT" ||
+          item.type !== "ITEM" ||
           typeof item.id !== "string"
         ) {
           continue;
@@ -610,7 +629,7 @@ export async function populateMercadoLivre(
                   candidato.externalId,
 
                 sourceType:
-                  "PRODUCT",
+                  "ITEM",
 
                 sourceUrl:
                   candidato.sourceUrl,

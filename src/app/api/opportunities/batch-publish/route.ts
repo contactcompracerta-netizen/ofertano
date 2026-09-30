@@ -8,6 +8,7 @@ import {
   createPrismaApplyAffiliateLinkStore,
 } from "@/services/opportunities/applyAffiliateLink";
 import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
+import { assertMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -527,14 +528,52 @@ async function synchronizePublishedProduct(
 
   const validatedAt = new Date();
 
-  await tx.marketplaceOffer.upsert({
+  /*
+   * LISTING-FIRST: este upsert NUNCA pode criar uma oferta ML. Uma oferta
+   * nova precisa de listingItemId + sourceUrl da listing concreta; sem
+   * isso o resultado correto e zero write (fail closed), porque criar uma
+   * linha sem identidade e o que produz oferta de seller/preco errado.
+   */
+  const existingOffer = await tx.marketplaceOffer.findUnique({
     where: {
       productId_marketplace: {
         productId,
         marketplace,
       },
     },
-    update: {
+    select: {
+      id: true,
+      externalId: true,
+      sourceUrl: true,
+    },
+  });
+
+  if (!existingOffer) {
+    throw new Error(
+      "[ML_LISTING_FIRST] batch-publish: oferta inexistente para " +
+        `${productId}/${marketplace}. Oferta nova exige listing concreta ` +
+        "(listingItemId + sourceUrl) e nunca nasce de produto de catalogo.",
+    );
+  }
+
+  if (marketplace === "MERCADO_LIVRE") {
+    assertMercadoLivreListingIdentity(
+      {
+        externalId: existingOffer.externalId,
+        listingItemId: existingOffer.externalId,
+        sourceUrl: existingOffer.sourceUrl,
+        origin: "listing",
+        price: product.price,
+      },
+      "batch-publish",
+    );
+  }
+
+  await tx.marketplaceOffer.update({
+    where: {
+      id: existingOffer.id,
+    },
+    data: {
       affiliateLink,
       price: product.price,
       oldPrice: product.oldPrice,
@@ -545,23 +584,6 @@ async function synchronizePublishedProduct(
       active: true,
       available: true,
       errorMessage: null,
-      affiliateValidatedAt:
-        validatedAt,
-    },
-    create: {
-      productId,
-      marketplace,
-      affiliateLink,
-      price: product.price,
-      oldPrice: product.oldPrice,
-      installments:
-        product.installments,
-      stock: product.stock,
-      status: "ACTIVE",
-      discoverySource:
-        "OPPORTUNITY",
-      active: true,
-      available: true,
       affiliateValidatedAt:
         validatedAt,
     },

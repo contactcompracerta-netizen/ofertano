@@ -26,10 +26,16 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
 
 // --- Mapeamento correto de um contexto de save -----------------------------
 {
+  /*
+   * LISTING-FIRST: `externalListingId` é a chave de identidade do V1 e precisa
+   * ser um ITEM_ID de anúncio real (`^MLB\d{8,}$`) comprovado pela `sourceUrl`.
+   * `ML123` não é um id de anúncio e o seeding é fail-closed.
+   */
   const listing = buildShadowListingFromSaveContext({
     marketplace: "MERCADO_LIVRE",
-    externalId: "ML123",
-    sourceUrl: "https://produto.mercadolivre.com.br/ML123",
+    externalId: "MLB8765432601",
+    sourceUrl:
+      "https://produto.mercadolivre.com.br/MLB-8765432601-iphone-16-128gb",
     title: "iPhone 16 128GB Preto",
     price: 4999.9,
     oldPrice: 5499.9,
@@ -41,7 +47,7 @@ import { resolveMarketplaceIdFromLegacyEnum } from "../marketplaceRegistry";
   });
   assert.ok(listing, "listing deve ser construída");
   assert.equal(listing.marketplaceId, "mercado_livre");
-  assert.equal(listing.externalListingId, "ML123");
+  assert.equal(listing.externalListingId, "MLB8765432601");
   assert.equal(listing.source, "legacy-save-product");
   assert.equal(listing.identity.brand, "Apple");
   assert.equal(listing.catalog.title, "iPhone 16 128GB Preto");

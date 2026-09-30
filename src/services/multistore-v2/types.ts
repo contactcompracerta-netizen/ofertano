@@ -82,7 +82,10 @@ export type QueryIntent = {
 export type RawCandidate = {
   marketplace: MarketplaceCode;
   marketplaceName: string;
+  /** LISTING-FIRST (ML): sempre o listingItemId do anuncio. */
   externalId: string;
+  /** Metadado de catalogo. Nunca substitui externalId. */
+  catalogProductId?: string | null;
   title: string;
   price: number | null;
   url: string;
@@ -219,7 +222,13 @@ export type CanonicalProduct = {
 export type CanonicalOffer = {
   marketplace: MarketplaceCode;
   marketplaceName: string;
+  /**
+   * LISTING-FIRST: em MERCADO_LIVRE e SEMPRE o listingItemId
+   * (ITEM_ID concreto do anuncio).
+   */
   externalId: string;
+  /** Metadado de catalogo. Nunca substitui externalId. */
+  catalogProductId?: string | null;
   title: string;
   url: string;
   image: string;

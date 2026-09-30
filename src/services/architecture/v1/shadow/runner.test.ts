@@ -24,8 +24,14 @@ import type { LegacyPublicationOutcome } from "./parityEngine";
 
 const mercadoLivreRow = {
   marketplace: "MERCADO_LIVRE",
-  externalId: "ML-1",
-  sourceUrl: "https://produto.mercadolivre.com.br/ML-1",
+  /*
+   * LISTING-FIRST: `externalListingId` é a chave de identidade do V1 e precisa
+   * ser um ITEM_ID de anúncio real (`^MLB\d{8,}$`) comprovado pela `sourceUrl`.
+   * `ML-1` não é um id de anúncio e o seeding é fail-closed — a linha seria
+   * descartada e a paridade mediria zero.
+   */
+  externalId: "MLB8765432603",
+  sourceUrl: "https://produto.mercadolivre.com.br/MLB-8765432603-smartphone-x",
   title: "Smartphone X 128GB",
   brand: "MarcaX",
   price: 1299.9,
@@ -55,7 +61,18 @@ function offer(marketplace: string): {
   status: string;
   matchStatus: string;
   price: number;
+  externalId?: string;
+  sourceUrl?: string;
 } {
+  /*
+   * LISTING-FIRST: oferta ML só conta para a elegibilidade V1 quando a
+   * identidade de anúncio é provada (`externalId` = ITEM_ID + `sourceUrl` que
+   * comprova esse id). Sem os dois, o gate é fail-closed e a oferta ML não
+   * satisfaz o requisito Multi Loja — o que faria este fixture medir outra
+   * coisa.
+   */
+  const isMl = marketplace === "MERCADO_LIVRE";
+
   return {
     marketplace,
     active: true,
@@ -63,6 +80,13 @@ function offer(marketplace: string): {
     status: "ACTIVE",
     matchStatus: "EXACT",
     price: 100,
+    ...(isMl
+      ? {
+          externalId: "MLB8765432604",
+          sourceUrl:
+            "https://produto.mercadolivre.com.br/MLB-8765432604-smartphone-x",
+        }
+      : {}),
   };
 }
 

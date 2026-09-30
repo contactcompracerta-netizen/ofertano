@@ -98,6 +98,13 @@ const INVALID_DATA_TOKENS = [
   "sourceUrl ausente",
   "externalId ausente",
   "dados de entrada inválidos",
+  /*
+   * LISTING-FIRST: recusa de identidade de anúncio do Mercado Livre
+   * (catalog_product_id como externalId, URL /p/ de catálogo, URL que aponta
+   * outra listing). É dado inválido, NÃO falha transitória: cair para o
+   * writer legado repetiria exatamente a mesma escrita proibida.
+   */
+  "ML_LISTING_FIRST",
 ];
 
 function hasAnyToken(message: string, tokens: string[]): boolean {

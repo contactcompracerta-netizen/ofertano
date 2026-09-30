@@ -1,5 +1,6 @@
 import type { GenerateOutcome } from "./generator";
 import { confirmarAffiliateLinkMercadoLivre } from "@/lib/affiliates/publicPurchase";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 import type { MercadoLivreApplyStore, MercadoLivrePendingStore } from "./pending";
 
 export type GeneratorFn = (input: {
@@ -21,6 +22,7 @@ export type WorkerItemResult =
   | { offerId: string; result: "AUTH_REQUIRED"; reason: string }
   | { offerId: string; result: "GENERATION_FAILED"; reason: string }
   | { offerId: string; result: "VALIDATION_FAILED"; reason: string }
+  | { offerId: string; result: "SKIP_CATALOG_ONLY"; reason: string }
   | { offerId: string; result: "UPDATED" };
 
 export type WorkerRunResult = {
@@ -96,6 +98,39 @@ export async function runMercadoLivreWorker(
         reason: "sourceUrl ausente na pendência",
       });
       failedCount += 1;
+      continue;
+    }
+
+    /*
+     * LISTING-FIRST: só entra no Link Builder uma oferta que já é um anúncio.
+     *
+     * Sem este gate, uma oferta legada de catálogo (externalId = catalogId,
+     * sourceUrl `/p/...`) entraria no gerador, o ML responderia com o
+     * anúncio em destaque no momento e gravaríamos um `affiliateLink`
+     * apontando para o anúncio ERRADO — troca de vendedor e preço sem
+     * tocar em `externalId`, ou seja, invisível.
+     *
+     * Fail-closed e SEM redescoberta: o worker nunca escolhe um anúncio
+     * substituto para uma oferta de catálogo. Registrado como
+     * SKIP_CATALOG_ONLY para o relatório de legado, semwrite.
+     */
+    if (
+      !isValidMercadoLivreListingIdentity({
+        externalId: fresh.externalId,
+        listingItemId: fresh.externalId,
+        sourceUrl: item.sourceUrl,
+        origin: "listing",
+      })
+    ) {
+      log("RESULT=SKIP (oferta não é um anúncio — CATALOG_PRODUCT_NOT_LISTING)");
+      results.push({
+        offerId: item.offerId,
+        result: "SKIP_CATALOG_ONLY",
+        reason:
+          `CATALOG PRODUCT != MARKETPLACE OFFER (externalId=${fresh.externalId ?? "(vazio)"}, ` +
+          `sourceUrl=${item.sourceUrl}). Link de afiliado não é gerado para oferta de catálogo.`,
+      });
+      skippedCount += 1;
       continue;
     }
 

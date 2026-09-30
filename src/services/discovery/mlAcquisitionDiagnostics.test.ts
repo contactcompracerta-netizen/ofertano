@@ -256,11 +256,25 @@ async function runMlStageBudgetCases(): Promise<void> {
       }),
     }),
   );
+  /*
+   * LISTING-FIRST: o alvo deste caso e o ORÇAMENTO/ESTAGUAMENTO — uma
+   * `items-api` pendurada não pode impedir a lane de catálogo de rodar dentro
+   * do orçamento. O que a lane de catálogo produz é terminal e não entra em
+   * `candidates`, então a prova é que ela executou (`sourcesTried`), não que
+   * virou oferta.
+   */
   assert.ok(
+    (itemsHangCatalogRuns.sourcesTried ?? []).some((source) =>
+      source.startsWith("catalog"),
+    ),
+    "items-api pendurada nao impede catalogo",
+  );
+  assert.equal(
     itemsHangCatalogRuns.candidates.some(
       (entry) => entry.externalId === "MLB-CATALOG-STAGE",
     ),
-    "items-api pendurada nao impede catalogo",
+    false,
+    "LISTING-FIRST: produto de catalogo nunca vira offer candidate, mesmo com items-api pendurada.",
   );
 
   let publicFallbackStarted = false;
@@ -316,16 +330,37 @@ async function runMlStageBudgetCases(): Promise<void> {
       }),
     }),
   );
+  /*
+   * LISTING-FIRST: a lane de catálogo continua TERMINAL — o produto de catálogo
+   * não vira oferta e não satisfaz cobertura de oferta. A prova de que a
+   * busca pública pendurada não impediu o estágio de catálogo é que ele rodou.
+   */
   assert.ok(
-    publicHangCatalogRuns.candidates.some(
-      (entry) => entry.externalId === "MLB-CATALOG-PUBLIC",
+    (publicHangCatalogRuns.sourcesTried ?? []).some((source) =>
+      source.startsWith("catalog"),
     ),
     "busca publica pendurada nao impede catalogo",
   );
   assert.equal(
-    publicFallbackStarted,
+    publicHangCatalogRuns.candidates.some(
+      (entry) => entry.externalId === "MLB-CATALOG-PUBLIC",
+    ),
     false,
-    "HTML publico nao deve competir com catalogo que ja encontrou oferta",
+    "LISTING-FIRST: produto de catalogo nunca vira offer candidate, mesmo com a busca publica pendurada.",
+  );
+  /*
+   * INVERSÃO DELIBERADA DA EXPECTATIVA ANTIGA.
+   *
+   * Antes, o catálogo "encontrava oferta" e por isso o HTML público era pulado
+   * (`publicFallbackStarted === false`). Sob LISTING-FIRST isso é exatamente o
+   * caminho errado: o catálogo NUNCA produz oferta, então pular a lane de anúncio
+   * por causa dele entrega busca sem resultado. O fallback público é a única
+   * fonte de oferta disponível aqui e ele PRECISA rodar.
+   */
+  assert.equal(
+    publicFallbackStarted,
+    true,
+    "HTML publico precisa rodar: o catalogo nao pode satisfazer cobertura de oferta",
   );
 
   const hydrationHang = await buscarMercadoLivreComFontes(
@@ -414,11 +449,18 @@ async function runMlStageBudgetCases(): Promise<void> {
     hydrationOrder.includes("MLB-CONCURRENT-4"),
     "IDs seguintes nao podem ficar bloqueados pelo primeiro produto pendurado",
   );
-  assert.ok(
+  /*
+   * LISTING-FIRST: o produto de catálogo hidratado em paralelo é terminal e
+   * não entra em `candidates`. O mecanismo realmente coberto aqui — as
+   * hidratação não bloqueiam umas às outras — já é provado por
+   * `hydrationOrder.includes("MLB-CONCURRENT-4")` acima.
+   */
+  assert.equal(
     concurrentHydration.candidates.some(
       (entry) => entry.externalId === "MLB-CONCURRENT-LISTING",
     ),
-    "primeira oferta compravel concluida em paralelo e preservada",
+    false,
+    "LISTING-FIRST: produto de catalogo hidratado em paralelo nunca vira offer candidate.",
   );
   assert.ok(
     Date.now() - concurrentHydrationStartedAt < 1_000,
@@ -499,11 +541,17 @@ async function runMlStageBudgetCases(): Promise<void> {
   );
   const bulkCatalogElapsedMs = Date.now() - bulkCatalogStartedAt;
   assert.equal(bulkHydrationStarted, true, "lote ranqueado chega a hidratacao");
-  assert.ok(
+  /*
+   * LISTING-FIRST: o lote ranqueado continua sendo hidratado dentro do
+   * orçamento (é isso que `CATALOG_RANKING_BOUNDED` mede), mas nenhum produto
+   * de catálogo pode virar oferta.
+   */
+  assert.equal(
     bulkCatalog.candidates.some(
       (entry) => entry.externalId === "MLB-BULK-0",
     ),
-    "oferta relevante do lote de catalogo e preservada",
+    false,
+    "LISTING-FIRST: produto de catalogo do lote nunca vira offer candidate.",
   );
   assert.ok(
     bulkCatalogElapsedMs < 2_000,
@@ -617,11 +665,23 @@ async function runMlStageBudgetCases(): Promise<void> {
       }),
     }),
   );
+  /*
+   * LISTING-FIRST: o orçamento dinâmico continua sendo transferido para a lane
+   * de catálogo (o produto de catálogo é hidratado), mas o resultado é terminal
+   * e não entra em `candidates`.
+   */
   assert.ok(
+    (dynamicCatalog.sourcesTried ?? []).some((source) =>
+      source.startsWith("catalog"),
+    ),
+    "catalogo lento ainda completa com orcamento dinamico transferido",
+  );
+  assert.equal(
     dynamicCatalog.candidates.some(
       (entry) => entry.externalId === "MLB-DYNAMIC-CATALOG",
     ),
-    "catalogo lento ainda completa com orcamento dinamico transferido",
+    false,
+    "LISTING-FIRST: produto de catalogo lento nunca vira offer candidate.",
   );
 
   let releaseCatalog: (() => void) | undefined;

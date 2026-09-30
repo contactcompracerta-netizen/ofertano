@@ -11,8 +11,15 @@ export const commercePending = ['20260917120000_commerce_intelligence_foundation
 // na MESMA cadeia do cutover, porque o estado do autopilot vive no mesmo plano
 // de controle. Nao muda nenhuma migracao ja aplicada.
 export const autopilotPending = ['20260926120000_catalog_cutover_autopilot'];
+/*
+ * LISTING-FIRST: migration ADITIVA (`MarketplaceOffer.catalogProductId` + índice).
+ * Catálogo passa a ser metadado estrutural, nunca identidade de oferta. Entra na
+ * MESMA cadeia do catálogo porque altera o mesmo plano de dados, e não muda
+ * nenhuma migration já aplicada.
+ */
+export const mlListingFirstPending = ['20260930120000_ml_listing_first_catalog_metadata'];
 export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', ...autopilotPending];
-export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending];
+export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending, ...mlListingFirstPending];
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
 export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending];
@@ -24,6 +31,7 @@ export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...ar
  *   commercePending                       só o commerce
  *   autopilotPending                      SÓ a migration do autopilot: o
  *                                         estado real entre o push e o apply
+ *   mlListingFirstPending                 SÓ a migration do catálogo ML
  *   architecturePending                   só o catálogo inteiro
  *   commercePending + architecturePending tudo
  *   cutoverPending                        só as três do plano de cutover
@@ -32,11 +40,11 @@ export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...ar
  *   architecturePending.slice(0, -1)      o ponto intermediário da FASE 7.1
  *                                         (só a 130000 aplicada)
  *
- * `autopilotPending` e `[]` são os dois estados que a FASE 7.2 realmente produz:
- * o código está no repositório mas a migration ainda não foi aplicada; depois
- * do apply, nada pendente de novo. Nenhum outro recorte é aceito.
+ * `autopilotPending`, `mlListingFirstPending` e `[]` são os estados reais entre
+ * o push e o apply de cada migration aditiva, e o estado final depois do apply.
+ * Nenhum outro recorte é aceito.
  */
-const pendingAllowlistSets = [[], commercePending, autopilotPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1)];
+const pendingAllowlistSets = [[], commercePending, autopilotPending, mlListingFirstPending, architecturePending, [...commercePending, ...architecturePending], cutoverPending, [cutoverPending[1]], architecturePending.slice(0, -1)];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = code => { throw new Error(code); };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

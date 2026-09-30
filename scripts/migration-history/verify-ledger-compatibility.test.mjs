@@ -92,6 +92,10 @@ test('no invented partial pending set around the autopilot migration',()=>{
  for(const n of [...commercePending,...architecturePending]) s.ledger.push({ ...s.ledger[0], migration_name:n, checksum:n===autopilotPending[0]?'f'.repeat(64):c.repositoryChecksums[n], applied_steps_count:1 });
  assert.throws(()=>verifyLedgerCompatibility(s,[],c),/UNEXPECTED_CHECKSUM_MISMATCH/);
  // E com o PIN correto, sem pendentes, o gate passa.
- s.ledger[s.ledger.length-1].checksum=c.repositoryChecksums[autopilotPending[0]];
+ // A linha e localizada pelo NOME, nao pela posicao: o inventario forward cresce
+ // com as migrations aditivas (autopilot, catalogo ML) e o teste nao pode
+ // depender de qual delas ficou por ultimo na fila.
+ const autopilotRow = s.ledger.find(r => r.migration_name === autopilotPending[0]);
+ autopilotRow.checksum = c.repositoryChecksums[autopilotPending[0]];
  assert.deepEqual(verifyLedgerCompatibility(s,[],c).pending,[]);
 });

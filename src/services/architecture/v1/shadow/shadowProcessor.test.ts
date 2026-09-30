@@ -23,8 +23,13 @@ import {
 
 const baseInput = {
   marketplace: "MERCADO_LIVRE",
-  externalId: "ML-1",
-  sourceUrl: "https://produto.mercadolivre.com.br/ML-1",
+  /*
+   * LISTING-FIRST: `externalListingId` é a chave de identidade do V1 e precisa
+   * ser um ITEM_ID de anúncio real (`^MLB\d{8,}$`) comprovado pela `sourceUrl`.
+   * `ML-1` não é um id de anúncio e o seeding é fail-closed.
+   */
+  externalId: "MLB8765432602",
+  sourceUrl: "https://produto.mercadolivre.com.br/MLB-8765432602-smartphone-x",
   title: "Smartphone X 128GB",
   price: 1299.9,
   oldPrice: 1499.9,
@@ -153,7 +158,7 @@ async function main(): Promise<void> {
 
     const rows = await repos.raw.listRawRows("mercado_livre", 10);
     assert.equal(rows.length, 1, "uma única chave persistida");
-    assert.equal(rows[0].externalId, "ML-1");
+    assert.equal(rows[0].externalId, "MLB8765432602");
   }
 
   // --- PersistRaw aditivo preserva legacy ------------------------------------

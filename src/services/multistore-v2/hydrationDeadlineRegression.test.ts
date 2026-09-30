@@ -105,10 +105,16 @@ async function runHydrationDeadlineRegressionCase(): Promise<void> {
             foundCandidate({
               marketplace: "MERCADO_LIVRE",
               marketplaceName: "Mercado Livre",
-              externalId: "MLB-REAL-220V",
+              /*
+               * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID
+               * de anúncio real (`^MLB\d{8,}$`) e a `sourceUrl` precisa provar
+               * aquele mesmo id. `MLB-REAL-220V` não é um id de anúncio.
+               */
+              externalId: "MLB8765432110",
               title: "Aspirador de Pó e Água Wap GTW Inox 12 1400W Bocal de Sopro 220v",
               price: 299,
-              sourceUrl: "https://produto.mercadolivre.com.br/MLB-REAL-220V",
+              sourceUrl:
+                "https://produto.mercadolivre.com.br/MLB-8765432110-aspirador-wap-gtw-220v",
               attributes: { VOLTAGE: "220V" },
             }),
           ],

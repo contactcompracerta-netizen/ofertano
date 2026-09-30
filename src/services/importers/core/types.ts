@@ -11,7 +11,17 @@ export interface ProductImport {
   externalId: string;
 
   /*
+   * LISTING-FIRST (Mercado Livre): `externalId` é SEMPRE o listingItemId
+   * (ITEM_ID concreto do anúncio). `catalogProductId` é metadado
+   * estrutural e NUNCA substitui o externalId.
+   */
+  catalogProductId?: string | null;
+
+  /*
    * URL original/canônica do produto.
+   *
+   * Para MERCADO_LIVRE precisa representar a listing concreta
+   * comprovada. URL `/p/MLB...` é rota de catálogo e é recusada.
    */
   url: string;
 

@@ -66,10 +66,23 @@ function commitsFake(log: { structural: number; fastOffer: number; legacy: numbe
   };
 }
 
+/** URL publica individual que PROVA o ITEM_ID informado. */
+function mlListingUrl(listingItemId: string): string {
+  return `https://produto.mercadolivre.com.br/${listingItemId.replace(
+    /^MLB/,
+    "MLB-",
+  )}-smartphone-x`;
+}
+
 const rowML: LegacyShadowRawRow = {
   marketplace: "MERCADO_LIVRE",
-  externalId: "ML-1",
-  sourceUrl: "https://produto.mercadolivre.com.br/ML-1",
+  /*
+   * LISTING-FIRST: a oferta ML so e semeada/commitada quando o `externalId` e um
+   * ITEM_ID de anuncio real (`^MLB\d{8,}$`) comprovado pela `sourceUrl`. `ML-1`
+   * nao e id de anuncio e o seeding e fail-closed, o que zeraria os commits.
+   */
+  externalId: "MLB8765432702",
+  sourceUrl: "https://produto.mercadolivre.com.br/MLB-8765432702-smartphone-x",
   title: "Smartphone X 128GB",
   brand: "MarcaX",
   price: 1299.9,
@@ -291,10 +304,15 @@ async function main(): Promise<void> {
     resetCutoverMetrics();
     resetCutoverBreaker();
     const c = commitsFake({ structural: 0, fastOffer: 0, legacy: 0 });
+    /*
+     * LISTING-FIRST: cada row ML precisa do seu proprio ITEM_ID de anuncio e de
+     * uma `sourceUrl` que prove esse id. `ML-2`/`ML-3` com a URL de `rowML`
+     * seriam descartados pelo gate de identidade (LISTING_URL_MISMATCH).
+     */
     const rows: LegacyShadowRawRow[] = [
       rowML,
-      { ...rowML, externalId: "ML-2" },
-      { ...rowML, externalId: "ML-3" },
+      { ...rowML, externalId: "MLB8765432703", sourceUrl: mlListingUrl("MLB8765432703") },
+      { ...rowML, externalId: "MLB8765432704", sourceUrl: mlListingUrl("MLB8765432704") },
     ];
     const result = await runAuthoritativeCanary(
       {
