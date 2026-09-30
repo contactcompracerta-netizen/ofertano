@@ -21,6 +21,22 @@ import {
   type ShadowRepositoryBundle,
 } from "./repository";
 
+/**
+ * LISTING-FIRST: cada observacao ML precisa do seu proprio ITEM_ID de anuncio e
+ * de uma `sourceUrl` que prove esse id. Um id inventado (`ML-2`) seria
+ * descartado pelo gate de identidade e o teste mediria "nada foi escrito" em vez
+ * do que pretende medir.
+ */
+function mlObservation(itemId: string) {
+  return {
+    externalId: itemId,
+    sourceUrl: `https://produto.mercadolivre.com.br/${itemId.replace(
+      /^MLB/,
+      "MLB-",
+    )}-smartphone-x`,
+  };
+}
+
 const baseInput = {
   marketplace: "MERCADO_LIVRE",
   /*
@@ -80,12 +96,14 @@ async function main(): Promise<void> {
     assert.equal(calls, 1);
     assert.equal(captured[0], "2026-01-02T03:04:05.678Z");
     await processShadowListing({ flags, realRepos: repos, now }, {
-      ...baseInput, externalId: "ML-2", collectedAt: "2025-01-01T00:00:00.000Z",
+      ...baseInput, ...mlObservation("MLB8765432603"), collectedAt: "2025-01-01T00:00:00.000Z",
     });
     assert.equal(calls, 1, "explicit observation time bypasses the clock");
     assert.equal(captured[1], "2025-01-01T00:00:00.000Z");
     const before = Date.now();
-    await processShadowListing({ flags, realRepos: repos }, { ...baseInput, externalId: "ML-3" });
+    await processShadowListing({ flags, realRepos: repos }, {
+      ...baseInput, ...mlObservation("MLB8765432604"),
+    });
     assert.ok(Date.parse(captured[2]) >= before);
     assert.ok(Date.parse(captured[2]) <= Date.now());
   }

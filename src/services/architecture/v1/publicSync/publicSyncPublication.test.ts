@@ -81,7 +81,20 @@ function offer(over: Partial<PublicOfferLike>): PublicOfferLike {
   };
 }
 
-const ml = () => offer({ marketplace: "MERCADO_LIVRE", price: 100 });
+/*
+ * LISTING-FIRST: a oferta ML deste arquivo é uma oferta de ANÚNCIO, então precisa
+ * de um ITEM_ID real (`^MLB\d{8,}$`) comprovado pela `sourceUrl`. Sem os dois,
+ * `isPublicavelOfertaMercadoLivre` falha fechado e a contagem de marketplaces
+ * públicos mediria "oferta ML inexistente" em vez do peso de publicação.
+ */
+const ml = () =>
+  offer({
+    marketplace: "MERCADO_LIVRE",
+    price: 100,
+    externalId: "MLB8765432610",
+    sourceUrl:
+      "https://produto.mercadolivre.com.br/MLB-8765432610-smartphone-x",
+  });
 const shopee = (price = 80) => offer({ marketplace: "SHOPEE", price });
 
 function main() {

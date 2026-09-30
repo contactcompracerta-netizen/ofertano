@@ -159,7 +159,15 @@ test('price alert reconciliation is pinned and only its exact pending states are
   assert.deepEqual(priceAlertReconciliationPending,['20260927120000_price_alert_schema_reconciliation']);
   assert.equal(c.manifest.forwardMigrations['20260927120000_price_alert_schema_reconciliation'],
                c.repositoryChecksums['20260927120000_price_alert_schema_reconciliation']);
-  assert.equal(Object.keys(c.manifest.forwardMigrations).at(-2),'20260927120000_price_alert_schema_reconciliation');
+  // A posicao no inventario e relativa, nao absoluta: o inventario forward cresce
+  // a cada migration aditiva aplicada (social_post, catalogo ML). O que precisa
+  // valer e a ORDEM CRONOLOGICA do catalogo, que e o invariante real.
+  const forwardNames=Object.keys(c.manifest.forwardMigrations);
+  const pos=n=>{const i=forwardNames.indexOf(n);assert.notEqual(i,-1,`${n} ausente do inventario forward`);return i;};
+  assert.ok(pos('20260927100000_schema_reconciliation')<pos(priceAlertReconciliationPending[0]),
+            'reconciliacao de schema precede a de PriceAlert');
+  assert.ok(pos(priceAlertReconciliationPending[0])<pos('20260927180000_social_post_index_reconciliation'),
+            'reconciliacao de PriceAlert precede a de social_post');
   // 2) PREVIEW: schema_reconciliation ja aplicada, so a de PriceAlert pendente.
   const p=clone();
   for(const n of [...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending])

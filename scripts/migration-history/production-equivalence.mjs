@@ -116,4 +116,7 @@ model price_alerts {
 }
 // Updated only after explicit contract review; never derived from live observations at runtime.
 const CONTRACT_SHA256 = '1f601c891992bbd0ab39c059a1d715bb6a40740f2cfe31fccd7d60642b05485c';
-const RUNTIME_SCHEMA_SHA256 = '7131ca922a9cf70f8a6969f22754259604608155fd96a53a0de2612010f07b87';
+// LISTING-FIRST: reemitido para o schema.prisma com `MarketplaceOffer.catalogProductId`
+// + `@@index([marketplace, catalogProductId])`. Mudanca aditiva e revisada; o overlay
+// de producao (unmanaged Favorite/PriceAlertEvent/notifications/price_alerts) nao muda.
+const RUNTIME_SCHEMA_SHA256 = 'ef9ec917c0c59b0d0a947b3a5a83efc5d04a3edd6e5635793f92b1088dd6e080';
