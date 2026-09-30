@@ -15,6 +15,7 @@ import {
   AFFILIATE_INPUT_MODE_EXACT_ITEM,
   canonicalizarMlb,
   hydrateExactItemPermalink,
+  mlbParaApi,
   permalinkProvaAnuncio,
   type HydrateItemFn,
 } from "./itemHydration";
@@ -158,6 +159,75 @@ console.log("--- 10. canonicalização de MLB ---");
   assert.equal(canonicalizarMlb("mlb-7681144154"), MLB);
   assert.equal(canonicalizarMlb("MLB_7681144154"), MLB);
   assert.equal(canonicalizarMlb("  MLB-7681144154  "), MLB);
+}
+
+console.log("--- 10b. forma enviada à API é SEM hífen (medido) ---");
+{
+  // Regressão medida: `GET /items/MLB-7681144154` devolve 404 sem `id` no
+  // corpo; `GET /items/MLB7681144154` devolve 403 COM `id`. A API não
+  // reconhece a forma com hífen. Enviar a forma do permalink ao endpoint de
+  // recurso produz 404 garantido e mascara negação de permissão.
+  for (const entrada of [
+    "MLB7681144154",
+    "MLB-7681144154",
+    "mlb-7681144154",
+    "  MLB_7681144154 ",
+  ]) {
+    assert.equal(mlbParaApi(entrada), "MLB7681144154", `entrada: ${entrada}`);
+  }
+  // E o que a API devolve (o multiget responde SEM hífen) ainda casa.
+  assert.equal(canonicalizarMlb(mlbParaApi(MLB)), MLB, "ida e volta preserva o MLB");
+  console.log(`  mlbParaApi -> ${mlbParaApi(MLB)} (canônico: ${canonicalizarMlb(MLB)})`);
+}
+
+console.log("--- 10c. a API é chamada com a forma sem hífen ---");
+{
+  let recebido: string | null = null;
+  const spy: HydrateItemFn = async (id) => {
+    recebido = id;
+    return {
+      id: "MLB7681144154",
+      permalink:
+        "https://www.mercadolivre.com.br/Notebook-X/MLB-7681144154-apple" +
+        "-p/MLB25263382",
+    };
+  };
+  const r = await hydrateExactItemPermalink(MLB, { getItem: spy });
+  assert.equal(recebido, "MLB7681144154", "a API não pode receber MLB-...");
+  assert.equal(r.ok, true, r.ok ? "" : r.reason);
+  console.log(`  getItem recebeu: ${recebido}`);
+}
+
+console.log("--- 10d. access_denied é NO_RETRY, não RETRY ---");
+{
+  // Medido: o ML responde 403 access_denied para GET /items/{id} desta
+  // credencial. Não é transitório — repetir devolve 403 para sempre. Marcar
+  // RETRY faria o backfill re-enfileirar a oferta indefinidamente.
+  const negado = async () => {
+    throw new Error(
+      'Mercado Livre Multiget para MLB7681144154 retornou 403: ' +
+        '{"id":"MLB7681144154","error":"access_denied","status":403}',
+    );
+  };
+  const r = await hydrateExactItemPermalink(MLB, { getItem: negado });
+  assert.equal(r.ok, false);
+  assert.equal(r.ok === false && r.disposition, "NO_RETRY",
+    "negação de permissão não pode ser retentável");
+  assert.match(r.ok === false ? r.reason : "", /recusou ler/i);
+  console.log(`  NO_RETRY: ${!r.ok ? r.reason.slice(0, 90) : ""}`);
+}
+
+console.log("--- 10e. 5xx/timeout continua RETRY ---");
+{
+  for (const msg of ["ETIMEDOUT", "HTTP 502", "rate limit 429", "fetch failed"]) {
+    const r = await hydrateExactItemPermalink(MLB, {
+      getItem: async () => {
+        throw new Error(msg);
+      },
+    });
+    assert.equal(r.ok === false && r.disposition, "RETRY", `msg: ${msg}`);
+  }
+  console.log("  4 falhas transitórias mantidas em RETRY");
 }
 
 console.log("--- 11. permalinkProvaAnuncio isolado ---");

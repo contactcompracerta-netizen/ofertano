@@ -57,6 +57,22 @@ export function canonicalizarMlb(valor: string): string {
 }
 
 /**
+ * MLB na forma que a API aceita.
+ *
+ * MEDIDO: `GET /items/MLB-7681144154` -> 404 `resource not found`, sem `id`
+ * no corpo. `GET /items/MLB7681144154` -> 403 `access_denied`, COM `id` no
+ * corpo. A API não reconhece a forma com hífen; o hífen pertence ao namespace
+ * do PERMALINK (`/MLB-7681144154-...-p/MLB25263382`), não ao do recurso.
+ *
+ * Enviar a forma canônica para a API produz 404 garantido — que é
+ * indistinguível de "anúncio não existe" e mascara negação de permissão como
+ * dado ausente. Por isso as duas formas são funções separadas.
+ */
+export function mlbParaApi(valor: string): string {
+  return `MLB${canonicalizarMlb(valor).replace("MLB-", "")}`;
+}
+
+/**
  * A permalink devolvida pela API é mesmo do anúncio pedido?
  *
  * O ML às vezes devolve o permalink de catálogo quando o anúncio já migrou
@@ -122,16 +138,38 @@ export async function hydrateExactItemPermalink(
 
   const fn = deps.getItem ?? (getItem as unknown as HydrateItemFn);
 
+  // A API recebe a forma SEM hífen. `esperado` (com hífen) é a forma do
+  // permalink e a forma de comparação; confundi-las dá 404 falso.
+  const paraApi = mlbParaApi(esperado);
+
   let item: Awaited<ReturnType<HydrateItemFn>>;
   try {
-    item = await fn(esperado);
+    item = await fn(paraApi);
   } catch (err) {
+    const mensagem = (err as Error)?.message ?? "erro desconhecido";
+
+    // Negação de permissão não é falha transitória: o ML respondeu, e a
+    // resposta é "não". Marcar RETRY aqui faz o backfill re-enfileirar a
+    // mesma oferta para sempre, e — pior — a oferta fica indistinguível de um
+    // erro de rede que o tempo resolveria.
+    if (/access_denied|forbidden/i.test(mensagem)) {
+      return {
+        ok: false,
+        inputMode: AFFILIATE_INPUT_MODE_EXACT_ITEM,
+        status: "ITEM_HYDRATION_FAILED",
+        reason:
+          `Mercado Livre recusou ler ${esperado} para esta credencial ` +
+          `(${mensagem.slice(0, 200)}). Repetir não muda a resposta.`,
+        disposition: "NO_RETRY",
+      };
+    }
+
     // Erro de rede/5xx/429: o anúncio pode existir. Retentar.
     return {
       ok: false,
       inputMode: AFFILIATE_INPUT_MODE_EXACT_ITEM,
       status: "ITEM_HYDRATION_FAILED",
-      reason: `Falha de rede ao hidratar ${esperado}: ${(err as Error)?.message ?? "erro desconhecido"}`,
+      reason: `Falha de rede ao hidratar ${esperado}: ${mensagem}`,
       disposition: "RETRY",
     };
   }
