@@ -129,11 +129,18 @@ async function runOfflineMlMagaluClusterCase(): Promise<void> {
             foundCandidate({
               marketplace: "MERCADO_LIVRE",
               marketplaceName: "Mercado Livre",
-              externalId: "MLB-FIXTURE-220V",
+              /*
+               * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID
+               * de anúncio real (`^MLB\d{8,}$`) e a `sourceUrl` precisa provar
+               * aquele mesmo id. `MLB-FIXTURE-220V` não é um id de anúncio e o
+               * gate de `searchMultistoreV2` o descarta — corretamente.
+               */
+              externalId: "MLB8765432109",
               title:
                 "Aspirador De Po E Agua Wap Gtw Inox 12 1400w Bocal Sopro 220v",
               price: 399.9,
-              sourceUrl: "https://produto.mercadolivre.com.br/MLB-FIXTURE-220V",
+              sourceUrl:
+                "https://produto.mercadolivre.com.br/MLB-8765432109-aspirador-wap-gtw-220v",
               brand: "Wap",
               status: "FOUND",
               attributes: { VOLTAGE: "220V" },

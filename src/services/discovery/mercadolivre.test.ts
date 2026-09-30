@@ -85,6 +85,13 @@ function fontes(
   };
 }
 
+/*
+ * Produto de catalogo NUNCA vira oferta. Este helper reproduz o pior caso
+ * possivel: a lane de catalogo se comportando errado e devolvendo um
+ * `KEPT` com id numerico no formato de MLB e uma URL `produto.` que parece
+ * de listing. A proveniencia CATALOG e terminal e o candidato tem que ser
+ * descartado do mesmo jeito.
+ */
 function keptCatalogCandidate(
   externalId: string,
   title: string,
@@ -115,6 +122,22 @@ function keptCatalogCandidate(
         error: null,
       },
     },
+  };
+}
+
+/** Produto de catalogo normal: sempre termina DROPPED. */
+function droppedCatalogCandidate(
+  externalId: string,
+  title: string,
+  reason = "Catalogo sem publicacao compravel no momento.",
+): Awaited<ReturnType<MercadoLivreAcquisitionSources["loadCatalogCandidate"]>> {
+  return {
+    title,
+    externalId,
+    stage: "offers-fetch",
+    status: "DROPPED",
+    reason,
+    lexicalScore: 0.7,
   };
 }
 
@@ -461,14 +484,18 @@ async function runAcquisitionCases() {
         httpStatus: 200,
         data: [
           {
-            id: "MLB-CAT-KEEP",
+            id: "MLB2102485316",
             name: testFQuery,
             status: "active",
           },
         ],
       }),
+      /*
+       * Pior caso: a lane de catalogo devolve `KEPT` com id numerico MLB e
+       * uma URL que parece de listing. Mesmo assim nao pode virar oferta.
+       */
       loadCatalogCandidate: async () =>
-        keptCatalogCandidate("MLB-CAT-KEEP", testFQuery),
+        keptCatalogCandidate("MLB2102485316", testFQuery),
       searchItemsApi: async () => ({
         status: "SUCCESS",
         httpStatus: 200,
@@ -477,15 +504,21 @@ async function runAcquisitionCases() {
     }),
   );
   assert.equal(
-    testF.candidates.some((entry) => entry.externalId === "MLB-CAT-KEEP"),
-    true,
-    "TESTE F: catalogo com oferta valida continua.",
+    testF.candidates.some((entry) => entry.externalId === "MLB2102485316"),
+    false,
+    "TESTE F: produto de catalogo nunca vira oferta, nem com `KEPT` e URL de listing.",
   );
   assert.equal(
     testF.candidates.some((entry) => entry.externalId === "MLB555666777"),
     true,
-    "TESTE F: API de anuncios compoe a cobertura quando o catalogo ainda nao atingiu targetUsable.",
+    "TESTE F: API de anuncios entrega a oferta; o catalogo nao compoe a cobertura.",
   );
+  assert.equal(
+    testF.candidates.every((entry) => entry.origin !== "CATALOG"),
+    true,
+    "TESTE F: nenhum candidato pode sair com proveniencia de catalogo.",
+  );
+  assert.equal(testF.discoveryMode, "LISTING_FIRST");
 
   const catalogWithoutWinner = await buscarMercadoLivreComFontes(
     request(),
@@ -579,7 +612,7 @@ async function runAcquisitionCases() {
   );
   assert.ok(
     publicFallbackCalls > 0,
-    "catalogo parcial com targetUsable > 1 precisa chamar o fallback publico",
+    "catalogo parcial nao atinge targetUsable, entao precisa chamar o fallback publico",
   );
   assert.equal(
     publicFallbackAfterPartialCatalog.candidates.some(
@@ -588,17 +621,24 @@ async function runAcquisitionCases() {
     true,
     "o candidato publico precisa sobreviver quando o catalogo nao atinge a cobertura",
   );
+  assert.equal(
+    publicFallbackAfterPartialCatalog.candidates.some(
+      (entry) => entry.externalId === "MLB-CATALOG-RACE",
+    ),
+    false,
+    "a lane de catalogo nunca contribui com oferta, mesmo quando a lane publica entra depois",
+  );
 
   let publicCallsAfterCatalogCoverage = 0;
-  const catalogReachesTarget = await buscarMercadoLivreComFontes(
+  const catalogNeverReachesTarget = await buscarMercadoLivreComFontes(
     request(coverageQuery, 2),
     fontes({
       searchCatalog: async () => ({
         status: "SUCCESS",
         httpStatus: 200,
         data: [
-          { id: "MLB-CATALOG-GOAL-1", name: coverageQuery, status: "active" },
-          { id: "MLB-CATALOG-GOAL-2", name: coverageQuery, status: "active" },
+          { id: "MLB2102485317", name: coverageQuery, status: "active" },
+          { id: "MLB2102485318", name: coverageQuery, status: "active" },
         ],
       }),
       loadCatalogCandidate: async (productId) =>
@@ -608,19 +648,22 @@ async function runAcquisitionCases() {
         return {
           status: "SUCCESS",
           httpStatus: 200,
-          data: [item({ id: "MLB-PUBLIC-UNNEEDED", title: coverageQuery })],
+          data: [
+            item({ id: "MLB-PUBLIC-FILL-1", title: coverageQuery }),
+            item({ id: "MLB-PUBLIC-FILL-2", title: coverageQuery }),
+          ],
         };
       },
     }),
   );
-  assert.ok(
-    catalogReachesTarget.candidates.length >= 2,
-    "catalogo precisa hidratar candidatos suficientes para atingir targetUsable > 1",
-  );
   assert.equal(
-    publicCallsAfterCatalogCoverage,
+    catalogNeverReachesTarget.candidates.length,
     0,
-    "catalogo que atinge o target nao deve chamar fallback publico",
+    "catalogo sozinho nunca compoe cobertura de oferta",
+  );
+  assert.ok(
+    publicCallsAfterCatalogCoverage > 0,
+    "catalogo nunca atinge targetUsable, entao o fallback publico precisa rodar mesmo com 2 produtos de catalogo",
   );
 
   const strongIdentityQuery = "JBL Tune 520BT";
@@ -630,7 +673,6 @@ async function runAcquisitionCases() {
     "o cenario fast path usa identidade forte reconhecida pelo QueryCore",
   );
   let publicCallsForStrongIdentity = 0;
-  const strongIdentityStartedAt = Date.now();
   const strongIdentityFastPath = await buscarMercadoLivreComFontes(
     request(strongIdentityQuery),
     fontes({
@@ -647,6 +689,11 @@ async function runAcquisitionCases() {
       }),
       loadCatalogCandidate: async (productId) =>
         keptCatalogCandidate(productId, "Headphone JBL Tune 520BT Bluetooth"),
+      searchItemsApi: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [item({ id: "MLB420040040", title: "JBL Tune 520BT" })],
+      }),
       searchPublicListings: async () => {
         publicCallsForStrongIdentity += 1;
         return {
@@ -657,21 +704,24 @@ async function runAcquisitionCases() {
       },
     }),
   );
-  assert.ok(
-    Date.now() - strongIdentityStartedAt < 500,
-    "identidade forte com targetUsable=1 precisa retornar pelo fast path",
-  );
   assert.equal(
     publicCallsForStrongIdentity,
     0,
-    "identidade forte coberta pelo primeiro candidato nao deve chamar fallback publico",
+    "identidade forte coberta pelo anuncio da lane principal nao deve chamar fallback publico",
+  );
+  assert.equal(
+    strongIdentityFastPath.candidates.some(
+      (entry) => entry.externalId === "MLB420040040",
+    ),
+    true,
+    "fast path precisa retornar o anuncio de listing valido",
   );
   assert.equal(
     strongIdentityFastPath.candidates.some(
       (entry) => entry.externalId === "MLB-JBL-520BT",
     ),
-    true,
-    "fast path precisa retornar o primeiro candidato forte valido",
+    false,
+    "identidade forte vinda de catalogo nao pode ser a oferta",
   );
 
   const idsSurviveHydrationFailure = await hidratarItensComPaginaPublica(
@@ -838,7 +888,15 @@ async function runAcquisitionCases() {
   );
   assert.equal(noneAvailable.candidates.length, 0);
   assert.ok(
-    noneAvailable.searchOutcome === "BLOCKED" || noneAvailable.searchOutcome === "ERROR",
+    noneAvailable.searchOutcome === "BLOCKED" ||
+      noneAvailable.searchOutcome === "ERROR" ||
+      /*
+       * LISTING-FIRST: `LISTING_SOURCE_BLOCKED` e o fail-closed do modo
+       * LISTING_FIRST. As fontes de ANUNCIO foram bloqueadas e o catalogo nao
+       * pode virar oferta, entao zero oferta nova e o resultado correto.
+       * `reduzirSearchOutcomes` ja normaliza este estado para BLOCKED.
+       */
+      noneAvailable.searchOutcome === "LISTING_SOURCE_BLOCKED",
     "Nenhuma fonte ML disponivel nao pode crashar.",
   );
 
@@ -1105,14 +1163,31 @@ async function runAcquisitionCases() {
               }
             : undefined,
       }),
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          item({
+            id: "MLB777888999",
+            title: "Headphone MarcaX Wireless Rosa",
+            price: 149,
+          }),
+        ],
+      }),
     }),
   );
   assert.equal(
     catalogSorted.candidates.some((entry) => entry.externalId === "MLB-RELEVANT-LISTING"),
+    false,
+    "ordenacao de catalogo nunca promove produto de catalogo a oferta",
+  );
+  assert.equal(
+    catalogSorted.candidates.some((entry) => entry.externalId === "MLB777888999"),
     true,
-    "catalogo relevante e priorizado antes de item nao relacionado",
+    "o anuncio real da lane publica e a unica oferta do resultado",
   );
 
+  const hydratedCatalogProductIds: string[] = [];
   const relevantCatalogHydration = await buscarMercadoLivreComFontes(
     request("Aspirador de Pó e Água Wap GTW Inox 12 1400W com Bocal de Sopro - 220V"),
     fontes({
@@ -1138,6 +1213,7 @@ async function runAcquisitionCases() {
         ],
       }),
       loadCatalogCandidate: async (productId) => {
+        hydratedCatalogProductIds.push(productId);
         if (productId === "MLB-IRRELEVANT-FOOD") {
           return {
             title: "Água Na Lata Com Gás - Pack Com 12 Unidades",
@@ -1198,12 +1274,26 @@ async function runAcquisitionCases() {
       },
     }),
   );
+  /*
+   * LISTING-FIRST: o produto RELEVANTE tem que ser HIDRATADO — a hidratacao nao
+   * pode encerrar no item irrelevante. O alvo deste cenario e a ordem/cobertura
+   * da hidratacao, nao a-promocao do produto de catalogo a oferta: nenhum
+   * produto de catalogo pode virar oferta, entao o candidato de catalogo
+   * deliberadamente NAO aparece em `candidates`.
+   */
   assert.equal(
-    relevantCatalogHydration.candidates.some(
-      (entry) => entry.externalId === "MLB-RELEVANT-LISTING",
-    ),
+    hydratedCatalogProductIds.includes("MLB-RELEVANT-ASPIRADOR"),
     true,
     "item irrelevante compravel nao pode encerrar a hidracao antes do candidato real",
+  );
+  assert.equal(
+    relevantCatalogHydration.candidates.some(
+      (entry) =>
+        entry.externalId === "MLB-RELEVANT-LISTING" ||
+        entry.externalId === "MLB-IRRELEVANT-LISTING",
+    ),
+    false,
+    "LISTING-FIRST: produto de catalogo hidratado nunca vira offer candidate.",
   );
 
   const controller = new AbortController();
@@ -1212,11 +1302,21 @@ async function runAcquisitionCases() {
   const partialBeforeSlowHydration = await buscarMercadoLivreComFontes(
     { ...request("Produto Teste Parcial"), signal: controller.signal },
     fontes({
+      /*
+       * LISTING-FIRST: a oferta que sobrevive ao abort vem da lane de ANUNCIO,
+       * que e rapida. A lane de catalogo abaixo continua lenta de proposito para
+       * exercitar o corte por deadline, mas o resultado dela e terminal e nunca
+       * entra em `candidates`.
+       */
       searchItemsApi: async () => ({
-        status: "BLOCKED",
-        httpStatus: 403,
-        data: [],
-        reason: "listagem bloqueada",
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          item({
+            id: "MLB111222333",
+            title: "Produto Teste Parcial Original",
+          }),
+        ],
       }),
       searchCatalog: async () => ({
         status: "SUCCESS",
@@ -1284,7 +1384,7 @@ async function runAcquisitionCases() {
       (entry) => entry.externalId === "MLB111222333",
     ),
     true,
-    "candidato valido do catalogo sobrevive a hidratacao lenta apos abort",
+    "anuncio valido da lane de listagem sobrevive a hidratacao lenta apos abort",
   );
 
   let catalogDomainCalls = 0;
@@ -1298,17 +1398,22 @@ async function runAcquisitionCases() {
         data: [],
         reason: "403",
       }),
-      searchPublicLista: async () => ({
-        status: "BLOCKED",
+      /*
+       * LISTING-FIRST: o headphone que precisa sobreviver ao fallback de dominio
+       * vem de uma lane de ANUNCIO. `searchPublicLista`/`searchPublicJm` nao sao
+       * definidos aqui de proposito: quando ambos existem, a lane generica
+       * `public-search` (que usa `searchPublicListings`) nao entra no plano.
+       *
+       * O catalogo abaixo so comprova que a busca refez a consulta sem dominio
+       * (`catalogDomainCalls >= 2`); o resultado dele e terminal e nunca entra em
+       * `candidates`.
+       */
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
         httpStatus: 200,
-        data: [],
-        reason: "anti-bot",
-      }),
-      searchPublicJm: async () => ({
-        status: "BLOCKED",
-        httpStatus: 200,
-        data: [],
-        reason: "anti-bot",
+        data: [
+          item({ id: "MLB3468142988", title: "Headphone MarcaX Wireless Rosa" }),
+        ],
       }),
       searchCatalog: async (_queryText, _limit, domainId) => {
         catalogDomainCalls += 1;
@@ -1398,6 +1503,21 @@ async function runAcquisitionCases() {
         httpStatus: 403,
         data: [],
         reason: "403",
+      }),
+      /*
+       * LISTING-FIRST: o catalogo deixou de ser fast path de OFERTA. A oferta
+       * precisa vir de uma lane de ANUNCIO; o catalogo abaixo segue provando o
+       * encanamento de dominio (`domainCalls`, `catalogDomainArg`).
+       */
+      searchPublicListings: async () => ({
+        status: "SUCCESS",
+        httpStatus: 200,
+        data: [
+          item({
+            id: "MLB5093933269",
+            title: "Aspirador De Pó E Água Wap Gtw Inox 12 1400w 220v",
+          }),
+        ],
       }),
       searchCatalog: async (_queryText, _limit, domainId) => {
         catalogDomainArg = domainId ?? null;

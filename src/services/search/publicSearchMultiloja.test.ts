@@ -776,9 +776,14 @@ async function runAsyncCases() {
               {
                 marketplace: "MERCADO_LIVRE",
                 marketplaceName: "Mercado Livre",
-                externalId: "MLB-WAVE",
-                sourceUrl: "https://loja.example/MLB-WAVE",
-                affiliateLink: "https://aff.example/MLB-WAVE",
+                /*
+                 * LISTING-FIRST: `externalId` de oferta ML tem que ser um ITEM_ID
+                 * de anúncio real (`^MLB\d{8,}$`) e a `sourceUrl` precisa provar
+                 * aquele mesmo id. `MLB-WAVE` não é um id de anúncio.
+                 */
+                externalId: "MLB8765432112",
+                sourceUrl: "https://produto.mercadolivre.com.br/MLB-8765432112-wave",
+                affiliateLink: "https://aff.example/MLB-8765432112-wave",
                 title: LONG_QUERY,
                 image: "https://img.example/wave.jpg",
                 price: 189,
@@ -825,7 +830,7 @@ async function runAsyncCases() {
   );
   assert.ok(
     progressiveDiscovery.candidates.some(
-      (item) => item.externalId === "MLB-WAVE",
+      (item) => item.externalId === "MLB8765432112",
     ),
     "O produto do fallback deve ser validado e preservado.",
   );

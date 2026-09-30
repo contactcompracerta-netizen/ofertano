@@ -27,7 +27,12 @@ import {
 } from "@/services/multistore-v2";
 import type { SearchBudget } from "@/services/multistore-v2/timeBudget";
 import { isWeakModifier, normalizeConceptText } from "@/services/multistore-v2/productConcepts";
-import { hasPublicMultiStore, meetsPublicMultiStoreMarketplaceCount } from "@/services/publicVisibility/multiStoreVisibility";
+import {
+  countDistinctNonEmptyMarketplaces,
+  hasPublicMultiStore,
+  meetsPublicMultiStoreMarketplaceCount,
+} from "@/services/publicVisibility/multiStoreVisibility";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 
 function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -320,9 +325,27 @@ function offerFromDiscoveryCandidate(
     return null;
   }
 
+  /*
+   * LISTING-FIRST: este fallback existe para quando o importador falha.
+   * Ele NUNCA pode persistir produto de catalogo como oferta ML, entao
+   * exige a mesma identidade de listing comprovada do importador.
+   */
+  if (
+    candidate.marketplace === "MERCADO_LIVRE" &&
+    !isValidMercadoLivreListingIdentity({
+      externalId,
+      listingItemId: candidate.listingItemId ?? externalId,
+      sourceUrl,
+      origin: "listing",
+    })
+  ) {
+    return null;
+  }
+
   const product: ProductImport = {
     marketplace: candidate.marketplaceName,
     externalId,
+    catalogProductId: candidate.catalogProductId ?? null,
     url: sourceUrl,
     affiliateLink: candidate.affiliateLink ?? null,
     title,

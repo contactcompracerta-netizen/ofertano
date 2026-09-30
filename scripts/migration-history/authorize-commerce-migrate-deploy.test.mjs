@@ -1,4 +1,4 @@
-import { withSocialReconciliationApplied } from './social-reconciliation-test-fixture.mjs';
+import { withForwardMigrationsApplied } from './forward-applied-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fixture from './production-ledger.fixture.json' with {type:'json'};
@@ -14,11 +14,11 @@ function schemaStateFrom(core){
 }
 function input(){
  const id=identity();
- return {ledgerSnapshot:withSocialReconciliationApplied(fixture),allowedPending:[...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending,...priceAlertReconciliationPending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(security)};
+ return {ledgerSnapshot:withForwardMigrationsApplied(fixture),allowedPending:[...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending,...priceAlertReconciliationPending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(security)};
 }
 function r3bInput(){
  const id=identity();
- return {ledgerSnapshot:withSocialReconciliationApplied(fixture),allowedPending:[...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending,...priceAlertReconciliationPending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(r3b)};
+ return {ledgerSnapshot:withForwardMigrationsApplied(fixture),allowedPending:[...retroactivePending,...commercePending,...architecturePending,...schemaReconciliationPending,...priceAlertReconciliationPending],repositoryContract:loadRepositoryContract(),expectedProductionIdentity:id,observedFlags:{version:1,flags:Object.fromEntries(requiredOffFlags.map(f=>[f,false])),canaryTokenPresent:false},schemaState:schemaStateFrom(r3b)};
 }
 test('all independent gates authorize exact pending without mutating inputs',()=>{
  const i=input(),before=structuredClone(i);const result=authorizeCommerceMigrateDeploy(i);

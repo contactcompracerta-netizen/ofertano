@@ -63,6 +63,12 @@ function collectFiles(dir: string, extension: string): string[] {
 }
 
 /** Oferta mínima para `hasPublicMultiStore` (invariante de publicação). */
+/*
+ * LISTING-FIRST: oferta ML so conta para `hasPublicMultiStore` quando a
+ * identidade de anuncio e provada (`externalId` = ITEM_ID + `sourceUrl` que
+ * comprova esse id). Sem os dois, o gate e fail-closed e a oferta ML nao
+ * satisfaz o minimo Multi Loja — o fixture mediria outra coisa.
+ */
 const oferta = (marketplace: string) => ({
   marketplace,
   active: true,
@@ -70,6 +76,13 @@ const oferta = (marketplace: string) => ({
   status: "ACTIVE",
   matchStatus: "EXACT" as const,
   price: 100,
+  ...(marketplace === "MERCADO_LIVRE"
+    ? {
+        externalId: "MLB8765432801",
+        sourceUrl:
+          "https://produto.mercadolivre.com.br/MLB-8765432801-smartphone-x",
+      }
+    : {}),
 });
 
 /* -------------------------------------------------------------------------- */

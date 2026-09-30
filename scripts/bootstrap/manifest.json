@@ -2,7 +2,7 @@
   "version": 4,
   "baselineSourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
   "baselineSchemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
-  "currentSchemaSHA256": "28b1db8d893b60b27ab7d1df2d876b6e695a63343dd498142b1e2ee4b093c3db",
+  "currentSchemaSHA256": "3a6c7ab1816deb6ad6507dfa6a3a126ab39a065610813c2686b1eae108de02c9",
   "baselineDDLHash": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
   "baselineMigrations": {
     "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
@@ -26,7 +26,8 @@
     "20260926220000_candidate_blocking_keys": "84d0b473c49d9fbc5b3fada515a62367c44cf2df32a600219a3efbff9b292a10",
     "20260927100000_schema_reconciliation": "d85c069b5dbdcbbd3c75cae9d0b7be722dc3acea4e620e6332782a01d2c905b6",
     "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0",
-    "20260927180000_social_post_index_reconciliation": "f886a7113da3e3e5d552a9ddb76627ef8e7fbea3ff982df2ddd621c8fa07b632"
+    "20260927180000_social_post_index_reconciliation": "f886a7113da3e3e5d552a9ddb76627ef8e7fbea3ff982df2ddd621c8fa07b632",
+    "20260930120000_ml_listing_first_catalog_metadata": "26bb8f7e1bd9688750fd0ecadfc80eaf6fc3b424ad16c52ffdaa43fa7afb8abd"
   },
   "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain",
   "localCompatibility": {

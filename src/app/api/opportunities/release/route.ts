@@ -13,8 +13,18 @@ function statusForApplyCode(
     | "OFFER_NOT_FOUND"
     | "PRODUCT_MISMATCH"
     | "EXTERNAL_ID_MISMATCH"
-    | "NOT_MERCADO_LIVRE",
+    | "NOT_MERCADO_LIVRE"
+    | "CATALOG_PRODUCT_NOT_LISTING",
 ) {
+  /*
+   * LISTING-FIRST: oferta de catálogo é 422 (entidade processada, mas
+   * semanticamente inválida) e não 409 — não é conflito de estado nem erro de
+   * entrada malformada. O corpo já explica que é preciso importar o anúncio.
+   */
+  if (code === "CATALOG_PRODUCT_NOT_LISTING") {
+    return 422;
+  }
+
   if (code === "INVALID_AFFILIATE_LINK" || code === "NOT_MERCADO_LIVRE") {
     return 400;
   }

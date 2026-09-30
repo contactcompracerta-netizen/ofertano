@@ -1,10 +1,10 @@
-import { withSocialReconciliationApplied } from './social-reconciliation-test-fixture.mjs';
+import { withForwardMigrationsApplied } from './forward-applied-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { verifyLedgerCompatibility, loadRepositoryContract, commercePending, architecturePending, autopilotPending, blockingKeyMigration, retroactivePending, schemaReconciliationPending, priceAlertReconciliationPending } from './verify-ledger-compatibility.mjs';
 const original = JSON.parse(fs.readFileSync(new URL('./production-ledger.fixture.json', import.meta.url), 'utf8'));
-const clone = () => withSocialReconciliationApplied(original);
+const clone = () => withForwardMigrationsApplied(original);
 const fullPending = [...retroactivePending, ...commercePending, ...architecturePending, ...schemaReconciliationPending, ...priceAlertReconciliationPending];
 const reject = (mutate, code, pending = fullPending) => { const s = clone(); mutate(s); assert.throws(() => verifyLedgerCompatibility(s, pending), new RegExp(code)); };
 test('forensic ledger allows exactly two known divergences and full pending without mutation', () => {

@@ -57,26 +57,44 @@ export type SearchCompletionDecision = {
   reason: string;
 };
 
+/**
+ * LISTING-FIRST: `LISTING_SOURCE_BLOCKED` é um BLOCKED para a barreira.
+ *
+ * O Mercado Livre respondeu, mas nenhuma fonte devolveu um ANÚNCIO concreto
+ * (as rotas de anúncio foram bloqueadas e o catálogo não pode virar oferta).
+ * Do ponto de vista da barreira de conclusão de busca isso é bloqueio: a
+ * busca NÃO terminou com um resultado publicável, então nada pode ser
+ * publicado. Normalizar aqui mantém a barreira fail-closed sem propagar um
+ * membro novo por todos os consumidores.
+ */
+function normalizarOutcome(
+  outcome: MarketplaceSearchOutcome,
+): MarketplaceSearchOutcome {
+  return outcome === "LISTING_SOURCE_BLOCKED" ? "BLOCKED" : outcome;
+}
+
 export function reduzirSearchOutcomes(
   outcomes: MarketplaceSearchOutcome[],
 ): MarketplaceSearchOutcome {
-  if (outcomes.some((outcome) => outcome === "SEARCH_COMPLETED")) {
+  const normalizados = outcomes.map(normalizarOutcome);
+
+  if (normalizados.some((outcome) => outcome === "SEARCH_COMPLETED")) {
     return "SEARCH_COMPLETED";
   }
 
-  if (outcomes.some((outcome) => outcome === "EMPTY_VALID")) {
+  if (normalizados.some((outcome) => outcome === "EMPTY_VALID")) {
     return "EMPTY_VALID";
   }
 
-  if (outcomes.some((outcome) => outcome === "BLOCKED")) {
+  if (normalizados.some((outcome) => outcome === "BLOCKED")) {
     return "BLOCKED";
   }
 
-  if (outcomes.some((outcome) => outcome === "UNUSABLE")) {
+  if (normalizados.some((outcome) => outcome === "UNUSABLE")) {
     return "UNUSABLE";
   }
 
-  if (outcomes.some((outcome) => outcome === "ERROR")) {
+  if (normalizados.some((outcome) => outcome === "ERROR")) {
     return "ERROR";
   }
 
@@ -111,7 +129,7 @@ export function inferSearchOutcome(
   }
 
   if (result.searchOutcome) {
-    return result.searchOutcome;
+    return normalizarOutcome(result.searchOutcome);
   }
 
   const error = result.error ?? "";
@@ -151,7 +169,7 @@ export function classificarBuscaDoMarketplace(
   }
 
   if (result.searchOutcome) {
-    return result.searchOutcome;
+    return normalizarOutcome(result.searchOutcome);
   }
 
   const error = result.error ?? "";

@@ -17,17 +17,33 @@ import type {
 } from "./pending";
 
 const SOURCE_ML =
-  "https://produto.mercadolivre.com.br/MLB-1234567890-smartphone-_JM";
+  "https://produto.mercadolivre.com.br/MLB-12345678-smartphone-_JM";
 const AFFILIATE_ML = "https://meli.la/2qvdFzv";
 
-function pending(): MercadoLivrePending {
+function pending(
+  overrides: Partial<MercadoLivrePending> = {},
+): MercadoLivrePending {
   return {
     offerId: "offer-1",
     productId: "prod-1",
-    externalId: "MLB-1",
+    externalId: "MLB12345678",
     sourceUrl: SOURCE_ML,
     opportunityId: "opp-1",
+    ...overrides,
   };
+}
+
+/*
+ * LISTING-FIRST: cada oferta precisa de um ITEM_ID de anúncio real
+ * (`^MLB\d{8,}$`) e de uma `sourceUrl` que PROVE aquele mesmo item_id.
+ * `MLB-2`/`MLB-3` violam o contrato e seriam recusados fail-closed.
+ */
+function listingPending(offerId: string, itemId: string): MercadoLivrePending {
+  return pending({
+    offerId,
+    externalId: itemId,
+    sourceUrl: `https://produto.mercadolivre.com.br/${itemId}-smartphone-_JM`,
+  });
 }
 
 function createMemoryStores(init: { pendingList?: MercadoLivrePending[] } = {}) {
@@ -193,7 +209,7 @@ async function run() {
   {
     const stores = createMemoryStores({ pendingList: [pending()] });
     await runDaemon(stores, seq([
-      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true },
+      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true },
     ]), { cycles: 1, limit: 5 });
     assert.equal(stores.applied.length, 1);
     assert.equal(stores.applied[0], "offer-1");
@@ -203,9 +219,9 @@ async function run() {
   {
     const stores = createMemoryStores({
       pendingList: [
-        pending(),
-        { ...pending(), offerId: "offer-2", externalId: "MLB-2" },
-        { ...pending(), offerId: "offer-3", externalId: "MLB-3" },
+        listingPending("offer-1", "MLB12345678"),
+        listingPending("offer-2", "MLB87654321"),
+        listingPending("offer-3", "MLB11223344"),
       ],
     });
     let maxConcurrent = 0;
@@ -215,7 +231,7 @@ async function run() {
       maxConcurrent = Math.max(maxConcurrent, active);
       await new Promise((r) => setTimeout(r, 10));
       active -= 1;
-      return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true };
+      return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true };
     }, { cycles: 1, limit: 5 });
     assert.equal(stores.applied.length, 3);
     assert.equal(maxConcurrent, 1);
@@ -315,7 +331,7 @@ async function run() {
       id: "offer-1",
       productId: "prod-1",
       marketplace: "MERCADO_LIVRE",
-      externalId: "MLB-1",
+      externalId: "MLB12345678",
       sourceUrl: SOURCE_ML,
       affiliateLink: AFFILIATE_ML,
     });
@@ -338,7 +354,7 @@ async function run() {
       {
         pendingStore: stores.pendingStore,
         applyStore: stores.applyStore,
-        generate: seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true }]),
+        generate: seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true }]),
         sleep: timerSleep(),
         shouldContinue: () => !stop,
       },
@@ -406,7 +422,7 @@ async function run() {
     const stores = createMemoryStores({ pendingList: [pending()] });
     await runDaemon(
       stores,
-      seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true }]),
+      seq([{ status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true }]),
       { cycles: 1, limit: 5, dryRun: true },
     );
     assert.equal(stores.applied.length, 0);
@@ -417,8 +433,8 @@ async function run() {
   {
     const list = [
       pending(),
-      { ...pending(), offerId: "o2", externalId: "MLB-2" },
-      { ...pending(), offerId: "o3", externalId: "MLB-3" },
+      listingPending("o2", "MLB87654321"),
+      listingPending("o3", "MLB11223344"),
     ];
     const stores = createMemoryStores({ pendingList: list });
     let calls = 0;
@@ -426,7 +442,7 @@ async function run() {
       stores,
       async () => {
         calls += 1;
-        return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true };
+        return { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true };
       },
       { cycles: 1, limit: 10, maxPerHour: 2 },
     );
@@ -439,8 +455,8 @@ async function run() {
     const stores = createMemoryStores({
       pendingList: [
         pending(),
-        { ...pending(), offerId: "o2", externalId: "MLB-2" },
-        { ...pending(), offerId: "o3", externalId: "MLB-3" },
+        listingPending("o2", "MLB87654321"),
+        listingPending("o3", "MLB11223344"),
       ],
     });
     const gen = trackingGen({ status: "CHROME_NOT_RUNNING", reason: "chrome indisponível" });
@@ -460,8 +476,8 @@ async function run() {
     const stores = createMemoryStores({
       pendingList: [
         pending(),
-        { ...pending(), offerId: "o2", externalId: "MLB-2" },
-        { ...pending(), offerId: "o3", externalId: "MLB-3" },
+        listingPending("o2", "MLB87654321"),
+        listingPending("o3", "MLB11223344"),
       ],
     });
     const gen = trackingGen({ status: "AUTH_REQUIRED", reason: "autentique" });
@@ -494,7 +510,7 @@ async function run() {
     const stores = createMemoryStores({
       pendingList: [
         pending(),
-        { ...pending(), offerId: "o2", externalId: "MLB-2" },
+        listingPending("o2", "MLB87654321"),
       ],
     });
     await runDaemon(

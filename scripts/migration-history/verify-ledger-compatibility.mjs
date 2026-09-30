@@ -11,6 +11,15 @@ export const commercePending = ['20260917120000_commerce_intelligence_foundation
 // na MESMA cadeia do cutover, porque o estado do autopilot vive no mesmo plano
 // de controle. Nao muda nenhuma migracao ja aplicada.
 export const autopilotPending = ['20260926120000_catalog_cutover_autopilot'];
+/*
+ * LISTING-FIRST: migration ADITIVA (`MarketplaceOffer.catalogProductId` + índice).
+ * Catálogo passa a ser metadado estrutural, nunca identidade de oferta.
+ *
+ * Ja APLICADA em producao (checksum conferido byte a byte contra
+ * _prisma_migrations). Nao entra em nenhum pendingAllowlistSet pelo mesmo
+ * motivo de `blockingKeyMigration`: nao esta pendente, esta aplicada.
+ */
+export const mlListingFirstMigration = ['20260930120000_ml_listing_first_catalog_metadata'];
 export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', ...autopilotPending];
 export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending];
 // FASE 8.3B: indice de blocking derivado. ADITIVA, ja APLICADA em producao
@@ -32,7 +41,7 @@ export const previewPendingBeforeDeploy = [...priceAlertReconciliationPending];
 export const socialPostReconciliationPending = ['20260927180000_social_post_index_reconciliation'];
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
-export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration, ...schemaReconciliationPending, ...priceAlertReconciliationPending, ...socialPostReconciliationPending];
+export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration, ...schemaReconciliationPending, ...priceAlertReconciliationPending, ...socialPostReconciliationPending, ...mlListingFirstMigration];
 // BOOTSTRAP RETROATIVO: migration que ordena DENTRO da cadeia historica
 // (<= lastBaseline) mas ainda NAO foi executada em producao. Nao entra em
 // canonicalForwardInventory de proposito: o invariante normal "forward >

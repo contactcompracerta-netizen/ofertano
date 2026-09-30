@@ -12,14 +12,14 @@ import type {
 } from "./pending";
 
 const SOURCE_ML =
-  "https://produto.mercadolivre.com.br/MLB-1234567890-smartphone-_JM";
+  "https://produto.mercadolivre.com.br/MLB-12345678-smartphone-_JM";
 const AFFILIATE_ML = "https://meli.la/2qvdFzv";
 
 function pending(overrides: Partial<MercadoLivrePending> = {}): MercadoLivrePending {
   return {
     offerId: "offer-1",
     productId: "prod-1",
-    externalId: "MLB-1",
+    externalId: "MLB12345678",
     sourceUrl: SOURCE_ML,
     opportunityId: "opp-1",
     ...overrides,
@@ -102,7 +102,7 @@ async function run() {
       {
         status: "SUCCESS",
         affiliateUrl: AFFILIATE_ML,
-        sourceItemId: "MLB-1",
+        sourceItemId: "MLB12345678",
         validated: true,
       },
     ]);
@@ -127,7 +127,7 @@ async function run() {
             id: "offer-1",
             productId: "prod-1",
             marketplace: "MERCADO_LIVRE",
-            externalId: "MLB-1",
+            externalId: "MLB12345678",
             sourceUrl: SOURCE_ML,
             affiliateLink: AFFILIATE_ML,
           },
@@ -198,7 +198,7 @@ async function run() {
         {
           status: "SUCCESS",
           affiliateUrl: AFFILIATE_ML,
-          sourceItemId: "MLB-1",
+          sourceItemId: "MLB12345678",
           validated: true,
         },
       ],
@@ -218,7 +218,7 @@ async function run() {
       {
         status: "SUCCESS",
         affiliateUrl: AFFILIATE_ML,
-        sourceItemId: "MLB-1",
+        sourceItemId: "MLB12345678",
         validated: true,
       },
       {
@@ -235,7 +235,11 @@ async function run() {
       },
     ]);
     const stores = createMemoryStores({
-      pendingList: [pending({ offerId: "o1" }), pending({ offerId: "o2" }), pending({ offerId: "o3", externalId: "MLB-3" })],
+      pendingList: [
+        pending({ offerId: "o1" }),
+        pending({ offerId: "o2" }),
+        pending({ offerId: "o3", externalId: "MLB11223344" }),
+      ],
     });
     const result = await runMercadoLivreWorker(
       { ...stores, generate: generator },
@@ -248,7 +252,7 @@ async function run() {
   // 9) Cooldown aplicado (verifica que houve pausa) — sem asserção temporal frágil
   {
     const generator = makeGenerator([
-      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true },
+      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true },
     ]);
     const stores = createMemoryStores({ pendingList: [pending()] });
     const result = await runMercadoLivreWorker(
@@ -261,7 +265,7 @@ async function run() {
   // 10) Item ML válido: esperadoItemId extraído/base passado ao gerador
   {
     const generator = makeGenerator([
-      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB-1", validated: true },
+      { status: "SUCCESS", affiliateUrl: AFFILIATE_ML, sourceItemId: "MLB12345678", validated: true },
     ]);
     const stores = createMemoryStores({ pendingList: [pending()] });
     await runMercadoLivreWorker(
@@ -271,7 +275,7 @@ async function run() {
     const calls = (generator as unknown as { calls: Array<{ sourceUrl: string; expectedItemId: string | null }> }).calls;
     assert.equal(calls.length, 1);
     assert.equal(calls[0].sourceUrl, SOURCE_ML);
-    assert.equal(calls[0].expectedItemId, "MLB-1");
+    assert.equal(calls[0].expectedItemId, "MLB12345678");
   }
 
   console.log("ML_AFFILIATE_WORKER_TEST_OK");

@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
+
 export type MercadoLivrePending = {
   offerId: string;
   productId: string;
@@ -84,8 +86,28 @@ export function createPrismaMercadoLivrePendingStore(
         },
       });
 
-      const offersByProduct = new Map<string, typeof offers[number]>();
-      for (const offer of offers) {
+      /*
+       * LISTING-FIRST: a pendência é por ANÚNCIO.
+       *
+       * Sem o filtro, uma oferta legada de catálogo entra na fila de
+       * afiliados com um catalog_product_id como `externalId` e uma
+       * sourceUrl `/p/...`; o Link Builder responde com o anúncio em destaque
+       * no momento e o `affiliateLink` gravado aponta para o anúncio errado.
+       *
+       * O filtro NÃO apaga nada: a oferta continua no banco e no relatório de
+       * legado, apenas não é reimportável como oferta comprável.
+       */
+      const offersAnuncio = offers.filter((offer) =>
+        isValidMercadoLivreListingIdentity({
+          externalId: offer.externalId,
+          listingItemId: offer.externalId,
+          sourceUrl: offer.sourceUrl,
+          origin: "listing",
+        }),
+      );
+
+      const offersByProduct = new Map<string, (typeof offersAnuncio)[number]>();
+      for (const offer of offersAnuncio) {
         if (!offersByProduct.has(offer.productId)) {
           offersByProduct.set(offer.productId, offer);
         }
@@ -108,14 +130,63 @@ export function createPrismaMercadoLivrePendingStore(
     },
 
     async countPending() {
-      return client.productOpportunity.count({
+      /*
+       * `countPending` é métrica de fila. Contar ofertas de catálogo como
+       * "pendentes de afiliado" inflaria o número com itens que jamais serão
+       * processados (o worker faz skip de catalog-only) e esconderia itens
+       * reais. Mesma semântica de `listPendingMercadoLivreOffers`.
+       */
+      const opportunities = await client.productOpportunity.findMany({
         where: {
           marketplace: "MERCADO_LIVRE",
           status: "WAITING_AFFILIATE",
           affiliateLink: null,
           productId: { not: null },
         },
+        select: { productId: true },
       });
+
+      const productIds = [
+        ...new Set(
+          opportunities
+            .map((o) => o.productId)
+            .filter((p): p is string => Boolean(p)),
+        ),
+      ];
+
+      if (productIds.length === 0) {
+        return 0;
+      }
+
+      const offers = await client.marketplaceOffer.findMany({
+        where: {
+          marketplace: "MERCADO_LIVRE",
+          productId: { in: productIds },
+          affiliateLink: null,
+        },
+        select: {
+          productId: true,
+          externalId: true,
+          sourceUrl: true,
+        },
+      });
+
+      const pendingProducts = new Set(
+        offers
+          .filter((offer) =>
+            isValidMercadoLivreListingIdentity({
+              externalId: offer.externalId,
+              listingItemId: offer.externalId,
+              sourceUrl: offer.sourceUrl,
+              origin: "listing",
+            }),
+          )
+          .map((offer) => offer.productId),
+      );
+
+      return opportunities.filter(
+        (o) => o.productId && pendingProducts.has(o.productId),
+      ).length;
     },
 
     async findOfferById(offerId) {

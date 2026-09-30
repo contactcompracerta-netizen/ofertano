@@ -16,6 +16,7 @@
 import {
   resolveMarketplaceIdFromLegacyEnum,
 } from "../marketplaceRegistry";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 import {
   DEFAULT_PAYLOAD_VERSION,
   type AvailabilityValue,
@@ -105,15 +106,56 @@ function collectGtin(
 }
 
 /**
+ * LISTING-FIRST: guard de identidade de anúncio no seeding do contrato V1.
+ *
+ * `externalListingId` é a chave de identidade do V1 (`UNIQUE(marketplaceId,
+ * externalListingId)`) e é o que o writer autoritativo usa para achar
+ * `MarketplaceOffer`. Semeá-la com um `catalog_product_id` (ou com uma URL
+ * `/p/`) transforma um produto de catálogo na identidade de uma oferta — e
+ * o round-trip passa a "confirmar" esse erro como se fosse paridade.
+ *
+ * Retorna `false` = fail-closed. O chamador (shadowProcessor / runner) trata
+ * `null` como LISTING_INVALID e não escreve nada. Catálogo continua válido
+ * como enriquecimento: o que é proibido é virar identidade de oferta.
+ */
+function isV1SeedableListingIdentity(input: {
+  marketplaceId: string;
+  externalId: string;
+  sourceUrl?: string | null;
+}): boolean {
+  if (input.marketplaceId !== "mercado_livre") {
+    return true;
+  }
+
+  return isValidMercadoLivreListingIdentity({
+    externalId: input.externalId,
+    listingItemId: input.externalId,
+    sourceUrl: input.sourceUrl ?? null,
+    origin: "listing",
+  });
+}
+
+/**
  * Constrói a listing V1 a partir do contexto observável do saveProduct.
  * Transformação pura: collectedAt deve ser fornecido pela borda.
- * Retorna null sem collectedAt ou marketplace resolvível (fail-closed).
+ * Retorna null sem collectedAt, sem marketplace resolvível, ou quando a
+ * identidade de anúncio ML não é provada (fail-closed).
  */
 export function buildShadowListingFromSaveContext(
   input: LegacyShadowSaveContext,
 ): NormalizedMarketplaceListingV1 | null {
   const marketplaceId = resolveMarketplaceIdFromLegacyEnum(input.marketplace);
   if (!marketplaceId || input.collectedAt == null) {
+    return null;
+  }
+
+  if (
+    !isV1SeedableListingIdentity({
+      marketplaceId,
+      externalId: input.externalId,
+      sourceUrl: input.sourceUrl,
+    })
+  ) {
     return null;
   }
 
@@ -184,13 +226,24 @@ export function buildShadowListingFromSaveContext(
 
 /**
  * Constrói a listing V1 a partir de uma linha REAL de RawMarketplaceListing
- * (replay/canário). Retorna null quando o marketplace não é resolvível.
+ * (replay/canário). Retorna null quando o marketplace não é resolvível ou
+ * quando a linha carrega um catalog_product_id como identidade de anúncio.
  */
 export function buildShadowListingFromRawRow(
   row: LegacyShadowRawRow,
 ): NormalizedMarketplaceListingV1 | null {
   const marketplaceId = resolveMarketplaceIdFromLegacyEnum(row.marketplace);
   if (!marketplaceId) {
+    return null;
+  }
+
+  if (
+    !isV1SeedableListingIdentity({
+      marketplaceId,
+      externalId: row.externalId,
+      sourceUrl: row.sourceUrl,
+    })
+  ) {
     return null;
   }
 

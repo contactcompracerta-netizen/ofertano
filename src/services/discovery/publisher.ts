@@ -13,6 +13,10 @@ import type {
   ProductImport,
 } from "@/services/importers/core/types";
 
+import {
+  isValidMercadoLivreListingIdentity,
+} from "@/services/mercadoLivre/listingIdentity";
+
 import type {
   DiscoveryCandidate,
   ProductDiscoveryResult,
@@ -129,10 +133,34 @@ function converterCandidato(
       ? candidato.oldPrice
       : null;
 
+  const externalId = candidato.externalId.trim();
+  const url = candidato.sourceUrl.trim();
+
+  /*
+   * LISTING-FIRST: um candidato de descoberta so vira ProductImport quando
+   * comprova listing concreta do Mercado Livre. Produto de catalogo nunca
+   * chega aqui, e se chegar e recusado com zero write.
+   */
+  if (candidato.marketplace === "MERCADO_LIVRE") {
+    if (
+      !isValidMercadoLivreListingIdentity({
+        externalId,
+        listingItemId: candidato.listingItemId ?? externalId,
+        sourceUrl: url,
+        origin: "listing",
+      })
+    ) {
+      throw new Error(
+        "LISTING_FIRST: candidato ML sem identidade de listing comprovada.",
+      );
+    }
+  }
+
   return {
     marketplace: candidato.marketplaceName,
-    externalId: candidato.externalId.trim(),
-    url: candidato.sourceUrl.trim(),
+    externalId,
+    catalogProductId: candidato.catalogProductId ?? null,
+    url,
     affiliateLink: candidato.affiliateLink?.trim() || null,
     title: candidato.title.trim(),
     description: null,

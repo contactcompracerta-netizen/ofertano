@@ -34,6 +34,10 @@ import type { PrismaClient, Marketplace } from "@prisma/client";
 import type { ProductImport } from "@/services/importers/core/types";
 import { saveProduct } from "@/services/database/saveProduct";
 import { historicoPrecisaNovaEntrada } from "@/services/priceHistory/priceHistoryService";
+import {
+  assertMercadoLivreListingIdentity,
+  isValidMercadoLivreListingIdentity,
+} from "@/services/mercadoLivre/listingIdentity";
 
 import { resolveDisplayName, resolveLegacyEnumValue } from "../marketplaceRegistry";
 import type { V1WriteContext } from "./writer";
@@ -44,11 +48,45 @@ export interface RealAuthoritativeCommits {
   legacyWrite: (ctx: V1WriteContext) => Promise<{ productId: string | null }>;
 }
 
+/**
+ * LISTING-FIRST: o V1 writer NÃO é uma exceção.
+ *
+ * A row observada na origem pode ter nascido de um produto de catálogo
+ * (`/p/MLB<catalog>`), de um snapshot do Chrome ou de qualquer writer antigo
+ * ainda não migrado. O `externalListingId` que o V1 herda dessa row não é
+ * evidência de anúncio: é apenas o que alguém gravaram antes.
+ *
+ * Para MERCADO_LIVRE o V1 só pode escrever quando a identidade de listing é
+ * provada aqui (ITEM_ID + sourceUrl que comprova aquele ITEM_ID). Caso
+ * contrário o commit aborta antes de qualquer escrita — fail-closed, e sem
+ * "corrigir" o id para a listing mais barata: trocar seller/preço por
+ * adivinhação destrói a identidade do anúncio.
+ */
+function assertV1ListingIdentity(ctx: V1WriteContext, context: string): void {
+  if (ctx.marketplaceId !== "mercado_livre") {
+    return;
+  }
+
+  assertMercadoLivreListingIdentity(
+    {
+      externalId: ctx.externalListingId,
+      listingItemId: ctx.externalListingId,
+      sourceUrl: ctx.row.sourceUrl ?? null,
+      origin: "listing",
+      price: ctx.listing.commerce.price,
+      sellerId: ctx.listing.seller.externalSellerId ?? ctx.listing.seller.name,
+    },
+    context,
+  );
+}
+
 /** Monta o ProductImport canônico a partir da listing V1 (marketplace agnóstico). */
 export function buildProductImportFromV1Context(
   ctx: V1WriteContext,
 ): ProductImport {
   const { listing } = ctx;
+
+  assertV1ListingIdentity(ctx, "buildProductImportFromV1Context");
 
   const images = listing.catalog.images.filter(Boolean);
   const attributes: Record<string, string> = {};
@@ -139,6 +177,17 @@ export function createRealAuthoritativeCommits(
         );
       }
       const marketplace = marketplaceEnum as Marketplace;
+
+      /*
+       * LISTING-FIRST: o fast path NÃO pode ser a rota de escape.
+       *
+       * A busca da oferta é feita por (marketplace, externalId). Se o
+       * `externalId` herdado for um catalog_product_id, o fast path
+       * publicaria/atualizaria uma oferta de catálogo (preço e estoque de um
+       * anúncio que não existe). Fail-closed: valida a identidade ANTES de
+       * procurar, e nunca "corrige" o id escolhendo outro anúncio.
+       */
+      assertV1ListingIdentity(ctx, "commitV1FastOffer");
 
       const offer = await prisma.marketplaceOffer.findUnique({
         where: {

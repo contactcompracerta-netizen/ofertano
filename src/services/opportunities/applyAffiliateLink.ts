@@ -1,6 +1,7 @@
 import type { OpportunityStatus, PrismaClient } from "@prisma/client";
 
 import { validateOfficialMercadoLivreAffiliateLink } from "@/lib/affiliates/validateAdminAffiliateLink";
+import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
 import {
   opportunityAlteraOutroProduct,
   type ExactOfferSnapshot,
@@ -29,7 +30,8 @@ export type ApplyAffiliateLinkResult =
         | "OFFER_NOT_FOUND"
         | "PRODUCT_MISMATCH"
         | "EXTERNAL_ID_MISMATCH"
-        | "NOT_MERCADO_LIVRE";
+        | "NOT_MERCADO_LIVRE"
+        | "CATALOG_PRODUCT_NOT_LISTING";
       error: string;
     };
 
@@ -363,6 +365,34 @@ export async function applyConfirmedAffiliateLinkToOwnedOffer(
       ok: false,
       code: "OFFER_NOT_FOUND",
       error: "MarketplaceOffer do Mercado Livre não encontrada.",
+    };
+  }
+
+  /*
+   * LISTING-FIRST: ativar/publicar exige que a oferta seja um ANÚNCIO.
+   *
+   * `activateOfferAffiliate` é o ponto que torna a oferta pública
+   * (status ACTIVE + active=true). Se a oferta nasceu de um produto de
+   * catálogo, o CTA abriria `/p/MLB<catalog>` — página com N anúncios, sem
+   * vendedor nem preço da oferta — e o preço gravado seria o de um anúncio
+   * sorteado. Mesmo com um link de afiliado correto colado manualmente, ativar
+   * a oferta não conserta a identidade dela.
+   */
+  if (
+    !isValidMercadoLivreListingIdentity({
+      externalId: offer.externalId,
+      listingItemId: offer.externalId,
+      sourceUrl: offer.sourceUrl,
+      origin: "listing",
+    })
+  ) {
+    return {
+      ok: false,
+      code: "CATALOG_PRODUCT_NOT_LISTING",
+      error:
+        "Esta oferta não é um anúncio do Mercado Livre (identidade de catálogo " +
+        "ou URL de catálogo). CATALOG PRODUCT != MARKETPLACE OFFER: importe o " +
+        "anúncio do vendedor antes de ativá-lo.",
     };
   }
 

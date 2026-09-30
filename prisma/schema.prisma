@@ -216,7 +216,15 @@ model MarketplaceOffer {
   marketplace Marketplace
 
   // Identificação da oferta dentro do marketplace.
+  //
+  // LISTING-FIRST: em MERCADO_LIVRE este campo é SEMPRE o listingItemId
+  // (ITEM_ID concreto do anúncio). Proibido gravar catalogProductId aqui.
   externalId String?
+
+  // Metadado estrutural: catálogo ao qual o anúncio pertence.
+  // Nunca substitui externalId.
+  catalogProductId String?
+
   sourceUrl  String? @db.Text
 
   // Pode ficar vazio enquanto aguarda revisão.
@@ -260,6 +268,7 @@ model MarketplaceOffer {
 
   @@unique([productId, marketplace])
   @@unique([marketplace, externalId])
+  @@index([marketplace, catalogProductId])
   @@index([status, updatedAt])
   @@index([matchStatus, updatedAt])
   @@index([nextCheckAt, active])

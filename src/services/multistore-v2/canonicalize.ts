@@ -81,6 +81,7 @@ export function canonicalizeCluster(
       marketplace: raw.marketplace,
       marketplaceName: raw.marketplaceName,
       externalId: raw.externalId,
+      catalogProductId: raw.catalogProductId ?? null,
       title,
       url,
       image,
