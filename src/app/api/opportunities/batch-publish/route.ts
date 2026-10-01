@@ -9,6 +9,7 @@ import {
 } from "@/services/opportunities/applyAffiliateLink";
 import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
 import { assertMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
+import { listOfertasListingAware } from "@/services/database/marketplaceOfferWriter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -529,18 +530,19 @@ async function synchronizePublishedProduct(
   const validatedAt = new Date();
 
   /*
-   * LISTING-FIRST: este upsert NUNCA pode criar uma oferta ML. Uma oferta
-   * nova precisa de listingItemId + sourceUrl da listing concreta; sem
-   * isso o resultado correto e zero write (fail closed), porque criar uma
-   * linha sem identidade e o que produz oferta de seller/preco errado.
+   * LISTING-FIRST: este caminho NUNCA cria uma oferta ML. Uma oferta nova
+   * precisa de listingItemId + sourceUrl da listing concreta; sem isso o
+   * resultado correto e zero write (fail closed), porque criar uma linha sem
+   * identidade e o que produz oferta de seller/preco errado.
+   *
+   * (productId, marketplace) deixou de ser unique: no ML um Product pode ter
+   * varios anuncios. A busca e por lista, em ordem deterministica de criacao
+   * — e a identidade da linha escolhida ainda e conferida logo abaixo.
    */
-  const existingOffer = await tx.marketplaceOffer.findUnique({
-    where: {
-      productId_marketplace: {
-        productId,
-        marketplace,
-      },
-    },
+  const [existingOffer] = await listOfertasListingAware({
+    db: tx,
+    productId,
+    marketplace,
     select: {
       id: true,
       externalId: true,

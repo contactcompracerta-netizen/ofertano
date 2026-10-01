@@ -225,6 +225,33 @@ model MarketplaceOffer {
   // Nunca substitui externalId.
   catalogProductId String?
 
+  /*
+   * LISTING-FIRST: guarda a evidência bruta do anúncio.
+   *
+   * Para MERCADO_LIVRE com identityVersion >= 1, `rawPayload.listing.item_id`
+   * é a MESMA coisa que `externalId`. A constraint `ml_listing_identity_v1`
+   * (SQL, criada por 20260930000000_ml_listing_first) exige essa igualdade:
+   * é o que impede que o writer troque o anúncio e mantenha o id antigo.
+   *
+   * Guardar o payload permite reconferir a listing exata mais tarde sem
+   * depender de `/items/{id}`, que responde 403 sem token de vendedor.
+   */
+  rawPayload Json?
+
+  // Estado declarado do anúncio (não do produto de catálogo).
+  condition String?
+
+  shipping Json?
+
+  /*
+   * 0 = oferta legada, escrita antes do contrato LISTING-FIRST.
+   * 1 = identidade de anúncio comprovada.
+   *
+   * Uma linha nova de MERCADO_LIVRE NUNCA pode nascer em 0: o trigger
+   * `ml_new_listing` rejeita o INSERT. Legado em 0 é preservado, não migrado.
+   */
+  identityVersion Int @default(0)
+
   sourceUrl  String? @db.Text
 
   // Pode ficar vazio enquanto aguarda revisão.
@@ -266,7 +293,29 @@ model MarketplaceOffer {
 
   priceHistory PriceHistory[] @relation("OfferPriceHistory")
 
-  @@unique([productId, marketplace])
+  /*
+   * Unicidade de oferta é ASSERTIVA POR MERCADO, não global.
+   *
+   * MERCADO_LIVRE: um Product pode ter VÁRIOS anúncios (um Product pode
+   *   agregar várias listings do mesmo catálogo). Logo NÃO pode existir
+   *   unique (productId, marketplace) aqui — ela colapsaria as listings e
+   *   faria o writer escolher um vendedor por conta própria.
+   *
+   * SHOPEE / MAGAZINE_LUIZA / AMAZON / ALIEXPRESS: no desenho atual é UMA
+   *   oferta por Product+Marketplace. Essa unicidade existe no banco como
+   *   índice PARCIAL `MarketplaceOffer_non_ml_product_marketplace_key`
+   *   (`WHERE marketplace <> 'MERCADO_LIVRE'`), criado por SQL em
+   *   20260930000000_ml_listing_first.
+   *
+   * Por que `@@index` aqui e não `@@unique`: o Prisma não sabe expressar
+   * índice único parcial. Declarar `@@unique` aqui fazia o cliente emitir
+   * `ON CONFLICT ("productId","marketplace")` SEM predicado, e o Postgres
+   * recusava com 42P10 — quebrando toda escrita de oferta não-ML. Declarar
+   * `@@unique` seria MENTIR sobre o banco: ele não existe. O índice comum
+   * abaixo é honesto e serve de apoio ao `findFirst(productId, marketplace)`.
+   */
+  @@index([productId, marketplace])
+
   @@unique([marketplace, externalId])
   @@index([marketplace, catalogProductId])
   @@index([status, updatedAt])

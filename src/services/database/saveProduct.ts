@@ -25,6 +25,11 @@ import { resolveMarketplaceIdFromLegacyEnum } from "@/services/architecture/v1/m
 import {
   assertMercadoLivreListingIdentity,
 } from "@/services/mercadoLivre/listingIdentity";
+import {
+  findOfertaListingAware,
+  upsertOfertaListingAware,
+  withUniqueRaceRetry,
+} from "@/services/database/marketplaceOfferWriter";
 
 /*
  * Marcadores duráveis de commit gravados pelo MESMO cliente de transação do
@@ -2741,40 +2746,45 @@ export async function saveProduct(
   ) => {
     pendingCommitKind = commitKind;
 
-    return prisma.$transaction(async (tx) => {
-    let ofertaPeloCodigo =
-      await tx.marketplaceOffer.findUnique({
-        where: {
-          marketplace_externalId: {
-            marketplace,
-            externalId,
-          },
-        },
-        include: {
-          product: true,
-        },
-      });
-
-    const produtoAlvo =
-      options.targetProductId &&
-      options.verifiedExactMatch
-        ? await tx.product.findUnique({
-            where: {
-              id: options.targetProductId,
+    const run = async (tx: Prisma.TransactionClient) => {
+      /*
+       * `marketplace_externalId` é a identidade REAL da oferta: o anúncio.
+       * Para MERCADO_LIVRE um Product tem várias listings, e é por isso que
+       * (productId, marketplace) deixou de ser unique no schema.
+       */
+      let ofertaPeloCodigo =
+        await tx.marketplaceOffer.findUnique({
+          where: {
+            marketplace_externalId: {
+              marketplace,
+              externalId,
             },
-          })
-        : null;
+          },
+          include: {
+            product: true,
+          },
+        });
 
-    // FASE 7.2: factual do COMEÇO da transação canônica. Depois do trecho de
-    // reanexação `ofertaPeloCodigo` pode virar null e a informação se perde.
-    const ofertaExistiaAntesDaTransacao = ofertaPeloCodigo !== null;
+      const produtoAlvo =
+        options.targetProductId &&
+        options.verifiedExactMatch
+          ? await tx.product.findUnique({
+              where: {
+                id: options.targetProductId,
+              },
+            })
+          : null;
 
-    const decisaoAlvo = decidirAlvoDaOferta({
-      targetProductId: options.targetProductId,
-      verifiedExactMatch: options.verifiedExactMatch,
-      targetExiste: Boolean(produtoAlvo),
-      ofertaExistenteProductId: ofertaPeloCodigo?.productId ?? null,
-    });
+      // FASE 7.2: factual do COMEÇO da transação canônica. Depois do trecho de
+      // reanexação `ofertaPeloCodigo` pode virar null e a informação se perde.
+      const ofertaExistiaAntesDaTransacao = ofertaPeloCodigo !== null;
+
+      const decisaoAlvo = decidirAlvoDaOferta({
+        targetProductId: options.targetProductId,
+        verifiedExactMatch: options.verifiedExactMatch,
+        targetExiste: Boolean(produtoAlvo),
+        ofertaExistenteProductId: ofertaPeloCodigo?.productId ?? null,
+      });
 
     /*
      * Contrato do Exact Matcher: se o cluster ja escolheu o Product
@@ -3244,12 +3254,22 @@ export async function saveProduct(
       ofertaPeloCodigo?.productId ===
       saved.id
         ? ofertaPeloCodigo
-        : await tx.marketplaceOffer.findUnique({
-            where: {
-              productId_marketplace: {
-                productId: saved.id,
-                marketplace,
-              },
+        : await findOfertaListingAware({
+            db: tx,
+            productId: saved.id,
+            marketplace,
+            externalId,
+            select: {
+              id: true,
+              price: true,
+              affiliateLink: true,
+              affiliateValidatedAt: true,
+              reviewedAt: true,
+              lastPriceChangeAt: true,
+              status: true,
+              matchStatus: true,
+              matchScore: true,
+              reviewReason: true,
             },
           });
 
@@ -3325,129 +3345,128 @@ export async function saveProduct(
           options.revalidateRejected,
       });
 
-    const oferta =
-      await tx.marketplaceOffer.upsert({
-        where: {
-          productId_marketplace: {
-            productId: saved.id,
-            marketplace,
-          },
-        },
+    const oferta = await upsertOfertaListingAware({
+      db: tx,
+      productId: saved.id,
+      marketplace,
+      externalId,
 
-        update: {
-          externalId,
-          catalogProductId,
-          sourceUrl,
+      update: {
+        externalId,
+        catalogProductId,
+        sourceUrl,
 
-          affiliateLink,
+        affiliateLink,
 
-          title: product.title,
-          image: product.image,
-          seller: product.seller,
+        title: product.title,
+        image: product.image,
+        seller: product.seller,
 
-          price: product.price,
-          oldPrice: product.oldPrice,
-          installments:
-            product.installments,
-          stock: product.stock,
+        price: product.price,
+        oldPrice: product.oldPrice,
+        installments:
+          product.installments,
+        stock: product.stock,
 
-          status,
+        status,
 
-          matchStatus:
-            identidadePreservada.matchStatus,
+        matchStatus:
+          identidadePreservada.matchStatus,
 
-          matchScore:
-            identidadePreservada.matchScore,
+        matchScore:
+          identidadePreservada.matchScore,
 
-          discoverySource,
+        discoverySource,
 
-          active: true,
-          available: disponivel,
+        active: true,
+        available: disponivel,
 
-          reviewReason:
-            identidadePreservada.reviewReason,
+        reviewReason:
+          identidadePreservada.reviewReason,
 
-          errorMessage: null,
+        errorMessage: null,
 
-          affiliateValidatedAt:
-            linkInformado
-              ? agora
-              : ofertaAtual
-                  ?.affiliateValidatedAt ??
-                null,
+        affiliateValidatedAt:
+          linkInformado
+            ? agora
+            : ofertaAtual
+                ?.affiliateValidatedAt ??
+              null,
 
-          reviewedAt:
-            linkInformado
-              ? agora
-              : ofertaAtual?.reviewedAt ??
-                null,
+        reviewedAt:
+          linkInformado
+            ? agora
+            : ofertaAtual?.reviewedAt ??
+              null,
 
-          lastCheckedAt: agora,
+        lastCheckedAt: agora,
 
-          lastPriceChangeAt:
-            mudouPreco
-              ? agora
-              : ofertaAtual
-                  ?.lastPriceChangeAt ??
-                null,
+        lastPriceChangeAt:
+          mudouPreco
+            ? agora
+            : ofertaAtual
+                ?.lastPriceChangeAt ??
+              null,
 
-          consecutiveErrors: 0,
-        },
+        consecutiveErrors: 0,
+      },
 
-        create: {
-          productId: saved.id,
-          marketplace,
+      create: {
+        externalId,
+        catalogProductId,
+        sourceUrl,
 
-          externalId,
-          catalogProductId,
-          sourceUrl,
+        affiliateLink,
 
-          affiliateLink,
+        title: product.title,
+        image: product.image,
+        seller: product.seller,
 
-          title: product.title,
-          image: product.image,
-          seller: product.seller,
+        price: product.price,
+        oldPrice: product.oldPrice,
+        installments:
+          product.installments,
+        stock: product.stock,
 
-          price: product.price,
-          oldPrice: product.oldPrice,
-          installments:
-            product.installments,
-          stock: product.stock,
+        status,
 
-          status,
+        matchStatus:
+          matchScoreExato !== null
+            ? "EXACT"
+            : "HIGH",
 
-          matchStatus:
-            matchScoreExato !== null
-              ? "EXACT"
-              : "HIGH",
+        matchScore: matchScoreExato,
 
-          matchScore: matchScoreExato,
+        discoverySource,
 
-          discoverySource,
+        active: true,
+        available: disponivel,
+        isBest: false,
 
-          active: true,
-          available: disponivel,
-          isBest: false,
+        reviewReason: affiliateLink
+          ? null
+          : "Aguardando link individual de afiliado.",
 
-          reviewReason: affiliateLink
-            ? null
-            : "Aguardando link individual de afiliado.",
+        errorMessage: null,
 
-          errorMessage: null,
+        affiliateValidatedAt:
+          linkInformado ? agora : null,
 
-          affiliateValidatedAt:
-            linkInformado ? agora : null,
+        reviewedAt:
+          linkInformado ? agora : null,
 
-          reviewedAt:
-            linkInformado ? agora : null,
+        lastCheckedAt: agora,
 
-          lastCheckedAt: agora,
+        lastPriceChangeAt: agora,
 
-          lastPriceChangeAt: agora,
+        consecutiveErrors: 0,
+      },
 
-          consecutiveErrors: 0,
-        },
-      });
+      // Só o id é consumido daqui em diante (price history e rastro).
+      select: {
+        id: true,
+      },
+    });
 
     const ultimoHistorico =
       await tx.priceHistory.findFirst({
@@ -3570,8 +3589,24 @@ export async function saveProduct(
     await recordCommitEventInTransaction(tx);
     markCommitBoundary();
 
-    return synchronized;
-    });
+      return synchronized;
+    };
+
+    /*
+     * Retry de TRANSAÇÃO INTEIRA, uma vez, só quando o erro é P2002.
+     *
+     * A ordem dos dois callbacks importa: `withUniqueRaceRetry` fica FORA de
+     * `$transaction` para que a segunda volta abra uma transação NOVA. Se
+     * estivesse dentro, a releitura rodaria sobre a transação já abortada pelo
+     * Postgres e falharia de novo — foi verificado empiricamente que, depois
+     * de P2002, qualquer statement na mesma transação é recusado.
+     *
+     * A fronteira de commit nunca é atravessada por este retry: o erro P2002
+     * acontece na escrita da oferta, muito antes de `markCommitBoundary()`.
+     */
+    return withUniqueRaceRetry(() =>
+      prisma.$transaction(async (tx) => run(tx)),
+    );
   };
 
   /*

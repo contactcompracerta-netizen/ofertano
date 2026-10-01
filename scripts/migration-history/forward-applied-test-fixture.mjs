@@ -9,7 +9,7 @@ import { loadRepositoryContract, socialPostReconciliationPending, mlListingFirst
 export function withForwardMigrationsApplied(fixture) {
   const result = structuredClone(fixture);
   const checksums = loadRepositoryContract().repositoryChecksums;
-  for (const name of [socialPostReconciliationPending[0], ...mlListingFirstMigration]) {
+  for (const name of [socialPostReconciliationPending[0], ...mlListingFirstMigration]) { // includes both in defined order
     result.ledger.push({ ...result.ledger[0], migration_name: name, checksum: checksums[name], applied_steps_count: 1 });
   }
   return result;

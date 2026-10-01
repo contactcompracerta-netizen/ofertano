@@ -19,7 +19,8 @@ export const autopilotPending = ['20260926120000_catalog_cutover_autopilot'];
  * _prisma_migrations). Nao entra em nenhum pendingAllowlistSet pelo mesmo
  * motivo de `blockingKeyMigration`: nao esta pendente, esta aplicada.
  */
-export const mlListingFirstMigration = ['20260930120000_ml_listing_first_catalog_metadata'];
+export const mlListingFirstCatalogMetadataMigration = ['20260930120000_ml_listing_first_catalog_metadata'];
+export const mlListingFirstMigration = ['20260930000000_ml_listing_first', '20260930120000_ml_listing_first_catalog_metadata'];
 export const cutoverPending = ['20260925120000_catalog_cutover_global_control', '20260925130000_catalog_cutover_global_control_timestamptz', ...autopilotPending];
 export const architecturePending = ['20260924080000_catalog_architecture_v1', ...cutoverPending];
 // FASE 8.3B: indice de blocking derivado. ADITIVA, ja APLICADA em producao
@@ -91,6 +92,19 @@ export function verifyLedgerCompatibility(snapshot, allowedPending, contract = l
   if (manifest.baselineDDLHash !== pins.baselineDDLChecksum || contract.baselineDDLChecksum !== pins.baselineDDLChecksum || manifest.currentSchemaSHA256 !== pins.schemaChecksum || contract.schemaChecksum !== pins.schemaChecksum) fail('REPOSITORY_SCHEMA_CONTRACT_CHANGED');
   const baselineNames = ['20260824000000_postgresql_baseline', ...knownNames, '20260905110000_bootstrap_legacy_objects', '20260905120000_price_alerts', '20260907000000_social_automation', '20260907220000_social_three_slots', '20260912000000_add_raw_marketplace_listing'];
   if (!same(Object.keys(manifest.baselineMigrations).sort(), baselineNames.sort()) || !same(Object.keys(manifest.forwardMigrations), canonicalForwardInventory) || !same(Object.keys(manifest.retroactiveForwardMigrations ?? {}), canonicalRetroactiveInventory)) fail('CANONICAL_INVENTORY_CHANGED');
+  /*
+   * ORDEM DE APLICACAO REAL (coluna `started_at` de `_prisma_migrations`), que
+   * difere da ordem LEXICAL dos nomes de diretorio.
+   *
+   * O Prisma aplica migrations pendentes em ordem lexical. Em producao,
+   * `20260930120000_ml_listing_first_catalog_metadata` rodou as 09:51:36Z e
+   * `20260930000000_ml_listing_first` rodou as 21:24:11Z do mesmo dia, apesar
+   * do timestamp menor. Os bytes das duas estao pinados na ledger de producao
+   * e nenhuma pode ser reescrita para virar idempotente; sem esta ordem
+   * declarada, o replay de um banco novo aborta com 42701.
+   */
+  if (!same(manifest.forwardApplicationOrder, pins.productionForwardApplicationOrder)) fail('FORWARD_APPLICATION_ORDER_PIN_CHANGED');
+  if (!same([...(manifest.forwardApplicationOrder ?? [])].sort(), [...canonicalForwardInventory].sort())) fail('FORWARD_APPLICATION_ORDER_NOT_A_PERMUTATION');
   if (!same(Object.keys(repositoryChecksums).sort(), Object.keys(expected).sort())) fail('REPOSITORY_INVENTORY_MISMATCH');
   for (const [name, checksum] of Object.entries(expected)) if (!validChecksum(checksum) || repositoryChecksums[name] !== checksum) fail('REPOSITORY_CHECKSUM_CHANGED');
   const history = compatibility.productionHistory;

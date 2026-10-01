@@ -44,7 +44,9 @@
     "fase8-3b:benchmark": "tsx src/scripts/fase8-3b-benchmark.ts",
     "test:phase-p": "tsx --test src/scripts/phasePPublicationInvariants.test.ts",
     "test:phase-p:publication": "tsx --test src/services/publicVisibility/phasePPublicVisibility.test.ts src/scripts/phasePPublicationReconcile.test.ts src/scripts/fase8-3-blindRediscoveryHarness.test.ts && tsx src/services/publicVisibility/multiStoreVisibility.test.ts",
-    "fase8:publication-reconcile": "tsx --env-file=.env.local src/scripts/phase-p-publication-reconcile.ts"
+    "fase8:publication-reconcile": "tsx --env-file=.env.local src/scripts/phase-p-publication-reconcile.ts",
+    "test:listing-first": "tsx src/services/database/marketplaceOfferWriter.partialUnique.test.ts && tsx src/services/priceMonitor/listingFirstMonitor.test.ts",
+    "test:migration-replay": "node scripts/bootstrap/ml-listing-first-replay.integration.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

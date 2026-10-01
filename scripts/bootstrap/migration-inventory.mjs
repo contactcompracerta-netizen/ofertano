@@ -21,6 +21,7 @@ export function validateInventory({
   baselineMigrations = {},
   forwardMigrations = {},
   retroactiveForwardMigrations = {},
+  forwardApplicationOrder = null,
   actualNames = [],
   actualChecksums = {},
 } = {}) {
@@ -113,7 +114,55 @@ export function validateInventory({
     }
   }
 
-  return { lastBaseline, baseline: baselineNames, forward: Object.keys(forwardMigrations), retroactive: retroNames };
+  // 5) ORDEM DE APLICACAO declarada para as forward migrations.
+  //
+  // O Prisma aplica migrations PENDENTES em ordem LEXICAL de diretorio. Isso
+  // coincide com a ordem real de producao em quase toda a cadeia, mas nao e
+  // verdade em `20260930000000_ml_listing_first`: ela foi aplicada em
+  // producao (coluna started_at) DEPOIS de
+  // `20260930120000_ml_listing_first_catalog_metadata`, apesar do timestamp
+  // menor. Os bytes das duas estao pinados na ledger de producao, entao nao
+  // podem ser tornados idempotentes: em ordem lexical o replay de banco novo
+  // aborta com 42701 (a de 20260930000000 cria catalogProductId com
+  // ADD COLUMN IF NOT EXISTS, a de 20260930120000 com ADD COLUMN simples).
+  //
+  // `forwardApplicationOrder` e a ordem REAL de aplicacao, observada em
+  // producao, pinada em forensic-pins.json. Ela NAO pode ser um subconjunto
+  // inventado: tem de ser permutacao exata das forward declaradas, e nao pode
+  // reordenar migrations que o Prisma ja aplica em ordem lexical sem motivo
+  // declarado (a unica inversao aceita e a ultima, coberta pelo PIN).
+  if (forwardApplicationOrder !== null) {
+    const forwardNames = Object.keys(forwardMigrations);
+    if (!Array.isArray(forwardApplicationOrder)) {
+      throw new Error('FORWARD_APPLICATION_ORDER_INVALID');
+    }
+    const declared = [...forwardApplicationOrder].sort();
+    const expected = [...forwardNames].sort();
+    if (JSON.stringify(declared) !== JSON.stringify(expected)) {
+      const err = new Error('FORWARD_APPLICATION_ORDER_NOT_A_PERMUTATION');
+      err.missing = forwardNames.filter(n => !forwardApplicationOrder.includes(n));
+      err.unexpected = forwardApplicationOrder.filter(n => !(n in forwardMigrations));
+      throw err;
+    }
+    /*
+     * Invariante real: as UNICAS migrations cuja ordem de aplicacao difere da
+     * ordem lexical sao as duas do catalogo do ML. Qualquer outra inversao
+     * seria um recorte inventado, e a unica justificativa existente para uma
+     * inversao (bytes pinados na ledger de producao, nao reescrevivel) nao se
+     * aplica a mais nada.
+     */
+    const reordered = forwardNames.filter(
+      n => forwardApplicationOrder.indexOf(n) !== forwardNames.indexOf(n),
+    );
+    const knownInversions = ['20260930000000_ml_listing_first', '20260930120000_ml_listing_first_catalog_metadata'];
+    if (!reordered.every(n => knownInversions.includes(n))) {
+      const err = new Error('FORWARD_APPLICATION_ORDER_UNEXPECTED_INVERSION');
+      err.migrations = reordered;
+      throw err;
+    }
+  }
+
+  return { lastBaseline, baseline: baselineNames, forward: Object.keys(forwardMigrations), retroactive: retroNames, forwardApplicationOrder };
 }
 
 // Semântica pós-produção: depois que a retroativa for aplicada, ela NÃO pode

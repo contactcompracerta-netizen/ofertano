@@ -7,6 +7,7 @@ import type {
 import type {
   MarketplaceName,
 } from "@/services/importers/core/types";
+import { listOfertasListingAware } from "@/services/database/marketplaceOfferWriter";
 
 export type MarketplaceMultiloja =
   | Marketplace
@@ -193,20 +194,20 @@ export async function agendarComparacaoMultilojaDoProduto(
       marketplaceName,
     );
 
-  const oferta =
-    await prisma.marketplaceOffer.findUnique({
-      where: {
-        productId_marketplace: {
-          productId,
-          marketplace,
-        },
-      },
-
-      select: {
-        sourceUrl: true,
-        affiliateLink: true,
-      },
-    });
+  /*
+   * LISTING-FIRST: (productId, marketplace) não é mais unique (no ML um
+   * Product pode ter vários anúncios), então a busca é por lista, com ordem
+   * determinística de criação. Fora do ML o índice parcial garante um só.
+   */
+  const [oferta] = await listOfertasListingAware({
+    db: prisma,
+    productId,
+    marketplace,
+    select: {
+      sourceUrl: true,
+      affiliateLink: true,
+    },
+  });
 
   const sourceUrl =
     oferta?.sourceUrl?.trim();

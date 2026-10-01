@@ -22,6 +22,7 @@
     "20260927100000_schema_reconciliation": "d85c069b5dbdcbbd3c75cae9d0b7be722dc3acea4e620e6332782a01d2c905b6",
     "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0",
     "20260927180000_social_post_index_reconciliation": "f886a7113da3e3e5d552a9ddb76627ef8e7fbea3ff982df2ddd621c8fa07b632",
+    "20260930000000_ml_listing_first": "a16cea210b413907ebfb47f7731e4a7eeedcc25bf0cb682b7f5dbd4e613fccbc",
     "20260930120000_ml_listing_first_catalog_metadata": "26bb8f7e1bd9688750fd0ecadfc80eaf6fc3b424ad16c52ffdaa43fa7afb8abd"
   },
   "knownDivergences": {
@@ -51,7 +52,23 @@
     }
   },
   "baselineDDLChecksum": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
-  "schemaChecksum": "3a6c7ab1816deb6ad6507dfa6a3a126ab39a065610813c2686b1eae108de02c9",
+  "schemaChecksum": "07b72514586e8b9163341c2c136cb6b2d259109e854dc9d2da93f2c2a9ee3c07",
+  "productionForwardApplicationOrder": [
+    "20260915194500_rls_security_hardening",
+    "20260915203000_fix_rls_product_public_read",
+    "20260917120000_commerce_intelligence_foundation",
+    "20260918100000_commerce_canary_control_plane",
+    "20260924080000_catalog_architecture_v1",
+    "20260925120000_catalog_cutover_global_control",
+    "20260925130000_catalog_cutover_global_control_timestamptz",
+    "20260926120000_catalog_cutover_autopilot",
+    "20260926220000_candidate_blocking_keys",
+    "20260927100000_schema_reconciliation",
+    "20260927120000_price_alert_schema_reconciliation",
+    "20260927180000_social_post_index_reconciliation",
+    "20260930120000_ml_listing_first_catalog_metadata",
+    "20260930000000_ml_listing_first"
+  ],
   "productionAppliedSteps": {
     "20260824000000_postgresql_baseline": 0,
     "20260824120000_analytics_intelligence": 1,
@@ -66,7 +83,12 @@
     "20260924080000_catalog_architecture_v1": 1,
     "20260925120000_catalog_cutover_global_control": 1,
     "20260925130000_catalog_cutover_global_control_timestamptz": 1,
+    "20260926120000_catalog_cutover_autopilot": 1,
+    "20260926220000_candidate_blocking_keys": 1,
+    "20260927180000_social_post_index_reconciliation": 1,
     "20260927100000_schema_reconciliation": 1,
-    "20260927120000_price_alert_schema_reconciliation": 1
+    "20260927120000_price_alert_schema_reconciliation": 1,
+    "20260930120000_ml_listing_first_catalog_metadata": 1,
+    "20260930000000_ml_listing_first": 1
   }
 }

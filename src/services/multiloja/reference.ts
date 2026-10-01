@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { listOfertasListingAware } from "@/services/database/marketplaceOfferWriter";
 
 import type {
   MarketplaceName,
@@ -89,26 +90,28 @@ export async function reconstruirReferenciaMultiloja(
     );
   }
 
-  const offer =
-    await prisma.marketplaceOffer.findUnique({
-      where: {
-        productId_marketplace: {
-          productId,
-          marketplace,
-        },
-      },
-
-      select: {
-        externalId: true,
-        sourceUrl: true,
-        affiliateLink: true,
-        seller: true,
-        price: true,
-        oldPrice: true,
-        installments: true,
-        stock: true,
-      },
-    });
+  /*
+   * LISTING-FIRST: (productId, marketplace) deixou de ser unique, porque em
+   * MERCADO_LIVRE um Product pode ter vários anúncios. Fora do ML o índice
+   * parcial garante no máximo uma, então a lista tem um elemento; no ML
+   * escolhemos a mais antiga de forma determinística (nunca "a última
+   * vista"), porque a ordem da API não pode decidir.
+   */
+  const [offer] = await listOfertasListingAware({
+    db: prisma,
+    productId,
+    marketplace,
+    select: {
+      externalId: true,
+      sourceUrl: true,
+      affiliateLink: true,
+      seller: true,
+      price: true,
+      oldPrice: true,
+      installments: true,
+      stock: true,
+    },
+  });
 
   const externalId =
     offer?.externalId?.trim();

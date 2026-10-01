@@ -24,9 +24,14 @@
  * indice de CandidateBlockingKey e o writer so o referencia.
  */
 
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { resolveLegacyEnumValue } from "../marketplaceRegistry";
 import { sincronizarMelhorOfertaDoProduto } from "../../../database/saveProduct";
+import {
+  findOfertaListingAware,
+  upsertOfertaListingAware,
+  withUniqueRaceRetry,
+} from "../../../database/marketplaceOfferWriter";
 import { toCanonicalMarketplaceId } from "../publication/shadowWeight";
 import type {
   OfferCommitContext,
@@ -169,13 +174,40 @@ export function createPrismaPublicOfferCommitter(
         throw new Error(`INVALID_PRICE: ${draft.externalId}`);
       }
 
-      const existing = await prisma.marketplaceOffer.findUnique({
-        where: {
-          productId_marketplace: {
-            productId: draft.productId,
-            marketplace: legacyEnum as never,
-          },
-        },
+      /*
+       * LISTING-FIRST: a identidade da oferta depende do marketplace.
+       *
+       * MERCADO_LIVRE -> por anúncio (`marketplace_externalId`). Um Product
+       * pode ter VÁRIOS anúncios e esta chamada grava UM deles; procurar por
+       * (productId, marketplace) escolheria um anúncio arbitrário.
+       *
+       * demais -> por (productId, marketplace), garantido no máximo um pelo
+       * índice parcial do banco.
+       */
+      const existing = await findOfertaListingAware({
+        db: prisma,
+        productId: draft.productId,
+        marketplace: legacyEnum as never,
+        externalId: draft.externalId,
+        /*
+         * O select cobre TODOS os `OBSERVABLE_FIELDS`, porque `diffFields`
+         * compara o estado persistido com o draft para decidir NOOP vs
+         * UPDATE. Se um campo observável ficasse de fora, ele leria
+         * `undefined` e todo ciclo pareceria uma mudança.
+         */
+        select: {
+          id: true,
+          productId: true,
+          title: true,
+          seller: true,
+          image: true,
+          price: true,
+          sourceUrl: true,
+          affiliateLink: true,
+          available: true,
+          status: true,
+          active: true,
+        } satisfies Prisma.MarketplaceOfferSelect,
       });
 
       // `@@unique([marketplace, externalId])`: se a listing ja pertence a
@@ -221,17 +253,27 @@ export function createPrismaPublicOfferCommitter(
             changedFields: [...OBSERVABLE_FIELDS],
           };
         }
-        await prisma.$transaction(async (tx) => {
-          await tx.marketplaceOffer.create({
-            data: {
+        /*
+         * `withUniqueRaceRetry` no nível da TRANSAÇÃO, não do statement: o
+         * Postgres aborta a transação depois de um P2002, então reler dentro
+         * dela é impossível. Repetindo a transação inteira, o `findFirst` da
+         * segunda volta enxerga a linha que o outro writer criou.
+         */
+        await withUniqueRaceRetry(() =>
+          prisma.$transaction(async (tx) => {
+            await upsertOfertaListingAware({
+              db: tx,
               productId: draft.productId,
               marketplace: legacyEnum as never,
-              ...data,
-            },
-          });
-          // Publication gate CENTRAL. Nunca escrevo Product.active aqui.
-          await sincronizarMelhorOfertaDoProduto(tx, draft.productId);
-        });
+              externalId: draft.externalId,
+              update: data as never,
+              create: data as never,
+              select: { id: true },
+            });
+            // Publication gate CENTRAL. Nunca escrevo Product.active aqui.
+            await sincronizarMelhorOfertaDoProduto(tx, draft.productId);
+          }),
+        );
         return {
           productId: draft.productId,
           marketplaceId: draft.marketplaceId,

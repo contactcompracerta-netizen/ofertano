@@ -2,6 +2,7 @@ import type { OpportunityStatus, PrismaClient } from "@prisma/client";
 
 import { validateOfficialMercadoLivreAffiliateLink } from "@/lib/affiliates/validateAdminAffiliateLink";
 import { isValidMercadoLivreListingIdentity } from "@/services/mercadoLivre/listingIdentity";
+import { listOfertasListingAware } from "@/services/database/marketplaceOfferWriter";
 import {
   opportunityAlteraOutroProduct,
   type ExactOfferSnapshot,
@@ -188,13 +189,21 @@ export function createPrismaApplyAffiliateLinkStore(
     },
 
     async findMercadoLivreOfferForProduct(productId) {
-      const row = await client.marketplaceOffer.findUnique({
-        where: {
-          productId_marketplace: {
-            productId,
-            marketplace: "MERCADO_LIVRE",
-          },
-        },
+      /*
+       * LISTING-FIRST: um Product pode ter VÁRIOS anúncios no ML, então
+       * "a oferta deste Product" não é única. Sem `offerId` no input, a
+       * escolha precisa ser DETERMINÍSTICA: a mais antiga (ordem de criação),
+       * nunca "a última vista" ou a mais barata, porque a ordem da API não
+       * pode decidir a qual anúncio o afiliado pertence.
+       *
+       * A identidade continua sendo conferida depois, no gate
+       * `isValidMercadoLivreListingIdentity`: escolher a linha não
+       * transforma catálogo em anúncio.
+       */
+      const [row] = await listOfertasListingAware({
+        db: client,
+        productId,
+        marketplace: "MERCADO_LIVRE",
         select: {
           id: true,
           productId: true,

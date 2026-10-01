@@ -23,6 +23,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -68,6 +69,7 @@ function verifyManifest() {
       baselineMigrations: MANIFEST.baselineMigrations,
       forwardMigrations: MANIFEST.forwardMigrations,
       retroactiveForwardMigrations: MANIFEST.retroactiveForwardMigrations,
+      forwardApplicationOrder: MANIFEST.forwardApplicationOrder ?? null,
       actualNames,
       actualChecksums: Object.fromEntries(actualNames.map(n => [n, sha256(fs.readFileSync(path.join(migDir, n, "migration.sql")))])),
     });
@@ -177,8 +179,87 @@ async function checkEquivalence(client, target, category) {
   } finally { schema.cleanup(); }
 }
 
-function deployAndStatus(target) {
-  requirePrisma(["migrate", "deploy"], target);
+/*
+ * Aplicar um conjunto de migrations num diretorio temporario.
+ *
+ * `migrate deploy` aplica as migrations PENDENTES em ordem LEXICAL de
+ * diretorio, e aborta se a ledger tiver uma migration aplicada que o diretorio
+ * nao conhece. Por isso cada passo e staged com exatamente: baseline +
+ * ja aplicadas + a proxima. A ordem real vem do chamador.
+ */
+function applyStagedSubset(target, names, expectedMigration) {
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), "ofertano-forward-order-"));
+
+  try {
+    const migrations = path.join(staging, "migrations");
+    fs.mkdirSync(migrations);
+    fs.copyFileSync(
+      path.join(ROOT, "prisma/migrations/migration_lock.toml"),
+      path.join(migrations, "migration_lock.toml"),
+    );
+
+    for (const name of names) {
+      fs.mkdirSync(path.join(migrations, name));
+      fs.copyFileSync(
+        path.join(ROOT, "prisma/migrations", name, "migration.sql"),
+        path.join(migrations, name, "migration.sql"),
+      );
+    }
+
+    const config = path.join(staging, "prisma.config.ts");
+    fs.writeFileSync(
+      config,
+      `export default { schema: ${JSON.stringify(SCHEMA_PATH)}, migrations: { path: ${JSON.stringify(migrations)} }, datasource: { url: process.env.DIRECT_URL } };\n`,
+    );
+
+    const out = requirePrisma(["migrate", "deploy", "--config", config], target);
+
+    if (!out.stdout.includes(`Applying migration \`${expectedMigration}\``)) {
+      abort("FORWARD_STAGE_NOT_APPLIED", { migration: expectedMigration, stdout: out.stdout.trim().slice(0, 800) });
+    }
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+/*
+ * ORDEM DE APLICACAO REAL, e nao a lexical dos nomes.
+ *
+ * `20260930000000_ml_listing_first` ordena antes de
+ * `20260930120000_ml_listing_first_catalog_metadata`, mas em PRODUCAO rodou
+ * DEPOIS (started_at 21:24:11 contra 09:51:36Z do mesmo dia). Os bytes das
+ * duas estao pinados na ledger de producao, entao nao podem ser reescritas
+ * para virar idempotentes: a primeira usa `ADD COLUMN IF NOT EXISTS
+ * "catalogProductId"` e a segunda `ADD COLUMN "catalogProductId"`, e em ordem
+ * lexical o replay de banco novo aborta com 42701 "column already exists".
+ *
+ * Nao existe nenhuma migration nova aqui, nenhum `migrate resolve`, e nenhuma
+ * edicao de migration aplicada: a ordem e a que a propria ledger de producao
+ * registra, e e a unica que reproduz o schema de producao.
+ */
+async function deployForwardInDeclaredOrder(client, target) {
+  const order = MANIFEST.forwardApplicationOrder ?? Object.keys(MANIFEST.forwardMigrations);
+  const applied = new Set((await client.query('SELECT migration_name FROM "_prisma_migrations"')).rows.map((r) => r.migration_name));
+  const firstPending = order.findIndex((name) => !applied.has(name));
+
+  if (firstPending === -1) {
+    requirePrisma(["migrate", "deploy"], target);
+    return;
+  }
+
+  const staged = [
+    ...Object.keys(MANIFEST.baselineMigrations),
+    ...order.slice(0, firstPending),
+  ];
+
+  for (let i = firstPending; i < order.length; i += 1) {
+    staged.push(order[i]);
+    applyStagedSubset(target, staged, order[i]);
+  }
+}
+
+async function deployAndStatus(client, target) {
+  await deployForwardInDeclaredOrder(client, target);
   requirePrisma(["migrate", "status"], target);
 }
 
@@ -200,7 +281,7 @@ async function main() {
       }
       await bootstrapFresh(client, target);
       await scaffoldLocalSupabase(client, target);
-      deployAndStatus(target);
+      await deployAndStatus(client, target);
       await checkEquivalence(client, target, "A");
       result("PASS", "A", { classification: "A", ...detail });
       return;
@@ -211,7 +292,7 @@ async function main() {
         result("PASS", "B", { classification: "B", action: "already canonical", ...detail });
         return;
       }
-      deployAndStatus(target);
+      await deployAndStatus(client, target);
       result("NOOP", "B", { classification: "B", message: "already migrated canonical schema", ...detail });
       return;
     }
