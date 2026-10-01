@@ -26,11 +26,17 @@ export type {
 } from "./resolver";
 
 export {
+  auditarConflitosEstruturais,
   avaliarCompatibilidadeExataEntreImports,
   avaliarIdentidadesExatas,
 } from "./exactMatcher";
 
-export type { ExactMatchResult } from "./exactMatcher";
+export type {
+  ExactMatchResult,
+  StructuralAuditV1,
+  StructuralConflictKind,
+  StructuralConflictV1,
+} from "./exactMatcher";
 
 export {
   avaliarCompatibilidadeComConsulta,

@@ -257,6 +257,71 @@ function conflitoDeSubmodelo(
   return null;
 }
 
+/**
+ * Capacidade em GB (ou fracao de GB), normalizando unidade. `1TB` e
+ * `1024GB` sao a MESMA capacidade: tratá-las como dimensao diferente seria
+ * um falso conflito, ou seja, EXTRACTION_NOISE.
+ */
+function capacidadeEmGb(valor: string): number | null {
+  const m = /(\d+(?:[.,]\d+)?)\s*(tb|gb|mb)/i.exec(valor);
+
+  if (!m) {
+    return null;
+  }
+
+  const amount = Number(m[1].replace(",", "."));
+  const unit = m[2].toLowerCase();
+
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  if (unit === "tb") return amount * 1024;
+  if (unit === "mb") return amount / 1024;
+  return amount;
+}
+
+/**
+ * Eixos cujo valor e uma GRANDEZA: comparacao dimensional, nao textual.
+ */
+const DIMENSIONAL_HARD_KEYS: IdentityVariantKey[] = [
+  "storage",
+  "ram",
+  "capacity",
+];
+
+/**
+ * Dois valores de variante sao compativeis?
+ *
+ * Ausência NAO e conflito: a fonte que nao deklaro o atributo esta se
+ * calando, nao afirmando o contrario (§2 da missao). Para eixos
+ * dimensionais, `1tb` x `1024gb` e a MESMA grandeza (EXTRACTION_NOISE),
+ * enquanto `128gb` x `256gb` sao grandezas DIMENSIONALMENTE diferentes
+ * (REAL_STRUCTURAL_CONFLICT).
+ */
+function variantesCompativeis(
+  key: IdentityVariantKey,
+  firstValue: string,
+  secondValue: string,
+): { compat: boolean; ruido: boolean } {
+  if (firstValue === secondValue) {
+    return { compat: true, ruido: false };
+  }
+
+  if (DIMENSIONAL_HARD_KEYS.includes(key)) {
+    const firstCapacity = capacidadeEmGb(firstValue);
+    const secondCapacity = capacidadeEmGb(secondValue);
+
+    if (firstCapacity !== null && secondCapacity !== null) {
+      return Math.abs(firstCapacity - secondCapacity) <= 0.5
+        ? { compat: true, ruido: true }
+        : { compat: false, ruido: false };
+    }
+  }
+
+  return { compat: false, ruido: false };
+}
+
 function conflitoDeVariantes(
   first: ProductIdentity,
   second: ProductIdentity,
@@ -634,6 +699,201 @@ function titulosComerciaisEquivalentes(
   return coverage >= 0.8 && sizeRatio >= 0.5;
 }
 
+/**
+ * AUDITORIA DE CONFLITO ESTRUTURAL (FASE 2 / CROSS-MARKET MATCHING).
+ *
+ * Um GTIN/EAN identico e valido e evidencia EXTREMAMENTE forte de que as
+ * duas ofertas sao o MESMO objeto fisico. Mas forca fisica nao anula uma
+ * contradicao comprovada: um anunciante pode publicar o codigo de barras do
+ * item principal junto com o titulo/planilha de outra variante.
+ *
+ * Por isso o GTIN NAO faz mais `return exact(...)` imediato. Ele passa
+ * PRIMEIRO por esta auditoria, que separa:
+ *
+ *   REAL_STRUCTURAL_CONFLICT — as DUAS fontes AFIRMARAM valores diferentes
+ *     no mesmo eixo estrutural (capacidade, voltagem, tamanho, kit x
+ *     unidade, marca, modelo/MPN, submodelo, SKU do fabricante). Isso e
+ *     o fabricante se contradizendo: o par nao pode virar EXACT.
+ *
+ *   EXTRACTION_NOISE — ruido de extracao, nao contradicao: mesma grandeza
+ *     escrita de formas diferentes (`1tb` x `1024gb`), submodelo
+ *     informado de um lado e omissao do outro, SKU do fabricante presente
+ *     de um lado e ausente do outro. Nao bloqueia a promocao.
+ *
+ * AUSENCIA de atributo nunca vira conflito: `missing` e a fonte se calando.
+ */
+export type StructuralConflictKind =
+  | "REAL_STRUCTURAL_CONFLICT"
+  | "EXTRACTION_NOISE";
+
+export interface StructuralConflictV1 {
+  kind: StructuralConflictKind;
+  /** Eixo estrutural observado (brand, storage, voltage, model...). */
+  axis: string;
+  detail: string;
+}
+
+export interface StructuralAuditV1 {
+  conflicts: StructuralConflictV1[];
+  noise: StructuralConflictV1[];
+}
+
+function conflito(
+  axis: string,
+  detail: string,
+): StructuralConflictV1 {
+  return { kind: "REAL_STRUCTURAL_CONFLICT", axis, detail };
+}
+
+function ruido(axis: string, detail: string): StructuralConflictV1 {
+  return { kind: "EXTRACTION_NOISE", axis, detail };
+}
+
+/**
+ * Auditoria estrutural completa. Usada pelo caminho do GTIN igual para NAO
+ * deixar evidencia forte mascarar conflito comprovado. Nao altera o caminho
+ * sem GTIN, que continua usando `conflitoDeVariantes`/`conflitoDeSubmodelo`/
+ * `conflitoDeSkuEspecifico` na ordem original.
+ */
+export function auditarConflitosEstruturais(
+  first: ProductIdentity,
+  second: ProductIdentity,
+): StructuralAuditV1 {
+  const conflicts: StructuralConflictV1[] = [];
+  const noise: StructuralConflictV1[] = [];
+
+  // 1. Marca: as duas fontes AFIRMARAM marcas diferentes.
+  if (first.brand && second.brand && first.brand !== second.brand) {
+    conflicts.push(
+      conflito("brand", `Marca diferente: ${first.brand} x ${second.brand}.`),
+    );
+  }
+
+  // 2. Eixos estruturais HARD: so conflita com valor nos DOIS lados.
+  for (const key of HARD_VARIANT_KEYS) {
+    const firstValue = first.variants[key];
+    const secondValue = second.variants[key];
+
+    if (!firstValue || !secondValue) {
+      continue;
+    }
+
+    const verdict = variantesCompativeis(key, firstValue, secondValue);
+
+    if (verdict.compat) {
+      if (verdict.ruido) {
+        noise.push(
+          ruido(
+            key,
+            `Variante ${key} declarada em notacao diferente para a mesma grandeza: ${firstValue} x ${secondValue}.`,
+          ),
+        );
+      }
+      continue;
+    }
+
+    conflicts.push(
+      conflito(key, `Variante ${key} diferente: ${firstValue} x ${secondValue}.`),
+    );
+  }
+
+  // 3. Eixos assimetricos (kit x unidade): ausencia de um lado tambem e
+  //    contradicao estrutural, porque "kit" e "unidade" sao unidades
+  //    comerciais diferentes — nao um atributo que a fonte esqueceu.
+  for (const key of ASYMMETRIC_VARIANT_KEYS) {
+    const firstValue = first.variants[key];
+    const secondValue = second.variants[key];
+
+    if (firstValue && secondValue && firstValue !== secondValue) {
+      conflicts.push(
+        conflito(key, `Variante ${key} diferente: ${firstValue} x ${secondValue}.`),
+      );
+      continue;
+    }
+
+    if (Boolean(firstValue) !== Boolean(secondValue)) {
+      conflicts.push(
+        conflito(
+          key,
+          `Variante ${key} incompativel: ${firstValue ?? "padrao"} x ${secondValue ?? "padrao"}.`,
+        ),
+      );
+    }
+  }
+
+  // 4. Submodelo: base comum com extensoes divergentes e conflito; base
+  //    comum com um lado sem extensao e ruido (a fonte nao detalhou).
+  const submodelConflict = conflitoDeSubmodelo(first, second);
+
+  if (submodelConflict) {
+    const missingSide = /insuficiente para confirmar/.test(submodelConflict);
+    (missingSide ? noise : conflicts).push(
+      missingSide
+        ? ruido("submodel", submodelConflict)
+        : conflito("submodel", submodelConflict),
+    );
+  }
+
+  // 5. SKU especifico do fabricante.
+  const skuCheck = conflitoDeSkuEspecifico(first, second);
+
+  if (skuCheck.conflict) {
+    (skuCheck.missingOnly ? noise : conflicts).push(
+      skuCheck.missingOnly
+        ? ruido("manufacturerSku", skuCheck.conflict)
+        : conflito("manufacturerSku", skuCheck.conflict),
+    );
+  }
+
+  // 6. Modelo comercial: um codigo que CONTEM o outro nao e modelo
+  //    diferente, e sim o mesmo modelo com mais/menos detalhe de extracao.
+  const firstCommercial = first.commercialModel ?? first.model;
+  const secondCommercial = second.commercialModel ?? second.model;
+
+  if (firstCommercial && secondCommercial && firstCommercial !== secondCommercial) {
+    const prefixCompatible =
+      firstCommercial.startsWith(secondCommercial) ||
+      secondCommercial.startsWith(firstCommercial);
+
+    (prefixCompatible ? noise : conflicts).push(
+      prefixCompatible
+        ? ruido(
+            "commercialModel",
+            `Modelo comercial em grau de detalhe diferente: ${firstCommercial} x ${secondCommercial}.`,
+          )
+        : conflito(
+            "commercialModel",
+            `Modelo comercial diferente: ${firstCommercial} x ${secondCommercial}.`,
+          ),
+    );
+  }
+
+  // 7. MPN / modelo estruturado: so e conflito quando nao existe modelo
+  //    comercial em comum para explicar a divergencia.
+  const commonModel =
+    firstCommercial && secondCommercial
+      ? firstCommercial
+      : codigoModeloEmComum(first, second);
+  const firstStructured = modeloEstruturado(first);
+  const secondStructured = modeloEstruturado(second);
+
+  if (
+    firstStructured &&
+    secondStructured &&
+    firstStructured !== secondStructured &&
+    !commonModel
+  ) {
+    conflicts.push(
+      conflito(
+        "mpn",
+        `Modelo/MPN diferente: ${firstStructured} x ${secondStructured}.`,
+      ),
+    );
+  }
+
+  return { conflicts, noise };
+}
+
 export function avaliarIdentidadesExatas(
   first: ProductIdentity,
   second: ProductIdentity,
@@ -682,9 +942,43 @@ export function avaliarIdentidadesExatas(
   const secondGlobalCode = globalCode(second);
 
   if (firstGlobalCode && secondGlobalCode) {
-    return firstGlobalCode === secondGlobalCode
-      ? exact("GTIN", "GTIN/EAN identico.")
-      : reject("GTIN/EAN diferente.");
+    /*
+     * GTIN/EAN DIFERENTE e conflito de identidade mais forte que existe:
+     * dois codigos de barras para o mesmo objeto. Rejeita sempre.
+     *
+     * GTIN/EAN IDENTICO e evidencia fortissima, mas nao e prova ciega.
+     * Antes de promover, a auditoria estrutural roda: se as DUAS fontes
+     * AFIRMARAM valores divergentes em um eixo estrutural (capacidade,
+     * voltagem, tamanho, kit x unidade, marca, modelo/MPN), o par e
+     * REJECT — o anuncio esta contradizendo a si mesmo. Se a divergencia
+     * for apenas ruido de extracao (1tb x 1024gb, submodelo detalhado de
+     * um lado, SKU do fabricante omitido pelo outro), o GTIN ainda promove,
+     * porque evidencia forte e corroborada nao pode ser rebaixada por
+     * diferenca de detalhe de preenchimento.
+     */
+    if (firstGlobalCode !== secondGlobalCode) {
+      return reject("GTIN/EAN diferente.");
+    }
+
+    const audit = auditarConflitosEstruturais(first, second);
+
+    if (audit.conflicts.length > 0) {
+      return reject(
+        `${audit.conflicts[0].detail} GTIN/EAN identico nao anula conflito estrutural comprovado.`,
+      );
+    }
+
+    const noiseSuffix =
+      audit.noise.length > 0
+        ? ` Ruido de extracao absorvido: ${Array.from(
+            new Set(audit.noise.map((item) => item.axis)),
+          ).join(", ")}.`
+        : "";
+
+    return exact(
+      "GTIN",
+      `GTIN/EAN identico e nenhum conflito estrutural comprovado.${noiseSuffix}`,
+    );
   }
 
   if (
