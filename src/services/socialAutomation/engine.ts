@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { isOfertaPublicavelNoMarketplace } from "@/services/publicVisibility/multiStoreVisibility";
 
 import {
   buildEvergreenContent,
@@ -72,6 +73,8 @@ function toReliableProducts(
       price: number;
       oldPrice: number | null;
       image: string | null;
+      externalId: string | null;
+      sourceUrl: string | null;
     }>;
   }>,
 ): ReliableProduct[] {
@@ -79,6 +82,15 @@ function toReliableProducts(
     .map((product) => {
       const offers = product.offers
         .filter((offer) => Number.isFinite(offer.price) && offer.price > 0)
+        /*
+         * LISTING-FIRST: o card social é uma SUPERFÍCIE pública ("MENOR
+         * PREÇO ENCONTRADO"). Sem identidade de anúncio, a oferta de
+         * CATÁLOGO do Mercado Livre (`/p/...`) entrava como loja e o card
+         * anunciava "MENOR PREÇO ENCONTRADO: R$ 63,00" num valor que não
+         * tem vendedor nem compra possível. A disponibilidade/preço já
+         * vieram filtrados do `where`, então basta a regra de mercado.
+         */
+        .filter(isOfertaPublicavelNoMarketplace)
         .sort((left, right) => left.price - right.price)
         .map((offer) => ({
           id: offer.id,
@@ -165,6 +177,9 @@ async function eligibleProducts(
           price: true,
           oldPrice: true,
           image: true,
+          // LISTING-FIRST: insumo de `isOfertaPublicavelNoMarketplace`.
+          externalId: true,
+          sourceUrl: true,
         },
       },
     },

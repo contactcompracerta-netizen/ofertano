@@ -15,8 +15,10 @@ import Footer from "@/components/Footer";
 import { searchCatalogOrDiscover } from "@/services/search/searchCatalogOrDiscover";
 import {
   hasPublicMultiStore,
+  isUsablePublicOffer,
   multiStorePublicWhere,
 } from "@/services/publicVisibility/multiStoreVisibility";
+import { listarDicasPublicas } from "@/services/publicVisibility/publicDiscoveryHints";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -124,6 +126,14 @@ export default async function HomePage({
               status: true,
               available: true,
               affiliateLink: true,
+              /*
+               * LISTING-FIRST: sem `externalId`/`sourceUrl` a Home não
+               * consegue provar a identidade do anúncio do Mercado Livre e
+               * a oferta de CATÁLOGO (`/p/...`) entrava no comparador do
+               * Hero como se fosse uma loja comprável.
+               */
+              externalId: true,
+              sourceUrl: true,
             },
           },
         },
@@ -137,15 +147,13 @@ export default async function HomePage({
 
     const produtosComparador = produtosMultiLoja
       .map((produto) => {
+        /*
+         * O comparador do Hero é a mesma grade de lojas da página de
+         * produto, então usa o gate público central (`isUsablePublicOffer`)
+         * em vez de um filtro local que só checava disponibilidade.
+         */
         const ofertasValidas = produto.offers
-          .filter(
-            (oferta) =>
-              oferta.available &&
-              oferta.status !== "UNAVAILABLE" &&
-              oferta.status !== "ERROR" &&
-              Number.isFinite(oferta.price) &&
-              oferta.price > 0,
-          )
+          .filter(isUsablePublicOffer)
           .sort((a, b) => a.price - b.price)
           .map((oferta) => ({
             marketplace: oferta.marketplace,
@@ -226,6 +234,16 @@ export default async function HomePage({
     );
   const searchDurationMs = Date.now() - pesquisaIniciadaEm;
 
+  /*
+   * Dicas do estado "0 resultado": só custam uma consulta quando a busca
+   * NÃO retornou nada, e cada sugestão é uma categoria/marca de produto
+   * realmente público. Busca com resultado não precisa delas.
+   */
+  const dicas =
+    resultado.products.length === 0
+      ? await listarDicasPublicas()
+      : undefined;
+
   return (
     <main className="min-h-screen bg-slate-50">
       <Header />
@@ -233,6 +251,7 @@ export default async function HomePage({
       <OffersSection
         produtos={resultado.products}
         busca={busca}
+        dicas={dicas}
         searchMeta={{
           durationMs: searchDurationMs,
           source: resultado.source,

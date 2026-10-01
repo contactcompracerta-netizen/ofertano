@@ -94,7 +94,10 @@ import {
   precoValidoParaHistorico,
 } from "@/services/priceHistory/priceHistoryService";
 
-import { permitirAtivacaoProdutoAutoCriado } from "@/services/publicVisibility/multiStoreVisibility";
+import {
+  isOfertaPublicavelNoMarketplace,
+  permitirAtivacaoProdutoAutoCriado,
+} from "@/services/publicVisibility/multiStoreVisibility";
 
 type MarketplaceDatabase =
   | "MERCADO_LIVRE"
@@ -2211,8 +2214,34 @@ export async function sincronizarMelhorOfertaDoProduto(
       },
     });
 
+  /*
+   * ELEIÇÃO DA MELHOR OFERTA — só entre ofertas que a política pública
+   * consegue EXIBIR.
+   *
+   * `isBest` e `Product.price` alimentam o selo "Melhor preço" de todo o
+   * catálogo (card, Hero, comparador, JSON-LD). Se a oferta eleita for
+   * rejeitada pela política pública, o site anuncia como melhor preço um
+   * valor que o usuário não consegue comprar: foi o caso da oferta de
+   * CATÁLOGO do Mercado Livre (`/p/...`), que agrega anúncios, não tem
+   * vendedor e não aceita CTA de oferta.
+   *
+   * O fallback para a lista completa é deliberado. Ofertas com
+   * identidade ainda NÃO materializada (ML Listing-First v1, `sourceUrl`
+   * vazio porque o link de afiliado ainda não voltou) não podem perder o
+   * preço por causa de um dado pendente — isso apagaria a comparação de
+   * 25 ofertasmonitoradas. Rebaixar todas aqui é decisão de política com
+   * base em ausência de dado; a política pública decide com base no que a
+   * oferta É. Quando existe ao menos uma oferta exibível, ela manda.
+   */
+  const ofertasExibiveis = ofertasExatas.filter(
+    isOfertaPublicavelNoMarketplace,
+  );
+
+  const ofertasDaEleicao =
+    ofertasExibiveis.length > 0 ? ofertasExibiveis : ofertasExatas;
+
   const melhorOfertaEncontrada =
-    ofertasExatas.find(
+    ofertasDaEleicao.find(
       (item) =>
         item.available &&
         item.status !== "UNAVAILABLE" &&
@@ -2222,7 +2251,7 @@ export async function sincronizarMelhorOfertaDoProduto(
     ) ?? null;
 
   const melhorOfertaCompravel =
-    ofertasExatas.find(
+    ofertasDaEleicao.find(
       (item) =>
         item.available &&
         item.status === "ACTIVE" &&

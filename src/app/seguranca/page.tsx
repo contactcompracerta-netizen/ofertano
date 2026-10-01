@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import prisma from "@/lib/prisma";
 import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
+import { isUsablePublicOffer } from "@/services/publicVisibility/multiStoreVisibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -107,6 +108,18 @@ export default async function ProdutoPage({
     notFound();
   }
 
+  /*
+   * Grade de ofertas com o gate público CENTRAL.
+   *
+   * Sem isso, a rota herdada exibia a oferta de CATÁLOGO do Mercado Livre
+   * (`/p/...`) como se fosse uma loja: aparecia "Mercado Livre / Link em
+   * revisão / R$ 63,00" ao lado das lojas reais, anunciando um preço sem
+   * compra possível. "Link em revisão" continua correto para oferta de
+   * anúncio real sem afiliado — essa é informativa, não falsa.
+   */
+  const ofertasPublicaveis =
+    produto.offers.filter(isUsablePublicOffer);
+
   const possuiPrecoAnterior =
     produto.oldPrice !== null &&
     produto.oldPrice > produto.price;
@@ -135,7 +148,7 @@ export default async function ProdutoPage({
 
   const linkLegadoPrincipal = produto.affiliateLink.trim();
 
-  const ofertaPrincipalComLink = produto.offers.find((oferta) => {
+  const ofertaPrincipalComLink = ofertasPublicaveis.find((oferta) => {
     const link = oferta.affiliateLink?.trim();
 
     return (
@@ -400,7 +413,7 @@ export default async function ProdutoPage({
 
         {(produto.description ||
           produto.specifications ||
-          produto.offers.length > 0) && (
+          ofertasPublicaveis.length > 0) && (
           <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_0.6fr]">
             <div className="space-y-8">
               {produto.description && (
@@ -429,13 +442,20 @@ export default async function ProdutoPage({
                       ).map(([chave, valor]) => (
                         <div
                           key={chave}
-                          className="grid gap-2 py-4 sm:grid-cols-[0.8fr_1.2fr]"
+                          className="grid min-w-0 gap-2 py-4 sm:grid-cols-[0.8fr_1.2fr]"
                         >
-                          <dt className="font-bold text-gray-800">
+                          <dt className="min-w-0 break-words font-bold text-gray-800">
                             {chave}
                           </dt>
 
-                          <dd className="text-gray-600">
+                          {/*
+                           * `min-w-0` + `break-words`: sem isso a coluna da
+                           * grade assume a largura MÁXIMA do conteúdo e uma
+                           * URL sem quebras (link de afiliado) empurrava a
+                           * página para 504px, criando rolagem horizontal em
+                           * 320/360/390/430px.
+                           */}
+                          <dd className="min-w-0 break-words text-gray-600">
                             {typeof valor === "string" ||
                             typeof valor === "number" ||
                             typeof valor === "boolean"
@@ -450,7 +470,7 @@ export default async function ProdutoPage({
             </div>
 
             <aside className="space-y-6">
-              {produto.offers.length > 0 && (
+              {ofertasPublicaveis.length > 0 && (
                 <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-black text-gray-900">
                     Compare preços
@@ -462,7 +482,7 @@ export default async function ProdutoPage({
                   </p>
 
                   <div className="mt-5 space-y-3">
-                    {produto.offers.map((oferta) => {
+                    {ofertasPublicaveis.map((oferta) => {
                       const link =
                         oferta.affiliateLink?.trim();
 

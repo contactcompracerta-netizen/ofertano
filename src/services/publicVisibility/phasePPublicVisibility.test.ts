@@ -112,12 +112,27 @@ setShadowEnv(SHADOW_REAL);
  * Ofertas como o Prisma AS ENTREGA: `marketplace` é a CHAVE do enum, em
  * maiúsculas. Reproduzir essa forma é o ponto inteiro da regressão — um
  * fixture em minúsculas passaria e não provaria nada.
+ *
+ * LISTING-FIRST (atualização do fixture): a política pública exige que uma
+ * oferta MERCADO_LIVRE seja um ANÚNCIO provado — ITEM_ID (`MLB` + dígitos)
+ * E `sourceUrl` de anúncio (`produto.mercadolivre.com.br/MLB-...`). O
+ * fixture antigo criava ML sem identidade, então TODO caso que usava ML
+ * caía como "não publicável" depois do endurecimento e a suíte ficava
+ * vermelha por FIXTURE desatualizado, não por regressão de código. Agora
+ * o default representa a oferta ML REAL e publicável do banco; quem
+ * precisa de uma ML inválida passa `externalId`/`sourceUrl` no override.
  */
+const IDENTIDADE_ML = {
+  externalId: "MLB1234567890",
+  sourceUrl: "https://produto.mercadolivre.com.br/MLB-1234567890-anuncio",
+} as const;
+
 const oferta = (
   marketplace: string,
   overrides: Partial<PublicOfferLike> = {},
 ): PublicOfferLike => ({
   marketplace,
+  ...(marketplace === "MERCADO_LIVRE" ? IDENTIDADE_ML : {}),
   active: true,
   matchStatus: "EXACT",
   available: true,

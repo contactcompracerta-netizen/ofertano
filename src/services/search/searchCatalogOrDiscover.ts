@@ -198,6 +198,11 @@ async function searchCatalog(query: string) {
           available: true,
           status: true,
           price: true,
+          // LISTING-FIRST: identidade do anúncio. Sem estes dois campos a
+          // busca tratava TODA oferta ML como não publicável (fail-closed
+          // silencioso) e a contagem de lojas do card divergia da grade.
+          externalId: true,
+          sourceUrl: true,
         },
       },
     },
@@ -225,6 +230,30 @@ export type SearchCatalogOrDiscoverResult = {
   products: Awaited<ReturnType<typeof searchCatalog>>;
   discovery?: Awaited<ReturnType<typeof descobrirProdutos>>;
 };
+
+type CatalogProduct = Awaited<ReturnType<typeof searchCatalog>>;
+
+/*
+ * A busca pública SEMPRE começa pelo catálogo. O motor V2 ao vivo
+ * (`searchMultistoreV2`) responde com clusters frescos deste momento e não
+ * consulta o banco — sem esta mesclagem, um produto já publicado e visível
+ * (Multi Loja) nunca aparecia na busca. O usuário buscava "Redmi Buds" e
+ * recebia "Nenhum produto encontrado" mesmo com o produto no ar.
+ *
+ * O catálogo vem primeiro (é a vitrine canônica) e a descoberta entra depois,
+ * deduplicada por `id`.
+ */
+function mesclarCatalogoComDescoberta(
+  catalogo: CatalogProduct,
+  descoberta: CatalogProduct,
+): CatalogProduct {
+  const idsDoCatalogo = new Set(catalogo.map((produto) => produto.id));
+
+  return [
+    ...catalogo,
+    ...descoberta.filter((produto) => !idsDoCatalogo.has(produto.id)),
+  ];
+}
 
 function rankDiscoveryCandidates(
   query: string,
@@ -432,6 +461,13 @@ export type PublicSearchOptions = {
   adapters?: DiscoveryAdapter[];
   findExistingProductId?: PersistCanonicalOptions["findExistingProductId"];
   budget?: SearchBudget;
+  /*
+   * Gancho de teste para a leitura de catálogo (CATALOG-FIRST do motor V2).
+   * Em produção o padrão é `searchCatalog`. Existe porque o motor V2 não
+   * consulta o catálogo por conta própria: sem injetar essa leitura, a
+   * regressão "produto público some da busca" não é observável sem banco.
+   */
+  searchCatalogFn?: (query: string) => Promise<CatalogProduct>;
 };
 
 export async function searchCatalogOrDiscover(
@@ -452,6 +488,33 @@ export async function searchCatalogOrDiscover(
   traceMultiloja("query", { query: search });
 
   if (usarMotorMultistoreV2()) {
+    /*
+     * CATALOG-FIRST no motor V2.
+     *
+     * `searchMultistoreV2` faz uma caçada ao vivo e NÃO consulta o catálogo,
+     * então um produto já publicado e público (Multi Loja) nunca aparecia na
+     * busca: o usuário digitava o nome exato e recebia "Nenhum produto
+     * encontrado". Aqui a vitrine canônica é lida primeiro e a descoberta ao
+     * vivo entra depois, deduplicada por `id`.
+     *
+     * A leitura do catálogo é resiliente: se o banco estiver indisponível
+     * (por exemplo, ambiente de teste sem `DATABASE_URL`), a busca segue
+     * apenas com a descoberta, sem quebrar a rota.
+     */
+    let catalogoVisivel: CatalogProduct = [];
+
+    try {
+      const lerCatalogo = options.searchCatalogFn ?? searchCatalog;
+      catalogoVisivel = (await lerCatalogo(search)).filter(
+        hasPublicMultiStore,
+      );
+    } catch (error) {
+      console.error(
+        "[Search] Catálogo indisponível; seguindo com descoberta:",
+        error,
+      );
+    }
+
     try {
       const limit = Math.max(discoveryLimit, 12);
       const v2 = await searchMultistoreV2(search, {
@@ -521,7 +584,10 @@ export async function searchCatalogOrDiscover(
           return {
             query: search,
             source: "DISCOVERY",
-            products: views as Awaited<ReturnType<typeof searchCatalog>>,
+            products: mesclarCatalogoComDescoberta(
+              catalogoVisivel,
+              views as CatalogProduct,
+            ),
           };
         }
       } else if (v2.views.length > 0 && visibleProducts.length > 0) {
@@ -535,9 +601,20 @@ export async function searchCatalogOrDiscover(
         return {
           query: search,
           source: "DISCOVERY",
-          products: v2.views.filter((_, index) =>
-            visibleIndexes.has(index),
-          ) as Awaited<ReturnType<typeof searchCatalog>>,
+          products: mesclarCatalogoComDescoberta(
+            catalogoVisivel,
+            v2.views.filter((_, index) =>
+              visibleIndexes.has(index),
+            ) as CatalogProduct,
+          ),
+        };
+      }
+
+      if (catalogoVisivel.length > 0) {
+        return {
+          query: search,
+          source: "CATALOG",
+          products: catalogoVisivel,
         };
       }
 
@@ -548,6 +625,15 @@ export async function searchCatalogOrDiscover(
       };
     } catch (error) {
       console.error("[Search Multi Loja V2] Discovery falhou:", error);
+
+      if (catalogoVisivel.length > 0) {
+        return {
+          query: search,
+          source: "CATALOG",
+          products: catalogoVisivel,
+        };
+      }
+
       return {
         query: search,
         source: "NOT_FOUND",
@@ -647,6 +733,8 @@ export async function searchCatalogOrDiscover(
                 available: true,
                 status: true,
                 price: true,
+                externalId: true,
+                sourceUrl: true,
               },
             },
           },

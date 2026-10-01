@@ -34,8 +34,21 @@ const SHADOW_REAL: ShadowFlags = {
   marketplaceIds: ["shopee"],
 };
 
+/*
+ * LISTING-FIRST: oferta MERCADO_LIVRE só é pública com identidade de
+ * ANÚNCIO provada (ITEM_ID + URL de anúncio). O fixture representa a
+ * oferta ML real do banco; sem identidade o teste ficava vermelho por
+ * fixture desatualizado, não por violação da reconcilição.
+ */
 const oferta = (marketplace: string) => ({
   marketplace,
+  ...(marketplace === "MERCADO_LIVRE"
+    ? {
+        externalId: "MLB1234567890",
+        sourceUrl:
+          "https://produto.mercadolivre.com.br/MLB-1234567890-anuncio",
+      }
+    : {}),
   active: true,
   matchStatus: "EXACT",
   available: true,

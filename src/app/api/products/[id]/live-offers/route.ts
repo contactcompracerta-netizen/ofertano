@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sanitizarOfertaCompraPublica } from "@/lib/affiliates/liveOffers";
 import { resolverLinkLegadoPrincipal } from "@/lib/affiliates/publicPurchase";
-import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
+import {
+  hasPublicMultiStore,
+  isUsablePublicOffer,
+} from "@/services/publicVisibility/multiStoreVisibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +46,7 @@ export async function GET(_request: Request, context: RouteContext) {
             marketplace: true,
             affiliateLink: true,
             sourceUrl: true,
+            externalId: true,
             matchStatus: true,
             status: true,
             available: true,
@@ -68,21 +72,23 @@ export async function GET(_request: Request, context: RouteContext) {
       );
     }
 
-    const offers = product.offers.map((offer) =>
-      sanitizarOfertaCompraPublica({
-        id: offer.id,
-        productId: offer.productId,
-        marketplace: offer.marketplace,
-        affiliateLink: offer.affiliateLink,
-        sourceUrl: offer.sourceUrl,
-        matchStatus: offer.matchStatus,
-        status: offer.status,
-        available: offer.available,
-        price: offer.price,
-        oldPrice: offer.oldPrice,
-        installments: offer.installments,
-      }),
-    );
+    const offers = product.offers
+      .filter(isUsablePublicOffer)
+      .map((offer) =>
+        sanitizarOfertaCompraPublica({
+          id: offer.id,
+          productId: offer.productId,
+          marketplace: offer.marketplace,
+          affiliateLink: offer.affiliateLink,
+          sourceUrl: offer.sourceUrl,
+          matchStatus: offer.matchStatus,
+          status: offer.status,
+          available: offer.available,
+          price: offer.price,
+          oldPrice: offer.oldPrice,
+          installments: offer.installments,
+        }),
+      );
 
     return NextResponse.json({
       success: true,

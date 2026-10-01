@@ -250,7 +250,18 @@ export type PublicProductView = {
   discount: number | null;
   store: string;
   brand: string | null;
-  offers: Array<{ marketplace: string }>;
+  /*
+   * A identidade viaja junto do marketplace porque a UI pública decide
+   * "quantas lojas comparar" com `isOfertaPublicavelNoMarketplace`, que
+   * precisa provar o anúncio em MERCADO_LIVRE. Sem estes campos a oferta
+   * ML de catálogo seria contada como loja pela view e rejeitada pela
+   * grade — o card anunciava 3 lojas e a página mostrava 2.
+   */
+  offers: Array<{
+    marketplace: string;
+    externalId?: string | null;
+    sourceUrl?: string | null;
+  }>;
 };
 
 export type MultistoreV2Result = {

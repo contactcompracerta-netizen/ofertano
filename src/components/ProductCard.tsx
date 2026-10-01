@@ -1,5 +1,21 @@
 import Link from "next/link";
 import { sanitizeProductNameForDisplay } from "@/lib/product/productPresentation";
+import {
+  listarMarketplacesComparaveis,
+  type PublicOfferLike,
+} from "@/services/publicVisibility/multiStoreVisibility";
+
+/*
+ * Oferta chega no card com a IDENTIDADE, não só com o marketplace.
+ *
+ * Sem `externalId`/`sourceUrl` a política pública não consegue provar que a
+ * oferta do Mercado Livre é um anúncio concreto, e ela contava `/p/`
+ * (rota de CATÁLOGO) como se fosse uma loja. O card passava a anunciar
+ * "Compare em 3 lojas" e "Melhor preço" num preço que não tinha CTA. Os
+ * campos abaixo são o insumo de `isUsablePublicOffer` — a MESMA função que
+ * decide se o produto aparece na Home.
+ */
+type OfertaCard = PublicOfferLike;
 
 type ProductCardProps = {
   produto: {
@@ -17,9 +33,7 @@ type ProductCardProps = {
     sales?: number | null;
     stock?: number | null;
     featured?: boolean;
-    offers?: Array<{
-      marketplace: string;
-    }>;
+    offers?: OfertaCard[];
   };
 };
 
@@ -37,13 +51,7 @@ function formatarQuantidade(valor: number) {
 export default function ProductCard({ produto }: ProductCardProps) {
   const displayName = sanitizeProductNameForDisplay(produto.name);
 
-  const lojasComparadas = Array.from(
-    new Set(
-      (produto.offers ?? []).map(
-        (oferta) => oferta.marketplace,
-      ),
-    ),
-  );
+  const lojasComparadas = listarMarketplacesComparaveis(produto.offers);
 
   const possuiMultiLoja =
     lojasComparadas.length >= 2;

@@ -16,13 +16,27 @@ type Offer = {
   status?: string;
   matchStatus?: string;
   price?: number | null;
+  externalId?: string | null;
+  sourceUrl?: string | null;
 };
+
+/*
+ * LISTING-FIRST: uma oferta MERCADO_LIVRE só é publicável se provar o
+ * ANÚNCIO (ITEM_ID + URL de anúncio). O fixture abaixo é a oferta ML real
+ * e publicável do banco; sem isso o arquivo ficava vermelho por FIXTURE
+ * desatualizado, não por regressão.
+ */
+const IDENTIDADE_ML = {
+  externalId: "MLB1234567890",
+  sourceUrl: "https://produto.mercadolivre.com.br/MLB-1234567890-anuncio",
+} as const;
 
 const oferta = (
   marketplace: string,
   overrides: Partial<Offer> = {},
 ): Offer => ({
   marketplace,
+  ...(marketplace === "MERCADO_LIVRE" ? IDENTIDADE_ML : {}),
   active: true,
   matchStatus: "EXACT",
   available: true,

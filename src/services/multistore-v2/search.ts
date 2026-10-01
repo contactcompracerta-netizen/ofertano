@@ -410,6 +410,10 @@ function toViews(
       brand: product.brand,
       offers: product.offers.map((offer) => ({
         marketplace: offer.marketplace,
+        // `url` do cluster é a URL do anúncio escolhido (Listing-First);
+        // é ela que prova o `externalId` para a política pública.
+        externalId: offer.externalId,
+        sourceUrl: offer.url,
       })),
     };
   });

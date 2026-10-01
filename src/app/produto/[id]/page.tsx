@@ -32,7 +32,12 @@ import {
   ProductLivePurchase,
 } from "@/components/product/ProductLivePurchase";
 import prisma from "@/lib/prisma";
-import { hasPublicMultiStore } from "@/services/publicVisibility/multiStoreVisibility";
+import {
+  hasPublicMultiStore,
+  isOfertaPublicavelNoMarketplace,
+  isUsablePublicOffer,
+  PUBLIC_OFFER_SELECT,
+} from "@/services/publicVisibility/multiStoreVisibility";
 
 import PriceHistoryPanel, {
   type PeriodoPrecoSerializado,
@@ -355,6 +360,14 @@ export async function generateMetadata({
           available: true,
           status: true,
           price: true,
+          /*
+           * LISTING-FIRST: `lowPrice`/`highPrice` do JSON-LD e o preço dos
+           * rich results vêm daqui. Sem identidade do anúncio ML, uma
+           * oferta de CATÁLOGO (`/p/...`) entrava como o menor preço do
+           * produto — um número que o usuário não consegue comprar.
+           */
+          externalId: true,
+          sourceUrl: true,
         },
       },
     },
@@ -371,14 +384,7 @@ export async function generateMetadata({
   }
 
   const ofertasPublicas = produto.offers
-    .filter(
-      (oferta) =>
-        oferta.available &&
-        oferta.status !== "UNAVAILABLE" &&
-        oferta.status !== "ERROR" &&
-        Number.isFinite(oferta.price) &&
-        oferta.price > 0,
-    )
+    .filter(isUsablePublicOffer)
     .map((oferta) => ({
       marketplace: oferta.marketplace,
       price: oferta.price,
@@ -460,14 +466,35 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     (oferta) => oferta.matchStatus === "EXACT",
   );
 
-  const ofertasComparadorDisponiveis = ofertasComparador.filter(
-    (oferta) =>
-      oferta.available &&
-      oferta.status !== "UNAVAILABLE" &&
-      oferta.status !== "ERROR" &&
-      Number.isFinite(oferta.price) &&
-      oferta.price > 0,
+  /*
+   * DOMÍNIO DE COMPARAÇÃO E HISTÓRICO.
+   *
+   * O histórico representa o MENOR PREÇO DO MERCADO para este produto
+   * exato, e não o preço da oferta principal comprável. Uma oferta real
+   * sem link de afiliado continua valendo para comparação e histórico.
+   *
+   * O que NÃO entra é oferta sem identidade de anúncio no seu marketplace
+   * — notoriamente a oferta de CATÁLOGO do Mercado Livre (`/p/...`). Ela
+   * não tem vendedor nem CTA possível, então não pode aparecer nem no
+   * comparador, nem na "Menor em 30 dias", nem na "Média do período".
+   * Era por aqui que um R$ 63,00 não-comprável se passava pelo "menor
+   * preço do mercado" e contaminava o histórico exibido.
+   */
+  const ofertasComIdentidadePublica = ofertasComparador.filter(
+    isOfertaPublicavelNoMarketplace,
   );
+
+  /*
+   * Grade de lojas e JSON-LD usam o gate público CENTRAL. A oferta de
+   * CATÁLOGO do Mercado Livre (`/p/...`) não é um anúncio: não tem
+   * vendedor, o destaque muda conforme estoque e o CTA não pode ser
+   * construído. Exibi-la como "Melhor preço" anunciava um valor sem
+   * compra possível, e `AggregateOffer.lowPrice` repetia a mentira para
+   * buscadores. O estado "Link em revisão" continua valendo para oferta
+   * de anúncio real sem afiliado — ela é informativa, não falsa.
+   */
+  const ofertasComparadorDisponiveis =
+    ofertasComparador.filter(isUsablePublicOffer);
 
   const menorPrecoComparador =
     ofertasComparadorDisponiveis.length > 0
@@ -483,7 +510,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     (produto.price > 0 ? produto.price : 0);
 
   const idsOfertasComparador = new Set(
-    ofertasComparador.map((oferta) => oferta.id),
+    ofertasComIdentidadePublica.map((oferta) => oferta.id),
   );
 
   const historicoJanela: HistoricoPrecoEntrada[] = [
@@ -514,7 +541,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       .filter((offerId): offerId is string => offerId !== null),
   );
 
-  const ofertasParaBaseline = ofertasComparador.filter(
+  const ofertasParaBaseline = ofertasComIdentidadePublica.filter(
     (oferta) =>
       idsComHistoricoNaJanela.has(oferta.id) ||
       !historicoJanela.some(
@@ -592,7 +619,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
     inicioJanela30,
   );
 
-  const ultimaVerificacao = ofertasComparador.reduce<Date | null>(
+  const ultimaVerificacao = ofertasComIdentidadePublica.reduce<Date | null>(
     (maisRecente, oferta) => {
       if (!oferta.lastCheckedAt) {
         return maisRecente;
@@ -711,12 +738,11 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
         active: true,
         matchStatus: "EXACT",
       },
-      select: {
-        marketplace: true,
-        available: true,
-        status: true,
-        price: true,
-      },
+      // LISTING-FIRST: o card de recomendação anuncia "Compare em N lojas".
+      // Sem `externalId`/`sourceUrl`, `listarMarketplacesComparaveis` não
+      // consegue provar a identidade do anúncio ML e a contagem divergia da
+      // grade da página de produto. Mesma seleção das outras superfícies.
+      ...PUBLIC_OFFER_SELECT,
     },
   } as const;
 
@@ -791,7 +817,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
    * nem promover URL comum do Mercado Livre a afiliado.
    */
   const ofertaPrincipalComLink =
-    escolherOfertaPrincipalCompravel(ofertasComparador);
+    escolherOfertaPrincipalCompravel(ofertasComparadorDisponiveis);
 
   const marketplacePrincipal =
     ofertaPrincipalComLink
@@ -845,7 +871,13 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
   const possuiEstoque =
     produto.stock !== null && produto.stock > 0;
 
-  const ofertasAoVivo = ofertasComparador.map((oferta) =>
+  /*
+   * `initialOffers` alimenta o comparador VIVO no cliente. Sem o gate
+   * central, a oferta de CATÁLOGO do Mercado Livre (`/p/...`) voltava a
+   * aparecer como "Melhor preço" com "Link em revisão" mesmo estando
+   * correta no HTML renderizado no servidor.
+   */
+  const ofertasAoVivo = ofertasComparadorDisponiveis.map((oferta) =>
     sanitizarOfertaCompraPublica({
       id: oferta.id,
       productId: oferta.productId,
@@ -916,7 +948,7 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
       <Header />
       <ProductViewTracker
         productId={produto.id}
-        offers={ofertasComparador.map((oferta, index) => ({
+        offers={ofertasComparadorDisponiveis.map((oferta, index) => ({
           marketplace: oferta.marketplace,
           position: index + 1,
           price: oferta.price,
@@ -1163,12 +1195,18 @@ export default async function ProdutoPage({ params }: ProdutoPageProps) {
                       {productPresentation.displaySpecifications.map(([chave, valor]) => (
                         <div
                           key={chave}
-                          className="grid gap-1 py-2.5 sm:grid-cols-[0.8fr_1.2fr] sm:gap-3"
+                          className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[0.8fr_1.2fr] sm:gap-3"
                         >
-                          <dt className="text-xs font-black text-slate-800 sm:text-[13px]">
+                          {/*
+                           * `min-w-0` + `break-words`: sem isso a coluna da
+                           * grade assume a largura MÁXIMA do conteúdo e um
+                           * valor sem quebras (URL de afiliado, SKU) gerava
+                           * rolagem horizontal em 320px.
+                           */}
+                          <dt className="min-w-0 break-words text-xs font-black text-slate-800 sm:text-[13px]">
                             {chave}
                           </dt>
-                          <dd className="text-xs leading-5 text-slate-600 sm:text-right sm:text-[13px]">
+                          <dd className="min-w-0 break-words text-xs leading-5 text-slate-600 sm:text-right sm:text-[13px]">
                             {valor}
                           </dd>
                         </div>

@@ -126,6 +126,33 @@ export function isOfertaPublicavelNoMarketplace(
   return isPublicavelOfertaMercadoLivre(offer);
 }
 
+/*
+ * LISTA DE LOJAS DA GRADE DE COMPARAÇÃO.
+ *
+ * A contagem "Compare em N lojas" precisa ser a MESMA lista que a grade
+ * de lojas desenha. Sem identidade, um card anunciava 3 lojas enquanto a
+ * página do produto exibia 2 — porque a oferta de CATÁLOGO do Mercado Livre
+ * (`/p/...`) entrava na contagem e era rejeitada na grade.
+ *
+ * Aqui só entra a Regra de mercado (`isOfertaPublicavelNoMarketplace`):
+ * disponibilidade/preço já foram filtrados por quem montou a consulta
+ * (`where` da Prisma ou filtro do chamador), e a validade completa
+ * (`isUsablePublicOffer`) decide VISIBILIDADE do produto, não a contagem
+ * de lojas de um produto que já está visível.
+ */
+export function listarMarketplacesComparaveis(
+  offers: readonly PublicOfferLike[] | undefined,
+): string[] {
+  return Array.from(
+    new Set(
+      (offers ?? [])
+        .filter(isOfertaPublicavelNoMarketplace)
+        .map((offer) => offer.marketplace.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 // Conta marketplaces DISTINTOS entre as ofertas válidas.
 export function countDistinctPublicMarketplaces(
   offers: PublicOfferLike[],
