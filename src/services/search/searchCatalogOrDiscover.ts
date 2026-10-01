@@ -590,26 +590,22 @@ export async function searchCatalogOrDiscover(
             ),
           };
         }
-      } else if (v2.views.length > 0 && visibleProducts.length > 0) {
-        const visibleIndexes = new Set(
-          v2.products.map((product, index) =>
-            meetsPublicMultiStoreMarketplaceCount(product.offers)
-              ? index
-              : -1,
-          ),
-        );
-        return {
-          query: search,
-          source: "DISCOVERY",
-          products: mesclarCatalogoComDescoberta(
-            catalogoVisivel,
-            v2.views.filter((_, index) =>
-              visibleIndexes.has(index),
-            ) as CatalogProduct,
-          ),
-        };
       }
 
+      /*
+       * SEM PERSISTÊNCIA, o cluster ao vivo NÃO tem página.
+       *
+       * `v2.views` carrega o id sintético do cluster (`v2-<clusterId>`): não
+       * existe `Product` com esse id, então o card renderizado pela Home
+       * apontava para `/produto/v2-...` e devolvia 404. Em produção
+       * `PUBLIC_SEARCH_PERSISTENCE_ENABLED` está desligado, então esse era o
+       * caminho padrão: a busca anunciava "1 produto encontrado / Compare em
+       * 2 lojas / R$ 86,46" com link quebrado — produto fabricado na vitrine.
+       *
+       * Um cluster sem `Product` não é navegável, logo não pode ser card.
+       * Aqui a resposta pública é só a vitrine canônica (abaixo), e o
+       * cluster volta a ser o que ele é: rastreamento de descoberta.
+       */
       if (catalogoVisivel.length > 0) {
         return {
           query: search,

@@ -159,8 +159,7 @@ function candidato(
   marketplaceName: MarketplaceName,
   externalId: string,
   price: number,
-): DiscoveryCandidate {
-  /*
+): DiscoveryCandidate {  /*
    * A URL do ML precisa ser a página COMPRÁVEL da listing concreta
    * (`MLB-` + 8+ dígitos), senão a identidade é rejeitada e o candidato nem
    * entra como usable.
@@ -187,6 +186,42 @@ function candidato(
   };
 }
 
+/** V2 encontra um cluster MULTI LOJA de verdade (ML + Amazon). */
+function adaptersComDuasLojas(): DiscoveryAdapter[] {
+  return [
+    {
+      marketplace: "MERCADO_LIVRE",
+      marketplaceName: "Mercado Livre",
+      enabled: true,
+      searcher: async (
+        request: DiscoveryQuery,
+      ): Promise<MarketplaceDiscoveryResult> => ({
+        marketplace: "MERCADO_LIVRE",
+        query: request.query,
+        success: true,
+        scanned: 1,
+        candidates: [candidato("MERCADO_LIVRE", "Mercado Livre", "MLB90000001", 63)],
+        error: null,
+      }),
+    },
+    {
+      marketplace: "AMAZON",
+      marketplaceName: "Amazon",
+      enabled: true,
+      searcher: async (
+        request: DiscoveryQuery,
+      ): Promise<MarketplaceDiscoveryResult> => ({
+        marketplace: "AMAZON",
+        query: request.query,
+        success: true,
+        scanned: 1,
+        candidates: [candidato("AMAZON", "Amazon", "amz900001", 64)],
+        error: null,
+      }),
+    },
+  ];
+}
+
 async function run(searchCatalogFn: PublicSearchOptions["searchCatalogFn"]) {
   return searchCatalogOrDiscover(QUERY, 5, {
     adapters: adaptersSemResultado(),
@@ -196,41 +231,24 @@ async function run(searchCatalogFn: PublicSearchOptions["searchCatalogFn"]) {
 
 async function runComDescobertaDuplicada() {
   return searchCatalogOrDiscover(QUERY, 5, {
-    adapters: [
-      {
-        marketplace: "MERCADO_LIVRE",
-        marketplaceName: "Mercado Livre",
-        enabled: true,
-        searcher: async (
-          request: DiscoveryQuery,
-        ): Promise<MarketplaceDiscoveryResult> => ({
-          marketplace: "MERCADO_LIVRE",
-          query: request.query,
-          success: true,
-          scanned: 1,
-          candidates: [
-            candidato("MERCADO_LIVRE", "Mercado Livre", "MLB90000001", 63),
-          ],
-          error: null,
-        }),
-      },
-      {
-        marketplace: "AMAZON",
-        marketplaceName: "Amazon",
-        enabled: true,
-        searcher: async (
-          request: DiscoveryQuery,
-        ): Promise<MarketplaceDiscoveryResult> => ({
-          marketplace: "AMAZON",
-          query: request.query,
-          success: true,
-          scanned: 1,
-          candidates: [candidato("AMAZON", "Amazon", "amz900001", 64)],
-          error: null,
-        }),
-      },
-    ],
+    adapters: adaptersComDuasLojas(),
     searchCatalogFn: async () => [produtoPublicavel("produto-catalogo")],
+  });
+}
+
+/**
+ * Mesmo V2 multi-loja, mas COM persistência: o cluster ganha `Product` real e
+ * volta com id de verdade. Aí (e só aí) ele é navegável e entra na vitrine,
+ * mesclado com o catálogo.
+ */
+async function runComDescobertaPersistida() {
+  return searchCatalogOrDiscover(QUERY, 5, {
+    adapters: adaptersComDuasLojas(),
+    searchCatalogFn: async () => [produtoPublicavel("produto-catalogo")],
+    persistProduct: async (product) => ({
+      id: `persistido-${product.externalId}`,
+    }),
+    schedulePersist: () => undefined,
   });
 }
 
@@ -282,7 +300,8 @@ async function main() {
   assert.equal(quebrado.source, "NOT_FOUND");
   assert.equal(quebrado.products.length, 0);
 
-  // 6. Mesmo id no catálogo e na descoberta => uma linha só, do catálogo.
+  // 6. Cluster ao vivo SEM persistência não vira card: `v2-<clusterId>` não
+  //    tem página, então renderizá-lo fabricava produto com link 404.
   const duplicado = await runComDescobertaDuplicada();
   const ids = duplicado.products.map((produto) => produto.id);
   assert.equal(
@@ -294,6 +313,44 @@ async function main() {
     ids.includes("produto-catalogo"),
     "produto do catalogo continua na lista mesmo com o V2 respondendo",
   );
+  assert.equal(
+    ids.filter((id) => id.startsWith("v2-")).length,
+    0,
+    "cluster ao vivo sem Product nao entra na vitrine publica",
+  );
+  assert.equal(
+    duplicado.source,
+    "CATALOG",
+    "sem persistencia, a resposta vem do catalogo",
+  );
+
+  // 7. Cluster ao vivo COM persistência tem id real: aí ele é navegável e
+  //    entra mesclado com o catálogo, uma vez só.
+  process.env.PUBLIC_SEARCH_PERSISTENCE_ENABLED = "true";
+
+  const persistido = await runComDescobertaPersistida();
+  const idsPersistidos = persistido.products.map((produto) => produto.id);
+
+  assert.equal(
+    new Set(idsPersistidos).size,
+    idsPersistidos.length,
+    "catalogo + descoberta persistida aparece uma vez por produto",
+  );
+  assert.ok(
+    idsPersistidos.includes("produto-catalogo"),
+    "produto do catalogo continua na lista",
+  );
+  assert.ok(
+    idsPersistidos.some((id) => id.startsWith("persistido-")),
+    "cluster persistido entra com o id real do Product",
+  );
+  assert.equal(
+    idsPersistidos.filter((id) => id.startsWith("v2-")).length,
+    0,
+    "nenhum id sintetico de cluster na vitrine publica",
+  );
+
+  process.env.PUBLIC_SEARCH_PERSISTENCE_ENABLED = "false";
 
   console.log("busca publica catalog-first: invariantes passaram");
 }
