@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
-import { buildPriceMonitorCandidateWhere } from "./processPriceMonitor";
+import {
+  buildListingFirstMonitorCandidateWhere,
+  buildPriceMonitorCandidateWhere,
+} from "./processPriceMonitor";
 import {
   classificarOfertaParaRefreshListingFirst,
   montarRawPayloadAtualizado,
@@ -468,6 +471,114 @@ function oferta(extra: Record<string, unknown>): Record<string, unknown> {
   assert.equal(novo.listing.price, 10);
   assert.equal(novo.listing.original_price, 20);
   console.log("RAW_PAYLOAD_ITEM_ID_OVERRIDDEN=PASS");
+}
+
+// CASO 10 — OBSERVAR NAO E PUBLICAR: o passo LISTING-FIRST entra mesmo sem
+// `active`, porque uma oferta ML v1 nao tem `sourceUrl` e portanto nunca e
+// publicavel. O que o passo NAO abre tambem fica travado aqui.
+{
+  const legado = buildPriceMonitorCandidateWhere(
+    new Date(AGORA),
+  ) as unknown as Record<string, unknown>;
+  const listingFirst = buildListingFirstMonitorCandidateWhere(
+    new Date(AGORA),
+  ) as unknown as Record<string, unknown>;
+
+  const inativaV1 = oferta({
+    marketplace: "MERCADO_LIVRE",
+    identityVersion: 1,
+    active: false,
+    sourceUrl: null,
+  });
+
+  assert.equal(
+    avaliar(inativaV1, listingFirst),
+    true,
+    "ML v1 inativa ainda e observada: sem sourceUrl ela nunca e publica, logo nao ha preco obsoleto a preservar",
+  );
+
+  assert.equal(
+    avaliar(inativaV1, legado),
+    false,
+    "o lote legado continua exigindo active",
+  );
+
+  assert.equal(
+    listingFirst.active,
+    undefined,
+    "o passo listing-first nao exige active",
+  );
+  assert.equal(
+    listingFirst.marketplace,
+    "MERCADO_LIVRE",
+    "o passo listing-first nao alcanca nenhuma outra marketplace",
+  );
+
+  // Nao abre as 22 legadas.
+  for (const url of [
+    "https://www.mercadolivre.com.br/p/MLB1234567890",
+    null,
+  ]) {
+    assert.equal(
+      avaliar(
+        oferta({
+          marketplace: "MERCADO_LIVRE",
+          identityVersion: 0,
+          active: false,
+          sourceUrl: url,
+        }),
+        listingFirst,
+      ),
+      false,
+      `legada ML (identityVersion 0, sourceUrl ${url}) fora do passo listing-first`,
+    );
+  }
+
+  // Nao reabre REJECTED.
+  assert.equal(
+    avaliar(
+      oferta({
+        marketplace: "MERCADO_LIVRE",
+        identityVersion: 1,
+        active: false,
+        matchStatus: "REJECTED",
+      }),
+      listingFirst,
+    ),
+    false,
+    "REJECTED continua fora mesmo inativa",
+  );
+
+  // Nao alcança as nao-ML (que dependem de `sourceUrl`).
+  assert.equal(
+    avaliar(
+      oferta({
+        marketplace: "SHOPEE",
+        identityVersion: 1,
+        active: false,
+        sourceUrl: "https://shopee.com.br/item/1",
+      }),
+      listingFirst,
+    ),
+    false,
+    "nao-ML nunca entra pelo passo listing-first",
+  );
+
+  // E ainda respeita o agendamento.
+  assert.equal(
+    avaliar(
+      oferta({
+        marketplace: "MERCADO_LIVRE",
+        identityVersion: 1,
+        active: false,
+        nextCheckAt: "2026-09-30T18:00:00.000Z",
+      }),
+      listingFirst,
+    ),
+    false,
+    "ML v1 com nextCheckAt no futuro espera o proximo ciclo",
+  );
+  console.log("LISTING_FIRST_OBSERVES_INACTIVE_WITHOUT_PUBLISHING=PASS");
 }
 
 console.log("listingFirstMonitor: todos os casos passaram");

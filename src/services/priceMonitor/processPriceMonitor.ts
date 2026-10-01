@@ -180,6 +180,64 @@ export function buildPriceMonitorCandidateWhere(
   };
 }
 
+/**
+ * PASSO LISTING-FIRST — OBSERVAR NAO E PUBLICAR.
+ *
+ * `buildPriceMonitorCandidateWhere` exige `active: true`, porque no caminho
+ * legado `active` e o unico sinal de que a oferta ainda faz sentido no
+ * produto. Para MERCADO_LIVRE listing-first esse sinal nao serve:
+ *
+ *   - Uma oferta ML v1 NAO tem `sourceUrl` por contrato (a prova esta em
+ *     `externalId`/`catalogProductId`/`rawPayload.listing.item_id`), e sem
+ *     `sourceUrl` `classifyMercadoLivreListingIdentity` responde
+ *     `MISSING_SOURCE_URL` => a oferta NUNCA e publicavel. Publicar exigiria
+ *     fabricar uma URL, o que esta proibido.
+ *   - Logo `active: false` nessas 25 linhas e consequencia de nao haver URL
+ *     publica, nao de o preco estar obsoleto. Deixar o duty de observacao
+ *     preso a essa flag mantinha 25 anuncios reais sem nunca serem
+ *     refrescados: o preco ficaria congelado ate alguem inventar a URL.
+ *
+ * O duty de observacao e o duty de publicacao sao separados: este passo
+ * seleciona a oferta ML v1 provada INDEPENDENTEMENTE de `active`, e o
+ * refresh so escreve preco/vendedor/condicao/envio/rawPayload/
+ * lastCheckedAt/contadores — nenhum desses campos publica a oferta. O gate de
+ * publicacao continua sendo `isUsablePublicOffer`, intocado.
+ *
+ * O que este passo NAO abre:
+ *   - as 22 legadas (`identityVersion = 0`) seguem fora, por construcao;
+ *   - `REJECTED` continua fora (decisao do operador nao e revertida);
+ *   - nenhuma outra marketplace e tocada (`marketplace: MERCADO_LIVRE`).
+ *
+ * Funcao pura e exportada para os testes de regressao.
+ */
+export function buildListingFirstMonitorCandidateWhere(
+  agora: Date,
+): Prisma.MarketplaceOfferWhereInput {
+  return {
+    matchStatus: {
+      not: "REJECTED",
+    },
+    marketplace: "MERCADO_LIVRE",
+    identityVersion: {
+      gte: 1,
+    },
+    AND: [
+      {
+        OR: [
+          {
+            nextCheckAt: null,
+          },
+          {
+            nextCheckAt: {
+              lte: agora,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** Oferta efetivamente selecionada pelo monitor. */
 type OfertaSelecionada = {
   id: string;
@@ -194,6 +252,80 @@ type OfertaSelecionada = {
   catalogProductId: string | null;
   rawPayload: Prisma.JsonValue | null;
 };
+
+/** Projecao minima para as duas selecoes e para a ordenacao do lote. */
+type OfertaCandidata = OfertaSelecionada & {
+  active: boolean;
+  nextCheckAt: Date | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+};
+
+const SELECAO_OFERTA = {
+  id: true,
+  productId: true,
+  marketplace: true,
+  sourceUrl: true,
+  affiliateLink: true,
+  price: true,
+  consecutiveErrors: true,
+  identityVersion: true,
+  externalId: true,
+  catalogProductId: true,
+  rawPayload: true,
+  active: true,
+  nextCheckAt: true,
+  lastCheckedAt: true,
+  createdAt: true,
+} satisfies Prisma.MarketplaceOfferSelect;
+
+const ORDEM_POR_VENCIMENTO: Prisma.MarketplaceOfferOrderByWithRelationInput[] = [
+  {
+    nextCheckAt: "asc",
+  },
+  {
+    lastCheckedAt: "asc",
+  },
+  {
+    createdAt: "asc",
+  },
+];
+
+/**
+ * `ASC` do Postgres coloca `NULL` por ultimo. Reproduzimos isso em memoria
+ * para que a uniao dos dois lotes nao mude a ordem em relacao ao `ORDER BY`
+ * do banco (que e quem decide o lote quando um dos dois sobra).
+ */
+function instanteOrdenavel(
+  valor: Date | null,
+): number {
+  return valor === null
+    ? Number.POSITIVE_INFINITY
+    : valor.getTime();
+}
+
+function compararPorVencimento(
+  esquerda: OfertaCandidata,
+  direita: OfertaCandidata,
+): number {
+  const porVencimento =
+    instanteOrdenavel(esquerda.nextCheckAt) -
+    instanteOrdenavel(direita.nextCheckAt);
+
+  if (porVencimento !== 0) {
+    return porVencimento;
+  }
+
+  const porUltimoChecagem =
+    instanteOrdenavel(esquerda.lastCheckedAt) -
+    instanteOrdenavel(direita.lastCheckedAt);
+
+  if (porUltimoChecagem !== 0) {
+    return porUltimoChecagem;
+  }
+
+  return esquerda.createdAt.getTime() - direita.createdAt.getTime();
+}
 
 async function processarOfertaListingFirst(
   oferta: OfertaSelecionada,
@@ -332,34 +464,51 @@ export async function processPriceMonitor(
   const limit = normalizarLimite(requestedLimit);
   const agora = new Date();
 
-  const ofertas = await prisma.marketplaceOffer.findMany({
-    where: buildPriceMonitorCandidateWhere(agora),
-    orderBy: [
-      {
-        nextCheckAt: "asc",
-      },
-      {
-        lastCheckedAt: "asc",
-      },
-      {
-        createdAt: "asc",
-      },
-    ],
-    take: limit,
-    select: {
-      id: true,
-      productId: true,
-      marketplace: true,
-      sourceUrl: true,
-      affiliateLink: true,
-      price: true,
-      consecutiveErrors: true,
-      identityVersion: true,
-      externalId: true,
-      catalogProductId: true,
-      rawPayload: true,
-    },
-  });
+  /*
+   * DOIS LOTES, UMA REGRA DE DEDUP.
+   *
+   *   1. `buildPriceMonitorCandidateWhere` — nao-ML com `sourceUrl` e ML v1
+   *      que esteja `active`. E o lote legado, com as garantias antigas.
+   *   2. `buildListingFirstMonitorCandidateWhere` — ML v1 provada, com ou sem
+   *      `active`. E o que tira as 25 ofertas de announce real da sombra.
+   *
+   * A interseccao (ML v1 `active`) aparece nos dois; a chave e `id`, entao a
+   * uniao nao gera processamento duplicado nem contadores dobrados. O limite
+   * `LIMITE_MAXIMO` e aplicado DEPOIS da uniao, entao nenhum parametro pode
+   * elevar o teto.
+   */
+  const [loteMonitor, loteListingFirst] = await Promise.all([
+    prisma.marketplaceOffer.findMany({
+      where: buildPriceMonitorCandidateWhere(agora),
+      orderBy: ORDEM_POR_VENCIMENTO,
+      select: SELECAO_OFERTA,
+    }),
+    prisma.marketplaceOffer.findMany({
+      where: buildListingFirstMonitorCandidateWhere(agora),
+      orderBy: ORDEM_POR_VENCIMENTO,
+      select: SELECAO_OFERTA,
+    }),
+  ]);
+
+  const porId = new Map<string, OfertaCandidata>();
+
+  for (const oferta of loteMonitor as OfertaCandidata[]) {
+    porId.set(oferta.id, oferta);
+  }
+
+  let observadasInativas = 0;
+
+  for (const oferta of loteListingFirst as OfertaCandidata[]) {
+    if (!oferta.active) {
+      observadasInativas += 1;
+    }
+
+    porId.set(oferta.id, oferta);
+  }
+
+  const ofertas = [...porId.values()]
+    .sort(compararPorVencimento)
+    .slice(0, limit);
 
   const resultados: ResultadoOferta[] = [];
 
@@ -651,6 +800,7 @@ export async function processPriceMonitor(
     errors: erros,
     skipped: ignoradas,
     listingFirstProcessed: listingFirstProcessadas,
+    listingFirstInactiveObserved: observadasInativas,
     legacySkipped: legadoIgnorado,
     results: resultados,
   };
