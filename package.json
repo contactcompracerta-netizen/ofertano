@@ -45,7 +45,7 @@
     "test:phase-p": "tsx --test src/scripts/phasePPublicationInvariants.test.ts",
     "test:phase-p:publication": "tsx --test src/services/publicVisibility/phasePPublicVisibility.test.ts src/scripts/phasePPublicationReconcile.test.ts src/scripts/fase8-3-blindRediscoveryHarness.test.ts && tsx src/services/publicVisibility/multiStoreVisibility.test.ts",
     "fase8:publication-reconcile": "tsx --env-file=.env.local src/scripts/phase-p-publication-reconcile.ts",
-    "test:listing-first": "tsx src/services/database/marketplaceOfferWriter.partialUnique.test.ts && tsx src/services/priceMonitor/listingFirstMonitor.test.ts",
+    "test:listing-first": "tsx src/services/database/marketplaceOfferWriter.partialUnique.test.ts && tsx src/services/priceMonitor/listingFirstMonitor.test.ts && tsx src/services/priceMonitor/refreshOnly.test.mts",
     "test:migration-replay": "node scripts/bootstrap/ml-listing-first-replay.integration.mjs"
   },
   "dependencies": {

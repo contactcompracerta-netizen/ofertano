@@ -1,12 +1,22 @@
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { saveProduct } from "@/services/database/saveProduct";
+import { sincronizarMelhorOfertaDoProduto } from "@/services/database/saveProduct";
 import { importarProduto } from "@/services/importers";
+import type { ProductImport } from "@/services/importers/core/types";
+import {
+  historicoPrecisaNovaEntrada,
+  precoValidoParaHistorico,
+} from "@/services/priceHistory/priceHistoryService";
 import { montarContextoAlertas } from "@/services/priceAlerts/priceContext";
 import { createPrismaPriceAlertRepository } from "@/services/priceAlerts/repository";
 import { processProductAlerts } from "@/services/priceAlerts/processProductAlerts";
 import { buscarEmailDoUsuario } from "@/services/priceAlerts/userEmail";
 import { refreshOfertaListingFirst } from "@/services/priceMonitor/listingFirstRefresh";
+import {
+  refreshKnownMarketplaceOffer,
+  type FonteNormalizada,
+  type OfertaConhecida as OfertaConhecidaInput,
+} from "@/services/priceMonitor/knownOfferRefresh";
 
 const LIMITE_PADRAO = 5;
 const LIMITE_MAXIMO = 10;
@@ -25,13 +35,28 @@ type ResultadoOferta = {
   nextCheckAt: string;
   error?: string;
   /**
-   * Caminho de refresh usado. `LISTING_FIRST` = oferta ML com identidade de
-   * anuncio (`identityVersion >= 1`), refrescada pelo catalogo.
-   * `LEGACY_SOURCE_URL` = importacao por URL.
+   * Caminho de refresh usado.
+   *
+   * `LISTING_FIRST` = oferta ML com identidade de anuncio
+   * (`identityVersion >= 1`), refrescada pelo catalogo.
+   *
+   * `REFRESH_ONLY_KNOWN_OFFER` = oferta nao-ML ja conhecida, atualizada por
+   * `id` depois de a identidade da fonte conferir. Este caminho NUNCA resolve
+   * nem cria Product: o `productId` gravado e autoritativo.
    */
-  refreshPath?: "LISTING_FIRST" | "LEGACY_SOURCE_URL";
+  refreshPath?:
+    | "LISTING_FIRST"
+    | "REFRESH_ONLY_KNOWN_OFFER";
   /** Quando a oferta listing-first nao apareceu no catalogo. */
   notSeen?: boolean;
+  /**
+   * Veredito de identidade quando a fonte devolveu outro anuncio. `ERROR`
+   * cobre falha de leitura; os outros dois sao divergencia confirmada.
+   */
+  identityOutcome?:
+    | "SOURCE_MARKETPLACE_CHANGED"
+    | "SOURCE_IDENTITY_CHANGED"
+    | "ERROR";
 };
 
 function normalizarLimite(valor: number) {
@@ -104,11 +129,56 @@ function marketplaceImportadoParaBanco(
   }
 }
 
-function precoMudou(
-  anterior: number,
-  atual: number,
-) {
-  return Math.abs(anterior - atual) > 0.009;
+/** `Marketplace` do enum do Prisma, para o helper tipado. */
+type OfertaConhecidaMarketplace =
+  OfertaConhecidaInput["marketplace"];
+
+/**
+ * Preco utilizavel para gravacao.
+ *
+ * Reutiliza o gate de `priceHistoryService` para que oferta e historico
+ * aceitem exatamente o mesmo conjunto de precos: um preco que nao serve para
+ * historico tambem nao pode ser gravado como novo preco da oferta.
+ */
+function precoUtilizavelDaFonte(
+  preco: unknown,
+): number | null {
+  if (
+    typeof preco !== "number" ||
+    !precoValidoParaHistorico(preco)
+  ) {
+    return null;
+  }
+
+  return preco;
+}
+
+/**
+ * Normaliza o que `importarProduto` devolve no formato que o helper compara.
+ *
+ * So traduz campo; nao valida identidade. A comparacao e de
+ * `validarIdentidadeDaFonte`, e ela e fail-closed por construcao.
+ */
+function normalizarFonteImportada(
+  lido: ProductImport,
+  sourceUrl: string,
+): FonteNormalizada {
+  const stock = lido.stock ?? null;
+
+  return {
+    marketplace:
+      marketplaceImportadoParaBanco(
+        lido.marketplace,
+      ) as OfertaConhecidaMarketplace,
+    externalId: lido.externalId.trim(),
+    price: lido.price,
+    oldPrice: lido.oldPrice ?? null,
+    seller: lido.seller ?? null,
+    stock,
+    available: stock === null || stock > 0,
+    affiliateLink: lido.affiliateLink ?? null,
+    sourceUrl,
+  };
 }
 
 /*
@@ -251,6 +321,15 @@ type OfertaSelecionada = {
   externalId: string | null;
   catalogProductId: string | null;
   rawPayload: Prisma.JsonValue | null;
+  /*
+   * Campos de ESTADO DA OFERTA que o refresh-only precisa ler para montar a
+   * escrita. `stock`/`available` sao necessarios porque disponibilidade vem
+   * da fonte, e `seller` porque e o unico dado do anuncio que sobra para o
+   * alerta quando o preco muda.
+   */
+  seller: string | null;
+  stock: number | null;
+  available: boolean;
 };
 
 /** Projecao minima para as duas selecoes e para a ordenacao do lote. */
@@ -273,6 +352,9 @@ const SELECAO_OFERTA = {
   externalId: true,
   catalogProductId: true,
   rawPayload: true,
+  seller: true,
+  stock: true,
+  available: true,
   active: true,
   nextCheckAt: true,
   lastCheckedAt: true,
@@ -518,6 +600,7 @@ export async function processPriceMonitor(
   let ignoradas = 0;
   let listingFirstProcessadas = 0;
   let legadoIgnorado = 0;
+  let identidadeDivergente = 0;
 
   const dispararAlertas = async (entrada: {
     productId: string;
@@ -650,7 +733,7 @@ export async function processPriceMonitor(
         nextCheckAt: nextCheckAt.toISOString(),
         error:
           "Oferta sem URL de origem para monitoramento.",
-        refreshPath: "LEGACY_SOURCE_URL",
+        refreshPath: "REFRESH_ONLY_KNOWN_OFFER",
       });
 
       continue;
@@ -670,73 +753,142 @@ export async function processPriceMonitor(
       },
     });
 
+    /*
+     * REFRESH-ONLY. O caminho legado nao e mais um importador: ele consulta a
+     * fonte, confere a IDENTIDADE e atualiza A MESMA oferta por `id`.
+     *
+     * `importarProduto()` continua sendo usado — ele e o leitor de HTTP, e
+     * ler a fonte nao cria nada. O que saiu foi o `saveProduct()`: ele e o
+     * caminho de DESCOBERTA que resolve `canonicalKey` e cria Product quando
+     * nao acha compativel. Um cron de preco nao tem autoridade para decidir
+     * qual produto e o mesmo; por isso `targetProductId` deixou de ser
+     * necessario — o `productId` gravado na oferta ja e autoritativo.
+     *
+     * Se a fonte responder outro marketplace ou outro anuncio, o helper
+     * devolve veredito de erro e NAO escreve nada (ver `knownOfferRefresh`).
+     */
     try {
-      const produtoImportado =
-        await importarProduto(sourceUrl);
+      const resultadoRefresh =
+        await refreshKnownMarketplaceOffer(
+          {
+            offerId: oferta.id,
+            productId: oferta.productId,
+            marketplace: oferta
+              .marketplace as OfertaConhecidaMarketplace,
+            externalId: oferta.externalId,
+            sourceUrl: oferta.sourceUrl,
+            affiliateLink: oferta.affiliateLink,
+            price: oferta.price,
+            seller: oferta.seller,
+            stock: oferta.stock,
+            available: oferta.available,
+          },
+          {
+            db: prisma as never,
+            lerFonte: async (conhecida) => {
+              const lido = await importarProduto(
+                conhecida.sourceUrl as string,
+              );
 
-      const marketplaceImportado =
-        marketplaceImportadoParaBanco(
-          produtoImportado.marketplace,
+              return normalizarFonteImportada(
+                lido,
+                conhecida.sourceUrl as string,
+              );
+            },
+            linkAfiliadoSeguro: (link) =>
+              Boolean(link?.trim()),
+            sincronizarPublicacao: async (
+              productId,
+            ) => {
+              await sincronizarMelhorOfertaDoProduto(
+                prisma as never,
+                productId,
+              );
+            },
+            precoUtilizavel: precoUtilizavelDaFonte,
+            historicoPrecisaNovaEntrada,
+            agora: inicio,
+            proximoCheckAposSucesso: adicionarMilissegundos(
+              inicio,
+              INTERVALO_SUCESSO_MS,
+            ),
+          },
         );
 
+      /*
+       * Erro de identidade NAO e erro de fonte: nada foi consultado com
+       * sucesso que justificasse punishing o contador como falha de rede.
+       * Ainda assim e um erro controlado e precisa ficar visivel e contar.
+       */
       if (
-        marketplaceImportado !== oferta.marketplace
+        resultadoRefresh.status ===
+          "SOURCE_MARKETPLACE_CHANGED" ||
+        resultadoRefresh.status ===
+          "SOURCE_IDENTITY_CHANGED" ||
+        resultadoRefresh.status === "ERROR"
       ) {
-        throw new Error(
-          `A URL da oferta pertence a ${produtoImportado.marketplace}, mas a oferta cadastrada pertence a ${oferta.marketplace}.`,
-        );
+        identidadeDivergente +=
+          resultadoRefresh.status === "ERROR"
+            ? 0
+            : 1;
+
+        const fimErro = new Date();
+        const nextCheckAtErro =
+          proximoCheckDepoisDeErro(
+            oferta.consecutiveErrors + 1,
+            fimErro,
+          );
+
+        await prisma.marketplaceOffer.update({
+          where: {
+            id: oferta.id,
+          },
+          data: {
+            lastCheckedAt: fimErro,
+            nextCheckAt: nextCheckAtErro,
+            consecutiveErrors:
+              oferta.consecutiveErrors + 1,
+            errorMessage: resultadoRefresh.error,
+          },
+        });
+
+        erros += 1;
+
+        resultados.push({
+          offerId: oferta.id,
+          productId: oferta.productId,
+          marketplace: oferta.marketplace,
+          success: false,
+          priceBefore: oferta.price,
+          nextCheckAt: nextCheckAtErro.toISOString(),
+          error: resultadoRefresh.error,
+          refreshPath: "REFRESH_ONLY_KNOWN_OFFER",
+          identityOutcome:
+            resultadoRefresh.status,
+        });
+
+        continue;
       }
-
-      const priceChanged = precoMudou(
-        oferta.price,
-        produtoImportado.price,
-      );
-
-      await saveProduct(
-        produtoImportado,
-        oferta.affiliateLink,
-        {
-          targetProductId: oferta.productId,
-          discoverySource: "PRICE_MONITOR",
-        },
-      );
-
-      const fim = new Date();
-      const nextCheckAt = adicionarMilissegundos(
-        fim,
-        INTERVALO_SUCESSO_MS,
-      );
-
-      await prisma.marketplaceOffer.update({
-        where: {
-          id: oferta.id,
-        },
-        data: {
-          lastCheckedAt: fim,
-          nextCheckAt,
-          consecutiveErrors: 0,
-          errorMessage: null,
-        },
-      });
 
       atualizadas += 1;
 
-      if (priceChanged) {
+      if (resultadoRefresh.priceChanged) {
         precosAlterados += 1;
 
         /*
          * FLUXO AUTOMATICO DE ALERTAS: somente depois de o novo preco
-         * estar persistido (saveProduct ja gravou preco + historico),
+         * estar persistido (o helper ja gravou oferta + historico),
          * processamos os alertas ativos do produto. Falha aqui nunca
          * quebra o monitor: registramos e seguimos.
          */
         await dispararAlertas({
           productId: oferta.productId,
-          currentPrice: produtoImportado.price,
-          previousPrice: oferta.price,
-          productName: produtoImportado.title ?? oferta.productId,
-          marketplace: produtoImportado.marketplace,
-          store: produtoImportado.seller ?? null,
+          currentPrice:
+            resultadoRefresh.priceAfter,
+          previousPrice: resultadoRefresh.priceBefore,
+          productName: oferta.productId,
+          marketplace: oferta.marketplace,
+          store: oferta.seller,
         });
       }
 
@@ -745,11 +897,15 @@ export async function processPriceMonitor(
         productId: oferta.productId,
         marketplace: oferta.marketplace,
         success: true,
-        priceBefore: oferta.price,
-        priceAfter: produtoImportado.price,
-        priceChanged,
-        nextCheckAt: nextCheckAt.toISOString(),
-        refreshPath: "LEGACY_SOURCE_URL",
+        priceBefore: resultadoRefresh.priceBefore,
+        priceAfter: resultadoRefresh.priceAfter,
+        priceChanged: resultadoRefresh.priceChanged,
+        nextCheckAt:
+          adicionarMilissegundos(
+            inicio,
+            INTERVALO_SUCESSO_MS,
+          ).toISOString(),
+        refreshPath: "REFRESH_ONLY_KNOWN_OFFER",
       });
     } catch (error) {
       const fim = new Date();
@@ -785,7 +941,7 @@ export async function processPriceMonitor(
         priceBefore: oferta.price,
         nextCheckAt: nextCheckAt.toISOString(),
         error: mensagem,
-        refreshPath: "LEGACY_SOURCE_URL",
+        refreshPath: "REFRESH_ONLY_KNOWN_OFFER",
       });
     }
   }
@@ -802,6 +958,20 @@ export async function processPriceMonitor(
     listingFirstProcessed: listingFirstProcessadas,
     listingFirstInactiveObserved: observadasInativas,
     legacySkipped: legadoIgnorado,
+    /*
+     * Invariante do modo. `refreshOnlyKnownOffer` e a contagem de ofertas
+     * passadas pelo helper que atualiza binding conhecido; a garantia de que
+     * NENHUM Product foi criado e estrutural (o helper nao recebe e nao
+     * chama nenhum caminho de criacao), e este numero fecha a conta do que
+     * ele fez.
+     */
+    refreshOnlyKnownOffer: resultados.filter(
+      (item) =>
+        item.refreshPath ===
+        "REFRESH_ONLY_KNOWN_OFFER",
+    ).length,
+    sourceIdentityChanged: identidadeDivergente,
+    productsCreatedByPriceMonitor: 0,
     results: resultados,
   };
 }
