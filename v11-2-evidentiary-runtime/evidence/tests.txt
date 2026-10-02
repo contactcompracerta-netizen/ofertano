@@ -1,0 +1,48 @@
+✔ dry-run has exact sequence, never touches drivers, and does not invent TLS (7.172891ms)
+✔ happy path: connect/queries/disconnect are awaited in deterministic PG then Prisma order (1.984054ms)
+✔ PG connection rejection is connection error, not TLS failure (1.144143ms)
+✔ PG query cannot emit TLS confirmation or process success (0.767496ms)
+✔ PG ro-off cannot emit TLS confirmation or process success (0.780984ms)
+✔ PG tls-query cannot emit TLS confirmation or process success (0.761204ms)
+✔ PG tls-empty cannot emit TLS confirmation or process success (0.829775ms)
+✔ PG tls-string cannot emit TLS confirmation or process success (0.525815ms)
+✔ PG tls-many cannot emit TLS confirmation or process success (0.757641ms)
+✔ PG tls-off cannot emit TLS confirmation or process success (0.847795ms)
+✔ PG disconnect failure never emits disconnected or completion (0.836663ms)
+✔ PG constructor failure never invents connect attempt (0.720967ms)
+✔ PRISMA connection rejection is connection error, not TLS failure (1.077313ms)
+✔ PRISMA query cannot emit TLS confirmation or process success (0.902951ms)
+✔ PRISMA ro-off cannot emit TLS confirmation or process success (0.793699ms)
+✔ PRISMA tls-query cannot emit TLS confirmation or process success (1.0202ms)
+✔ PRISMA tls-empty cannot emit TLS confirmation or process success (0.547195ms)
+✔ PRISMA tls-string cannot emit TLS confirmation or process success (0.370131ms)
+✔ PRISMA tls-many cannot emit TLS confirmation or process success (0.419453ms)
+✔ PRISMA tls-off cannot emit TLS confirmation or process success (0.357787ms)
+✔ PRISMA disconnect failure never emits disconnected or completion (0.597884ms)
+✔ PRISMA constructor failure never invents connect attempt (0.472196ms)
+✔ PG socket must be positively encrypted even if query returned ssl true (0.559433ms)
+✔ RUN_ID stable and unique across runs, sequence increasing, timestamp valid (1.085741ms)
+✔ no secret values, env key names, raw errors, rows or URLs in markers/results (1.755302ms)
+✔ invalid input undefined fails closed before factories (0.560996ms)
+✔ invalid input  fails closed before factories (0.201065ms)
+✔ invalid input not a URL fails closed before factories (0.193715ms)
+✔ invalid input https://fixture.invalid fails closed before factories (0.181122ms)
+✔ invalid input postgresql://fixture.invalid/db#fragment fails closed before factories (0.196337ms)
+✔ required production signals fail closed without leaking environment values (0.223317ms)
+✔ normalization enforces require, preserves unrelated parameters and input (0.203074ms)
+✔ real mode rejects absent, forged, mismatched or reused dry-run receipt before factory (1.086847ms)
+✔ empty/incomplete evidence remains indeterminate; mixed, reordered or contradictory logs rejected (1.026915ms)
+✔ success marker only after host exit zero and only once (0.585705ms)
+✔ actual local child dry-run exits 0, emits exit last, with network APIs blocked (67.686211ms)
+✔ actual local child with missing env exits 1 and never emits success (59.78459ms)
+✔ concrete adapters use only fixed read queries, same URL, startup read-only and awaited lifecycles (6.594228ms)
+✔ pending connect and disconnect never produce premature success markers (24.490001ms)
+✔ events after disconnect or completion invalidate evidence (1.548958ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 315.622303

@@ -1,0 +1,12 @@
+import net from 'node:net';
+import tls from 'node:tls';
+import dns from 'node:dns';
+import dgram from 'node:dgram';
+import { syncBuiltinESMExports } from 'node:module';
+let attempts = 0;
+const blocked = () => { attempts++; throw new Error('NETWORK_FORBIDDEN_IN_LOCAL_VALIDATION'); };
+net.connect = net.createConnection = net.Socket.prototype.connect = tls.connect = blocked;
+dns.lookup = dns.resolve = dns.promises.lookup = dns.promises.resolve = blocked;
+dgram.createSocket = globalThis.fetch = blocked;
+syncBuiltinESMExports();
+process.once('exit', () => { if (attempts !== 0) process.exitCode = 99; });

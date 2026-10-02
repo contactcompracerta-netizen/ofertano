@@ -1,0 +1,26 @@
+{
+  "name": "ofertano-v11-read-only-tls-probe",
+  "version": "11.0.0",
+  "private": true,
+  "description": "V11 Read-Only TLS Probe - proves DIRECT_URL normalization, sslmode=require, pg TLS, and PrismaClient TLS without migrations or writes",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --reporter=verbose tests/v11-probe.test.ts",
+    "test:dev": "vitest --reporter=verbose tests/v11-probe.test.ts",
+    "dry-run": "tsx src/v11-probe.ts --dry-run",
+    "probe": "tsx src/v11-probe.ts",
+    "static-scan": "node scripts/static-scan.mjs",
+    "typecheck": "tsc --noEmit",
+    "package": "node scripts/package.mjs"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.0",
+    "@prisma/client": "^7.9.0",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.0.1"
+  }
+}
