@@ -47,3 +47,10 @@ src/components/Header.tsx.backup
 .ml-affiliate-profile/
 .ml-affiliate-chrome/
 scripts/.ml-affiliate-poc-logs/
+
+# Prisma Client gerado.
+# O schema usa `provider = "prisma-client-js"` SEM `output`, portanto
+# `prisma generate` escreve em node_modules/@prisma/client. Este diretório
+# existia apenas como artefato de uma configuração antiga de `output` e nunca
+# foi importado pelo projeto. Não versionar.
+/src/generated/prisma/
