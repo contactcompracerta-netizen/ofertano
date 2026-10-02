@@ -48,6 +48,12 @@ src/components/Header.tsx.backup
 .ml-affiliate-chrome/
 scripts/.ml-affiliate-poc-logs/
 
+# Evidencia gerada por execucao de teste/rehearsal/canario.
+# Regra: evidencia LIDA por gate, teste, runbook ou doc e fixture e fica
+# versionada (ver docs/evidence/README.md). Saida reescrita a cada execucao
+# nao e evidencia, e log.
+/docs/evidence/50ag*/
+
 # Banco local de rascunho (o datasource do projeto e PostgreSQL).
 # O dev.db versionado continha 3 linhas Product da era "Compra Certa".
 # O conteudo permanece no historico Git; nao e fixture de teste.
