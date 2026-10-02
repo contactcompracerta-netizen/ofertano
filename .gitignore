@@ -43,10 +43,15 @@ debug-mercadolivre.html
 log.txt
 src/components/Header.tsx.backup
 
-# ml affiliate POC local
+# ml affiliate: artefatos locais de execucao
+# O perfil .ml-affiliate-chrome/ e scripts/.ml-affiliate-poc-logs/ eram
+# gravados por scripts/ml-affiliate-poc.mts (POC superseded). O gerador real
+# (src/services/affiliates/mercadolivre/generator.ts) conecta via CDP
+# (127.0.0.1:9222) e nao cria perfil local.
 .ml-affiliate-profile/
 .ml-affiliate-chrome/
 scripts/.ml-affiliate-poc-logs/
+.ml-affiliate-daemon.lock
 
 # Evidencia gerada por execucao de teste/rehearsal/canario.
 # Regra: evidencia LIDA por gate, teste, runbook ou doc e fixture e fica
