@@ -48,6 +48,14 @@ src/components/Header.tsx.backup
 .ml-affiliate-chrome/
 scripts/.ml-affiliate-poc-logs/
 
+# Banco local de rascunho (o datasource do projeto e PostgreSQL).
+# O dev.db versionado continha 3 linhas Product da era "Compra Certa".
+# O conteudo permanece no historico Git; nao e fixture de teste.
+/dev.db
+/dev.db-journal
+/dev.db-shm
+/dev.db-wal
+
 # Prisma Client gerado.
 # O schema usa `provider = "prisma-client-js"` SEM `output`, portanto
 # `prisma generate` escreve em node_modules/@prisma/client. Este diretório
