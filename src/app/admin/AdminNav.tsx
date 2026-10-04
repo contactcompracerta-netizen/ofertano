@@ -7,6 +7,7 @@ import styles from "./admin.module.css";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Início" },
+  { href: "/admin/operacoes", label: "Operações" },
   { href: "/admin/inteligencia", label: "Inteligência" },
   { href: "/admin/oportunidades", label: "Oportunidades" },
   { href: "/admin/fila", label: "Fila" },
