@@ -1,10 +1,10 @@
-import type { CommerceCanaryGrantStatus, Marketplace, PrismaClient } from '@prisma/client';
+import type { CommerceCanaryGrantStatus, Marketplace } from '@prisma/client';
 import type { CommerceShadowInput, CommerceShadowResult, ShadowDependencies } from '../shadow/contracts';
 import type { QueryResultRow } from 'pg';
 
 /** Minimal SQL executor duck-type satisfied by pg Pool/Client and test fakes. */
 export interface SqlExecutor {
-  query<R extends QueryResultRow = any>(text: string, values?: unknown[]): Promise<{ rowCount: number | null; rows: R[] }>;
+  query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<{ rowCount: number | null; rows: R[] }>;
 }
 
 /** How the current environment authorizes a canary attempt. */
@@ -60,7 +60,7 @@ export type ControlPlaneEvent = {
   durationMs: number;
 };
 
-export interface DistributedCanaryInput extends CommerceShadowInput {}
+export type DistributedCanaryInput = CommerceShadowInput;
 
 /**
  * Dependencies for the distributed orchestrator. `connectionString` addresses

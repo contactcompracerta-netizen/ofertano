@@ -155,7 +155,9 @@ export function looksLikeListingTitle(query: string): boolean {
  * Infer product condition from query text.
  * Returns normalized condition if detected, null otherwise.
  */
-export function inferConditionFromQuery(query: string): string | null {
+export function inferConditionFromQuery(
+  query: string,
+): "refurbished" | "used" | "repackaged" | null {
   const normalized = normalizeMultistoreText(query).toLowerCase();
 
   if (/(recondicionado|remanufaturado|refurbished|renewed)/.test(normalized)) {

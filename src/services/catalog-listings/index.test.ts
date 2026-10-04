@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { MarketplaceListingMarket } from ".";
+
 import {
   buildListingIdentity,
   buildProductSearchDocument,
@@ -1827,7 +1829,7 @@ test("same marketplace and external id remains idempotent under canary controls"
   const repository = {
     findListingByMarketplaceExternalId: async (marketplace: string, externalId: string) => {
       const match = calls.find((entry) => entry.marketplace === marketplace && entry.externalId === externalId);
-      return match ? normalizeMarketplaceListing({ marketplace: marketplace as any, externalId, title: "Existing", brand: "BrandX" }) : null;
+      return match ? normalizeMarketplaceListing({ marketplace: marketplace as MarketplaceListingMarket, externalId, title: "Existing", brand: "BrandX" }) : null;
     },
     upsertRawMarketplaceListing: async (listing: ReturnType<typeof normalizeMarketplaceListing>) => {
       calls.push({ marketplace: listing.marketplace, externalId: listing.externalId });
@@ -1883,7 +1885,7 @@ test("enabled dual-write persists idempotently for the same marketplace and exte
   const repository = {
     findListingByMarketplaceExternalId: async (marketplace: string, externalId: string) => {
       const match = calls.find((entry) => entry.marketplace === marketplace && entry.externalId === externalId);
-      return match ? normalizeMarketplaceListing({ marketplace: marketplace as any, externalId, title: "Existing", brand: "BrandX" }) : null;
+      return match ? normalizeMarketplaceListing({ marketplace: marketplace as MarketplaceListingMarket, externalId, title: "Existing", brand: "BrandX" }) : null;
     },
     upsertRawMarketplaceListing: async (listing: ReturnType<typeof normalizeMarketplaceListing>) => {
       calls.push({ marketplace: listing.marketplace, externalId: listing.externalId });

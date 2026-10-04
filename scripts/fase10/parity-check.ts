@@ -15,7 +15,7 @@ function cortar(s: string | null, n = 120) {
   return s && s.length > n ? `${s.slice(0, n)}...[len=${s.length}]` : (s ?? "(nulo)");
 }
 
-function comparar(label: string, v1: any, legacy: any): "MATCH" | "DIFF" {
+function comparar(label: string, v1: unknown, legacy: unknown): "MATCH" | "DIFF" {
   if (JSON.stringify(v1) === JSON.stringify(legacy)) {
     console.log(`  ${label.padEnd(20)} MATCH`);
     return "MATCH";
@@ -66,7 +66,7 @@ async function main() {
     console.log("-".repeat(80));
     console.log(`OFFER externalId=${o.externalId} productId=${o.productId}`);
 
-    let v1Listing: any = null;
+    let v1Listing: unknown = null;
     try {
       v1Listing = await connector.fetchByExternalId(o.externalId);
     } catch (e) {
@@ -84,7 +84,7 @@ async function main() {
     const product = productMap.get(o.productId);
 
     console.log("  --- CAMPOS DE OFERTA ---");
-    const cmp = (label: string, v1: any, legacy: any) => {
+    const cmp = (label: string, v1: unknown, legacy: unknown) => {
       const r = comparar(label, v1, legacy);
       if (r === "MATCH") matchCount++; else diffCount++;
     };

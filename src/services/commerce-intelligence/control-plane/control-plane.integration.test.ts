@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
+import { Client, type QueryResultRow } from 'pg';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { runCommerceDistributedCanary } from './service';
@@ -53,9 +52,9 @@ const legacy = (c: Awaited<ReturnType<typeof counts>>) => ({ product: c.product,
 
 function runDistributed(env: Record<string, string | undefined>, hooks: { events?: ControlPlaneEvent[]; shadowEvents?: ShadowEvent[]; queryCounter?: { n: number } } = {}) {
   const executor: SqlExecutor = {
-    async query<R = any>(text: string, values?: unknown[]) {
+    async query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) {
       if (hooks.queryCounter) hooks.queryCounter.n++;
-      return client.query(text as string, values as any[]) as any;
+      return client.query(text, values) as unknown as Promise<{ rowCount: number | null; rows: R[] }>;
     },
   };
   return runCommerceDistributedCanary(input, {
@@ -224,7 +223,7 @@ async function main() {
       const r = await runCommerceDistributedCanary(input, {
         env: baseEnv('cfg-token-0001', overrides),
         connectionString: url,
-        getExecutor: () => ({ async query<R = any>(text: string, values?: unknown[]) { queries++; return client.query(text, values as any[]) as any; } }),
+        getExecutor: () => ({ async query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) { queries++; return client.query(text, values) as unknown as Promise<{ rowCount: number | null; rows: R[] }>; } }),
         log: (e) => cfgEvents.push(e),
       });
       return { r, queries };

@@ -26,7 +26,7 @@ export function extractSanitizedIdentity(rawQuery: string): SanitizedIdentity {
 
   // Set condition from sanitized query
   const condition = inferConditionFromQuery(sanitization.sanitizedQuery);
-  identity.strongIdentity.condition = condition as any;
+  identity.strongIdentity.condition = condition;
 
   return {
     ...identity,

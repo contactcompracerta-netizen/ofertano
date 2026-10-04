@@ -51,12 +51,17 @@ async function main() {
   console.log(`\n--- Testing ${binding.externalId} ---`);
 
   // fetchByExternalId
-  const fetchKnown = (connector: any) => 
+  type CandidateConnector = {
+    fetchByExternalId?: (id: string) => Promise<unknown>;
+    rawPayloadFor?: (id: string) => unknown;
+  };
+
+  const fetchKnown = (connector: CandidateConnector) =>
     typeof connector.fetchByExternalId === "function"
       ? (id: string) => connector.fetchByExternalId!(id)
       : null;
 
-  const readRaw = (connector: any) =>
+  const readRaw = (connector: CandidateConnector) =>
     typeof connector.rawPayloadFor === "function"
       ? (id: string) => connector.rawPayloadFor!(id)
       : null;

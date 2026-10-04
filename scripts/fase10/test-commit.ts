@@ -50,15 +50,18 @@ async function main() {
   const raw = connector.rawPayloadFor("ee0gdc22g3");
   console.log(`  raw payload: ${raw ? "present" : "null"}`);
   if (raw) {
-    const { requestedUrl, finalUrl } = raw as any;
+    const { requestedUrl, finalUrl } =
+      raw as { requestedUrl: string; finalUrl: string };
     console.log(`    requestedUrl (affiliate): ${requestedUrl}`);
     console.log(`    finalUrl (source): ${finalUrl}`);
   }
 
   // Resolve links
   const links = resolvePurchaseLinks({
-    affiliateLink: raw ? (raw as any).requestedUrl : null,
-    sourceUrl: raw ? (raw as any).finalUrl : null,
+    affiliateLink: raw
+      ? (raw as { requestedUrl: string }).requestedUrl
+      : null,
+    sourceUrl: raw ? (raw as { finalUrl: string }).finalUrl : null,
   });
   console.log(`  resolved affiliateLink: ${links.affiliateLink} (${links.affiliateState})`);
   console.log(`  resolved sourceUrl: ${links.sourceUrl} (${links.sourceState})`);
