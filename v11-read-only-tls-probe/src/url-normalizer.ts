@@ -50,7 +50,7 @@ export function forceSslRequire(rawDirectUrl: string): NormalizationResult {
     const url = new URL(rawDirectUrl);
 
     // Rule 2: Protocol validation
-    if (!ACCEPTED_PROTOCOLS.includes(url.protocol)) {
+    if (!(ACCEPTED_PROTOCOLS as readonly string[]).includes(url.protocol)) {
       return {
         success: false,
         originalUrl: rawDirectUrl,

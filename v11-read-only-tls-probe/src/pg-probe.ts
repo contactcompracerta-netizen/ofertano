@@ -39,6 +39,7 @@ export async function probePgTls(
     connected: false,
     fingerprint: "",
     normalizedUrlUsed: normalizedDirectUrl,
+    readOnlyVerified: false,
   };
 
   // Dry-run mode: do not open any socket or database connection

@@ -68,10 +68,14 @@ export async function runV11Probe(): Promise<V11Report> {
   }
   console.log(`sslmode=require applied: ${normalization.sslmodeApplied}`);
   console.log(`URL fingerprint: ${normalization.fingerprint}`);
+  const normalizedUrl = normalization.normalizedUrl;
+  if (!normalizedUrl) {
+    throw new Error("NORMALIZED_URL_MISSING");
+  }
 
   // PHASE 3: pg read-only probe
   console.log("─── PG READ-ONLY PROBE ───");
-  const pgResult = await probePgTls(normalization.normalizedUrl, { dryRun: isDryRun });
+  const pgResult = await probePgTls(normalizedUrl, { dryRun: isDryRun });
   if (isDryRun) {
     V11_DRY_RUN_NETWORK_ACCESS = "NO";
     V11_DRY_RUN_DATABASE_ACCESS = "NO";
@@ -84,7 +88,7 @@ export async function runV11Probe(): Promise<V11Report> {
 
   // PHASE 4: PrismaClient read-only probe
   console.log("─── PRISMA READ-ONLY PROBE ───");
-  const prismaResult = await probePrismaTls(normalization.normalizedUrl, { dryRun: isDryRun });
+  const prismaResult = await probePrismaTls(normalizedUrl, { dryRun: isDryRun });
   if (isDryRun) {
     V11_PRISMA_CLIENT_PROBE_IMPLEMENTED = "YES";
   } else {
@@ -95,8 +99,8 @@ export async function runV11Probe(): Promise<V11Report> {
 
   // Verify same normalized URL used by both probes
   const sameNormalizedUrl = verifySameFingerprint(
-    normalization.normalizedUrl,
-    normalization.normalizedUrl
+    normalizedUrl,
+    normalizedUrl
   );
 
   // PHASE 5: Generate report
