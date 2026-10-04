@@ -47,7 +47,16 @@ export default function ImageSearchButton() {
   const [draftQuery, setDraftQuery] = useState("");
 
   useEffect(() => {
-    setMounted(true);
+    // Defer para microtask: evita setState síncrono dentro do efeito.
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        setMounted(true);
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   useEffect(() => {

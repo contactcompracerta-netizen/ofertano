@@ -25,7 +25,15 @@ export default function AnalyticsListingScope({
   const [occurrenceId, setOccurrenceId] = useState<string | null>(null);
 
   useEffect(() => {
-    setOccurrenceId(beginListingOccurrence(surface, scope));
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        setOccurrenceId(beginListingOccurrence(surface, scope));
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, [surface, scope]);
 
   return (

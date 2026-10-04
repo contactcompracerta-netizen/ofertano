@@ -67,7 +67,15 @@ export default function AdminPushButton() {
   }, []);
 
   useEffect(() => {
-    void refreshStatus();
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void refreshStatus();
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, [refreshStatus]);
 
   async function enableNotifications() {

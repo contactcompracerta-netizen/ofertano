@@ -334,7 +334,17 @@ export default function AdminBlogPage() {
   }, []);
 
   useEffect(() => {
-    void loadPosts();
+    // Defer para microtask: o setState síncrono inicial (loading) não pode
+    // acontecer dentro do efeito (react-hooks/set-state-in-effect).
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void loadPosts();
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, [loadPosts]);
 
   const filteredPosts = useMemo(

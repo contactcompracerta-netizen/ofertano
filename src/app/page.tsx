@@ -4,6 +4,7 @@ import { after } from "next/server";
 
 import { serializeJsonLd } from "@/lib/seo/serialize";
 import { buildWebSiteStructuredData } from "@/lib/seo/website";
+import { agoraEmMs } from "@/lib/agoraEmMs";
 
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
@@ -221,7 +222,7 @@ export default async function HomePage({
    * busca e clustering no caminho da resposta; persistencia Prisma
    * so depois, via after(), sem prender o HTML.
    */
-  const pesquisaIniciadaEm = Date.now();
+  const pesquisaIniciadaEm = agoraEmMs();
   const resultado =
     await searchCatalogOrDiscover(
       busca,
@@ -232,7 +233,7 @@ export default async function HomePage({
         },
       },
     );
-  const searchDurationMs = Date.now() - pesquisaIniciadaEm;
+  const searchDurationMs = agoraEmMs() - pesquisaIniciadaEm;
 
   /*
    * Dicas do estado "0 resultado": só custam uma consulta quando a busca

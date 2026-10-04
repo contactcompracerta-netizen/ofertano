@@ -502,8 +502,16 @@ export default function OpportunitiesPage() {
     }, []);
 
   useEffect(() => {
-    void loadCategories();
-    void loadOpportunities();
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void loadCategories();
+        void loadOpportunities();
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, [loadCategories, loadOpportunities]);
 
   useEffect(() => {

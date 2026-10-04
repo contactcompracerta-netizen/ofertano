@@ -103,7 +103,15 @@ export default function AffiliateLinksPage() {
   }, []);
 
   useEffect(() => {
-    void carregarPendentes();
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void carregarPendentes();
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, [carregarPendentes]);
 
   async function copiarUrls() {

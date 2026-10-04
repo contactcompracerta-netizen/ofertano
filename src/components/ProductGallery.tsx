@@ -73,8 +73,30 @@ export default function ProductGallery({
 
   const [imagensComErro, setImagensComErro] = useState<string[]>([]);
   const [imagensCarregadas, setImagensCarregadas] = useState<string[]>([]);
-  const [preloadFinalizado, setPreloadFinalizado] = useState(false);
+  const [preloadFinalizado, setPreloadFinalizado] = useState(
+    () => imagensOriginais.length === 0,
+  );
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  /*
+   * Reset síncrono quando o produto muda: ajustar estado durante o render
+   * (padrão documentado) em vez de setState dentro de useEffect.
+   */
+  const [resetKey, setResetKey] = useState({
+    productName,
+    imagensOriginais,
+  });
+
+  if (
+    resetKey.productName !== productName ||
+    resetKey.imagensOriginais !== imagensOriginais
+  ) {
+    setResetKey({ productName, imagensOriginais });
+    setSelectedIndex(0);
+    setImagensComErro([]);
+    setImagensCarregadas([]);
+    setPreloadFinalizado(imagensOriginais.length === 0);
+  }
 
   const imagensValidas = useMemo(() => {
     if (!preloadFinalizado) {
@@ -96,15 +118,7 @@ export default function ProductGallery({
   ]);
 
   useEffect(() => {
-    setSelectedIndex(0);
-    setImagensComErro([]);
-    setImagensCarregadas([]);
-    setPreloadFinalizado(false);
-  }, [productName, imagensOriginais]);
-
-  useEffect(() => {
     if (imagensOriginais.length === 0) {
-      setPreloadFinalizado(true);
       return;
     }
 
@@ -175,11 +189,14 @@ export default function ProductGallery({
     };
   }, [imagensOriginais]);
 
-  useEffect(() => {
-    if (selectedIndex > imagensValidas.length - 1) {
-      setSelectedIndex(Math.max(imagensValidas.length - 1, 0));
-    }
-  }, [imagensValidas.length, selectedIndex]);
+  /*
+   * Clamp derivado em vez de setState em efeito: o índice exibido nunca
+   * ultrapassa a última imagem válida.
+   */
+  const indiceExibido = Math.min(
+    selectedIndex,
+    Math.max(imagensValidas.length - 1, 0),
+  );
 
   function registrarErro(imagem: string) {
     setImagensComErro((atuais) =>
@@ -204,7 +221,7 @@ export default function ProductGallery({
   }
 
   const imagemSelecionada =
-    imagensValidas[selectedIndex] ?? imagensValidas[0];
+    imagensValidas[indiceExibido] ?? imagensValidas[0];
   const possuiVariasImagens = imagensValidas.length > 1;
 
   function mostrarAnterior() {
@@ -243,10 +260,10 @@ export default function ProductGallery({
         <img
           key={imagemSelecionada}
           src={imagemSelecionada}
-          alt={`${displayName} - imagem ${selectedIndex + 1}`}
+          alt={`${displayName} - imagem ${indiceExibido + 1}`}
           referrerPolicy="no-referrer"
           decoding="async"
-          fetchPriority={selectedIndex === 0 ? "high" : "auto"}
+          fetchPriority={indiceExibido === 0 ? "high" : "auto"}
           onError={() => registrarErro(imagemSelecionada)}
           className="pointer-events-none h-full w-full select-none object-contain"
         />
@@ -272,7 +289,7 @@ export default function ProductGallery({
             </button>
 
             <span className="absolute bottom-2.5 right-2.5 z-20 rounded-full bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white sm:bottom-3 sm:right-3 sm:text-[11px]">
-              {selectedIndex + 1} / {imagensValidas.length}
+              {indiceExibido + 1} / {imagensValidas.length}
             </span>
           </>
         )}
@@ -282,7 +299,7 @@ export default function ProductGallery({
         <div className="border-t border-slate-200 bg-slate-50/50 px-2 py-2 sm:px-2.5">
           <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {imagensValidas.map((imagem, indice) => {
-              const selecionada = selectedIndex === indice;
+              const selecionada = indiceExibido === indice;
 
               return (
                 <button

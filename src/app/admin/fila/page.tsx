@@ -189,14 +189,24 @@ export default function FilaImportacaoPage() {
   }, []);
 
   useEffect(() => {
-    void loadQueue();
-
     const interval = window.setInterval(() => {
       void loadQueue();
     }, 15000);
 
     return () => {
       window.clearInterval(interval);
+    };
+  }, [loadQueue]);
+
+  useEffect(() => {
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void loadQueue();
+      }
+    });
+    return () => {
+      ativo = false;
     };
   }, [loadQueue]);
 

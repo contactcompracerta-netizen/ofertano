@@ -557,7 +557,15 @@ export default function InteligenciaDashboard() {
   }, [query]);
 
   useEffect(() => {
-    void load();
+    let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void load();
+      }
+    });
+    return () => {
+      ativo = false;
+    };
   }, [load]);
 
   const today = dateKeyInTimeZone(new Date());

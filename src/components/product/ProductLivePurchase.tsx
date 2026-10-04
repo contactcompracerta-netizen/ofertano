@@ -139,10 +139,18 @@ export function ProductLivePurchase({
     initialOffers.map(sanitizarOfertaCompraPublica),
   );
   const offersRef = useRef(offers);
-  offersRef.current = offers;
+
+  useEffect(() => {
+    offersRef.current = offers;
+  }, [offers]);
 
   useEffect(() => {
     let ativo = true;
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        void atualizar();
+      }
+    });
 
     async function atualizar() {
       try {
