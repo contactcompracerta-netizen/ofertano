@@ -34,16 +34,24 @@ export function scheduleCommerceShadowAfterBarrier(candidates:readonly RawCandid
     };
     if(options.defer)options.defer(work);
     else {
-      try {
-        // Synchronous registration, but no Next/worker module initialization when OFF.
-        const {after}=require('next/server') as typeof import('next/server');
-        after(work);
-      }
-      catch {
-        // Local CLI has no request context. Preview/Production never uses this fallback.
-        if(process.env.VERCEL_ENV)throw new Error('AFTER_CONTEXT_REQUIRED');
-        setTimeout(()=>{void work();},0);
-      }
+      // Registro via import dinâmico: `next/server` só é inicializado
+      // quando o agendamento realmente acontece (sem require síncrono).
+      void (async () => {
+        try {
+          try {
+            const { after } = await import('next/server');
+            after(work);
+          }
+          catch {
+            // Local CLI has no request context. Preview/Production never uses this fallback.
+            if(process.env.VERCEL_ENV)throw new Error('AFTER_CONTEXT_REQUIRED');
+            setTimeout(()=>{void work();},0);
+          }
+        }
+        catch {
+          logBoundary({event:'COMMERCE_SHADOW_FAILED',reason:'SCHEDULING_FAILED',durationMs:0,writeCount:0},true);
+        }
+      })();
     }
   } catch {logBoundary({event:'COMMERCE_SHADOW_FAILED',reason:'SCHEDULING_FAILED',durationMs:0,writeCount:0},true);}
 }

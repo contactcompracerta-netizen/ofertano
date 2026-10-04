@@ -65,13 +65,21 @@ export function scheduleCommerceDistributedCanaryAfterBarrier(
     };
     if (options.defer) options.defer(work);
     else {
-      try {
-        const { after } = require('next/server') as typeof import('next/server');
-        after(work);
-      } catch {
-        if (process.env.VERCEL_ENV) throw new Error('AFTER_CONTEXT_REQUIRED');
-        setTimeout(() => { void work(); }, 0);
-      }
+      // Registro via import dinâmico: `next/server` só é inicializado
+      // quando o agendamento realmente acontece (sem require síncrono).
+      void (async () => {
+        try {
+          try {
+            const { after } = await import('next/server');
+            after(work);
+          } catch {
+            if (process.env.VERCEL_ENV) throw new Error('AFTER_CONTEXT_REQUIRED');
+            setTimeout(() => { void work(); }, 0);
+          }
+        } catch {
+          logBoundary({ event: 'COMMERCE_CANARY_FAILED', reason: 'SCHEDULING_FAILED', durationMs: 0, writeCount: 0 }, true);
+        }
+      })();
     }
   } catch { logBoundary({ event: 'COMMERCE_CANARY_FAILED', reason: 'SCHEDULING_FAILED', durationMs: 0, writeCount: 0 }, true); }
 }
