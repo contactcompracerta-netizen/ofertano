@@ -9,6 +9,8 @@ import { agoraEmMs } from "@/lib/agoraEmMs";
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import OffersSection from "@/components/OffersSection";
+import FlashDealsSection from "@/components/flashDeals/FlashDealsSection";
+import { getHomeFlashDeals } from "@/services/flashDeals/flashDeals";
 import AntiFraudNotice from "@/components/AntiFraudNotice";
 import Benefits from "@/components/Benefits";
 import Footer from "@/components/Footer";
@@ -122,6 +124,11 @@ export default async function HomePage({
               matchStatus: "EXACT",
             },
             select: {
+              id: true,
+              title: true,
+              image: true,
+              oldPrice: true,
+              rawPayload: true,
               marketplace: true,
               price: true,
               status: true,
@@ -202,6 +209,8 @@ export default async function HomePage({
         <Header />
 
         <Hero produtos={produtosComparador} />
+
+        <FlashDealsSection deals={getHomeFlashDeals(produtosMultiLoja)} />
 
         <OffersSection
           produtos={produtosMultiLoja}
