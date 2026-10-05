@@ -1,49 +1,75 @@
-﻿export default function Benefits() {
+function SearchIcon() {
   return (
-    <section className="border-y border-gray-200 bg-white">
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-8 md:grid-cols-3 md:gap-8 md:py-12">
-        <article className="rounded-2xl border border-gray-100 bg-slate-50 p-4 md:p-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 text-lg md:h-12 md:w-12 md:text-xl">
-            🔎
-          </div>
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="11" cy="11" r="6" />
+      <path d="m16 16 4 4" />
+    </svg>
+  );
+}
 
-          <h2 className="mt-3 text-base font-black leading-tight text-gray-900 md:mt-5 md:text-lg">
-            Compare antes de comprar
-          </h2>
+function StoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 10h16" />
+      <path d="M5 10 6.5 5h11L19 10" />
+      <path d="M6 10v9h12v-9" />
+      <path d="M9 19v-5h6v5" />
+    </svg>
+  );
+}
 
-          <p className="mt-1.5 text-sm leading-5 text-gray-600 md:mt-2 md:leading-6">
-            Consulte preços, descontos e condições antes de escolher uma oferta.
-          </p>
-        </article>
+function ShieldIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 5 6v5.5c0 4.2 2.8 8 7 9.5 4.2-1.5 7-5.3 7-9.5V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
 
-        <article className="rounded-2xl border border-gray-100 bg-slate-50 p-4 md:p-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 text-lg md:h-12 md:w-12 md:text-xl">
-            🏪
-          </div>
+const items = [
+  {
+    title: "Compare melhor",
+    description: "Preços e condições em um só lugar.",
+    icon: <SearchIcon />,
+  },
+  {
+    title: "Compre na loja",
+    description: "Checkout sempre no marketplace parceiro.",
+    icon: <StoreIcon />,
+  },
+  {
+    title: "Transparência primeiro",
+    description: "Sem pagamentos ou cobranças pelo Ofertano.",
+    icon: <ShieldIcon />,
+  },
+];
 
-          <h2 className="mt-3 text-base font-black leading-tight text-gray-900 md:mt-5 md:text-lg">
-            Lojas parceiras
-          </h2>
+export default function Benefits() {
+  return (
+    <section className="mx-auto w-full max-w-[1600px] px-2.5 pb-5 pt-1 sm:px-5 sm:pb-7 lg:px-8">
+      <div className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)] sm:grid sm:grid-cols-3">
+        {items.map((item, index) => (
+          <article
+            key={item.title}
+            className={`flex min-h-[68px] items-center gap-3 px-3 py-3 sm:min-h-[86px] sm:px-4 lg:px-5 ${
+              index > 0 ? "border-t border-slate-100 sm:border-l sm:border-t-0" : ""
+            }`}
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-emerald-100 bg-emerald-50 text-emerald-700 sm:h-9 sm:w-9">
+              {item.icon}
+            </div>
 
-          <p className="mt-1.5 text-sm leading-5 text-gray-600 md:mt-2 md:leading-6">
-            Os produtos são vendidos, cobrados e entregues pelos próprios
-            marketplaces.
-          </p>
-        </article>
-
-        <article className="rounded-2xl border border-gray-100 bg-slate-50 p-4 md:p-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 text-lg md:h-12 md:w-12 md:text-xl">
-            🛡️
-          </div>
-
-          <h2 className="mt-3 text-base font-black leading-tight text-gray-900 md:mt-5 md:text-lg">
-            Transparência e segurança
-          </h2>
-
-          <p className="mt-1.5 text-sm leading-5 text-gray-600 md:mt-2 md:leading-6">
-            O Ofertano não recebe pagamentos e não realiza vendas diretamente.
-          </p>
-        </article>
+            <div className="min-w-0">
+              <h2 className="text-[12px] font-black tracking-[-0.01em] text-slate-950 sm:text-[13px]">
+                {item.title}
+              </h2>
+              <p className="mt-0.5 text-[10px] leading-[1.4] text-slate-500 sm:text-[11px]">
+                {item.description}
+              </p>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
