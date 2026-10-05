@@ -1,8 +1,5 @@
-import type {
-  AffiliateLinkInput,
-  AffiliateProvider,
-  AffiliateProviderId,
-} from "./linkEngine";
+import { awinProvider } from "./awinProvider";
+import { notConfiguredProvider } from "../../lib/affiliate/providerUtils";
 
 function normalizeId(value: string | null | undefined): string {
   return (value ?? "")
@@ -11,25 +8,10 @@ function normalizeId(value: string | null | undefined): string {
     .replace(/[\s-]+/g, "_");
 }
 
-function notConfiguredProvider(
-  id: AffiliateProviderId,
-  supports: (input: AffiliateLinkInput) => boolean,
-): AffiliateProvider {
-  return {
-    id,
-    supports,
-    isConfigured: () => false,
-    async buildLink() {
-      throw new Error("PROVIDER_NOT_CONFIGURED");
-    },
-  };
-}
-
-export const AFFILIATE_PROVIDER_REGISTRY: readonly AffiliateProvider[] = [
-  notConfiguredProvider(
-    "awin",
-    (input) => normalizeId(input.affiliateNetwork) === "awin",
-  ),
+export const AFFILIATE_PROVIDER_REGISTRY: readonly (
+  | import("./linkEngine").AffiliateProvider
+)[] = [
+  awinProvider,
   notConfiguredProvider(
     "shopee",
     (input) => normalizeId(input.marketplace) === "shopee",
