@@ -9,33 +9,33 @@ const mobileLinkClassName =
 export default function Footer() {
   return (
     <footer className="border-t border-white/5 bg-[#07110F] text-slate-300">
-      <div className="mx-auto w-full max-w-[1600px] px-3 py-5 sm:px-5 md:px-8 md:py-7">
+      <div className="mx-auto w-full max-w-[1600px] px-3 py-3 sm:px-5 md:px-8 md:py-7">
         <div className="md:hidden">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <Link
                 href="/"
-                className="text-lg font-black tracking-[-0.03em] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                className="text-base font-black tracking-[-0.03em] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
               >
                 Ofertano
               </Link>
-              <p className="mt-1 max-w-[260px] text-[11px] leading-[1.45] text-slate-400">
+              <p className="mt-0.5 max-w-[250px] text-[10px] leading-[1.35] text-slate-400">
                 Compare preços e vá direto para a melhor oferta nas lojas parceiras.
               </p>
             </div>
 
-            <span className="mt-0.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300">
+            <span className="mt-0.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-300">
               comparar melhor
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <details className="group rounded-xl border border-white/10 bg-white/[0.035] px-3">
-              <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-[11px] font-black text-white [&::-webkit-details-marker]:hidden">
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <details className="group rounded-lg border border-white/10 bg-white/[0.035] px-2.5">
+              <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between text-[10px] font-black text-white [&::-webkit-details-marker]:hidden">
                 Navegação
                 <span className="text-slate-500 transition group-open:rotate-45">+</span>
               </summary>
-              <nav aria-label="Navegação do rodapé" className="border-t border-white/5 pb-2 pt-1">
+              <nav aria-label="Navegação do rodapé" className="border-t border-white/5 pb-1 pt-0.5">
                 <Link href="/" className={mobileLinkClassName}>Início</Link>
                 <Link href="/ofertas" className={mobileLinkClassName}>Ofertas</Link>
                 <Link href="/categorias" className={mobileLinkClassName}>Categorias</Link>
@@ -43,12 +43,12 @@ export default function Footer() {
               </nav>
             </details>
 
-            <details className="group rounded-xl border border-white/10 bg-white/[0.035] px-3">
-              <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-[11px] font-black text-white [&::-webkit-details-marker]:hidden">
+            <details className="group rounded-lg border border-white/10 bg-white/[0.035] px-2.5">
+              <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between text-[10px] font-black text-white [&::-webkit-details-marker]:hidden">
                 Institucional
                 <span className="text-slate-500 transition group-open:rotate-45">+</span>
               </summary>
-              <nav aria-label="Institucional" className="border-t border-white/5 pb-2 pt-1">
+              <nav aria-label="Institucional" className="border-t border-white/5 pb-1 pt-0.5">
                 <Link href="/sobre" className={mobileLinkClassName}>Sobre</Link>
                 <Link href="/contato" className={mobileLinkClassName}>Contato</Link>
                 <Link href="/politica-de-privacidade" className={mobileLinkClassName}>Privacidade</Link>
@@ -57,11 +57,11 @@ export default function Footer() {
             </details>
           </div>
 
-          <div className="mt-4 border-t border-white/10 pt-3">
-            <p className="text-[9px] leading-[1.45] text-slate-500">
+          <div className="mt-2 border-t border-white/10 pt-2">
+            <p className="text-[9px] leading-[1.35] text-slate-500">
               O Ofertano não vende produtos diretamente. Preços, disponibilidade, pagamento, entrega e garantia são responsabilidade das lojas parceiras.
             </p>
-            <p className="mt-2 text-[9px] font-semibold text-slate-600">
+            <p className="mt-1.5 text-[9px] font-semibold text-slate-600">
               © {new Date().getFullYear()} Ofertano. Todos os direitos reservados.
             </p>
           </div>
