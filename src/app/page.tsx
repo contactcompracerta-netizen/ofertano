@@ -167,6 +167,8 @@ export default async function HomePage({
 
         <FlashDealsSection deals={getHomeFlashDeals(produtosMultiLoja)} />
 
+        <FlashDealsSection deals={getHomeFlashDeals(produtosMultiLoja)} />
+
         <OffersSection
           produtos={produtosMultiLoja}
           busca=""
