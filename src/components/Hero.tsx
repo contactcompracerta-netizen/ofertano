@@ -1,21 +1,14 @@
 import ImageSearchButton from "@/components/ImageSearchButton";
-import HeroComparison, {
-  type HeroComparisonProduct,
-} from "@/components/HeroComparison";
 
-type HeroProps = {
-  produtos: HeroComparisonProduct[];
-};
-
-export default function Hero({ produtos }: HeroProps) {
+export default function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-slate-200/80 bg-[#F7FAF9]">
       <div className="pointer-events-none absolute left-[-7rem] top-[-9rem] h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl" />
       <div className="pointer-events-none absolute right-[-7rem] top-[-8rem] h-80 w-80 rounded-full bg-cyan-200/25 blur-3xl" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-emerald-300/70 to-transparent" />
 
-      <div className="relative mx-auto grid w-full max-w-[1600px] items-center gap-5 px-3 py-5 sm:px-5 sm:py-7 md:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] md:gap-7 lg:px-8 lg:py-9 xl:gap-12">
-        <div className="max-w-3xl">
+      <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 items-center gap-5 px-3 py-4 sm:px-5 sm:py-7 md:gap-7 lg:px-8 lg:py-9">
+        <div className="mx-auto w-full max-w-3xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/90 bg-white/75 px-2.5 py-1 shadow-sm backdrop-blur-xl">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
@@ -40,13 +33,13 @@ export default function Hero({ produtos }: HeroProps) {
           <form
             action="/"
             method="GET"
-            className="mt-4 w-full min-w-0 max-w-2xl rounded-[16px] border border-slate-200/90 bg-white/95 p-1 shadow-[0_12px_36px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:mt-5 sm:p-1.5"
+            className="mt-3 w-full min-w-0 max-w-2xl rounded-[14px] border border-slate-200/90 bg-white/95 p-0.5 shadow-[0_8px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl sm:mt-5 sm:rounded-[16px] sm:p-1.5 sm:shadow-[0_12px_36px_rgba(15,23,42,0.08)]"
           >
             <label htmlFor="busca-hero" className="sr-only">
               Pesquisar produtos
             </label>
 
-            <div className="flex gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <div className="relative min-w-0 flex-1">
                 <svg
                   viewBox="0 0 24 24"
@@ -67,7 +60,7 @@ export default function Hero({ produtos }: HeroProps) {
                   type="search"
                   autoComplete="off"
                   placeholder="Produto, marca ou categoria"
-                  className="h-10 w-full min-w-0 rounded-xl bg-slate-50/80 pl-9 pr-2 text-[11px] font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/10 sm:h-12 sm:pl-12 sm:pr-4 sm:text-sm lg:h-[52px]"
+                  className="h-9 w-full min-w-0 rounded-lg bg-slate-50/80 pl-9 pr-1.5 text-[11px] font-semibold text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/10 sm:h-12 sm:rounded-xl sm:pl-12 sm:pr-4 sm:text-sm lg:h-[52px]"
                 />
               </div>
 
@@ -75,7 +68,7 @@ export default function Hero({ produtos }: HeroProps) {
 
               <button
                 type="submit"
-                className="flex h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-[#087A55] px-3 text-[10px] font-black text-white shadow-[0_8px_20px_rgba(8,122,85,0.20)] transition hover:bg-[#066747] focus:outline-none focus:ring-4 focus:ring-emerald-200 sm:h-12 sm:px-5 sm:text-sm lg:h-[52px] lg:px-6"
+                className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#087A55] px-2.5 text-[10px] font-black text-white shadow-[0_5px_14px_rgba(8,122,85,0.18)] transition hover:bg-[#066747] focus:outline-none focus:ring-4 focus:ring-emerald-200 sm:h-12 sm:rounded-xl sm:px-5 sm:text-sm sm:shadow-[0_8px_20px_rgba(8,122,85,0.20)] lg:h-[52px] lg:px-6"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -111,9 +104,6 @@ export default function Hero({ produtos }: HeroProps) {
           </div>
         </div>
 
-        <div className="hidden md:block">
-          <HeroComparison produtos={produtos} />
-        </div>
       </div>
     </section>
   );

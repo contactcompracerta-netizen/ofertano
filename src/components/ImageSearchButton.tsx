@@ -295,7 +295,7 @@ export default function ImageSearchButton() {
         aria-label="Pesquisar por imagem"
         title="Pesquisar por imagem"
         aria-expanded={panel.kind === "chooser"}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 sm:h-12 sm:w-12 lg:h-14 lg:w-14"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:h-12 sm:w-12 sm:rounded-xl sm:border sm:border-slate-200 sm:bg-white sm:text-slate-700 sm:shadow-sm sm:hover:border-emerald-300 lg:h-14 lg:w-14"
       >
         <CameraIcon />
       </button>

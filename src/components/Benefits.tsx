@@ -47,24 +47,24 @@ const items = [
 
 export default function Benefits() {
   return (
-    <section className="mx-auto w-full max-w-[1600px] px-2.5 pb-5 pt-1 sm:px-5 sm:pb-7 lg:px-8">
-      <div className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)] sm:grid sm:grid-cols-3">
+    <section className="mx-auto w-full max-w-[1600px] px-2.5 pb-3 pt-1 sm:px-5 sm:pb-7 lg:px-8">
+      <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_5px_20px_rgba(15,23,42,0.04)] sm:grid sm:grid-cols-3 sm:rounded-[18px] sm:shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
         {items.map((item, index) => (
           <article
             key={item.title}
-            className={`flex min-h-[68px] items-center gap-3 px-3 py-3 sm:min-h-[86px] sm:px-4 lg:px-5 ${
+            className={`flex min-h-[46px] items-center gap-2 px-2.5 py-1.5 sm:min-h-[70px] sm:gap-3 sm:px-4 sm:py-3 lg:px-5 ${
               index > 0 ? "border-t border-slate-100 sm:border-l sm:border-t-0" : ""
             }`}
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-emerald-100 bg-emerald-50 text-emerald-700 sm:h-9 sm:w-9">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-700 sm:h-9 sm:w-9">
               {item.icon}
             </div>
 
             <div className="min-w-0">
-              <h2 className="text-[12px] font-black tracking-[-0.01em] text-slate-950 sm:text-[13px]">
+              <h2 className="text-[11px] font-black tracking-[-0.01em] text-slate-950 sm:text-[13px]">
                 {item.title}
               </h2>
-              <p className="mt-0.5 text-[10px] leading-[1.4] text-slate-500 sm:text-[11px]">
+              <p className="mt-0.5 text-[9px] leading-[1.3] text-slate-500 sm:text-[11px] sm:leading-[1.4]">
                 {item.description}
               </p>
             </div>

@@ -16,7 +16,6 @@ import Footer from "@/components/Footer";
 import { searchCatalogOrDiscover } from "@/services/search/searchCatalogOrDiscover";
 import {
   hasPublicMultiStore,
-  isUsablePublicOffer,
   multiStorePublicWhere,
 } from "@/services/publicVisibility/multiStoreVisibility";
 import { listarDicasPublicas } from "@/services/publicVisibility/publicDiscoveryHints";
@@ -146,50 +145,6 @@ export default async function HomePage({
 
     const produtosMultiLoja = produtos.filter(hasPublicMultiStore);
 
-    const produtosComparador = produtosMultiLoja
-      .map((produto) => {
-        /*
-         * O comparador do Hero é a mesma grade de lojas da página de
-         * produto, então usa o gate público central (`isUsablePublicOffer`)
-         * em vez de um filtro local que só checava disponibilidade.
-         */
-        const ofertasValidas = produto.offers
-          .filter(isUsablePublicOffer)
-          .sort((a, b) => a.price - b.price)
-          .map((oferta) => ({
-            marketplace: oferta.marketplace,
-            price: oferta.price,
-            href:
-              oferta.status === "ACTIVE"
-                ? oferta.affiliateLink?.trim() || null
-                : null,
-          }));
-
-        return {
-          id: produto.id,
-          name: produto.name,
-          image: produto.image,
-          rating: produto.rating,
-          offers: ofertasValidas,
-        };
-      })
-      .filter(
-        (produto) =>
-          produto.image.trim().length > 0 &&
-          produto.offers.length > 0,
-      )
-      .sort((a, b) => {
-        const multiA = a.offers.length >= 2 ? 1 : 0;
-        const multiB = b.offers.length >= 2 ? 1 : 0;
-
-        if (multiA !== multiB) {
-          return multiB - multiA;
-        }
-
-        return b.offers.length - a.offers.length;
-      })
-      .slice(0, 10);
-
     return (
       <main className="min-h-screen bg-slate-50">
         <script
@@ -201,7 +156,7 @@ export default async function HomePage({
 
         <Header />
 
-        <Hero produtos={produtosComparador} />
+        <Hero />
 
         <OffersSection
           produtos={produtosMultiLoja}
