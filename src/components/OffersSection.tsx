@@ -34,10 +34,6 @@ type OffersSectionProps = {
     source?: string;
     productIds?: string[];
   };
-  /*
-   * Só é lido no estado "0 resultado": cada sugestão aponta para dado
-   * real do catálogo público, então a tela nunca oferece caminho morto.
-   */
   dicas?: DicasPublicas;
 };
 
@@ -55,176 +51,166 @@ export default function OffersSection({
   return (
     <section
       id="ofertas"
-      className="mx-auto w-full max-w-[1440px] scroll-mt-20 px-2.5 py-4 sm:px-5 sm:py-8 lg:px-8 lg:py-10"
+      className="mx-auto w-full max-w-[1600px] scroll-mt-20 px-2.5 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8"
     >
-    <AnalyticsListingScope
-      surface={possuiBusca ? "search" : "home"}
-      scope={busca}
-    >
-      <div className="mb-3 flex items-end justify-between gap-3 sm:mb-6">
-        <div className="min-w-0">
-          <span className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 sm:text-xs">
-            {possuiBusca
-              ? "Resultado da pesquisa"
-              : "Produtos selecionados"}
-          </span>
+      <AnalyticsListingScope
+        surface={possuiBusca ? "search" : "home"}
+        scope={busca}
+      >
+        <div className="mb-3 flex items-end justify-between gap-3 sm:mb-5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700 sm:text-[10px]">
+                {possuiBusca ? "Resultado da pesquisa" : "Catálogo inteligente"}
+              </span>
+              {!possuiBusca && produtos.length > 0 && (
+                <span className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 sm:inline-flex">
+                  atualizado agora
+                </span>
+              )}
+            </div>
 
-          <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">
-            {possuiBusca
-              ? `Resultados para “${busca}”`
-              : "Ofertas recentes"}
-          </h2>
+            <h2 className="mt-1 text-[21px] font-black tracking-[-0.035em] text-slate-950 sm:text-2xl lg:text-[30px]">
+              {possuiBusca ? `Resultados para “${busca}”` : "Ofertas recentes"}
+            </h2>
 
-          <p className="mt-1 text-xs text-slate-600 sm:mt-2 sm:text-base">
-            {possuiBusca
-              ? `${produtos.length} produto${
-                  produtos.length === 1 ? "" : "s"
-                } encontrado${produtos.length === 1 ? "" : "s"}.`
-              : "Confira os últimos produtos adicionados."}
-          </p>
+            <p className="mt-0.5 text-[11px] font-medium text-slate-500 sm:text-sm">
+              {possuiBusca
+                ? `${produtos.length} produto${produtos.length === 1 ? "" : "s"} encontrado${produtos.length === 1 ? "" : "s"}.`
+                : "Mais produtos visíveis, menos rolagem e comparação direta."}
+            </p>
+          </div>
+
+          {possuiBusca ? (
+            <Link
+              href="/"
+              className="hidden shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 transition hover:border-emerald-200 hover:text-emerald-700 sm:inline-flex"
+            >
+              Limpar
+            </Link>
+          ) : (
+            produtos.length > 0 && (
+              <Link
+                href="/ofertas"
+                className="hidden shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 sm:inline-flex"
+              >
+                Ver todas →
+              </Link>
+            )
+          )}
         </div>
 
         {possuiBusca ? (
-          <Link
-            href="/"
-            className="hidden shrink-0 text-sm font-bold text-emerald-700 transition hover:text-emerald-900 sm:block"
-          >
-            Limpar pesquisa
-          </Link>
-        ) : (
-          produtos.length > 0 && (
-            <Link
-              href="/ofertas"
-              className="hidden shrink-0 text-sm font-bold text-emerald-700 transition hover:text-emerald-900 sm:block"
-            >
-              Ver todas →
-            </Link>
-          )
-        )}
-      </div>
+          <SearchAnalytics
+            query={busca}
+            resultCount={produtos.length}
+            durationMs={searchMeta?.durationMs}
+            searchSource={searchMeta?.source}
+            productIds={searchMeta?.productIds ?? produtos.map((produto) => produto.id)}
+          />
+        ) : null}
 
-      {possuiBusca ? (
-        <SearchAnalytics
-          query={busca}
-          resultCount={produtos.length}
-          durationMs={searchMeta?.durationMs}
-          searchSource={searchMeta?.source}
-          productIds={searchMeta?.productIds ?? produtos.map((produto) => produto.id)}
-        />
-      ) : null}
+        {produtos.length === 0 ? (
+          <div className="rounded-[24px] border border-slate-200 bg-white p-7 text-center shadow-[0_10px_40px_rgba(15,23,42,0.05)] sm:p-10">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-xl ring-1 ring-emerald-100">
+              🔍
+            </div>
 
-      {produtos.length === 0 ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl sm:h-16 sm:w-16">
-            🔍
-          </div>
+            <h3 className="mt-4 text-lg font-black text-slate-950 sm:text-xl">
+              {possuiBusca ? "Nenhum produto encontrado" : "Nenhum produto cadastrado"}
+            </h3>
 
-          <h3 className="mt-5 text-xl font-black text-slate-900 sm:text-2xl">
-            {possuiBusca
-              ? "Nenhum produto encontrado"
-              : "Nenhum produto cadastrado"}
-          </h3>
+            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
+              {possuiBusca
+                ? `Não encontramos produtos relacionados a “${busca}”. Tente um termo abaixo ou navegue por categoria.`
+                : "Importe o primeiro produto pelo painel administrativo para começar a exibir ofertas."}
+            </p>
 
-          <p className="mx-auto mt-3 max-w-lg text-sm text-slate-600 sm:text-base">
-            {possuiBusca
-              ? `Não encontramos produtos relacionados a “${busca}”. Tente um termo abaixo ou navegue por categoria.`
-              : "Importe o primeiro produto pelo painel administrativo para começar a exibir ofertas."}
-          </p>
+            {possuiBusca && temDicas ? (
+              <div className="mx-auto mt-6 grid max-w-3xl gap-5 text-left sm:grid-cols-2">
+                {categoriasDica.length > 0 ? (
+                  <div>
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      Categorias relacionadas
+                    </h4>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {categoriasDica.map((categoria) => (
+                        <li key={`categoria-${categoria.nome}`}>
+                          <Link
+                            href={`/?q=${encodeURIComponent(categoria.nome)}`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
+                          >
+                            {categoria.nome}
+                            <span className="text-[10px] font-black text-slate-400">
+                              {categoria.quantidade}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
 
-          {/*
-            Estado vazio útil: cada link abaixo é dado REAL do catálogo
-            público (categoria ou marca de produto visível), nunca uma
-            palavra literal. Nada é inventado para preencher a tela.
-          */}
-          {possuiBusca && temDicas ? (
-            <div className="mx-auto mt-8 grid max-w-3xl gap-6 text-left sm:grid-cols-2">
-              {categoriasDica.length > 0 ? (
-                <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                    Categorias relacionadas
-                  </h4>
+                {buscasDica.length > 0 ? (
+                  <div>
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      Sugestões de busca
+                    </h4>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {buscasDica.map((sugestao) => (
+                        <li key={`busca-${sugestao.termo}`}>
+                          <Link
+                            href={`/?q=${encodeURIComponent(sugestao.termo)}`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
+                          >
+                            {sugestao.termo}
+                            <span className="text-[10px] font-black text-slate-400">
+                              {sugestao.quantidade}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
-                  <ul className="mt-2 flex flex-wrap gap-2">
-                    {categoriasDica.map((categoria) => (
-                      <li key={`categoria-${categoria.nome}`}>
-                        <Link
-                          href={`/?q=${encodeURIComponent(categoria.nome)}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
-                        >
-                          {categoria.nome}
-                          <span className="text-[10px] font-black text-slate-400">
-                            {categoria.quantidade}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href={possuiBusca ? "/" : "/admin"}
+                className="inline-flex rounded-xl bg-[#087A55] px-5 py-2.5 text-sm font-black text-white transition hover:bg-[#066747]"
+              >
+                {possuiBusca ? "Ver todas as ofertas" : "Cadastrar produto"}
+              </Link>
 
-              {buscasDica.length > 0 ? (
-                <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                    Sugestões de busca
-                  </h4>
-
-                  <ul className="mt-2 flex flex-wrap gap-2">
-                    {buscasDica.map((sugestao) => (
-                      <li key={`busca-${sugestao.termo}`}>
-                        <Link
-                          href={`/?q=${encodeURIComponent(sugestao.termo)}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
-                        >
-                          {sugestao.termo}
-                          <span className="text-[10px] font-black text-slate-400">
-                            {sugestao.quantidade}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              {possuiBusca ? (
+                <Link
+                  href="/categorias"
+                  className="inline-flex rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-black text-slate-800 transition hover:border-emerald-300 hover:text-emerald-800"
+                >
+                  Ver categorias
+                </Link>
               ) : null}
             </div>
-          ) : null}
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href={possuiBusca ? "/" : "/admin"}
-              className="inline-flex rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
-            >
-              {possuiBusca ? "Ver todas as ofertas" : "Cadastrar produto"}
-            </Link>
-
-            {possuiBusca ? (
-              <Link
-                href="/categorias"
-                className="inline-flex rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-black text-slate-800 transition hover:border-emerald-300 hover:text-emerald-800"
-              >
-                Ver categorias
-              </Link>
-            ) : null}
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 lg:gap-5 xl:grid-cols-4 2xl:grid-cols-5">
-          {produtos.map((produto, index) => (
-            <ProductImpression
-              key={produto.id}
-              productId={produto.id}
-              position={index + 1}
-              query={possuiBusca ? busca : null}
-              surface={possuiBusca ? "search" : "home"}
-              marketplaces={listarMarketplacesComparaveis(
-                produto.offers,
-              )}
-            >
-              <ProductCard produto={produto} />
-            </ProductImpression>
-          ))}
-        </div>
-      )}
-    </AnalyticsListingScope>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-3 md:gap-3.5 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {produtos.map((produto, index) => (
+              <ProductImpression
+                key={produto.id}
+                productId={produto.id}
+                position={index + 1}
+                query={possuiBusca ? busca : null}
+                surface={possuiBusca ? "search" : "home"}
+                marketplaces={listarMarketplacesComparaveis(produto.offers)}
+              >
+                <ProductCard produto={produto} />
+              </ProductImpression>
+            ))}
+          </div>
+        )}
+      </AnalyticsListingScope>
     </section>
   );
 }
