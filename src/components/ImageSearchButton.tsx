@@ -42,6 +42,8 @@ export default function ImageSearchButton() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const chooserRef = useRef<HTMLDivElement>(null);
+  const [chooserPosition, setChooserPosition] = useState({ top: 0, right: 0 });
   const [mounted, setMounted] = useState(false);
   const [panel, setPanel] = useState<PanelState>({ kind: "closed" });
   const [draftQuery, setDraftQuery] = useState("");
@@ -68,7 +70,8 @@ export default function ImageSearchButton() {
       if (
         rootRef.current &&
         event.target instanceof Node &&
-        !rootRef.current.contains(event.target)
+        !rootRef.current.contains(event.target) &&
+        !chooserRef.current?.contains(event.target)
       ) {
         setPanel({ kind: "closed" });
       }
@@ -131,6 +134,13 @@ export default function ImageSearchButton() {
   }
 
   function openChooser() {
+    const bounds = rootRef.current?.getBoundingClientRect();
+    if (bounds) {
+      setChooserPosition({
+        top: bounds.bottom + 8,
+        right: Math.max(12, window.innerWidth - bounds.right),
+      });
+    }
     setPanel((current) =>
       current.kind === "chooser" ? { kind: "closed" } : { kind: "chooser" },
     );
@@ -295,13 +305,17 @@ export default function ImageSearchButton() {
         aria-label="Pesquisar por imagem"
         title="Pesquisar por imagem"
         aria-expanded={panel.kind === "chooser"}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 sm:h-12 sm:w-12 lg:h-14 lg:w-14"
+        className="flex h-10 w-10 shrink-0 items-center justify-center border-0 bg-transparent text-slate-700 shadow-none transition hover:text-emerald-800 sm:h-12 sm:w-12 lg:h-14 lg:w-14"
       >
         <CameraIcon />
       </button>
 
-      {panel.kind === "chooser" && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-[0_16px_45px_rgba(15,23,42,0.16)]">
+      {mounted && panel.kind === "chooser" && createPortal(
+        <div
+          ref={chooserRef}
+          style={chooserPosition}
+          className="fixed z-[9997] w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-[0_16px_45px_rgba(15,23,42,0.16)]"
+        >
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
@@ -337,7 +351,8 @@ export default function ImageSearchButton() {
             <span className="sm:hidden">Galeria</span>
             <span className="hidden sm:inline">Selecionar arquivo</span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {overlay}

@@ -1,34 +1,53 @@
-﻿import Link from "next/link";
+import Link from "next/link";
+
+function ShieldIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-4 w-4 sm:h-5 sm:w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3 5 6v5.5c0 4.2 2.8 8 7 9.5 4.2-1.5 7-5.3 7-9.5V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
 
 export default function AntiFraudNotice() {
   return (
-    <section className="mx-auto max-w-7xl px-4 pb-8 md:pb-16">
-      <div className="flex flex-col gap-3 rounded-[22px] border border-amber-200 bg-amber-50 p-5 shadow-sm md:flex-row md:items-start md:gap-5 md:rounded-3xl md:p-6">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-xl md:h-12 md:w-12 md:rounded-2xl md:text-2xl">
-          🛡️
+    <section className="mx-auto w-full max-w-[1600px] px-2.5 pb-2 sm:px-5 sm:pb-5 lg:px-8">
+      <div className="flex items-start gap-2 rounded-xl border border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50/60 px-2.5 py-2 shadow-[0_4px_16px_rgba(120,53,15,0.04)] sm:items-center sm:gap-3 sm:rounded-[18px] sm:px-4 sm:py-3.5 sm:shadow-[0_6px_24px_rgba(120,53,15,0.04)]">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-white text-amber-700 shadow-sm sm:h-9 sm:w-9 sm:rounded-xl">
+          <ShieldIcon />
         </div>
 
-        <div className="flex-1">
-          <p className="text-xs font-black uppercase tracking-widest text-amber-800 md:text-sm">
-            Aviso de segurança
-          </p>
+        <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-amber-700 sm:text-[10px]">
+                Segurança Ofertano
+              </p>
+              <h2 className="text-[12px] font-black tracking-[-0.01em] text-slate-950 sm:text-sm">
+                A compra sempre acontece na loja parceira.
+              </h2>
+            </div>
 
-          <h2 className="mt-1.5 text-lg font-black leading-tight text-gray-900 md:mt-2 md:text-xl">
-            O Ofertano não vende produtos diretamente
-          </h2>
-
-          <p className="mt-2 max-w-4xl text-sm leading-5 text-gray-700 md:mt-3 md:leading-6">
-            Todas as compras são realizadas exclusivamente nos sites e
-            aplicativos das lojas parceiras, como Mercado Livre, Amazon e
-            Shopee. O Ofertano não recebe pagamentos, não solicita transferências
-            e não realiza cobranças por WhatsApp ou redes sociais.
-          </p>
+            <p className="mt-0.5 line-clamp-2 text-[10px] leading-[1.4] text-slate-600 sm:mt-1 sm:line-clamp-1 sm:text-xs">
+              O Ofertano compara ofertas, mas não recebe pagamentos, transferências ou cobranças por WhatsApp e redes sociais.
+            </p>
+          </div>
 
           <Link
             href="/seguranca"
-            className="mt-3 inline-flex text-sm font-black text-amber-900 transition hover:text-amber-700 md:mt-4"
+            className="mt-1 inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-1 text-[9px] font-black text-amber-900 shadow-sm transition hover:border-amber-300 hover:bg-amber-100 sm:mt-0 sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-[11px]"
           >
-            Saiba como comprar com segurança →
+            Comprar com segurança
+            <span aria-hidden="true">→</span>
           </Link>
         </div>
       </div>
