@@ -275,7 +275,7 @@ export default function ImageSearchButton() {
       : null;
 
   return (
-    <div ref={rootRef} className="relative -mx-1.5 shrink-0">
+    <div ref={rootRef} className="relative mx-0 h-10 w-4 shrink-0 sm:-mx-1.5 sm:h-auto sm:w-auto">
       <input
         id={cameraInputId}
         ref={cameraInputRef}
@@ -305,7 +305,7 @@ export default function ImageSearchButton() {
         aria-label="Pesquisar por imagem"
         title="Pesquisar por imagem"
         aria-expanded={panel.kind === "chooser"}
-        className="flex h-10 w-10 shrink-0 items-center justify-center border-0 bg-transparent text-slate-700 shadow-none transition hover:text-emerald-800 sm:h-12 lg:h-14"
+        className="relative flex h-10 w-4 shrink-0 max-sm:appearance-none items-center justify-center border-0 bg-transparent p-0 text-slate-700 shadow-none transition before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-7 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:text-emerald-800 sm:h-12 sm:w-10 sm:before:hidden lg:h-14"
       >
         <CameraIcon />
       </button>
