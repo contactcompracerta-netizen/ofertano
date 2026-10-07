@@ -41,13 +41,13 @@ export default function Hero({
           <form
             action="/"
             method="GET"
-            className="mt-3 w-full min-w-0 max-w-2xl rounded-xl border border-slate-200 bg-white p-0.5 shadow-[0_10px_30px_rgba(15,23,42,0.09)] sm:mt-6 sm:rounded-2xl sm:p-1.5"
+            className="mb-3 mt-3 w-full min-w-0 max-w-2xl rounded-xl border border-slate-200 bg-white px-0.5 py-0 shadow-[0_10px_30px_rgba(15,23,42,0.09)] sm:mb-0 sm:mt-6 sm:rounded-2xl sm:p-1.5"
           >
             <label htmlFor="busca-hero" className="sr-only">
               Pesquisar produtos
             </label>
 
-            <div className="flex gap-1.5 sm:gap-2">
+            <div className="flex h-8 items-center gap-1.5 sm:h-auto sm:items-stretch sm:gap-2">
               <div className="relative min-w-0 flex-1">
                 <svg
                   viewBox="0 0 24 24"
