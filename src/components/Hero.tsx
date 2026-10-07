@@ -76,7 +76,7 @@ export default function Hero({
 
               <button
                 type="submit"
-                className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#087A55] px-2 text-[9px] font-black text-white shadow-md shadow-emerald-800/20 transition hover:bg-[#066747] sm:h-12 sm:gap-1.5 sm:rounded-xl sm:px-6 sm:text-sm lg:h-14 lg:px-7 lg:text-base"
+                className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-[#087A55] px-2 text-[9px] font-black text-white shadow-md shadow-emerald-800/20 transition hover:bg-[#066747] sm:h-12 sm:gap-1.5 sm:rounded-xl sm:px-6 sm:text-sm lg:h-14 lg:px-7 lg:text-base"
               >
                 <svg
                   viewBox="0 0 24 24"
