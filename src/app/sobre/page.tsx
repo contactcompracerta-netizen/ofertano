@@ -21,20 +21,20 @@ export const metadata: Metadata = {
 
 export default function SobrePage() {
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="of-page">
       <Header />
 
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-16">
-          <p className="text-sm font-black uppercase tracking-widest text-green-700">
+      <section className="of-page-intro">
+        <div className="of-page-intro__inner">
+          <p className="of-eyebrow">
             Sobre o Ofertano
           </p>
 
-          <h1 className="mt-3 max-w-4xl text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="of-page-title max-w-4xl">
             Compare preços antes de comprar
           </h1>
 
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">
+          <p className="of-page-lead max-w-3xl">
             O Ofertano reúne produtos e ofertas de lojas parceiras para ajudar
             você a pesquisar preços, comparar condições e tomar decisões de
             compra com mais informação.
@@ -42,60 +42,60 @@ export default function SobrePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-16">
-        <div className="grid gap-6 md:grid-cols-3">
-          <article className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100 text-2xl">
+      <section className="of-section">
+        <div className="grid gap-3 sm:gap-4 md:grid-cols-3">
+          <article className="of-card of-card-pad">
+            <div className="of-icon-tile bg-emerald-50 text-lg">
               🔎
             </div>
 
-            <h2 className="mt-5 text-xl font-black text-gray-900">
+            <h2 className="mt-3 of-card-title">
               Pesquisa simplificada
             </h2>
 
-            <p className="mt-3 leading-7 text-gray-600">
+            <p className="mt-2 of-body">
               Organizamos produtos e informações para facilitar a busca por
               ofertas relevantes.
             </p>
           </article>
 
-          <article className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-2xl">
+          <article className="of-card of-card-pad">
+            <div className="of-icon-tile bg-blue-50 text-lg">
               📊
             </div>
 
-            <h2 className="mt-5 text-xl font-black text-gray-900">
+            <h2 className="mt-3 of-card-title">
               Comparação de ofertas
             </h2>
 
-            <p className="mt-3 leading-7 text-gray-600">
+            <p className="mt-2 of-body">
               O objetivo é apresentar preços e condições de diferentes
               marketplaces em um só lugar.
             </p>
           </article>
 
-          <article className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
+          <article className="of-card of-card-pad">
+            <div className="of-icon-tile bg-amber-50 text-lg">
               🛡️
             </div>
 
-            <h2 className="mt-5 text-xl font-black text-gray-900">
+            <h2 className="mt-3 of-card-title">
               Compra nas lojas parceiras
             </h2>
 
-            <p className="mt-3 leading-7 text-gray-600">
+            <p className="mt-2 of-body">
               O pagamento e a entrega são realizados diretamente pelo
               marketplace responsável pela oferta.
             </p>
           </article>
         </div>
 
-        <div className="mt-10 rounded-3xl border border-gray-200 bg-white p-8 shadow-sm sm:p-10">
-          <h2 className="text-3xl font-black tracking-tight text-gray-900">
+        <div className="mt-5 of-card p-5 sm:mt-6 sm:p-6">
+          <h2 className="of-section-title">
             O que o Ofertano faz
           </h2>
 
-          <div className="mt-6 space-y-4 text-base leading-7 text-gray-600">
+          <div className="mt-4 space-y-3 of-body">
             <p>
               O Ofertano funciona como uma plataforma de descoberta e comparação
               de ofertas. Os produtos exibidos podem estar disponíveis em lojas
@@ -116,17 +116,17 @@ export default function SobrePage() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-5 flex flex-col gap-2 sm:mt-6 sm:flex-row">
           <Link
             href="/ofertas"
-            className="rounded-xl bg-green-600 px-7 py-4 text-center font-black text-white transition hover:bg-green-700"
+            className="of-control inline-flex items-center justify-center bg-[#087A55] px-5 text-sm font-black text-white transition hover:bg-[#066747]"
           >
             Ver ofertas
           </Link>
 
           <Link
             href="/seguranca"
-            className="rounded-xl border border-gray-300 bg-white px-7 py-4 text-center font-black text-gray-800 transition hover:border-green-300 hover:bg-green-50 hover:text-green-700"
+            className="of-control inline-flex items-center justify-center border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
           >
             Comprar com segurança
           </Link>
