@@ -63,34 +63,34 @@ export default async function OfertasPage() {
   const produtosMultiLoja = produtos.filter(hasPublicMultiStore);
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="of-page">
       <Header />
 
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-14">
-          <p className="text-sm font-black uppercase tracking-widest text-green-700">
+      <section className="of-page-intro">
+        <div className="of-page-intro__inner">
+          <p className="of-eyebrow">
             Catálogo Ofertano
           </p>
 
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="of-page-title">
             Todas as ofertas
           </h1>
 
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-gray-600">
+          <p className="of-page-lead">
             Confira todos os produtos disponíveis e acesse cada oferta
             diretamente na loja parceira.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-14">
-        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <section className="of-section">
+        <div className="mb-5 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-end">
           <div>
-            <h2 className="text-2xl font-black text-gray-900">
+            <h2 className="of-section-title">
               Produtos disponíveis
             </h2>
 
-            <p className="mt-2 text-gray-600">
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">
               {produtosMultiLoja.length}{" "}
               {produtosMultiLoja.length === 1
                 ? "produto encontrado"
@@ -101,22 +101,22 @@ export default async function OfertasPage() {
         </div>
 
         {produtosMultiLoja.length === 0 ? (
-          <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-sm font-black text-green-800">
+          <div className="of-empty">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-sm font-black text-emerald-700">
               —
             </div>
 
-            <h2 className="mt-6 text-2xl font-black text-gray-900">
+            <h2 className="mt-4 of-section-title">
               Nenhuma oferta disponível
             </h2>
 
-            <p className="mx-auto mt-3 max-w-lg text-gray-600">
+            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
               Ainda não existem produtos ativos disponíveis no catálogo.
             </p>
           </div>
         ) : (
           <AnalyticsListingScope surface="ofertas">
-            <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
             {produtosMultiLoja.map((produto, index) => (
               <ProductImpression
                 key={produto.id}
