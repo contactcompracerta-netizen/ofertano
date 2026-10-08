@@ -20,75 +20,75 @@ export const metadata: Metadata = {
 
 export default function ContatoPage() {
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="of-page">
       <Header />
 
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-16">
-          <p className="text-sm font-black uppercase tracking-widest text-green-700">
+      <section className="of-page-intro">
+        <div className="of-page-intro__inner">
+          <p className="of-eyebrow">
             Fale com o Ofertano
           </p>
 
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="of-page-title">
             Contato
           </h1>
 
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">
+          <p className="of-page-lead max-w-3xl">
             Use esta página para entrar em contato sobre informações do site,
             problemas com links, correções de produtos ou assuntos comerciais.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-4 py-16">
-        <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-          <div className="space-y-6">
-            <article className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100 text-2xl">
+      <section className="of-section max-w-[1120px]">
+        <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr] lg:gap-5">
+          <div className="space-y-4">
+            <article className="of-card of-card-pad">
+              <div className="of-icon-tile bg-emerald-50 text-lg">
                 ✉️
               </div>
 
-              <h2 className="mt-5 text-xl font-black text-gray-900">
+              <h2 className="mt-3 of-card-title">
                 Atendimento
               </h2>
 
-              <p className="mt-3 leading-7 text-gray-600">
+              <p className="mt-2 of-body">
                 Envie sua mensagem pelo formulário. O canal poderá ser usado
                 para dúvidas, sugestões e solicitações relacionadas ao Ofertano.
               </p>
             </article>
 
-            <article className="rounded-3xl border border-amber-200 bg-amber-50 p-7">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
+            <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+              <div className="of-icon-tile bg-amber-100 text-lg">
                 🛡️
               </div>
 
-              <h2 className="mt-5 text-xl font-black text-gray-900">
+              <h2 className="mt-3 of-card-title">
                 Problemas com compras
               </h2>
 
-              <p className="mt-3 leading-7 text-gray-700">
+              <p className="mt-2 text-sm leading-6 text-slate-700">
                 Pagamento, entrega, troca, devolução e garantia devem ser
                 tratados diretamente com a loja onde a compra foi realizada.
               </p>
             </article>
           </div>
 
-          <div className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm sm:p-9">
-            <h2 className="text-2xl font-black text-gray-900">
+          <div className="of-card p-5 sm:p-6">
+            <h2 className="of-section-title">
               Envie uma mensagem
             </h2>
 
-            <p className="mt-3 text-sm leading-6 text-gray-600">
+            <p className="mt-2 text-sm leading-6 text-slate-600">
               O formulário visual já ficará pronto. O envio será conectado a um
               serviço de e-mail em uma etapa futura.
             </p>
 
-            <form className="mt-8 space-y-5">
+            <form className="mt-5 space-y-4">
               <div>
                 <label
                   htmlFor="nome"
-                  className="mb-2 block text-sm font-black text-gray-800"
+                  className="mb-1.5 block text-sm font-bold text-slate-700"
                 >
                   Nome
                 </label>
@@ -98,14 +98,14 @@ export default function ContatoPage() {
                   name="nome"
                   type="text"
                   placeholder="Digite seu nome"
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                  className="of-control w-full border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="email"
-                  className="mb-2 block text-sm font-black text-gray-800"
+                  className="mb-1.5 block text-sm font-bold text-slate-700"
                 >
                   E-mail
                 </label>
@@ -115,14 +115,14 @@ export default function ContatoPage() {
                   name="email"
                   type="email"
                   placeholder="Digite seu e-mail"
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                  className="of-control w-full border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="assunto"
-                  className="mb-2 block text-sm font-black text-gray-800"
+                  className="mb-1.5 block text-sm font-bold text-slate-700"
                 >
                   Assunto
                 </label>
@@ -131,7 +131,7 @@ export default function ContatoPage() {
                   id="assunto"
                   name="assunto"
                   defaultValue=""
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                  className="of-control w-full border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                 >
                   <option value="" disabled>
                     Selecione um assunto
@@ -148,7 +148,7 @@ export default function ContatoPage() {
               <div>
                 <label
                   htmlFor="mensagem"
-                  className="mb-2 block text-sm font-black text-gray-800"
+                  className="mb-1.5 block text-sm font-bold text-slate-700"
                 >
                   Mensagem
                 </label>
@@ -158,13 +158,13 @@ export default function ContatoPage() {
                   name="mensagem"
                   rows={6}
                   placeholder="Escreva sua mensagem"
-                  className="w-full resize-y rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-green-500 focus:ring-4 focus:ring-green-100"
+                  className="w-full resize-y rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                 />
               </div>
 
               <button
                 type="button"
-                className="w-full rounded-xl bg-green-600 px-6 py-4 font-black text-white transition hover:bg-green-700"
+                className="of-control w-full bg-[#087A55] px-5 text-sm font-black text-white transition hover:bg-[#066747]"
               >
                 Enviar mensagem
               </button>
