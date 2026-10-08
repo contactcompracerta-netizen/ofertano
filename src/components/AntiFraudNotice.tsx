@@ -29,15 +29,15 @@ export default function AntiFraudNotice() {
         <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-amber-700 sm:text-[10px]">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">
                 Segurança Ofertano
               </p>
-              <h2 className="text-[12px] font-black tracking-[-0.01em] text-slate-950 sm:text-sm">
+              <h2 className="text-[13px] font-black tracking-[-0.01em] text-slate-950 sm:text-sm">
                 A compra sempre acontece na loja parceira.
               </h2>
             </div>
 
-            <p className="mt-0.5 line-clamp-2 text-[10px] leading-[1.4] text-slate-600 sm:mt-1 sm:line-clamp-1 sm:text-xs">
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.45] text-slate-600 sm:mt-1 sm:line-clamp-1 sm:text-xs">
               O Ofertano compara ofertas, mas não recebe pagamentos, transferências ou cobranças por WhatsApp e redes sociais.
             </p>
           </div>
