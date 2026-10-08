@@ -257,7 +257,7 @@ function ArticleCard({
     themeClasses[post.theme];
 
   return (
-    <article className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl hover:shadow-slate-200/60">
+    <article className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg hover:shadow-slate-200/50">
       <Link
         href={`/blog/${post.slug}`}
         aria-label={`Ler: ${post.title}`}
@@ -268,22 +268,22 @@ function ArticleCard({
           compact
         />
 
-        <div className="p-6 sm:p-7">
+        <div className="p-4 sm:p-5">
           <span
             className={`inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${theme.badge}`}
           >
             {post.category}
           </span>
 
-          <h3 className="mt-4 text-xl font-black leading-7 tracking-tight text-slate-950 transition group-hover:text-emerald-700">
+          <h3 className="mt-3 text-lg font-black leading-6 tracking-tight text-slate-950 sm:text-xl transition group-hover:text-emerald-700">
             {post.title}
           </h3>
 
-          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+          <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">
             {post.excerpt}
           </p>
 
-          <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-100 pt-5">
+          <div className="mt-4 flex items-center justify-between gap-4 border-t border-slate-100 pt-4">
             <span className="flex items-center gap-2 text-xs font-semibold text-slate-500">
               <ClockIcon />
               {post.readingTime}
@@ -318,9 +318,9 @@ export default async function BlogPage() {
 
   if (!featuredPost) {
     return (
-      <main className="min-h-screen bg-slate-50 text-slate-950">
+      <main className="of-page">
         <Header />
-        <section className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6 lg:px-8">
+        <section className="mx-auto max-w-3xl px-4 py-12 text-center sm:px-6 sm:py-16 lg:px-8">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
             Blog do Ofertano
           </p>
@@ -332,7 +332,7 @@ export default async function BlogPage() {
           </p>
           <Link
             href="/ofertas"
-            className="mt-8 inline-flex rounded-xl bg-emerald-600 px-6 py-4 font-black text-white hover:bg-emerald-700"
+            className="mt-6 inline-flex min-h-10 items-center rounded-lg bg-[#087A55] px-5 text-sm font-black text-white hover:bg-[#066747]"
           >
             Ver ofertas verificadas
           </Link>
@@ -349,15 +349,15 @@ export default async function BlogPage() {
     );
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="of-page">
       <Header />
 
       <section className="relative overflow-hidden border-b border-slate-800 bg-slate-950 text-white">
         <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_15%_15%,rgba(16,185,129,0.22),transparent_34%),radial-gradient(circle_at_85%_25%,rgba(59,130,246,0.16),transparent_30%)]" />
 
-        <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:px-8 lg:py-24">
+        <div className="relative mx-auto grid max-w-7xl gap-7 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-10 lg:px-8 lg:py-16">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300 sm:text-xs">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               Conteúdo Ofertano
             </span>
@@ -378,7 +378,7 @@ export default async function BlogPage() {
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <a
                 href="#artigos"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-black text-white transition hover:bg-emerald-400"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-black text-white transition hover:bg-emerald-400"
               >
                 Explorar os guias
                 <ArrowIcon />
@@ -386,7 +386,7 @@ export default async function BlogPage() {
 
               <Link
                 href="/ofertas"
-                className="inline-flex items-center justify-center rounded-xl border border-white/20 bg-white/5 px-6 py-3.5 text-sm font-black text-white transition hover:border-white/30 hover:bg-white/10"
+                className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-black text-white transition hover:border-white/30 hover:bg-white/10"
               >
                 Comparar preços agora
               </Link>
@@ -427,7 +427,7 @@ export default async function BlogPage() {
                 ].map(([number, label]) => (
                   <div
                     key={number}
-                    className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3.5"
+                    className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3"
                   >
                     <span className="text-xs font-black text-emerald-400">
                       {number}
@@ -444,7 +444,7 @@ export default async function BlogPage() {
       </section>
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
           <span className="mr-2 hidden shrink-0 items-center text-xs font-black uppercase tracking-wider text-slate-400 sm:flex">
             Navegue por:
           </span>
@@ -453,7 +453,7 @@ export default async function BlogPage() {
             <a
               key={category}
               href="#artigos"
-              className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+              className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
             >
               {category}
             </a>
@@ -461,7 +461,7 @@ export default async function BlogPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8 lg:py-20">
+      <section className="mx-auto max-w-7xl px-4 py-9 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
         <div className="mb-8 flex items-end justify-between gap-6">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
@@ -523,7 +523,7 @@ export default async function BlogPage() {
         id="artigos"
         className="border-y border-slate-200 bg-white"
       >
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8 lg:py-20">
+        <div className="mx-auto max-w-7xl px-4 py-9 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
           <div className="mb-9 max-w-2xl">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
               Conteúdos recentes
@@ -538,7 +538,7 @@ export default async function BlogPage() {
             </p>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {latestPosts.map((post) => (
               <ArticleCard
                 key={post.slug}
@@ -549,8 +549,8 @@ export default async function BlogPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8 lg:py-20">
-        <div className="grid overflow-hidden rounded-[2rem] bg-slate-950 text-white lg:grid-cols-[1fr_auto] lg:items-center">
+      <section className="mx-auto max-w-7xl px-4 py-9 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
+        <div className="grid overflow-hidden rounded-2xl bg-slate-950 text-white lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="p-8 sm:p-10 lg:p-12">
             <span className="inline-flex rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-300">
               Transparência Ofertano
@@ -572,7 +572,7 @@ export default async function BlogPage() {
           <div className="border-t border-white/10 p-8 lg:border-l lg:border-t-0 lg:p-12">
             <Link
               href="/ofertas"
-              className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-emerald-500 px-6 py-4 text-sm font-black text-white transition hover:bg-emerald-400"
+              className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-black text-white transition hover:bg-emerald-400"
             >
               Ver ofertas verificadas
               <ArrowIcon />
