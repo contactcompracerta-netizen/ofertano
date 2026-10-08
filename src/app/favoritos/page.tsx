@@ -174,25 +174,25 @@ export default function FavoritosPage() {
       <Header />
 
       <main className="min-h-[70vh] bg-slate-50">
-        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-          <div className="mb-8 flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:flex-row lg:items-center lg:justify-between">
+        <section className="of-section">
+          <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-6 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+              <p className="of-eyebrow">
                 Sua seleção
               </p>
 
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+              <h1 className="mt-2 text-[30px] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-4xl">
                 Meus favoritos
               </h1>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                 Salve produtos para comparar depois. Se entrar na sua conta, os favoritos ficam sincronizados entre seus dispositivos.
               </p>
             </div>
 
             <div className="shrink-0">
               {user ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                   <p className="text-xs font-bold text-emerald-700">
                     Favoritos sincronizados
                   </p>
@@ -218,7 +218,7 @@ export default function FavoritosPage() {
 
                   <Link
                     href="/login"
-                    className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
+                    className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#087A55] px-4 text-sm font-black text-white shadow-sm transition hover:bg-[#066747]"
                   >
                     Entrar
                   </Link>
@@ -228,11 +228,11 @@ export default function FavoritosPage() {
           </div>
 
           {loading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
+            <div className="of-empty text-sm font-semibold text-slate-500">
               Sincronizando seus favoritos...
             </div>
           ) : erro && products.length === 0 ? (
-            <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
               <p className="font-bold text-red-700">{erro}</p>
 
               <button
@@ -247,12 +247,12 @@ export default function FavoritosPage() {
               </button>
             </div>
           ) : products.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-3xl">
+            <div className="of-empty">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-xl">
                 ♡
               </div>
 
-              <h2 className="mt-5 text-2xl font-black text-slate-950">
+              <h2 className="mt-4 text-xl font-black tracking-tight text-slate-950">
                 Nenhum favorito ainda
               </h2>
 
@@ -262,7 +262,7 @@ export default function FavoritosPage() {
 
               <Link
                 href="/ofertas"
-                className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-700"
+                className="mt-5 inline-flex min-h-10 items-center justify-center rounded-lg bg-[#087A55] px-4 text-sm font-black text-white transition hover:bg-[#066747]"
               >
                 Ver ofertas
               </Link>
@@ -282,7 +282,7 @@ export default function FavoritosPage() {
                 </p>
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                 {products.map((product) => {
                   const possuiPrecoAnterior =
                     product.oldPrice !== null && product.oldPrice > product.price;
@@ -290,11 +290,11 @@ export default function FavoritosPage() {
                   return (
                     <article
                       key={product.id}
-                      className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                      className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
                     >
                       <Link
                         href={`/produto/${product.id}`}
-                        className="relative flex aspect-square items-center justify-center overflow-hidden bg-white p-5"
+                        className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-white p-3 sm:aspect-square sm:p-4"
                       >
                         <img
                           src={product.image}
@@ -310,26 +310,26 @@ export default function FavoritosPage() {
                         )}
                       </Link>
 
-                      <div className="flex flex-1 flex-col p-4">
+                      <div className="flex flex-1 flex-col p-3.5 sm:p-4">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
                           {product.store}
                         </p>
 
                         <Link
                           href={`/produto/${product.id}`}
-                          className="mt-2 line-clamp-2 min-h-12 text-sm font-black leading-6 text-slate-900 transition hover:text-emerald-700"
+                          className="mt-1.5 line-clamp-2 min-h-10 text-sm font-black leading-5 text-slate-900 transition hover:text-emerald-700"
                         >
                           {product.name}
                         </Link>
 
-                        <div className="mt-auto pt-4">
+                        <div className="mt-auto pt-3">
                           {possuiPrecoAnterior && product.oldPrice !== null && (
                             <p className="text-xs font-semibold text-slate-400 line-through">
                               {formatarPreco(product.oldPrice)}
                             </p>
                           )}
 
-                          <p className="mt-1 text-2xl font-black tracking-tight text-emerald-700">
+                          <p className="mt-1 text-xl font-black tracking-tight text-emerald-700 sm:text-2xl">
                             {formatarPreco(product.price)}
                           </p>
 
@@ -339,10 +339,10 @@ export default function FavoritosPage() {
                             </p>
                           )}
 
-                          <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
                             <Link
                               href={`/produto/${product.id}`}
-                              className="flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
+                              className="flex min-h-10 items-center justify-center rounded-lg bg-[#087A55] px-4 text-sm font-black text-white transition hover:bg-[#066747]"
                             >
                               Ver produto
                             </Link>
@@ -352,7 +352,7 @@ export default function FavoritosPage() {
                               onClick={() => void removerFavorito(product.id)}
                               aria-label={`Remover ${product.name} dos favoritos`}
                               title="Remover dos favoritos"
-                              className="flex h-11 w-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-xl text-rose-600 transition hover:bg-rose-100"
+                              className="flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-lg text-rose-600 transition hover:bg-rose-100"
                             >
                               ♥
                             </button>
