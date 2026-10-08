@@ -151,59 +151,59 @@ export default async function CategoriasPage() {
     });
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="of-page">
       <Header />
 
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-14">
-          <p className="text-sm font-black uppercase tracking-widest text-green-700">
+      <section className="of-page-intro">
+        <div className="of-page-intro__inner">
+          <p className="of-eyebrow">
             Navegue por assunto
           </p>
 
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="of-page-title">
             Categorias
           </h1>
 
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-gray-600">
+          <p className="of-page-lead">
             Escolha uma categoria para encontrar produtos relacionados.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-14">
+      <section className="of-section">
         {categorias.length === 0 ? (
-          <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl">
+          <div className="of-empty">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-lg">
               🏷️
             </div>
 
-            <h2 className="mt-6 text-2xl font-black text-gray-900">
+            <h2 className="mt-4 of-section-title">
               Nenhuma categoria disponível
             </h2>
 
-            <p className="mx-auto mt-3 max-w-lg text-gray-600">
+            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
               As categorias aparecerão quando houver produtos ativos
               cadastrados.
             </p>
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
             {categorias.map((categoria) => (
               <Link
                 key={categoria.nome}
                 href={`/?q=${encodeURIComponent(categoria.nome)}`}
-                className="group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-green-300 hover:bg-green-50 hover:shadow-lg"
+                className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-md sm:p-5"
               >
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-green-50 text-2xl transition group-hover:scale-105">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-lg transition group-hover:scale-105 sm:h-11 sm:w-11 sm:text-xl">
                   {obterIconeCategoria(categoria.nome)}
                 </div>
 
                 <div className="min-w-0">
-                  <h2 className="truncate font-black text-gray-900 transition group-hover:text-green-700">
+                  <h2 className="truncate text-[15px] font-black text-slate-900 transition group-hover:text-emerald-700">
                     {categoria.nome}
                   </h2>
 
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-0.5 text-xs text-slate-500">
                     {categoria.quantidade}{" "}
                     {categoria.quantidade === 1 ? "produto" : "produtos"}
                   </p>
