@@ -61,10 +61,10 @@ export default function Benefits() {
             </div>
 
             <div className="min-w-0">
-              <h2 className="text-[11px] font-black tracking-[-0.01em] text-slate-950 sm:text-[13px]">
+              <h2 className="text-[12px] font-black tracking-[-0.01em] text-slate-950 sm:text-[13px]">
                 {item.title}
               </h2>
-              <p className="mt-0.5 text-[9px] leading-[1.3] text-slate-500 sm:text-[11px] sm:leading-[1.4]">
+              <p className="mt-0.5 text-[10px] leading-[1.35] text-slate-500 sm:text-[11px] sm:leading-[1.4]">
                 {item.description}
               </p>
             </div>
