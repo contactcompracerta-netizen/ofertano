@@ -27,7 +27,10 @@ export interface AwinFeedDescriptor {
 
 export interface AwinFeedFetchOptions {
   timeoutMs?: number;
+  /** Limite do payload transferido (comprimido, quando aplicável). */
   maxBytes?: number;
+  /** Limite após descompressão/decodificação. */
+  maxDecodedBytes?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -122,6 +125,12 @@ async function fetchWithLimits(
       throw new Error(`AWIN_HTTP_${response.status}`);
     }
 
+    // fetch() segue redirects; valide também o destino FINAL para não
+    // transformar um redirect externo em fonte implicitamente aprovada.
+    if (response.url && !isAllowedAwinDownloadUrl(response.url)) {
+      throw new Error("AWIN_REDIRECT_URL_BLOCKED");
+    }
+
     const declaredLength = Number(response.headers.get("content-length") ?? "0");
     if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
       throw new Error(`AWIN_FEED_TOO_LARGE:${declaredLength}`);
@@ -137,9 +146,18 @@ async function fetchWithLimits(
   }
 }
 
-function decodeMaybeGzip(bytes: Uint8Array): string {
+function decodeMaybeGzip(
+  bytes: Uint8Array,
+  maxDecodedBytes: number,
+): string {
   const isGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-  const decoded = isGzip ? gunzipSync(bytes) : bytes;
+  const decoded = isGzip
+    ? gunzipSync(bytes, { maxOutputLength: maxDecodedBytes })
+    : bytes;
+
+  if (decoded.byteLength > maxDecodedBytes) {
+    throw new Error(`AWIN_DECODED_FEED_TOO_LARGE:${decoded.byteLength}`);
+  }
   return new TextDecoder("utf-8", { fatal: false }).decode(decoded);
 }
 
@@ -151,7 +169,11 @@ export async function fetchAwinFeedList(
     ...options,
     maxBytes: Math.min(options.maxBytes ?? 8 * 1024 * 1024, 8 * 1024 * 1024),
   });
-  return parseAwinFeedListCsv(decodeMaybeGzip(bytes));
+  const maxDecodedBytes = Math.min(
+    options.maxDecodedBytes ?? 16 * 1024 * 1024,
+    16 * 1024 * 1024,
+  );
+  return parseAwinFeedListCsv(decodeMaybeGzip(bytes, maxDecodedBytes));
 }
 
 export function selectAwinFeed(
@@ -194,7 +216,11 @@ export async function downloadAwinFeedRows(
   }
 
   const bytes = await fetchWithLimits(feed.downloadUrl, options);
-  const text = decodeMaybeGzip(bytes);
+  const maxDecodedBytes = Math.min(
+    options.maxDecodedBytes ?? 128 * 1024 * 1024,
+    256 * 1024 * 1024,
+  );
+  const text = decodeMaybeGzip(bytes, maxDecodedBytes);
   const rows = parseAwinCsv(text);
   const maxRows = Math.max(1, Math.min(options.maxRows ?? 500, 5000));
   return rows.slice(0, maxRows);
