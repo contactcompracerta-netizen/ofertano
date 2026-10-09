@@ -84,6 +84,7 @@ function genRow(i: number): RawAwinFeedItem {
     price: "99,90",
     currency: "BRL",
     productUrl: `https://www.example.com/p/${i}`,
+    affiliateUrl: `https://example-awin.test/cread.php?awinmid=1&ued=${encodeURIComponent(`https://www.example.com/p/${i}`)}`,
     imageUrls: `https://cdn.example-img.test/gen/${i}.jpg`,
   };
 }
