@@ -295,3 +295,42 @@ body {
     font-size: 46px;
   }
 }
+
+
+/* Mobile card heading: icon and title share one compact row */
+@media (max-width: 639px) {
+  .of-mobile-icon-card {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: center;
+  }
+
+  .of-mobile-icon-card > .of-icon-tile {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .of-mobile-icon-card > .of-card-title {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    margin-top: 0 !important;
+  }
+
+  .of-mobile-icon-card > .of-card-body {
+    grid-column: 1 / -1;
+    margin-top: 12px !important;
+  }
+}
+
+/* Every public page keeps the footer at the viewport bottom when content is short. */
+body > main {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+body > main > footer {
+  margin-top: auto;
+}
