@@ -5,9 +5,9 @@
   --ops-paper: #fff;
   --ops-wash: #f3f7f5;
   --ops-green: #176b52;
-  width: min(100%, 1440px);
+  width: min(100%, 1280px);
   margin: 0 auto;
-  padding: 28px clamp(14px, 3vw, 36px) 40px;
+  padding: 24px clamp(16px, 3vw, 32px) 36px;
   color: var(--ops-ink);
 }
 
@@ -24,7 +24,7 @@
 
 .pageHeader {
   align-items: flex-end;
-  padding-bottom: 22px;
+  padding-bottom: 18px;
 }
 
 .pageHeader h1,
@@ -36,7 +36,7 @@
 }
 
 .pageHeader h1 {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.15;
 }
 
@@ -89,14 +89,14 @@
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 18px 0 4px;
+  gap: 12px;
+  padding: 16px 0 4px;
 }
 
 .summaryCard {
   min-width: 0;
   border: 1px solid var(--ops-line);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--ops-paper);
   padding: 14px 16px;
 }
@@ -119,8 +119,8 @@
 .section {
   min-width: 0;
   border-top: 1px solid var(--ops-line);
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 20px;
+  padding-top: 18px;
 }
 
 .sectionHeader {

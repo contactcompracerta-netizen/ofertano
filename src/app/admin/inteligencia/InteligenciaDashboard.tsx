@@ -580,14 +580,14 @@ export default function InteligenciaDashboard() {
           : data?.products.growing ?? [];
 
   return (
-    <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto max-w-[1200px]">
+    <main className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+      <div className="mx-auto max-w-[1280px]">
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               Inteligência
             </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-[28px]">
               Analytics do Ofertano
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">

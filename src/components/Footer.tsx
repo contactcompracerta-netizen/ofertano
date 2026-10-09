@@ -8,7 +8,7 @@ const mobileLinkClassName =
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/5 bg-[#07110F] text-slate-300">
+    <footer className="mt-auto border-t border-white/5 bg-[#07110F] text-slate-300">
       <div className="mx-auto w-full max-w-[1600px] px-3 py-3 sm:px-5 md:px-8 md:py-7">
         <div className="md:hidden">
           <div className="flex items-start justify-between gap-2">

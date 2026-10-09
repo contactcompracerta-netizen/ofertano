@@ -97,7 +97,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
 
       <div className="flex flex-1 flex-col border-t border-slate-100 p-2.5 sm:p-3.5">
         <div className="flex min-w-0 items-center justify-between gap-2">
-          <p className="truncate text-[9px] font-black uppercase tracking-[0.04em] text-emerald-700 sm:text-[11px]">
+          <p className="truncate text-[10px] font-black uppercase tracking-[0.04em] text-emerald-700 sm:text-[11px]">
             {produto.store}
           </p>
 
@@ -109,7 +109,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
         </div>
 
         <Link href={`/produto/${produto.id}`} className="block">
-          <h2 className="mt-1.5 line-clamp-2 min-h-[32px] text-[11px] font-extrabold leading-[1.38] tracking-[-0.01em] text-slate-950 transition group-hover:text-emerald-700 sm:min-h-[38px] sm:text-[13px]">
+          <h2 className="mt-1.5 line-clamp-2 min-h-[32px] text-[12px] font-extrabold leading-[1.35] tracking-[-0.01em] text-slate-950 transition group-hover:text-emerald-700 sm:min-h-[38px] sm:text-[13px]">
             {displayName}
           </h2>
         </Link>
@@ -152,7 +152,7 @@ export default function ProductCard({ produto }: ProductCardProps) {
           </div>
 
           <div className="flex min-w-0 items-end justify-between gap-1">
-            <p className="truncate text-[16px] font-black tracking-[-0.045em] text-slate-950 sm:text-[20px]">
+            <p className="truncate text-[17px] font-black tracking-[-0.04em] text-slate-950 sm:text-[20px]">
               {formatarPreco(produto.price)}
             </p>
 

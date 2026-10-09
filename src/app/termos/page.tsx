@@ -21,39 +21,39 @@ export const metadata: Metadata = {
 
 export default function TermosPage() {
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="of-page">
       <Header />
 
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-14 sm:py-16">
-          <span className="text-sm font-black uppercase tracking-[0.14em] text-emerald-700">
+      <section className="of-page-intro">
+        <div className="of-page-intro__inner max-w-[960px]">
+          <span className="of-eyebrow">
             Informações legais
           </span>
 
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
+          <h1 className="of-page-title">
             Termos de Uso
           </h1>
 
-          <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">
+          <p className="of-page-lead max-w-3xl">
             Estes Termos de Uso estabelecem as regras para acesso e
             utilização do Ofertano, uma plataforma de comparação de
             preços e divulgação de ofertas de lojas parceiras.
           </p>
 
-          <p className="mt-4 text-sm font-semibold text-slate-500">
+          <p className="mt-3 text-xs font-semibold text-slate-500">
             Última atualização: 2 de agosto de 2026.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
-        <div className="space-y-8">
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+      <section className="of-reading max-w-[960px]">
+        <div className="space-y-4 sm:space-y-5">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               1. Aceitação dos termos
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 Ao acessar ou utilizar o Ofertano, você declara que
                 leu, compreendeu e concorda com estes Termos de Uso.
@@ -67,12 +67,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               2. Sobre o Ofertano
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 O Ofertano é uma plataforma informativa que organiza
                 produtos, preços, descontos e ofertas divulgadas por
@@ -91,18 +91,18 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm sm:p-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
+          <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-lg">
                 🛡️
               </div>
 
               <div>
-                <h2 className="text-2xl font-black text-slate-950">
+                <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
                   3. O Ofertano não realiza vendas
                 </h2>
 
-                <div className="mt-4 space-y-4 text-sm leading-7 text-slate-700 sm:text-base">
+                <div className="mt-3 space-y-3 text-sm leading-6 text-slate-700 sm:text-[15px] sm:leading-7">
                   <p>
                     Todas as compras são concluídas diretamente nos
                     sites ou aplicativos das lojas parceiras, como
@@ -126,12 +126,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               4. Preços e disponibilidade
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 Os preços, descontos, condições de pagamento,
                 disponibilidade de estoque, frete e prazo de entrega
@@ -153,12 +153,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               5. Links de afiliados
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 Alguns links disponibilizados no Ofertano podem ser
                 links de afiliados.
@@ -177,12 +177,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               6. Responsabilidades do usuário
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>Ao utilizar o Ofertano, o usuário concorda em:</p>
 
               <ul className="list-disc space-y-2 pl-6">
@@ -214,12 +214,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               7. Conteúdo e propriedade intelectual
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 A marca Ofertano, o layout, os textos institucionais, a
                 identidade visual e os elementos próprios da
@@ -240,12 +240,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               8. Sites de terceiros
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 O Ofertano possui links que direcionam o usuário para
                 páginas externas administradas por terceiros.
@@ -265,12 +265,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               9. Limitação de responsabilidade
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 O Ofertano não se responsabiliza por prejuízos causados
                 por alterações de preço, indisponibilidade de produtos,
@@ -290,12 +290,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               10. Privacidade e dados pessoais
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 O tratamento de dados pessoais e o uso de cookies são
                 descritos na Política de Privacidade do Ofertano.
@@ -310,12 +310,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               11. Alterações nos termos
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 Estes Termos de Uso poderão ser atualizados sempre que
                 necessário para refletir mudanças na plataforma, nos
@@ -334,12 +334,12 @@ export default function TermosPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-black text-slate-950">
+          <article className="of-card p-4 sm:p-5">
+            <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
               12. Contato
             </h2>
 
-            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600 sm:text-base">
+            <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600 sm:text-[15px] sm:leading-7">
               <p>
                 Dúvidas relacionadas a estes Termos de Uso poderão ser
                 enviadas pela página de contato.
@@ -355,13 +355,13 @@ export default function TermosPage() {
           </article>
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-slate-950 p-6 text-center sm:flex-row sm:text-left">
+        <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-center sm:mt-6 sm:flex-row sm:p-5 sm:text-left">
           <div>
-            <h2 className="text-xl font-black text-white">
+            <h2 className="text-lg font-black text-white">
               Continue comparando com segurança
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-slate-400">
+            <p className="mt-1 text-sm leading-6 text-slate-400">
               Consulte as ofertas e finalize suas compras somente nas
               lojas parceiras.
             </p>

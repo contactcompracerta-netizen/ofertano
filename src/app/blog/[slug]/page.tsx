@@ -238,7 +238,7 @@ export default async function BlogArticlePage({
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="of-page">
       <Header />
 
       <script
@@ -268,7 +268,7 @@ export default async function BlogArticlePage({
         <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full border border-white/10" />
         <div className="absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
 
-        <div className="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+        <div className="relative mx-auto max-w-5xl px-4 py-9 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
           <nav
             aria-label="Navegação estrutural"
             className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white/70"
@@ -292,20 +292,20 @@ export default async function BlogArticlePage({
             </span>
           </nav>
 
-          <div className="mt-10 max-w-4xl">
+          <div className="mt-7 max-w-4xl">
             <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white backdrop-blur">
               {post.category}
             </span>
 
-            <h1 className="mt-6 text-4xl font-black leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
+            <h1 className="mt-4 text-[32px] font-black leading-[1.08] tracking-[-0.035em] sm:text-4xl lg:text-5xl">
               {post.title}
             </h1>
 
-            <p className="mt-6 max-w-3xl text-base leading-8 text-white/80 sm:text-lg">
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/80 sm:text-base sm:leading-8">
               {post.excerpt}
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-white/70">
+            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-white/70 sm:text-sm">
               <span>
                 Por {post.author ?? "Ofertano"}
               </span>
@@ -326,15 +326,15 @@ export default async function BlogArticlePage({
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1fr)_300px] lg:px-8 lg:py-20">
-        <article className="min-w-0 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-10 lg:p-12">
-          <div className="border-b border-slate-200 pb-8">
-            <p className="text-lg font-semibold leading-8 text-slate-700 sm:text-xl">
+      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-8 lg:px-8 lg:py-12">
+        <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7 lg:p-8">
+          <div className="border-b border-slate-200 pb-5">
+            <p className="text-base font-semibold leading-7 text-slate-700 sm:text-lg">
               {post.excerpt}
             </p>
           </div>
 
-          <div className="mt-10 space-y-12">
+          <div className="mt-7 space-y-8">
             {post.sections.map(
               (section, sectionIndex) => (
                 <section
@@ -354,17 +354,17 @@ export default async function BlogArticlePage({
                     <div className="min-w-0 flex-1">
                       <h2
                         id={`section-${sectionIndex}`}
-                        className="text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-3xl"
+                        className="text-xl font-black leading-tight tracking-tight text-slate-950 sm:text-2xl"
                       >
                         {section.title}
                       </h2>
 
-                      <div className="mt-5 space-y-5">
+                      <div className="mt-4 space-y-4">
                         {section.paragraphs.map(
                           (paragraph) => (
                             <p
                               key={paragraph}
-                              className="text-base leading-8 text-slate-700"
+                              className="text-[15px] leading-7 text-slate-700"
                             >
                               {paragraph}
                             </p>
@@ -373,7 +373,7 @@ export default async function BlogArticlePage({
                       </div>
 
                       {section.bullets && (
-                        <ul className="mt-7 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
+                        <ul className="mt-5 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                           {section.bullets.map(
                             (bullet) => (
                               <li
@@ -396,7 +396,7 @@ export default async function BlogArticlePage({
             )}
           </div>
 
-          <aside className="mt-12 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
+          <aside className="mt-7 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
             <p className="text-sm font-black uppercase tracking-wider text-amber-900">
               Lembrete importante
             </p>
@@ -407,7 +407,7 @@ export default async function BlogArticlePage({
             </p>
           </aside>
 
-          <div className="mt-10 flex flex-col gap-4 border-t border-slate-200 pt-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-7 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <Link
               href="/blog"
               className="inline-flex items-center gap-2 text-sm font-black text-slate-700 transition hover:text-emerald-700"
@@ -427,7 +427,7 @@ export default async function BlogArticlePage({
         </article>
 
         <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">
               Sobre o Ofertano
             </p>

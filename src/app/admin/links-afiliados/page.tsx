@@ -228,7 +228,7 @@ export default function AffiliateLinksPage() {
 
   return (
     <main className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">
@@ -306,7 +306,7 @@ export default function AffiliateLinksPage() {
           </div>
         </div>
 
-        <section className="mb-8 rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+        <section className="mb-8 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
           <div className="grid gap-8 lg:grid-cols-2">
             <div>
               <h2 className="text-xl font-semibold">

@@ -1130,15 +1130,15 @@ export default function OpportunitiesPage() {
   }
 
   return (
-    <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto max-w-[1200px]">
+    <main className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+      <div className="mx-auto max-w-[1280px]">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               Operação
             </p>
 
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-[28px]">
               Oportunidades
             </h1>
 

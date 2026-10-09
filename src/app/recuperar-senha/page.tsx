@@ -129,7 +129,7 @@ export default function RecuperarSenhaPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10 sm:py-16">
+    <main className="min-h-screen bg-slate-50 px-4 py-6 sm:py-10">
       <div className="mx-auto w-full max-w-md">
         <Link
           href="/"
@@ -139,22 +139,22 @@ export default function RecuperarSenhaPage() {
           Voltar ao Ofertano
         </Link>
 
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
-          <div className="border-b border-slate-100 px-6 py-7 sm:px-8">
-            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-xl font-black text-white shadow-lg shadow-emerald-600/20">
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-200/50">
+          <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
+            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#087A55] text-lg font-black text-white shadow-md shadow-emerald-700/15">
               O
             </div>
 
-            <h1 className="text-2xl font-black tracking-tight text-slate-950">
+            <h1 className="text-[22px] font-black tracking-tight text-slate-950 sm:text-2xl">
               Criar nova senha
             </h1>
 
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">
               Defina uma nova senha para a sua conta.
             </p>
           </div>
 
-          <div className="px-6 py-7 sm:px-8">
+          <div className="px-5 py-5 sm:px-6">
             {estado === "verificando" && (
               <p className="text-sm font-semibold text-slate-600">
                 Validando seu link de recuperação...
@@ -218,7 +218,7 @@ export default function RecuperarSenhaPage() {
                         setSenha(event.target.value)
                       }
                       placeholder="Digite sua nova senha"
-                      className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                     />
                   </div>
 
@@ -241,7 +241,7 @@ export default function RecuperarSenhaPage() {
                         )
                       }
                       placeholder="Digite novamente"
-                      className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                     />
                   </div>
 
@@ -257,7 +257,7 @@ export default function RecuperarSenhaPage() {
                   <button
                     type="submit"
                     disabled={salvando}
-                    className="flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex min-h-10 w-full items-center justify-center rounded-lg bg-[#087A55] px-4 text-sm font-black text-white shadow-sm transition hover:bg-[#066747] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {salvando
                       ? "Salvando..."
