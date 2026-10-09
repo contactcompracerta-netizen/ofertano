@@ -7,6 +7,7 @@ import {
   DEFAULT_CATALOG_IMPORT_FLAGS,
   readCatalogImportFlags,
   isAnalysisEnabled,
+  isStagingWriteEnabled,
   isWriteEnabled,
   isLiveEnabled,
   assertWriteAllowed,
@@ -45,6 +46,7 @@ function expectNoThrow(fn: () => unknown, label: string): void {
 const empty = readCatalogImportFlags({});
 ok(empty.catalogImportEnabled === false, "CATALOG_IMPORT_ENABLED default false");
 ok(empty.awinWave1Enabled === false, "AWIN_WAVE1_ENABLED default false");
+ok(empty.awinWave1StagingWriteEnabled === false, "AWIN_WAVE1_STAGING_WRITE_ENABLED default false");
 ok(empty.awinWave1WriteEnabled === false, "AWIN_WAVE1_WRITE_ENABLED default false");
 ok(empty.awinWave1LiveEnabled === false, "AWIN_WAVE1_LIVE_ENABLED default false");
 ok(empty.mode === "DISABLED", "CATALOG_IMPORT_MODE default DISABLED");
@@ -58,6 +60,7 @@ ok(
   DEFAULT_CATALOG_IMPORT_FLAGS.mode === "DISABLED" &&
     !DEFAULT_CATALOG_IMPORT_FLAGS.catalogImportEnabled &&
     !DEFAULT_CATALOG_IMPORT_FLAGS.awinWave1Enabled &&
+    !DEFAULT_CATALOG_IMPORT_FLAGS.awinWave1StagingWriteEnabled &&
     !DEFAULT_CATALOG_IMPORT_FLAGS.awinWave1WriteEnabled &&
     !DEFAULT_CATALOG_IMPORT_FLAGS.awinWave1LiveEnabled,
   "DEFAULT_CATALOG_IMPORT_FLAGS tudo OFF",
@@ -93,6 +96,10 @@ ok(
   "modo inválido => DISABLED",
 );
 ok(
+  readCatalogImportFlags({ CATALOG_IMPORT_MODE: "shadow" }).mode === "SHADOW",
+  "shadow aceito",
+);
+ok(
   readCatalogImportFlags({ CATALOG_IMPORT_MODE: "live" }).mode === "LIVE",
   "live aceito",
 );
@@ -107,7 +114,22 @@ const analysisOnly: CatalogImportFlags = {
   mode: "DRY_RUN",
 };
 ok(isAnalysisEnabled(analysisOnly), "DRY_RUN com flags base ON => análise ON");
-ok(!isWriteEnabled(analysisOnly), "DRY_RUN nunca escreve");
+ok(!isStagingWriteEnabled(analysisOnly), "DRY_RUN não escreve staging");
+ok(!isWriteEnabled(analysisOnly), "DRY_RUN nunca escreve catálogo");
+
+const shadowWrite: CatalogImportFlags = {
+  ...analysisOnly,
+  awinWave1StagingWriteEnabled: true,
+  mode: "SHADOW",
+};
+ok(isAnalysisEnabled(shadowWrite), "SHADOW mantém análise ON");
+ok(isStagingWriteEnabled(shadowWrite), "SHADOW + staging flag => staging ON");
+ok(!isWriteEnabled(shadowWrite), "SHADOW nunca escreve catálogo");
+expectThrows(
+  () => assertWriteAllowed(shadowWrite),
+  (e) => e instanceof CatalogWriteBlockedError,
+  "SHADOW não passa pelo writer do catálogo",
+);
 
 const canaryWrite: CatalogImportFlags = {
   ...analysisOnly,
