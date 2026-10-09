@@ -21,7 +21,10 @@ import {
   observeLivePostWrite,
   type LivePostWriteObservation,
 } from "@/services/architecture/v1/cutover/liveParity";
-import { resolveMarketplaceIdFromLegacyEnum } from "@/services/architecture/v1/marketplaceRegistry";
+import {
+  resolveDisplayName,
+  resolveMarketplaceIdFromLegacyEnum,
+} from "@/services/architecture/v1/marketplaceRegistry";
 import {
   assertMercadoLivreListingIdentity,
 } from "@/services/mercadoLivre/listingIdentity";
@@ -104,11 +107,7 @@ type MarketplaceDatabase =
   | "AMAZON"
   | "SHOPEE"
   | "MAGAZINE_LUIZA"
-  | "ALIEXPRESS"
-  | "KABUM"
-  | "CAMA_IN_BOX"
-  | "OLYMPIKUS"
-  | "LEVEROS";
+  | "ALIEXPRESS";
 
 type DiscoverySourceDatabase =
   | "MANUAL"
@@ -412,24 +411,14 @@ function converterMarketplace(
 }
 
 function nomeMarketplace(
-  marketplace: MarketplaceDatabase,
+  marketplace: string,
 ): string {
-  const nomes: Record<
-    MarketplaceDatabase,
-    string
-  > = {
-    MERCADO_LIVRE: "Mercado Livre",
-    AMAZON: "Amazon",
-    SHOPEE: "Shopee",
-    MAGAZINE_LUIZA: "Magazine Luiza",
-    ALIEXPRESS: "AliExpress",
-    KABUM: "KaBuM!",
-    CAMA_IN_BOX: "Cama In Box",
-    OLYMPIKUS: "Olympikus",
-    LEVEROS: "Leveros",
-  };
+  const marketplaceId =
+    resolveMarketplaceIdFromLegacyEnum(marketplace);
 
-  return nomes[marketplace];
+  return marketplaceId
+    ? resolveDisplayName(marketplaceId)
+    : marketplace.replaceAll("_", " ");
 }
 
 function normalizarTextoIdentificador(
@@ -2392,7 +2381,7 @@ export async function sincronizarMelhorOfertaDoProduto(
     },
     data: {
       store: nomeMarketplace(
-        melhorOfertaPrincipal.marketplace as MarketplaceDatabase,
+        String(melhorOfertaPrincipal.marketplace),
       ),
 
       affiliateLink:
