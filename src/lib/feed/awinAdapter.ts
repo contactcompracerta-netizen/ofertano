@@ -419,33 +419,7 @@ export const awinFeedAdapter: FeedSourceAdapter = {
   source: "awin",
 
   parse(input: string): RawAwinFeedItem[] {
-    if (!input || input.trim() === "") return [];
-
-    // Simple CSV parser - handles quoted fields with commas
-    const lines = input.trim().split(/\r?\n/);
-    if (lines.length < 2) return [];
-
-    // Parse header
-    const headers = parseCsvLine(lines[0]);
-
-    const results: RawAwinFeedItem[] = [];
-
-    for (let i = 1; i < lines.length; i += 1) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      const values = parseCsvLine(line);
-      if (values.length !== headers.length) continue;
-
-      const row: Record<string, string> = {};
-      for (let j = 0; j < headers.length; j += 1) {
-        row[headers[j]] = values[j];
-      }
-
-      results.push(row as RawAwinFeedItem);
-    }
-
-    return results;
+    return parseAwinCsv(input);
   },
 
   normalize(raw: RawAwinFeedItem): NormalizedAwinFeedItem {
@@ -458,38 +432,167 @@ export const awinFeedAdapter: FeedSourceAdapter = {
 };
 
 /**
- * Simple CSV line parser that handles quoted fields.
- * Handles escaped quotes ("") within quoted fields.
+ * Parser CSV de documento inteiro.
+ * Suporta vírgula, tab e ponto-e-vírgula, aspas escapadas e quebras
+ * de linha dentro de campos entre aspas.
  */
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
+export function parseCsvDocument(input: string): string[][] {
+  if (!input || input.trim() === "") return [];
+
+  const delimiter = detectDelimiter(input);
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
   let inQuotes = false;
 
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const nextChar = line[i + 1];
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    const next = input[i + 1];
 
     if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        // Escaped quote - add one quote and skip next
-        current += '"';
+      if (inQuotes && next === '"') {
+        field += '"';
         i += 1;
       } else {
-        // Toggle quote state
         inQuotes = !inQuotes;
       }
-    } else if (char === "," && !inQuotes) {
-      // Field separator outside quotes
-      result.push(current);
-      current = "";
-    } else {
-      current += char;
+      continue;
     }
+
+    if (char === delimiter && !inQuotes) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(field);
+      field = "";
+      if (row.some((value) => value.trim() !== "")) rows.push(row);
+      row = [];
+      continue;
+    }
+
+    field += char;
   }
 
-  result.push(current);
-  return result;
+  row.push(field);
+  if (row.some((value) => value.trim() !== "")) rows.push(row);
+  return rows;
+}
+
+function detectDelimiter(input: string): "," | "\t" | ";" {
+  const firstLine = input.split(/\r?\n/, 1)[0] ?? "";
+  const candidates = [",", "\t", ";"] as const;
+  let best: "," | "\t" | ";" = ",";
+  let bestCount = -1;
+
+  for (const candidate of candidates) {
+    let count = 0;
+    let inQuotes = false;
+    for (let i = 0; i < firstLine.length; i += 1) {
+      if (firstLine[i] === '"') {
+        if (inQuotes && firstLine[i + 1] === '"') i += 1;
+        else inQuotes = !inQuotes;
+      } else if (!inQuotes && firstLine[i] === candidate) {
+        count += 1;
+      }
+    }
+    if (count > bestCount) {
+      best = candidate;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function first(row: Record<string, string>, keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return undefined;
+}
+
+function joinImages(row: Record<string, string>): string | undefined {
+  const values = [
+    first(row, ["large_image"]),
+    first(row, ["merchant_image_url"]),
+    first(row, ["aw_image_url"]),
+    first(row, ["alternate_image"]),
+    first(row, ["alternate_image_two"]),
+    first(row, ["alternate_image_three"]),
+    first(row, ["merchant_thumb_url"]),
+    first(row, ["aw_thumb_url"]),
+    first(row, ["imageUrls", "image_url"]),
+  ].filter((value): value is string => Boolean(value));
+
+  return values.length > 0 ? [...new Set(values)].join(";") : undefined;
+}
+
+/**
+ * Converte colunas reais do Product Feed AWIN para o contrato interno.
+ * Mantém aliases legados para fixtures e compatibilidade.
+ */
+export function mapAwinCsvRow(row: Record<string, string>): RawAwinFeedItem {
+  const advertiserId = first(row, ["merchant_id", "advertiser_id", "advertiserId"]);
+  const advertiserName = first(row, ["merchant_name", "advertiser_name", "advertiserName"]);
+  const productId = first(row, [
+    "merchant_product_id",
+    "aw_product_id",
+    "product_id",
+    "productId",
+  ]);
+
+  return {
+    id: first(row, ["id", "aw_product_id"]),
+    productId,
+    sku: first(row, ["sku"]),
+    programId: advertiserId,
+    advertiserId,
+    advertiserName,
+    title: first(row, ["product_name", "title", "name"]),
+    description: first(row, ["description", "product_short_description"]),
+    brand: first(row, ["brand_name", "brand"]),
+    model: first(row, ["product_model", "model_number", "model"]),
+    mpn: first(row, ["mpn"]),
+    gtin: first(row, ["product_GTIN", "product_gtin", "ean", "upc", "gtin"]),
+    price: first(row, ["search_price", "store_price", "price"]),
+    oldPrice: first(row, ["product_price_old", "rrp_price", "oldPrice"]),
+    currency: first(row, ["currency"]),
+    productUrl: first(row, ["merchant_deep_link", "product_url", "productUrl"]),
+    affiliateUrl: first(row, ["aw_deep_link", "affiliate_url", "affiliateUrl"]),
+    imageUrls: joinImages(row),
+    category: first(row, [
+      "merchant_product_category_path",
+      "merchant_category",
+      "category_name",
+      "category",
+    ]),
+    availability: first(row, ["stock_status", "in_stock", "is_for_sale", "availability"]),
+    attributes: first(row, ["specifications", "attributes"]),
+    _raw: row,
+  };
+}
+
+export function parseAwinCsv(input: string): RawAwinFeedItem[] {
+  const rows = parseCsvDocument(input);
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map((header) => header.trim());
+  const results: RawAwinFeedItem[] = [];
+
+  for (const values of rows.slice(1)) {
+    if (values.length !== headers.length) continue;
+    const row: Record<string, string> = {};
+    for (let i = 0; i < headers.length; i += 1) {
+      row[headers[i]] = values[i] ?? "";
+    }
+    results.push(mapAwinCsvRow(row));
+  }
+
+  return results;
 }
 
 /**
@@ -498,19 +601,12 @@ function parseCsvLine(line: string): string[] {
  */
 export const feedAdapterRegistry = new Map<string, FeedSourceAdapter>();
 
-// Register AWIN adapter
 feedAdapterRegistry.set("awin", awinFeedAdapter);
 
-/**
- * Get feed adapter by source name.
- */
 export function getFeedAdapter(source: string): FeedSourceAdapter | undefined {
   return feedAdapterRegistry.get(source.toLowerCase());
 }
 
-/**
- * Get all registered feed adapters.
- */
 export function getRegisteredFeedSources(): string[] {
   return Array.from(feedAdapterRegistry.keys());
 }

@@ -258,6 +258,34 @@ console.log("\n=== Dry Run Engine on KaBuM Fixture ===");
   assert(adapter === undefined, "Unknown source rejected");
 }
 
+// Teste 26: formato oficial AWIN é mapeado para o contrato interno
+{
+  const officialCsv = [
+    "aw_deep_link,product_name,aw_product_id,merchant_product_id,merchant_image_url,description,merchant_category,search_price,merchant_name,merchant_id,currency,merchant_deep_link,brand_name,product_model,model_number,ean,mpn,product_GTIN",
+    '"https://www.awin1.com/cread.php?awinmid=123&ued=https%3A%2F%2Floja.test%2Fp%2F1","Mouse Gamer G305","AW-1","SKU-1","https://img.test/g305.jpg","Mouse sem fio","Periféricos","249,90","KaBuM!","123","BRL","https://loja.test/p/1","Logitech","G305","910-005281","7891234567890","910-005281","7891234567890"',
+  ].join("\n");
+  const parsed = awinFeedAdapter.parse(officialCsv);
+  assert(parsed.length === 1, "Official AWIN CSV parses one row");
+  assert(parsed[0].productId === "SKU-1", "merchant_product_id mapped");
+  assert(parsed[0].title === "Mouse Gamer G305", "product_name mapped");
+  assert(parsed[0].price === "249,90", "search_price mapped");
+  assert(parsed[0].advertiserId === "123", "merchant_id mapped");
+  assert(parsed[0].affiliateUrl?.includes("awin1.com") === true, "aw_deep_link mapped");
+  assert(parsed[0].productUrl === "https://loja.test/p/1", "merchant_deep_link mapped");
+  assert(parsed[0].brand === "Logitech", "brand_name mapped");
+  assert(parsed[0].gtin === "7891234567890", "product_GTIN/ean mapped");
+}
+
+// Teste 27: parser suporta quebra de linha dentro de campo entre aspas
+{
+  const csv = `productId,title,description,price,currency,productUrl
+A1,"Produto teste","linha 1
+linha 2",10.00,BRL,https://loja.test/a1
+`;
+  const parsed = awinFeedAdapter.parse(csv);
+  assert(parsed.length === 1, "Quoted multiline row parsed");
+  assert(parsed[0].description === "linha 1\nlinha 2", "Quoted newline preserved");
+}
 console.log(`\nPassed: ${passed}, Failed: ${failed}`);
 if (failed > 0) process.exit(1);
 else console.log("AWIN_FEED_ADAPTER_TESTS=PASS");

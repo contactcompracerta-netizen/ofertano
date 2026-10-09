@@ -38,6 +38,7 @@ function flags(over: Partial<CatalogImportFlags> = {}): CatalogImportFlags {
   return {
     catalogImportEnabled: true,
     awinWave1Enabled: true,
+    awinWave1StagingWriteEnabled: false,
     awinWave1WriteEnabled: false,
     awinWave1LiveEnabled: false,
     mode: "DRY_RUN",
@@ -84,6 +85,7 @@ function genRow(i: number): RawAwinFeedItem {
     price: "99,90",
     currency: "BRL",
     productUrl: `https://www.example.com/p/${i}`,
+    affiliateUrl: `https://example-awin.test/cread.php?awinmid=1&ued=${encodeURIComponent(`https://www.example.com/p/${i}`)}`,
     imageUrls: `https://cdn.example-img.test/gen/${i}.jpg`,
   };
 }
@@ -263,6 +265,7 @@ async function main(): Promise<void> {
         price: "249,90",
         currency: "BRL",
         productUrl: "https://www.example.com/go/1",
+        affiliateUrl: "https://example-awin.test/cread.php?awinmid=1&ued=https%3A%2F%2Fwww.example.com%2Fgo%2F1",
         imageUrls: "https://cdn.example-img.test/c1.jpg",
       },
     ],
@@ -515,6 +518,60 @@ async function main(): Promise<void> {
   ok(rwRes.plan.counters.wouldReview === 1, "item PARTIAL => REVIEW");
   ok(rwRes.apply?.applied === 0, "REVIEW não aplica");
   ok(noWrites.gateway.writeAttempts === 0, "REVIEW: escrita=0");
+
+  /* ===================================================================== */
+  /* 9) Affiliate ausente e indisponibilidade são fail-closed              */
+  /* ===================================================================== */
+  const affiliateGuard = harness(flags());
+  const noAffiliate = await affiliateGuard.importer.run(
+    [
+      {
+        productId: "AFF-1",
+        title: "Produto com identidade forte sem afiliado",
+        brand: "Marca",
+        model: "M-1",
+        price: "99,90",
+        currency: "BRL",
+        productUrl: "https://www.example.com/aff/1",
+        imageUrls: "https://cdn.example-img.test/aff/1.jpg",
+      },
+    ],
+    "kabum",
+  );
+  const noAffiliateItem = find(noAffiliate.plan.items, "AFF-1");
+  ok(noAffiliateItem.decision === "REVIEW", "affiliate ausente => REVIEW");
+  ok(
+    noAffiliateItem.reasonCodes.includes("MISSING_AFFILIATE_URL"),
+    "affiliate ausente => reason explícito",
+  );
+  ok(noAffiliateItem.offerAction === "NONE", "affiliate ausente => sem offer write");
+
+  const unavailableGuard = harness(flags());
+  const unavailable = await unavailableGuard.importer.run(
+    [
+      {
+        productId: "STOCK-0",
+        title: "Produto indisponível com identidade forte",
+        brand: "Marca",
+        model: "S-0",
+        price: "149,90",
+        currency: "BRL",
+        productUrl: "https://www.example.com/stock/0",
+        affiliateUrl:
+          "https://example-awin.test/cread.php?awinmid=1&ued=https%3A%2F%2Fwww.example.com%2Fstock%2F0",
+        imageUrls: "https://cdn.example-img.test/stock/0.jpg",
+        availability: "out of stock",
+      },
+    ],
+    "kabum",
+  );
+  const unavailableItem = find(unavailable.plan.items, "STOCK-0");
+  ok(unavailableItem.decision === "REJECT", "indisponível => REJECT");
+  ok(
+    unavailableItem.reasonCodes.includes("UNAVAILABLE_ITEM"),
+    "indisponível => reason explícito",
+  );
+  ok(unavailableItem.offerAction === "NONE", "indisponível => sem offer write");
 
   console.log(`importer.test.ts PASS (${passed} asserções)`);
 }

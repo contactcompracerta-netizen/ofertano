@@ -3,7 +3,7 @@
  *
  * Flags fail-closed: importar este módulo NUNCA liga escrita.
  * Escrita real exige configuração explícita de ambiente
- * (CATALOG_IMPORT_ENABLED / AWIN_WAVE1_ENABLED / AWIN_WAVE1_WRITE_ENABLED)
+ * (CATALOG_IMPORT_ENABLED / AWIN_WAVE1_ENABLED / flags de staging/write)
  * e feeds reais — ver featureFlags.ts.
  */
 export * from "./types";
@@ -11,6 +11,7 @@ export {
   readCatalogImportFlags,
   DEFAULT_CATALOG_IMPORT_FLAGS,
   isAnalysisEnabled,
+  isStagingWriteEnabled,
   isWriteEnabled,
   isLiveEnabled,
   assertWriteAllowed,
@@ -47,6 +48,19 @@ export {
   InMemoryStagingStore,
 } from "./staging";
 export type { StagingStore, BuildStagingInput } from "./staging";
+export { PrismaStagingStore } from "./prismaStaging";
+export {
+  fetchAwinFeedList,
+  discoverJoinedAwinAdvertiserId,
+  parseAwinFeedListCsv,
+  selectAwinFeed,
+  downloadAwinFeedRows,
+  isAllowedAwinDownloadUrl,
+} from "./awinFeedSource";
+export type {
+  AwinFeedDescriptor,
+  AwinFeedFetchOptions,
+} from "./awinFeedSource";
 export { buildPlan, summarizePlan, emptyCounters } from "./plan";
 export type {
   CatalogImportPlan,

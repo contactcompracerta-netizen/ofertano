@@ -22,7 +22,7 @@ export type AffiliateNetwork = typeof AWIN_AFFILIATE_NETWORK;
 export type MerchantSlug = "kabum" | "cama-in-box" | "olympikus" | "leveros";
 
 /** Modos de execução do CatalogImporterV1. */
-export type CatalogImportMode = "DISABLED" | "DRY_RUN" | "CANARY" | "LIVE";
+export type CatalogImportMode = "DISABLED" | "DRY_RUN" | "SHADOW" | "CANARY" | "LIVE";
 
 export type ValidationStatus = "VALID" | "PARTIAL" | "INVALID";
 
@@ -48,6 +48,8 @@ export type ReasonCode =
   | "INVALID_CURRENCY"
   | "INVALID_DESTINATION_URL"
   | "INVALID_AFFILIATE_URL"
+  | "MISSING_AFFILIATE_URL"
+  | "UNAVAILABLE_ITEM"
   | "MISSING_IMAGE"
   | "INVALID_GTIN_IGNORED"
   | "WEAK_IDENTITY"

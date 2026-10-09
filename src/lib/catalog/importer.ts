@@ -5,9 +5,10 @@
  *   AWIN FEED -> NORMALIZER -> VALIDATOR -> IDENTITY -> MATCHER
  *              -> STAGING -> (plan) -> CATALOG WRITER
  *
- * Modos: DISABLED | DRY_RUN | CANARY | LIVE
+ * Modos: DISABLED | DRY_RUN | SHADOW | CANARY | LIVE
  *   - DISABLED : nada executa (lança).
  *   - DRY_RUN  : produz plano + staging em memória; gateway NUNCA tocado.
+ *   - SHADOW   : pode persistir APENAS staging; Product/Offer nunca são aplicados.
  *   - CANARY   : aplica o plano respeitando limites (25/anunciante, 100 total).
  *   - LIVE     : bloqueado por flag adicional (AWIN_WAVE1_LIVE_ENABLED).
  *
@@ -61,6 +62,8 @@ export interface CatalogImporterDeps {
   gateway: CatalogWriteGateway;
   existingProducts: readonly ExistingProductRef[];
   existingOffers: readonly ExistingOfferRef[];
+  /** Identificador da execução, gravado no staging para auditoria. */
+  runId?: string;
 }
 
 export interface ApplyResult {
@@ -101,6 +104,7 @@ export class CatalogImporterV1 {
   private readonly gateway: CatalogWriteGateway;
   private readonly existingProducts: readonly ExistingProductRef[];
   private readonly existingOffers: readonly ExistingOfferRef[];
+  private readonly runId?: string;
 
   /** Sessão canary: contador total entre execuções desta instância. */
   private canaryAppliedTotal = 0;
@@ -112,6 +116,7 @@ export class CatalogImporterV1 {
     this.gateway = deps.gateway;
     this.existingProducts = deps.existingProducts;
     this.existingOffers = deps.existingOffers;
+    this.runId = deps.runId;
   }
 
   async run(
@@ -218,6 +223,7 @@ export class CatalogImporterV1 {
       matchConfidence: null,
       decision: "REJECT",
       reasonCodes: reasons,
+      ...(this.runId !== undefined ? { runId: this.runId } : {}),
       ...(item.brand !== undefined ? { brand: item.brand } : {}),
       ...(item.gtin !== undefined ? { gtin: item.gtin } : {}),
       ...(item.mpn !== undefined ? { mpn: item.mpn } : {}),
@@ -261,6 +267,20 @@ export class CatalogImporterV1 {
     if (!item.productUrl || !isSafeExternalUrl(item.productUrl)) {
       reasons.push("INVALID_DESTINATION_URL");
     }
+    if (!item.affiliateUrl) {
+      reasons.push("MISSING_AFFILIATE_URL");
+    } else if (!isSafeExternalUrl(item.affiliateUrl)) {
+      reasons.push("INVALID_AFFILIATE_URL");
+    }
+
+    if (
+      item.availability !== undefined &&
+      /^(0|false|no|n|out[ -]?of[ -]?stock|unavailable|not[ -]?for[ -]?sale)$/i.test(
+        item.availability.trim(),
+      )
+    ) {
+      reasons.push("UNAVAILABLE_ITEM");
+    }
 
     const core: ReasonCode[] = [
       "MISSING_EXTERNAL_ID",
@@ -268,14 +288,13 @@ export class CatalogImporterV1 {
       "INVALID_PRICE",
       "INVALID_CURRENCY",
       "INVALID_DESTINATION_URL",
+      "INVALID_AFFILIATE_URL",
+      "UNAVAILABLE_ITEM",
     ];
     if (reasons.some((r) => core.includes(r))) {
       return { status: "INVALID", reasons };
     }
 
-    if (item.affiliateUrl !== undefined && !isSafeExternalUrl(item.affiliateUrl)) {
-      reasons.push("INVALID_AFFILIATE_URL");
-    }
     if (item.imageUrls.length === 0) {
       reasons.push("MISSING_IMAGE");
     }
@@ -353,6 +372,7 @@ export class CatalogImporterV1 {
       matchConfidence: match.productId ? match.confidence : null,
       decision,
       reasonCodes: dedupe(allReasons),
+      ...(this.runId !== undefined ? { runId: this.runId } : {}),
       ...(item.description !== undefined ? { description: item.description } : {}),
       ...(item.brand !== undefined ? { brand: item.brand } : {}),
       ...(item.gtin !== undefined && isValidGtin(item.gtin) ? { gtin: item.gtin } : {}),

@@ -96,6 +96,7 @@ async function main(): Promise<void> {
     const flags: CatalogImportFlags = {
       catalogImportEnabled: true,
       awinWave1Enabled: true,
+      awinWave1StagingWriteEnabled: false,
       awinWave1WriteEnabled: false,
       awinWave1LiveEnabled: false,
       mode: "DRY_RUN",
