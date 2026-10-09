@@ -1449,3 +1449,64 @@ model CatalogCutoverStageMetric {
 
   @@unique([marketplaceId, stage])
 }
+
+// CATALOG_WAVE1 (auditoria FASE A) — staging da pipeline AWIN → catálogo.
+//
+// Identidade em TRÊS camadas, deliberadamente separadas do enum Marketplace:
+//   source           = origem do feed ("AWIN")
+//   affiliateNetwork = rede de afiliados ("AWIN") — rede NÃO é marketplace
+//   merchant         = loja real (slug: kabum | cama-in-box | olympikus | leveros)
+//
+// O enum Marketplace permanece intocado (diretriz da missão: não adicionar
+// AWIN ao enum apenas para destravar). Product/Offer existentes não mudam
+// de semântica — esta tabela é puramente aditiva.
+//
+// Idempotência: @@unique([source, merchant, externalId]) permite upsert —
+// reprocessar o mesmo feed nunca duplica linhas de staging.
+//
+// Rollback: DROP TABLE "CatalogImportStagingItem"; (nenhum dado dependente).
+model CatalogImportStagingItem {
+  id String @id @default(cuid())
+
+  source           String
+  affiliateNetwork String
+  merchant         String
+  externalId       String
+
+  title       String
+  description String?
+
+  brand String?
+  gtin  String?
+  mpn   String?
+  model String?
+
+  category String?
+
+  price    Float?
+  currency String
+
+  imageUrl        String?
+  destinationUrl  String?
+  affiliateUrl    String?
+
+  attributes Json?
+
+  validationStatus String
+  identityLevel    String
+
+  matchCandidateProductId String?
+  matchConfidence         Float?
+
+  decision    String
+  reasonCodes String[]
+
+  runId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, merchant, externalId])
+  @@index([merchant, decision])
+  @@index([validationStatus, identityLevel])
+}
