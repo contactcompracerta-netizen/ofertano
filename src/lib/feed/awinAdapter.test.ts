@@ -278,13 +278,14 @@ console.log("\n=== Dry Run Engine on KaBuM Fixture ===");
 
 // Teste 27: parser suporta quebra de linha dentro de campo entre aspas
 {
-  const csv = 'productId,title,description,price,currency,productUrl\\n' +
-    'A1,"Produto teste","linha 1\\nlinha 2",10.00,BRL,https://loja.test/a1\\n';
+  const csv = `productId,title,description,price,currency,productUrl
+A1,"Produto teste","linha 1
+linha 2",10.00,BRL,https://loja.test/a1
+`;
   const parsed = awinFeedAdapter.parse(csv);
   assert(parsed.length === 1, "Quoted multiline row parsed");
   assert(parsed[0].description === "linha 1\nlinha 2", "Quoted newline preserved");
 }
-
 console.log(`\nPassed: ${passed}, Failed: ${failed}`);
 if (failed > 0) process.exit(1);
 else console.log("AWIN_FEED_ADAPTER_TESTS=PASS");
