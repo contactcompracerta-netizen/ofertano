@@ -201,6 +201,11 @@ export function selectAwinFeed(
   }
 
   const selected = candidates[0];
+  if (selected.membershipStatus.trim().toLowerCase() !== "joined") {
+    throw new Error(
+      `AWIN_ADVERTISER_NOT_JOINED:advertiser=${selected.advertiserId}:status=${selected.membershipStatus || "unknown"}`,
+    );
+  }
   if (!isAllowedAwinDownloadUrl(selected.downloadUrl)) {
     throw new Error("AWIN_FEED_URL_BLOCKED");
   }
