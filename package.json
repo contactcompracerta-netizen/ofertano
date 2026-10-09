@@ -50,7 +50,10 @@
     "test:listing-first": "tsx src/services/database/marketplaceOfferWriter.partialUnique.test.ts && tsx src/services/priceMonitor/listingFirstMonitor.test.ts && tsx src/services/priceMonitor/refreshOnly.test.mts && tsx src/services/priceMonitor/priceMonitorInvariant.test.mts",
     "test:catalog-wave1": "tsx src/lib/catalog/advertisers.test.ts && tsx src/lib/catalog/featureFlags.test.ts && tsx src/lib/catalog/identity.test.ts && tsx src/lib/catalog/matching.test.ts && tsx src/lib/catalog/staging.test.ts && tsx src/lib/catalog/transaction.test.ts && tsx src/lib/catalog/fixtures.test.ts && tsx src/lib/catalog/importer.test.ts",
     "wave1:dry-run": "tsx src/lib/catalog/runWave1DryRun.ts",
-    "test:migration-replay": "node scripts/bootstrap/ml-listing-first-replay.integration.mjs"
+    "test:migration-replay": "node scripts/bootstrap/ml-listing-first-replay.integration.mjs",
+    "test:feed-ingestion": "tsx src/lib/feed/urlSafety.test.ts && tsx src/lib/feed/normalization/index.test.ts && tsx src/lib/feed/awinAdapter.test.ts && tsx src/lib/feed/dryRunEngine.test.ts",
+    "test:catalog-wave1-runtime": "npm run test:feed-ingestion && npm run test:catalog-wave1 && tsx src/lib/catalog/awinFeedSource.test.ts",
+    "wave1:shadow": "tsx src/lib/catalog/runWave1Shadow.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
