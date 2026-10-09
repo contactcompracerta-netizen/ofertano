@@ -1,0 +1,41 @@
+name: Catalog Wave 1 Runtime CI
+
+on:
+  push:
+    branches:
+      - feat/catalog-wave1-runtime-20261009
+  pull_request:
+    paths:
+      - "src/lib/catalog/**"
+      - "src/lib/feed/**"
+      - "package.json"
+      - "prisma/**"
+      - ".github/workflows/catalog-wave1-runtime-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ofertano
+      CATALOG_IMPORT_ENABLED: "false"
+      AWIN_WAVE1_ENABLED: "false"
+      AWIN_WAVE1_STAGING_WRITE_ENABLED: "false"
+      AWIN_WAVE1_WRITE_ENABLED: "false"
+      AWIN_WAVE1_LIVE_ENABLED: "false"
+      CATALOG_IMPORT_MODE: DISABLED
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:catalog-wave1-runtime
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run build
