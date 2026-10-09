@@ -51,6 +51,7 @@ export type { StagingStore, BuildStagingInput } from "./staging";
 export { PrismaStagingStore } from "./prismaStaging";
 export {
   fetchAwinFeedList,
+  discoverJoinedAwinAdvertiserId,
   parseAwinFeedListCsv,
   selectAwinFeed,
   downloadAwinFeedRows,
