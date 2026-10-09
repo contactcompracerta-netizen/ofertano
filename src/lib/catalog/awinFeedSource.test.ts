@@ -1,5 +1,6 @@
 import {
   isAllowedAwinDownloadUrl,
+  discoverJoinedAwinAdvertiserId,
   parseAwinFeedListCsv,
   selectAwinFeed,
 } from "./awinFeedSource";
@@ -52,6 +53,9 @@ ok(
   !isAllowedAwinDownloadUrl("http://productdata.awin.com/feed.csv"),
   "http bloqueado",
 );
+
+const discoveredKabum = discoverJoinedAwinAdvertiserId(feeds, "KaBuM!");
+ok(discoveredKabum === "101", "advertiser joined descoberto por nome exato normalizado");
 
 const kabum = selectAwinFeed(feeds, "101");
 ok(kabum.feedId === "9001", "seleção única por advertiser");
