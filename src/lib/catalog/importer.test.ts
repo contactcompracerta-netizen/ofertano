@@ -263,6 +263,7 @@ async function main(): Promise<void> {
         price: "249,90",
         currency: "BRL",
         productUrl: "https://www.example.com/go/1",
+        affiliateUrl: "https://example-awin.test/cread.php?awinmid=1&ued=https%3A%2F%2Fwww.example.com%2Fgo%2F1",
         imageUrls: "https://cdn.example-img.test/c1.jpg",
       },
     ],
