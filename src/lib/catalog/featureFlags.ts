@@ -7,6 +7,7 @@
  * Flags:
  *   CATALOG_IMPORT_ENABLED     = false
  *   AWIN_WAVE1_ENABLED         = false
+ *   AWIN_WAVE1_STAGING_WRITE_ENABLED = false
  *   AWIN_WAVE1_WRITE_ENABLED   = false
  *   CATALOG_IMPORT_MODE        = DISABLED
  *   AWIN_WAVE1_LIVE_ENABLED    = false   (flag adicional que bloqueia LIVE)
@@ -16,6 +17,8 @@ import type { CatalogImportMode } from "./types";
 export interface CatalogImportFlags {
   catalogImportEnabled: boolean;
   awinWave1Enabled: boolean;
+  /** Permite escrita APENAS na tabela de staging durante SHADOW. */
+  awinWave1StagingWriteEnabled: boolean;
   awinWave1WriteEnabled: boolean;
   /** Flag extra: LIVE exige ativação explícita adicional. */
   awinWave1LiveEnabled: boolean;
@@ -25,6 +28,7 @@ export interface CatalogImportFlags {
 const MODES: readonly CatalogImportMode[] = [
   "DISABLED",
   "DRY_RUN",
+  "SHADOW",
   "CANARY",
   "LIVE",
 ];
@@ -48,6 +52,7 @@ export function readCatalogImportFlags(
   return {
     catalogImportEnabled: readBool(env.CATALOG_IMPORT_ENABLED),
     awinWave1Enabled: readBool(env.AWIN_WAVE1_ENABLED),
+    awinWave1StagingWriteEnabled: readBool(env.AWIN_WAVE1_STAGING_WRITE_ENABLED),
     awinWave1WriteEnabled: readBool(env.AWIN_WAVE1_WRITE_ENABLED),
     awinWave1LiveEnabled: readBool(env.AWIN_WAVE1_LIVE_ENABLED),
     mode: readMode(env.CATALOG_IMPORT_MODE),
@@ -58,6 +63,7 @@ export function readCatalogImportFlags(
 export const DEFAULT_CATALOG_IMPORT_FLAGS: CatalogImportFlags = Object.freeze({
   catalogImportEnabled: false,
   awinWave1Enabled: false,
+  awinWave1StagingWriteEnabled: false,
   awinWave1WriteEnabled: false,
   awinWave1LiveEnabled: false,
   mode: "DISABLED" as const,
