@@ -43,7 +43,7 @@ export default function ContatoPage() {
       <section className="of-section max-w-[1120px]">
         <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr] lg:gap-5">
           <div className="space-y-4">
-            <article className="of-card of-card-pad">
+            <article className="of-card of-card-pad of-mobile-icon-card">
               <div className="of-icon-tile bg-emerald-50 text-lg">
                 ✉️
               </div>
@@ -52,13 +52,13 @@ export default function ContatoPage() {
                 Atendimento
               </h2>
 
-              <p className="mt-2 of-body">
+              <p className="mt-2 of-body of-card-body">
                 Envie sua mensagem pelo formulário. O canal poderá ser usado
                 para dúvidas, sugestões e solicitações relacionadas ao Ofertano.
               </p>
             </article>
 
-            <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+            <article className="of-mobile-icon-card rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
               <div className="of-icon-tile bg-amber-100 text-lg">
                 🛡️
               </div>
@@ -67,7 +67,7 @@ export default function ContatoPage() {
                 Problemas com compras
               </h2>
 
-              <p className="mt-2 text-sm leading-6 text-slate-700">
+              <p className="of-card-body mt-2 text-sm leading-6 text-slate-700">
                 Pagamento, entrega, troca, devolução e garantia devem ser
                 tratados diretamente com a loja onde a compra foi realizada.
               </p>
