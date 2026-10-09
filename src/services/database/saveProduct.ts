@@ -104,7 +104,11 @@ type MarketplaceDatabase =
   | "AMAZON"
   | "SHOPEE"
   | "MAGAZINE_LUIZA"
-  | "ALIEXPRESS";
+  | "ALIEXPRESS"
+  | "KABUM"
+  | "CAMA_IN_BOX"
+  | "OLYMPIKUS"
+  | "LEVEROS";
 
 type DiscoverySourceDatabase =
   | "MANUAL"
@@ -419,6 +423,10 @@ function nomeMarketplace(
     SHOPEE: "Shopee",
     MAGAZINE_LUIZA: "Magazine Luiza",
     ALIEXPRESS: "AliExpress",
+    KABUM: "KaBuM!",
+    CAMA_IN_BOX: "Cama In Box",
+    OLYMPIKUS: "Olympikus",
+    LEVEROS: "Leveros",
   };
 
   return nomes[marketplace];

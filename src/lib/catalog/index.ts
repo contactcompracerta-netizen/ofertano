@@ -72,6 +72,7 @@ export {
   InMemoryCatalogGateway,
   NoWriteGateway,
 } from "./transaction";
+export { PrismaCatalogGateway } from "./prismaGateway";
 export type {
   CatalogWriteGateway,
   CatalogWriteOps,

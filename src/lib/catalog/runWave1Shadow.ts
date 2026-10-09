@@ -83,6 +83,9 @@ function intEnv(name: string, fallback: number, min: number, max: number): numbe
 
 function merchantFromMarketplace(value: string): MerchantSlug | null {
   if (value === "KABUM") return "kabum";
+  if (value === "CAMA_IN_BOX") return "cama-in-box";
+  if (value === "OLYMPIKUS") return "olympikus";
+  if (value === "LEVEROS") return "leveros";
   return null;
 }
 

@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/marketplace-sync?marketplace=aliexpress&dry=false&limit=1000",
       "schedule": "29 8 * * *"
+    },
+    {
+      "path": "/api/cron/catalog-awin-wave1?phase=SHADOW&limit=250",
+      "schedule": "31 8 * * *"
     }
   ]
 }
