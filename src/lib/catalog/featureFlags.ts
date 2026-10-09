@@ -96,6 +96,18 @@ export function isAnalysisEnabled(flags: CatalogImportFlags): boolean {
 }
 
 /**
+ * Pode escrever SOMENTE no staging?
+ * Exige modo SHADOW + flag de staging. Product/MarketplaceOffer continuam intocados.
+ */
+export function isStagingWriteEnabled(flags: CatalogImportFlags): boolean {
+  return (
+    isAnalysisEnabled(flags) &&
+    flags.awinWave1StagingWriteEnabled &&
+    flags.mode === "SHADOW"
+  );
+}
+
+/**
  * Pode ESCREVER no catálogo?
  * Exige: análise ON + write ON + modo CANARY ou LIVE.
  */
