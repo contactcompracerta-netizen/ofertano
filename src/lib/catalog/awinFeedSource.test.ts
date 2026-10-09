@@ -77,6 +77,16 @@ const explicit = selectAwinFeed(
 ok(explicit.feedId === "9003", "feedId explícito resolve ambiguidade");
 
 expectThrows(
+  () =>
+    selectAwinFeed(
+      [{ ...feeds[0], advertiserId: "303", membershipStatus: "Not Joined" }],
+      "303",
+    ),
+  "AWIN_ADVERTISER_NOT_JOINED",
+  "advertiser não aprovado é bloqueado",
+);
+
+expectThrows(
   () => selectAwinFeed(feeds, "999"),
   "AWIN_FEED_NOT_FOUND",
   "advertiser ausente",
