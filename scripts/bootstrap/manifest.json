@@ -2,7 +2,7 @@
   "version": 4,
   "baselineSourceSHA": "1c4f7eaf56447a059313dde8b37801f2364042f5",
   "baselineSchemaSHA256": "fa07966a6fede6fc068755bb53b0bc7fef8de46cb3a3fffac031eddfd1024048",
-  "currentSchemaSHA256": "07b72514586e8b9163341c2c136cb6b2d259109e854dc9d2da93f2c2a9ee3c07",
+  "currentSchemaSHA256": "0807ed7d9168d0e140ac3b86384f690490b462f889dc0c8f58f65da192c5cff2",
   "baselineDDLHash": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
   "baselineMigrations": {
     "20260824000000_postgresql_baseline": "9bf7d95b73b15dfa7aef1794313aa714b3b76ab22a37b0987cd5889773ccf4df",
@@ -28,7 +28,9 @@
     "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0",
     "20260927180000_social_post_index_reconciliation": "f886a7113da3e3e5d552a9ddb76627ef8e7fbea3ff982df2ddd621c8fa07b632",
     "20260930000000_ml_listing_first": "a16cea210b413907ebfb47f7731e4a7eeedcc25bf0cb682b7f5dbd4e613fccbc",
-    "20260930120000_ml_listing_first_catalog_metadata": "26bb8f7e1bd9688750fd0ecadfc80eaf6fc3b424ad16c52ffdaa43fa7afb8abd"
+    "20260930120000_ml_listing_first_catalog_metadata": "26bb8f7e1bd9688750fd0ecadfc80eaf6fc3b424ad16c52ffdaa43fa7afb8abd",
+    "20261009000000_add_catalog_import_staging": "fbc194ea5b0e26296a2926cd86fb6eac8728f065acc74b02bae97ef8132a4c76",
+    "20261009223000_catalog_wave1_merchant_marketplaces": "7ee13ede65fcfb4416752ae785ff780f2de5a9c0a181f36fd88c7f048bc046a5"
   },
   "forwardApplicationOrder": [
     "20260915194500_rls_security_hardening",
@@ -44,9 +46,11 @@
     "20260927120000_price_alert_schema_reconciliation",
     "20260927180000_social_post_index_reconciliation",
     "20260930120000_ml_listing_first_catalog_metadata",
-    "20260930000000_ml_listing_first"
+    "20260930000000_ml_listing_first",
+    "20261009000000_add_catalog_import_staging",
+    "20261009223000_catalog_wave1_merchant_marketplaces"
   ],
-  "forwardApplicationOrderRationale": "Ordem REAL de aplicacao em PRODUCAO (coluna started_at de _prisma_migrations), que difere da ordem LEXICAL dos nomes de diretorio. 20260930000000_ml_listing_first foi aplicada em 2026-09-30T21:24:11Z, depois de 20260930120000_ml_listing_first_catalog_metadata (2026-09-30T09:51:36Z), apesar do timestamp menor. Nenhum byte das duas migrations pode ser editado (checksum pinado na ledger de producao): 20260930000000 usa ADD COLUMN IF NOT EXISTS e 20260930120000 usa ADD COLUMN simples, entao em ordem LEXICAL (20260930000000 primeiro) o replay de banco novo aborta com 42701 column already exists. Reproduzir o schema de producao exige aplicar na ordem acima.",
+  "forwardApplicationOrderRationale": "Ordem REAL de aplicacao em PRODUCAO (coluna started_at de _prisma_migrations), que difere da ordem LEXICAL dos nomes de diretorio. 20260930000000_ml_listing_first foi aplicada em 2026-09-30T21:24:11Z, depois de 20260930120000_ml_listing_first_catalog_metadata (2026-09-30T09:51:36Z), apesar do timestamp menor. Nenhum byte das duas migrations pode ser editado (checksum pinado na ledger de producao): 20260930000000 usa ADD COLUMN IF NOT EXISTS e 20260930120000 usa ADD COLUMN simples, entao em ordem LEXICAL (20260930000000 primeiro) o replay de banco novo aborta com 42701 column already exists. Reproduzir o schema de producao exige aplicar na ordem acima. Em 2026-10-09, as migrations aditivas do Catalog Wave 1 foram aplicadas depois do bloco Listing-First, nesta ordem: staging AWIN e depois os enums dos merchants aprovados.",
   "requiredArrayInvariant": "SocialPost.hashtags NOT NULL, matching unchanged historical chain",
   "localCompatibility": {
     "legacyTablesSQLSHA256": "37cc793b2369e767ca7dbd3189a485ddb670637521f3ac40ce3dfc2df3a69f7b",
