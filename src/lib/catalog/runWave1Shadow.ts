@@ -205,34 +205,40 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const feed = selectAwinFeed(feeds, advertiserId, feedId);
-    const rows = await downloadAwinFeedRows(feed, {
-      maxRows,
-      maxBytes,
-      timeoutMs: 60_000,
-    });
+    try {
+      const feed = selectAwinFeed(feeds, advertiserId, feedId);
+      const rows = await downloadAwinFeedRows(feed, {
+        maxRows,
+        maxBytes,
+        timeoutMs: 60_000,
+      });
 
-    if (rows.length === 0) {
-      blocked.push(`${merchant.slug}:EMPTY_FEED_SAMPLE`);
-      console.log(`MERCHANT=${merchant.slug} STATUS=BLOCKED REASON=EMPTY_FEED_SAMPLE`);
-      continue;
+      if (rows.length === 0) {
+        throw new Error("EMPTY_FEED_SAMPLE");
+      }
+
+      const importer = new CatalogImporterV1({
+        flags,
+        stagingStore,
+        gateway: new NoWriteGateway(),
+        existingProducts,
+        existingOffers,
+        runId,
+      });
+      const result = await importer.run(rows, merchant.slug);
+      if (result.apply !== null) {
+        throw new Error(`SHADOW_APPLY_MUST_BE_NULL:${merchant.slug}`);
+      }
+
+      processed += 1;
+      console.log(countersLine(merchant.slug, result));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      blocked.push(`${merchant.slug}:${reason}`);
+      console.log(
+        `MERCHANT=${merchant.slug} STATUS=BLOCKED REASON=${reason}`,
+      );
     }
-
-    const importer = new CatalogImporterV1({
-      flags,
-      stagingStore,
-      gateway: new NoWriteGateway(),
-      existingProducts,
-      existingOffers,
-      runId,
-    });
-    const result = await importer.run(rows, merchant.slug);
-    if (result.apply !== null) {
-      throw new Error(`SHADOW_APPLY_MUST_BE_NULL:${merchant.slug}`);
-    }
-
-    processed += 1;
-    console.log(countersLine(merchant.slug, result));
   }
 
   const productCountAfter = await prisma.product.count();
@@ -264,7 +270,12 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(blocked.length > 0 ? "SHADOW_STATUS=PARTIAL" : "SHADOW_STATUS=PASS");
+  if (blocked.length > 0) {
+    console.log("SHADOW_STATUS=PARTIAL");
+    throw new Error(`SHADOW_INCOMPLETE:${blocked.join(",")}`);
+  }
+
+  console.log("SHADOW_STATUS=PASS");
 }
 
 void main()
