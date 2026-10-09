@@ -176,6 +176,47 @@ export async function fetchAwinFeedList(
   return parseAwinFeedListCsv(decodeMaybeGzip(bytes, maxDecodedBytes));
 }
 
+function normalizedAdvertiserName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * Descobre o advertiser ID somente quando o nome do programa JOINED casa
+ * exatamente após normalização e o resultado é unívoco.
+ * Qualquer ambiguidade falha fechada.
+ */
+export function discoverJoinedAwinAdvertiserId(
+  feeds: readonly AwinFeedDescriptor[],
+  displayName: string,
+): string {
+  const wanted = normalizedAdvertiserName(displayName);
+  const ids = [
+    ...new Set(
+      feeds
+        .filter(
+          (feed) =>
+            feed.membershipStatus.trim().toLowerCase() === "joined" &&
+            normalizedAdvertiserName(feed.advertiserName) === wanted,
+        )
+        .map((feed) => feed.advertiserId),
+    ),
+  ];
+
+  if (ids.length === 0) {
+    throw new Error(`AWIN_JOINED_ADVERTISER_NOT_FOUND:name=${displayName}`);
+  }
+  if (ids.length > 1) {
+    throw new Error(
+      `AWIN_JOINED_ADVERTISER_AMBIGUOUS:name=${displayName}:count=${ids.length}`,
+    );
+  }
+  return ids[0];
+}
+
 export function selectAwinFeed(
   feeds: readonly AwinFeedDescriptor[],
   advertiserId: string,
