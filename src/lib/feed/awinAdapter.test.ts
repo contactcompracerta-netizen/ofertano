@@ -270,7 +270,7 @@ console.log("\n=== Dry Run Engine on KaBuM Fixture ===");
   assert(parsed[0].title === "Mouse Gamer G305", "product_name mapped");
   assert(parsed[0].price === "249,90", "search_price mapped");
   assert(parsed[0].advertiserId === "123", "merchant_id mapped");
-  assert(parsed[0].affiliateUrl?.includes("awin1.com"), "aw_deep_link mapped");
+  assert(parsed[0].affiliateUrl?.includes("awin1.com") === true, "aw_deep_link mapped");
   assert(parsed[0].productUrl === "https://loja.test/p/1", "merchant_deep_link mapped");
   assert(parsed[0].brand === "Logitech", "brand_name mapped");
   assert(parsed[0].gtin === "7891234567890", "product_GTIN/ean mapped");
