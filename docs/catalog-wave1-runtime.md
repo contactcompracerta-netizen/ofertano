@@ -80,7 +80,7 @@ Merchants preparados na Wave 1:
 - olympikus
 - leveros
 
-Para cada merchant é obrigatório configurar o advertiser ID real. Feed ID é opcional somente quando o advertiser tiver exatamente um feed disponível:
+Advertiser ID pode ser omitido quando o Feed List encontrar exatamente um programa JOINED cujo nome normalizado corresponda ao merchant. Se a descoberta for ausente ou ambígua, o runner bloqueia. Feed ID é opcional somente quando o advertiser tiver exatamente um feed disponível:
 
 - AWIN_KABUM_ADVERTISER_ID / AWIN_KABUM_FEED_ID
 - AWIN_CAMA_IN_BOX_ADVERTISER_ID / AWIN_CAMA_IN_BOX_FEED_ID
@@ -100,9 +100,12 @@ No SHADOW o pipeline para no plan. Não existe writer de Product/Offer no caminh
 - HTTPS obrigatório.
 - Hosts de download allowlisted: productdata.awin.com e datafeed.api.productserve.com.
 - Timeout.
-- Limite de bytes.
+- Limite de bytes transferidos.
+- Limite adicional após descompressão.
 - Limite de linhas por execução.
 - Gzip detectado por magic bytes.
+- Host inicial e host final após redirects precisam permanecer na allowlist.
+- Apenas programas com Membership Status=Joined são aceitos.
 - Credenciais não são logadas.
 
 ## Qualidade de dados
@@ -127,7 +130,7 @@ No SHADOW o pipeline para no plan. Não existe writer de Product/Offer no caminh
 - Dry-run sintético: npm run wave1:dry-run
 - Shadow real, somente após configurar credenciais/IDs: npm run wave1:shadow
 
-O runner imprime run ID, contadores por merchant, Products/Offers/Staging antes/depois, merchants processados/bloqueados, PRODUCT_WRITES=0, OFFER_WRITES=0 e SHADOW_STATUS.
+O runner imprime run ID, contadores por merchant, Products/Offers/Staging antes/depois, merchants processados/bloqueados, PRODUCT_WRITES=0, OFFER_WRITES=0 e SHADOW_STATUS. PASS exige todos os merchants da Wave 1 processados; qualquer merchant bloqueado gera PARTIAL/BLOCKED e impede promoção.
 
 Se Product ou MarketplaceOffer mudar durante SHADOW, a execução falha.
 
