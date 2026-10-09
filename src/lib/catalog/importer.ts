@@ -288,7 +288,6 @@ export class CatalogImporterV1 {
       "INVALID_PRICE",
       "INVALID_CURRENCY",
       "INVALID_DESTINATION_URL",
-      "MISSING_AFFILIATE_URL",
       "INVALID_AFFILIATE_URL",
       "UNAVAILABLE_ITEM",
     ];
