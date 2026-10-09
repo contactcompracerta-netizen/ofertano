@@ -26,6 +26,7 @@ import "dotenv/config";
 
 import prisma from "../prisma";
 import {
+  discoverJoinedAwinAdvertiserId,
   downloadAwinFeedRows,
   fetchAwinFeedList,
   selectAwinFeed,
@@ -42,6 +43,7 @@ import type {
 
 interface MerchantEnv {
   slug: MerchantSlug;
+  displayName: string;
   advertiserKey: string;
   feedKey: string;
 }
@@ -49,21 +51,25 @@ interface MerchantEnv {
 const MERCHANTS: readonly MerchantEnv[] = [
   {
     slug: "kabum",
+    displayName: "KaBuM!",
     advertiserKey: "AWIN_KABUM_ADVERTISER_ID",
     feedKey: "AWIN_KABUM_FEED_ID",
   },
   {
     slug: "cama-in-box",
+    displayName: "Cama In Box",
     advertiserKey: "AWIN_CAMA_IN_BOX_ADVERTISER_ID",
     feedKey: "AWIN_CAMA_IN_BOX_FEED_ID",
   },
   {
     slug: "olympikus",
+    displayName: "Olympikus",
     advertiserKey: "AWIN_OLYMPIKUS_ADVERTISER_ID",
     feedKey: "AWIN_OLYMPIKUS_FEED_ID",
   },
   {
     slug: "leveros",
+    displayName: "Leveros",
     advertiserKey: "AWIN_LEVEROS_ADVERTISER_ID",
     feedKey: "AWIN_LEVEROS_FEED_ID",
   },
@@ -182,12 +188,20 @@ async function main(): Promise<void> {
   let processed = 0;
 
   for (const merchant of MERCHANTS) {
-    const advertiserId = process.env[merchant.advertiserKey]?.trim();
+    const configuredAdvertiserId = process.env[merchant.advertiserKey]?.trim();
     const feedId = process.env[merchant.feedKey]?.trim();
 
-    if (!advertiserId) {
-      blocked.push(`${merchant.slug}:MISSING_ADVERTISER_ID`);
-      console.log(`MERCHANT=${merchant.slug} STATUS=BLOCKED REASON=MISSING_ADVERTISER_ID`);
+    let advertiserId: string;
+    try {
+      advertiserId =
+        configuredAdvertiserId ||
+        discoverJoinedAwinAdvertiserId(feeds, merchant.displayName);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      blocked.push(`${merchant.slug}:${reason}`);
+      console.log(
+        `MERCHANT=${merchant.slug} STATUS=BLOCKED REASON=${reason}`,
+      );
       continue;
     }
 
