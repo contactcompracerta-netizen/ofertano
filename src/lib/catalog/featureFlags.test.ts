@@ -101,6 +101,7 @@ ok(
 const analysisOnly: CatalogImportFlags = {
   catalogImportEnabled: true,
   awinWave1Enabled: true,
+  awinWave1StagingWriteEnabled: false,
   awinWave1WriteEnabled: false,
   awinWave1LiveEnabled: false,
   mode: "DRY_RUN",
@@ -135,6 +136,7 @@ ok(isLiveEnabled(liveFull), "LIVE com flag extra ON");
 const flagsOff: CatalogImportFlags = {
   catalogImportEnabled: false,
   awinWave1Enabled: false,
+  awinWave1StagingWriteEnabled: false,
   awinWave1WriteEnabled: true,
   awinWave1LiveEnabled: true,
   mode: "CANARY",
@@ -148,6 +150,7 @@ expectThrows(
 const writeOff: CatalogImportFlags = {
   catalogImportEnabled: true,
   awinWave1Enabled: true,
+  awinWave1StagingWriteEnabled: false,
   awinWave1WriteEnabled: false,
   awinWave1LiveEnabled: false,
   mode: "CANARY",
