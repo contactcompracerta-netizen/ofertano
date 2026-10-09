@@ -44,7 +44,7 @@ export default function SobrePage() {
 
       <section className="of-section">
         <div className="grid gap-3 sm:gap-4 md:grid-cols-3">
-          <article className="of-card of-card-pad">
+          <article className="of-card of-card-pad of-mobile-icon-card">
             <div className="of-icon-tile bg-emerald-50 text-lg">
               🔎
             </div>
@@ -53,13 +53,13 @@ export default function SobrePage() {
               Pesquisa simplificada
             </h2>
 
-            <p className="mt-2 of-body">
+            <p className="mt-2 of-body of-card-body">
               Organizamos produtos e informações para facilitar a busca por
               ofertas relevantes.
             </p>
           </article>
 
-          <article className="of-card of-card-pad">
+          <article className="of-card of-card-pad of-mobile-icon-card">
             <div className="of-icon-tile bg-blue-50 text-lg">
               📊
             </div>
@@ -68,13 +68,13 @@ export default function SobrePage() {
               Comparação de ofertas
             </h2>
 
-            <p className="mt-2 of-body">
+            <p className="mt-2 of-body of-card-body">
               O objetivo é apresentar preços e condições de diferentes
               marketplaces em um só lugar.
             </p>
           </article>
 
-          <article className="of-card of-card-pad">
+          <article className="of-card of-card-pad of-mobile-icon-card">
             <div className="of-icon-tile bg-amber-50 text-lg">
               🛡️
             </div>
@@ -83,7 +83,7 @@ export default function SobrePage() {
               Compra nas lojas parceiras
             </h2>
 
-            <p className="mt-2 of-body">
+            <p className="mt-2 of-body of-card-body">
               O pagamento e a entrega são realizados diretamente pelo
               marketplace responsável pela oferta.
             </p>
