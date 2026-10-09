@@ -106,6 +106,27 @@ export const MARKETPLACE_REGISTRY_V1: ReadonlyArray<MarketplaceConfigV1> = [
     capabilities: capability({ gtin: true, pixPrice: true }),
   },
   {
+    marketplaceId: "cama_in_box",
+    displayName: "Cama In Box",
+    legacyEnumValue: "CAMA_IN_BOX",
+    publicEligible: true,
+    capabilities: capability({ stock: false, shipping: false, seller: false, variants: false, gtin: false, incrementalUpdates: false, fullSnapshot: true, webhook: false, pixPrice: false }),
+  },
+  {
+    marketplaceId: "olympikus",
+    displayName: "Olympikus",
+    legacyEnumValue: "OLYMPIKUS",
+    publicEligible: true,
+    capabilities: capability({ stock: false, shipping: false, seller: false, variants: true, gtin: false, incrementalUpdates: false, fullSnapshot: true, webhook: false, pixPrice: false }),
+  },
+  {
+    marketplaceId: "leveros",
+    displayName: "Leveros",
+    legacyEnumValue: "LEVEROS",
+    publicEligible: true,
+    capabilities: capability({ stock: false, shipping: false, seller: false, variants: false, gtin: false, incrementalUpdates: false, fullSnapshot: true, webhook: false, pixPrice: false }),
+  },
+  {
     marketplaceId: "terabyte",
     displayName: "Terabyte",
     legacyEnumValue: "TERABYTE",

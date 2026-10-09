@@ -42,7 +42,8 @@ export const previewPendingBeforeDeploy = [...priceAlertReconciliationPending];
 export const socialPostReconciliationPending = ['20260927180000_social_post_index_reconciliation'];
 const knownNames = ['20260824120000_analytics_intelligence', '20260828220000_admin_push_subscription'];
 const rlsNames = ['20260915194500_rls_security_hardening', '20260915203000_fix_rls_product_public_read'];
-export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration, ...schemaReconciliationPending, ...priceAlertReconciliationPending, ...socialPostReconciliationPending, ...mlListingFirstMigration];
+export const catalogWave1Applied = ['20261009000000_add_catalog_import_staging', '20261009223000_catalog_wave1_merchant_marketplaces'];
+export const canonicalForwardInventory = [...rlsNames, ...commercePending, ...architecturePending, ...blockingKeyMigration, ...schemaReconciliationPending, ...priceAlertReconciliationPending, ...socialPostReconciliationPending, ...mlListingFirstMigration, ...catalogWave1Applied];
 // BOOTSTRAP RETROATIVO: migration que ordena DENTRO da cadeia historica
 // (<= lastBaseline) mas ainda NAO foi executada em producao. Nao entra em
 // canonicalForwardInventory de proposito: o invariante normal "forward >

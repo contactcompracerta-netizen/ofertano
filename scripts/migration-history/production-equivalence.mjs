@@ -119,4 +119,4 @@ const CONTRACT_SHA256 = '1f601c891992bbd0ab39c059a1d715bb6a40740f2cfe31fccd7d606
 // LISTING-FIRST: reemitido para o schema.prisma com `MarketplaceOffer.catalogProductId`
 // + `@@index([marketplace, catalogProductId])`. Mudanca aditiva e revisada; o overlay
 // de producao (unmanaged Favorite/PriceAlertEvent/notifications/price_alerts) nao muda.
-const RUNTIME_SCHEMA_SHA256 = '2b8d0010e5732962a8a5ba27b73da2b0a9ce42398a0301b0467a0dd99d033169';
+const RUNTIME_SCHEMA_SHA256 = '6f5033e361a32a414e5395cd6104cc3c32ef8f7259426804b6bbb9eeec301659';

@@ -23,7 +23,9 @@
     "20260927120000_price_alert_schema_reconciliation": "0ddb1f8073a18acfd3f943f942f748f2de696960fcdffd9c0b55014370f43ae0",
     "20260927180000_social_post_index_reconciliation": "f886a7113da3e3e5d552a9ddb76627ef8e7fbea3ff982df2ddd621c8fa07b632",
     "20260930000000_ml_listing_first": "a16cea210b413907ebfb47f7731e4a7eeedcc25bf0cb682b7f5dbd4e613fccbc",
-    "20260930120000_ml_listing_first_catalog_metadata": "26bb8f7e1bd9688750fd0ecadfc80eaf6fc3b424ad16c52ffdaa43fa7afb8abd"
+    "20260930120000_ml_listing_first_catalog_metadata": "26bb8f7e1bd9688750fd0ecadfc80eaf6fc3b424ad16c52ffdaa43fa7afb8abd",
+    "20261009000000_add_catalog_import_staging": "fbc194ea5b0e26296a2926cd86fb6eac8728f065acc74b02bae97ef8132a4c76",
+    "20261009223000_catalog_wave1_merchant_marketplaces": "7ee13ede65fcfb4416752ae785ff780f2de5a9c0a181f36fd88c7f048bc046a5"
   },
   "knownDivergences": {
     "20260824120000_analytics_intelligence": {
@@ -52,7 +54,7 @@
     }
   },
   "baselineDDLChecksum": "47e140b8150e46d11327b326f9e90c77ecfd5af82560799c8e87d8ffa4c3f4be",
-  "schemaChecksum": "07b72514586e8b9163341c2c136cb6b2d259109e854dc9d2da93f2c2a9ee3c07",
+  "schemaChecksum": "0807ed7d9168d0e140ac3b86384f690490b462f889dc0c8f58f65da192c5cff2",
   "productionForwardApplicationOrder": [
     "20260915194500_rls_security_hardening",
     "20260915203000_fix_rls_product_public_read",
@@ -67,7 +69,9 @@
     "20260927120000_price_alert_schema_reconciliation",
     "20260927180000_social_post_index_reconciliation",
     "20260930120000_ml_listing_first_catalog_metadata",
-    "20260930000000_ml_listing_first"
+    "20260930000000_ml_listing_first",
+    "20261009000000_add_catalog_import_staging",
+    "20261009223000_catalog_wave1_merchant_marketplaces"
   ],
   "productionAppliedSteps": {
     "20260824000000_postgresql_baseline": 0,
@@ -89,6 +93,8 @@
     "20260927100000_schema_reconciliation": 1,
     "20260927120000_price_alert_schema_reconciliation": 1,
     "20260930120000_ml_listing_first_catalog_metadata": 1,
-    "20260930000000_ml_listing_first": 1
+    "20260930000000_ml_listing_first": 1,
+    "20261009000000_add_catalog_import_staging": 1,
+    "20261009223000_catalog_wave1_merchant_marketplaces": 1
   }
 }

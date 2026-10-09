@@ -414,8 +414,11 @@ export class CatalogImporterV1 {
     for (const item of writers) {
       const perMerchant = this.canaryAppliedPerMerchant.get(item.merchant) ?? 0;
       if (
-        perMerchant >= CANARY_MAX_PER_ADVERTISER ||
-        this.canaryAppliedTotal >= CANARY_MAX_TOTAL
+        this.flags.mode === "CANARY" &&
+        (
+          perMerchant >= CANARY_MAX_PER_ADVERTISER ||
+          this.canaryAppliedTotal >= CANARY_MAX_TOTAL
+        )
       ) {
         result.skippedCanaryLimit += 1;
         continue;
@@ -464,6 +467,9 @@ export class CatalogImporterV1 {
               externalId: item.externalId,
               price: item.staging.price ?? 0,
               title: item.staging.title,
+              ...(item.staging.imageUrl !== undefined
+                ? { imageUrl: item.staging.imageUrl }
+                : {}),
               ...(item.staging.destinationUrl !== undefined
                 ? { sourceUrl: item.staging.destinationUrl }
                 : {}),
@@ -515,6 +521,9 @@ export class CatalogImporterV1 {
       ...(item.staging.imageUrl !== undefined
         ? { imageUrl: item.staging.imageUrl }
         : {}),
+      ...(item.staging.description !== undefined ? { description: item.staging.description } : {}),
+      ...(item.staging.category !== undefined ? { category: item.staging.category } : {}),
+      ...(item.staging.affiliateUrl !== undefined ? { affiliateUrl: item.staging.affiliateUrl } : {}),
       source: item.staging.source,
       merchant: item.merchant,
       externalId: item.externalId,

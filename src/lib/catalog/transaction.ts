@@ -19,6 +19,9 @@ export interface ProductDraft {
   price: number;
   currency: string;
   imageUrl?: string;
+  description?: string;
+  category?: string;
+  affiliateUrl?: string;
   source: string;
   merchant: string;
   externalId: string;
@@ -30,6 +33,7 @@ export interface OfferDraft {
   externalId: string;
   price: number;
   title: string;
+  imageUrl?: string;
   sourceUrl?: string;
   affiliateUrl?: string;
 }
