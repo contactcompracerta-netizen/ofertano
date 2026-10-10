@@ -39,7 +39,7 @@ const base: ShopeeAffiliateOffer = {
 const product = toShopeeProductImport(base);
 assert.ok(product);
 assert.equal(product.marketplace, "Shopee");
-assert.equal(product.externalId, "123456789");
+assert.equal(product.externalId, "998877.123456789");
 assert.equal(product.price, 1899.9);
 assert.equal(product.affiliateLink, base.offerLink);
 assert.equal(product.url, base.productLink);
@@ -56,6 +56,11 @@ assert.equal(
   toShopeeProductImport({ ...base, offerLink: "" }),
   null,
   "sem link afiliado nunca vira seed",
+);
+assert.equal(
+  toShopeeProductImport({ ...base, shopId: 0 }),
+  null,
+  "sem shopId válido não existe identidade de listing",
 );
 assert.equal(
   toShopeeProductImport({ ...base, productLink: "javascript:alert(1)" }),

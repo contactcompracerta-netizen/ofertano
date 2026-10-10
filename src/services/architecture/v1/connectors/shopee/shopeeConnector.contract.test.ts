@@ -145,7 +145,7 @@ async function main() {
   /* --- 3. NORMALIZACAO + IDENTIDADE (FASE F / G) ----------------------- */
   assert.equal(listing.contractVersion, "normalized-listing/v1");
   assert.equal(listing.marketplaceId, SHOPEE_MARKETPLACE_ID);
-  assert.equal(listing.externalListingId, "1001");
+  assert.equal(listing.externalListingId, "77.1001");
   assert.equal(listing.source, "shopee-affiliate");
   assert.equal(listing.seller.externalSellerId, "77");
   assert.equal(listing.seller.name, "Loja Oficial");
@@ -254,7 +254,7 @@ async function main() {
   {
     const record = await repository.findListing({
       marketplaceId: SHOPEE_MARKETPLACE_ID,
-      externalListingId: "1001",
+      externalListingId: "77.1001",
     });
     assert.ok(record, "record existe antes do replay");
     const before = repository.allRecords().length;
@@ -278,7 +278,7 @@ async function main() {
     );
     assert.equal(
       listingKeyToString(record.key),
-      `${SHOPEE_MARKETPLACE_ID}:1001`,
+      `${SHOPEE_MARKETPLACE_ID}:77.1001`,
     );
   }
 
@@ -286,7 +286,7 @@ async function main() {
   {
     const record = await repository.findListing({
       marketplaceId: SHOPEE_MARKETPLACE_ID,
-      externalListingId: "1001",
+      externalListingId: "77.1001",
     });
     assert.ok(record);
     const replay = await reprocessRawListing(
@@ -302,7 +302,7 @@ async function main() {
     const repository2 = new InMemoryRawListingRepository();
     const ml = buildFakeListing({
       marketplaceId: "mercado_livre",
-      externalListingId: "1001",
+      externalListingId: "77.1001",
       identity: { gtin: ["7891234567890"], brand: "Samsung", model: "Galaxy Watch 4" },
       catalog: { title: "Smartwatch Samsung Galaxy Watch 4 44mm" },
       commerce: { price: 1349 },

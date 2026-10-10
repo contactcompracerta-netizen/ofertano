@@ -447,8 +447,20 @@ export class ShopeeMarketplaceConnector implements MarketplaceConnector {
     node: ShopeeOfferNodeV1,
   ): NormalizedMarketplaceListingV1 | null {
     const itemId = String(node.itemId ?? "").trim();
+    const shopId = String(node.shopId ?? "").trim();
     const price = toPositiveNumber(node.price);
-    if (itemId === "" || price === null) return null;
+    if (
+      itemId === "" ||
+      shopId === "" ||
+      !/^\d+$/.test(itemId) ||
+      !/^\d+$/.test(shopId) ||
+      /^0+$/.test(itemId) ||
+      /^0+$/.test(shopId) ||
+      price === null
+    ) {
+      return null;
+    }
+    const externalListingId = `${shopId}.${itemId}`;
 
     // A URL do produto tambem passa pelo filtro de seguranca (FASE R): se a
     // fonte mandar um esquema perigoso, ele nunca chega a ser persistido.
@@ -463,10 +475,9 @@ export class ShopeeMarketplaceConnector implements MarketplaceConnector {
       marketplaceId: this.marketplaceId,
       // FASE G: identidade = (marketplaceId, externalListingId).
       // Seller SKU / URL / GTIN nunca entram aqui.
-      externalListingId: itemId,
+      externalListingId,
       seller: {
-        externalSellerId:
-          String(node.shopId ?? "").trim() || null,
+        externalSellerId: shopId,
         name: trimmed(node.shopName),
       },
       identity: {
@@ -636,8 +647,21 @@ export class ShopeeMarketplaceConnector implements MarketplaceConnector {
 
     const normalized = this.tryNormalize(node);
     if (normalized === null) return null;
-    this.rawByExternalId.set(normalized.externalListingId, node);
-    return normalized;
+
+    /*
+     * Compatibilidade de refresh durante a migração:
+     * bindings legadas persistiram somente itemId. O lookup aceita essa chave
+     * e devolve a mesma identidade pedida para que o writer atualize a linha
+     * existente, sem criar um segundo externalId. Coletas novas usam sempre
+     * shopId.itemId, que é a identidade canônica da listing Shopee.
+     */
+    const result =
+      composite === null && bare !== null
+        ? { ...normalized, externalListingId: raw }
+        : normalized;
+
+    this.rawByExternalId.set(result.externalListingId, node);
+    return result;
   }
 
   /**
