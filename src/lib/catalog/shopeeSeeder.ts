@@ -79,7 +79,10 @@ export function toShopeeProductImport(
 ): ProductImport | null {
   const itemId = String(offer.itemId ?? "").trim();
   const shopId = String(offer.shopId ?? "").trim();
-  const externalId = itemId && shopId ? `${shopId}.${itemId}` : "";
+  const validItemId = /^\d+$/.test(itemId) && !/^0+$/.test(itemId);
+  const validShopId = /^\d+$/.test(shopId) && !/^0+$/.test(shopId);
+  const externalId =
+    validItemId && validShopId ? `${shopId}.${itemId}` : "";
   const title = String(offer.productName ?? "").trim();
   const price = positiveNumber(offer.price);
   const productUrl = safeHttps(offer.productLink);
