@@ -216,6 +216,27 @@ export function discoverJoinedAwinAdvertiserId(
   return ids[0];
 }
 
+export function listJoinedAwinFeeds(
+  feeds: readonly AwinFeedDescriptor[],
+  advertiserId: string,
+): AwinFeedDescriptor[] {
+  return feeds
+    .filter(
+      (feed) =>
+        feed.advertiserId === advertiserId.trim() &&
+        feed.membershipStatus.trim().toLowerCase() === "joined" &&
+        isAllowedAwinDownloadUrl(feed.downloadUrl),
+    )
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.lastImported);
+      const rightTime = Date.parse(right.lastImported);
+      const safeLeft = Number.isFinite(leftTime) ? leftTime : 0;
+      const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
+      if (safeLeft !== safeRight) return safeRight - safeLeft;
+      return left.feedId.localeCompare(right.feedId);
+    });
+}
+
 export function selectAwinFeed(
   feeds: readonly AwinFeedDescriptor[],
   advertiserId: string,
