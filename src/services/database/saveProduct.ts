@@ -2899,8 +2899,20 @@ export async function saveProduct(
         identificadores.gtin)
         ? await tx.product.findMany({
             where: {
-              active: true,
+              /*
+               * Produtos autoCreated de uma única loja ficam DRAFT/inativos
+               * até o gate Multi Loja. Eles AINDA precisam participar do
+               * matching cross-market; ignorá-los aqui impede que a segunda
+               * loja encontre o Product canônico e o catálogo nunca converge.
+               * O Exact Matcher abaixo continua sendo a autorização de merge.
+               */
               OR: [
+                { active: true },
+                { autoCreated: true, publicationStatus: "DRAFT" },
+              ],
+              AND: [
+                {
+                  OR: [
                 ...marcasParaBusca.map(
                   (marca) => ({
                     brand: {
@@ -2961,6 +2973,8 @@ export async function saveProduct(
                       },
                     ]
                   : []),
+                  ],
+                },
               ],
             },
             take: 30,
