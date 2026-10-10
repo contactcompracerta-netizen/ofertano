@@ -322,24 +322,28 @@ export class CatalogImporterV1 {
     if (status === "INVALID") {
       decision = "REJECT";
     } else if (status === "PARTIAL") {
-      // Conservador: nada de escrita com item incompleto.
+      // Item incompleto não escreve. Aquisição exige preço, URLs e imagem utilizáveis.
       decision = "REVIEW";
-    } else if (identity.level === "D") {
-      decision = "REVIEW";
-      allReasons.push("WEAK_IDENTITY");
-    } else if (identity.level === "C") {
-      decision = "REVIEW";
-      allReasons.push("PARTIAL_IDENTITY");
     } else if (match.conflict) {
+      // Conflito real continua bloqueando qualquer merge/escrita automática.
       decision = "REVIEW";
     } else if (match.productId && match.confidence >= AUTO_MATCH_THRESHOLD) {
       decision = "MATCH_PRODUCT";
       allReasons.push("AUTO_MATCH");
     } else if (match.productId && match.confidence >= REVIEW_THRESHOLD) {
+      // Candidato plausível, mas não forte o suficiente: não duplica nem funde.
       decision = "REVIEW";
       allReasons.push("REVIEW_THRESHOLD");
     } else {
+      /*
+       * AQUISIÇÃO != MATCHING.
+       * Feed oficial aprovado pode semear Product DRAFT mesmo sem GTIN/MPN/model.
+       * Nível C/D não pode auto-merge, mas também não pode fazer o produto sumir.
+       * O Product segue autoCreated+DRAFT/inativo até o gate Multi Loja liberar.
+       */
       decision = "CREATE_PRODUCT";
+      if (identity.level === "D") allReasons.push("WEAK_IDENTITY");
+      if (identity.level === "C") allReasons.push("PARTIAL_IDENTITY");
       allReasons.push("NEW_PRODUCT_CANDIDATE");
     }
 
