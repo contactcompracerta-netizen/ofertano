@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { discoverJoinedAwinAdvertiserId, downloadAwinFeedRows, fetchAwinFeedList, selectAwinFeed } from "@/lib/catalog/awinFeedSource";
+import { discoverJoinedAwinAdvertiserId, downloadAwinFeedRows, fetchAwinFeedList, listJoinedAwinFeeds } from "@/lib/catalog/awinFeedSource";
 import { CatalogImporterV1 } from "@/lib/catalog/importer";
 import { PrismaCatalogGateway } from "@/lib/catalog/prismaGateway";
 import { PrismaStagingStore } from "@/lib/catalog/prismaStaging";
@@ -9,11 +9,11 @@ import type { CatalogImportFlags } from "@/lib/catalog/featureFlags";
 import type { ExistingOfferRef, ExistingProductRef, MerchantSlug } from "@/lib/catalog/types";
 export const dynamic="force-dynamic"; export const maxDuration=300;
 type Phase="SHADOW"|"CANARY"|"LIVE";
-const MERCHANTS:ReadonlyArray<{slug:MerchantSlug;displayName:string;advertiserKey:string;feedKey:string}>=[
- {slug:"kabum",displayName:"KaBuM!",advertiserKey:"AWIN_KABUM_ADVERTISER_ID",feedKey:"AWIN_KABUM_FEED_ID"},
- {slug:"cama-in-box",displayName:"Cama In Box",advertiserKey:"AWIN_CAMA_IN_BOX_ADVERTISER_ID",feedKey:"AWIN_CAMA_IN_BOX_FEED_ID"},
- {slug:"olympikus",displayName:"Olympikus",advertiserKey:"AWIN_OLYMPIKUS_ADVERTISER_ID",feedKey:"AWIN_OLYMPIKUS_FEED_ID"},
- {slug:"leveros",displayName:"Leveros",advertiserKey:"AWIN_LEVEROS_ADVERTISER_ID",feedKey:"AWIN_LEVEROS_FEED_ID"},
+const MERCHANTS:ReadonlyArray<{slug:MerchantSlug;aliases:readonly string[];advertiserKey:string;feedKey:string}>=[
+ {slug:"kabum",aliases:["KaBuM BR","KaBuM!","KaBuM"],advertiserKey:"AWIN_KABUM_ADVERTISER_ID",feedKey:"AWIN_KABUM_FEED_ID"},
+ {slug:"cama-in-box",aliases:["Cama In Box BR","Cama In Box"],advertiserKey:"AWIN_CAMA_IN_BOX_ADVERTISER_ID",feedKey:"AWIN_CAMA_IN_BOX_FEED_ID"},
+ {slug:"olympikus",aliases:["Olympikus BR","Olympikus"],advertiserKey:"AWIN_OLYMPIKUS_ADVERTISER_ID",feedKey:"AWIN_OLYMPIKUS_FEED_ID"},
+ {slug:"leveros",aliases:["Leveros BR","Leveros"],advertiserKey:"AWIN_LEVEROS_ADVERTISER_ID",feedKey:"AWIN_LEVEROS_FEED_ID"},
 ];
 function merchantFromMarketplace(v:string):MerchantSlug|null{if(v==="KABUM")return"kabum";if(v==="CAMA_IN_BOX")return"cama-in-box";if(v==="OLYMPIKUS")return"olympikus";if(v==="LEVEROS")return"leveros";return null;}
 function flagsFor(p:Phase):CatalogImportFlags{return{catalogImportEnabled:true,awinWave1Enabled:true,awinWave1StagingWriteEnabled:p==="SHADOW",awinWave1WriteEnabled:p!=="SHADOW",awinWave1LiveEnabled:p==="LIVE",mode:p};}
@@ -39,12 +39,27 @@ export async function GET(request:Request){
   const feeds=await fetchAwinFeedList(apiKey,{maxBytes:8*1024*1024,timeoutMs:30000}); if(feeds.length===0)throw new Error("AWIN_FEED_LIST_EMPTY");
   const reports:Array<Record<string,unknown>>=[];let failures=0;
   for(const m of MERCHANTS){try{
-    const advertiserId=process.env[m.advertiserKey]?.trim()||discoverJoinedAwinAdvertiserId(feeds,m.displayName);
-    const feed=selectAwinFeed(feeds,advertiserId,process.env[m.feedKey]?.trim());
-    const rows=await downloadAwinFeedRows(feed,{maxRows,maxBytes:64*1024*1024,maxDecodedBytes:128*1024*1024,timeoutMs:60000}); if(rows.length===0)throw new Error("EMPTY_FEED_SAMPLE");
+    const advertiserId=process.env[m.advertiserKey]?.trim()||discoverJoinedAwinAdvertiserId(feeds,m.aliases);
+    const configuredFeedId=process.env[m.feedKey]?.trim();
+    const joinedFeeds=configuredFeedId
+      ? listJoinedAwinFeeds(feeds,advertiserId).filter(feed=>feed.feedId===configuredFeedId)
+      : listJoinedAwinFeeds(feeds,advertiserId);
+    if(joinedFeeds.length===0)throw new Error("AWIN_JOINED_FEED_NOT_FOUND");
+    const byExternalId=new Map<string,Awaited<ReturnType<typeof downloadAwinFeedRows>>[number]>();
+    const feedReports:Array<{feedId:string;feedName:string;lastImported:string;rows:number}>=[];
+    for(const feed of joinedFeeds.slice(0,10)){
+      if(byExternalId.size>=maxRows)break;
+      const part=await downloadAwinFeedRows(feed,{maxRows:maxRows-byExternalId.size,maxBytes:64*1024*1024,maxDecodedBytes:128*1024*1024,timeoutMs:60000});
+      feedReports.push({feedId:feed.feedId,feedName:feed.feedName,lastImported:feed.lastImported,rows:part.length});
+      for(const raw of part){
+        const externalId=String(raw.productId??raw.sku??raw.id??"").trim();
+        if(externalId&&!byExternalId.has(externalId))byExternalId.set(externalId,raw);
+      }
+    }
+    const rows=[...byExternalId.values()]; if(rows.length===0)throw new Error("EMPTY_FEED_SAMPLE");
     const state=await loadState(),importer=new CatalogImporterV1({flags:flagsFor(phase),stagingStore:new PrismaStagingStore(prisma),gateway:phase==="SHADOW"?new NoWriteGateway():new PrismaCatalogGateway(prisma),existingProducts:state.products,existingOffers:state.offers,runId});
     const result=await importer.run(rows,m.slug),c=result.plan.counters;if(result.apply?.failed)failures+=result.apply.failed;
-    reports.push({merchant:m.slug,advertiserId:feed.advertiserId,feedId:feed.feedId,feedName:feed.feedName,membershipStatus:feed.membershipStatus,lastImported:feed.lastImported,rows:rows.length,wouldCreateProducts:c.wouldCreateProducts,wouldMatchProducts:c.wouldMatchProducts,wouldCreateOffers:c.wouldCreateOffers,wouldUpdateOffers:c.wouldUpdateOffers,wouldReview:c.wouldReview,wouldReject:c.wouldReject,duplicateExternalIds:result.plan.duplicateExternalIds,apply:result.apply});
+    reports.push({merchant:m.slug,advertiserId,feedCount:joinedFeeds.length,feeds:feedReports,rows:rows.length,wouldCreateProducts:c.wouldCreateProducts,wouldMatchProducts:c.wouldMatchProducts,wouldCreateOffers:c.wouldCreateOffers,wouldUpdateOffers:c.wouldUpdateOffers,wouldReview:c.wouldReview,wouldReject:c.wouldReject,duplicateExternalIds:result.plan.duplicateExternalIds,apply:result.apply});
    }catch(e){failures+=1;reports.push({merchant:m.slug,error:e instanceof Error?e.message:"UNKNOWN_ERROR"});}}
   const productsAfter=await prisma.product.count(),offersAfter=await prisma.marketplaceOffer.count();
   if(phase==="SHADOW"&&(productsBefore!==productsAfter||offersBefore!==offersAfter))throw new Error("SHADOW_CATALOG_CHANGED");
