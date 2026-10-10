@@ -1,3 +1,4 @@
+import { isAwinCronAuthorized, isAwinPhaseEnabled, isEnabled } from "@/lib/catalog/awinRolloutGuards";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { discoverJoinedAwinAdvertiserId, downloadAwinFeedRows, fetchAwinFeedList, listJoinedAwinFeeds } from "@/lib/catalog/awinFeedSource";
@@ -16,7 +17,7 @@ const MERCHANTS:ReadonlyArray<{slug:MerchantSlug;aliases:readonly string[];adver
  {slug:"leveros",aliases:["Leveros BR","Leveros"],advertiserKey:"AWIN_LEVEROS_ADVERTISER_ID",feedKey:"AWIN_LEVEROS_FEED_ID"},
 ];
 function merchantFromMarketplace(v:string):MerchantSlug|null{if(v==="KABUM")return"kabum";if(v==="CAMA_IN_BOX")return"cama-in-box";if(v==="OLYMPIKUS")return"olympikus";if(v==="LEVEROS")return"leveros";return null;}
-function flagsFor(p:Phase):CatalogImportFlags{return{catalogImportEnabled:true,awinWave1Enabled:true,awinWave1StagingWriteEnabled:p==="SHADOW",awinWave1WriteEnabled:p!=="SHADOW",awinWave1LiveEnabled:p==="LIVE",mode:p};}
+function flagsFor(p:Phase):CatalogImportFlags{return{catalogImportEnabled:true,awinWave1Enabled:true,awinWave1StagingWriteEnabled:p==="SHADOW",awinWave1WriteEnabled:p!=="SHADOW"&&isEnabled(process.env.AWIN_WAVE1_WRITE_ENABLED),awinWave1LiveEnabled:p==="LIVE"&&isEnabled(process.env.AWIN_WAVE1_LIVE_ENABLED),mode:p};}
 function parsePhase(v:string|null):Phase|null{const p=v?.trim().toUpperCase();return p==="SHADOW"||p==="CANARY"||p==="LIVE"?p:null;}
 function limitFor(raw:string|null,p:Phase){const f=p==="SHADOW"?250:p==="CANARY"?25:100,c=p==="SHADOW"?1000:p==="CANARY"?25:500,n=Number.parseInt(raw??"",10);return Number.isFinite(n)&&n>0?Math.min(Math.trunc(n),c):f;}
 async function loadState():Promise<{products:ExistingProductRef[];offers:ExistingOfferRef[]}>{
@@ -28,10 +29,11 @@ async function loadState():Promise<{products:ExistingProductRef[];offers:Existin
  return{products,offers};
 }
 export async function GET(request:Request){
- const preview=process.env.VERCEL_ENV==="preview",secret=process.env.CRON_SECRET;
- if(!preview&&(!secret||request.headers.get("authorization")!==`Bearer ${secret}`))return NextResponse.json({success:false,error:"Acesso não autorizado."},{status:401});
+ const secret=process.env.CRON_SECRET;
+ if(!isAwinCronAuthorized(request.headers.get("authorization"),secret))return NextResponse.json({success:false,error:"Acesso não autorizado."},{status:401});
  if(process.env.AWIN_WAVE1_ROLLOUT_ENABLED?.trim().toLowerCase()!=="true")return NextResponse.json({success:false,error:"AWIN_WAVE1_ROLLOUT_DISABLED"},{status:403});
  const url=new URL(request.url),phase=parsePhase(url.searchParams.get("phase")); if(!phase)return NextResponse.json({success:false,error:"PHASE_REQUIRED: SHADOW|CANARY|LIVE"},{status:400});
+ if(!isAwinPhaseEnabled(phase,{AWIN_WAVE1_WRITE_ENABLED:process.env.AWIN_WAVE1_WRITE_ENABLED,AWIN_WAVE1_LIVE_ENABLED:process.env.AWIN_WAVE1_LIVE_ENABLED}))return NextResponse.json({success:false,error:"AWIN_PHASE_NOT_ENABLED"},{status:403});
  const apiKey=process.env.AWIN_DATAFEED_API_KEY?.trim(); if(!apiKey)return NextResponse.json({success:false,error:"AWIN_DATAFEED_API_KEY_MISSING"},{status:503});
  const maxRows=limitFor(url.searchParams.get("limit"),phase),runId=`awin-${phase.toLowerCase()}-${new Date().toISOString().replace(/[:.]/g,"-")}`;
  const productsBefore=await prisma.product.count(),offersBefore=await prisma.marketplaceOffer.count();

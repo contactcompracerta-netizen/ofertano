@@ -52,7 +52,7 @@
     "wave1:dry-run": "tsx src/lib/catalog/runWave1DryRun.ts",
     "test:migration-replay": "node scripts/bootstrap/ml-listing-first-replay.integration.mjs",
     "test:feed-ingestion": "tsx src/lib/feed/urlSafety.test.ts && tsx src/lib/feed/normalization/index.test.ts && tsx src/lib/feed/awinAdapter.test.ts && tsx src/lib/feed/dryRunEngine.test.ts",
-    "test:catalog-wave1-runtime": "npm run test:feed-ingestion && npm run test:catalog-wave1 && tsx src/lib/catalog/awinFeedSource.test.ts && npm run test:shopee-catalog-seeder",
+    "test:catalog-wave1-runtime": "npm run test:feed-ingestion && npm run test:catalog-wave1 && tsx src/lib/catalog/awinFeedSource.test.ts && npm run test:shopee-catalog-seeder && tsx src/lib/catalog/awinRolloutGuards.test.ts",
     "wave1:shadow": "tsx src/lib/catalog/runWave1Shadow.ts",
     "test:shopee-catalog-seeder": "tsx src/lib/catalog/shopeeSeeder.test.ts"
   },
