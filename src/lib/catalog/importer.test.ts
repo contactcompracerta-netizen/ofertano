@@ -127,8 +127,8 @@ async function main(): Promise<void> {
   ok(kb.wouldReject === 3, `kabum reject=3 (got ${kb.wouldReject})`);
 
   const ci = countersByMerchant["cama-in-box"];
-  ok(ci.wouldCreateProducts === 1, "cama create=1");
-  ok(ci.wouldReview === 2, `cama review=2 (got ${ci.wouldReview})`);
+  ok(ci.wouldCreateProducts === 2, `cama create=2 (got ${ci.wouldCreateProducts})`);
+  ok(ci.wouldReview === 1, `cama review=1 (got ${ci.wouldReview})`);
   ok(ci.wouldReject === 0, "cama reject=0");
 
   const ol = countersByMerchant.olympikus;
@@ -183,9 +183,10 @@ async function main(): Promise<void> {
   ok(c2.offerAction === "NONE", "c2 não escreve oferta");
 
   const c3 = find(ciRun.plan.items, "CIB-2003");
-  ok(c3.decision === "REVIEW", "c3 identidade fraca => REVIEW");
+  ok(c3.decision === "CREATE_PRODUCT", "c3 identidade fraca => seed DRAFT");
   ok(c3.identityLevel === "D", "c3 nível D");
   ok(c3.reasonCodes.includes("WEAK_IDENTITY"), "c3 reason WEAK_IDENTITY");
+  ok(c3.offerAction === "CREATE_OFFER", "c3 cria oferta da fonte aprovada");
 
   /* leveros: preço inválido ---------------------------------------------- */
   const lvRun = await dry.importer.run(fixtureSetFor("leveros").rows, "leveros");
@@ -254,7 +255,7 @@ async function main(): Promise<void> {
   ok(mk2.matchConfidence === 0.9, `k2 confiança 0.9 (got ${mk2.matchConfidence})`);
   ok(m3run.plan.counters.wouldCreateProducts === 4, "resto segue CREATE");
 
-  // (d) Identidade C => REVIEW.
+  // (d) Identidade C => pode semear Product DRAFT, mas não auto-merge.
   const m4 = harness(flags());
   const m4run = await m4.importer.run(
     [
@@ -272,9 +273,10 @@ async function main(): Promise<void> {
     "kabum",
   );
   const cItem = find(m4run.plan.items, "C-1");
-  ok(cItem.decision === "REVIEW", "identidade C => REVIEW");
+  ok(cItem.decision === "CREATE_PRODUCT", "identidade C => seed DRAFT");
   ok(cItem.identityLevel === "C", "nível C");
   ok(cItem.reasonCodes.includes("PARTIAL_IDENTITY"), "reason PARTIAL_IDENTITY");
+  ok(cItem.offerAction === "CREATE_OFFER", "identidade C => oferta da fonte aprovada");
 
   // (e) Imagem inválida => PARTIAL => REVIEW.
   const m5 = harness(flags());

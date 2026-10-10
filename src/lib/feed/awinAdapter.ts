@@ -507,9 +507,17 @@ function detectDelimiter(input: string): "," | "\t" | ";" {
   return best;
 }
 
+function normalizeAwinColumnName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function first(row: Record<string, string>, keys: readonly string[]): string | undefined {
   for (const key of keys) {
-    const value = row[key];
+    const value = row[key] ?? row[normalizeAwinColumnName(key)];
     if (typeof value === "string" && value.trim() !== "") return value.trim();
   }
   return undefined;
@@ -580,7 +588,7 @@ export function parseAwinCsv(input: string): RawAwinFeedItem[] {
   const rows = parseCsvDocument(input);
   if (rows.length < 2) return [];
 
-  const headers = rows[0].map((header) => header.trim());
+  const headers = rows[0].map(normalizeAwinColumnName);
   const results: RawAwinFeedItem[] = [];
 
   for (const values of rows.slice(1)) {

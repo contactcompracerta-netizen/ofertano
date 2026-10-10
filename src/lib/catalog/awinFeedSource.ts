@@ -191,30 +191,50 @@ function normalizedAdvertiserName(value: string): string {
  */
 export function discoverJoinedAwinAdvertiserId(
   feeds: readonly AwinFeedDescriptor[],
-  displayName: string,
+  displayName: string | readonly string[],
 ): string {
-  const wanted = normalizedAdvertiserName(displayName);
+  const aliases = Array.isArray(displayName) ? [...displayName] : [displayName];
+  const wanted = new Set(aliases.map(normalizedAdvertiserName));
   const ids = [
     ...new Set(
       feeds
         .filter(
           (feed) =>
             feed.membershipStatus.trim().toLowerCase() === "joined" &&
-            normalizedAdvertiserName(feed.advertiserName) === wanted,
+            wanted.has(normalizedAdvertiserName(feed.advertiserName)),
         )
         .map((feed) => feed.advertiserId),
     ),
   ];
 
   if (ids.length === 0) {
-    throw new Error(`AWIN_JOINED_ADVERTISER_NOT_FOUND:name=${displayName}`);
+    throw new Error("AWIN_JOINED_ADVERTISER_NOT_FOUND");
   }
   if (ids.length > 1) {
-    throw new Error(
-      `AWIN_JOINED_ADVERTISER_AMBIGUOUS:name=${displayName}:count=${ids.length}`,
-    );
+    throw new Error("AWIN_JOINED_ADVERTISER_AMBIGUOUS");
   }
   return ids[0];
+}
+
+export function listJoinedAwinFeeds(
+  feeds: readonly AwinFeedDescriptor[],
+  advertiserId: string,
+): AwinFeedDescriptor[] {
+  return feeds
+    .filter(
+      (feed) =>
+        feed.advertiserId === advertiserId.trim() &&
+        feed.membershipStatus.trim().toLowerCase() === "joined" &&
+        isAllowedAwinDownloadUrl(feed.downloadUrl),
+    )
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.lastImported);
+      const rightTime = Date.parse(right.lastImported);
+      const safeLeft = Number.isFinite(leftTime) ? leftTime : 0;
+      const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
+      if (safeLeft !== safeRight) return safeRight - safeLeft;
+      return left.feedId.localeCompare(right.feedId);
+    });
 }
 
 export function selectAwinFeed(
