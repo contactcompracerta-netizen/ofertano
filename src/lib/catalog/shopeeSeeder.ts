@@ -77,7 +77,9 @@ function safeHttps(value: unknown): string | null {
 export function toShopeeProductImport(
   offer: ShopeeAffiliateOffer,
 ): ProductImport | null {
-  const externalId = String(offer.itemId ?? "").trim();
+  const itemId = String(offer.itemId ?? "").trim();
+  const shopId = String(offer.shopId ?? "").trim();
+  const externalId = itemId && shopId ? `${shopId}.${itemId}` : "";
   const title = String(offer.productName ?? "").trim();
   const price = positiveNumber(offer.price);
   const productUrl = safeHttps(offer.productLink);
@@ -123,7 +125,8 @@ export function toShopeeProductImport(
     seller: shopName,
     attributes: {
       ...(shopName ? { LOJA: shopName } : {}),
-      SHOP_ID: String(offer.shopId ?? ""),
+      SHOP_ID: shopId,
+      ITEM_ID: itemId,
       ...(categoryIds.length > 0 ? { CATEGORY_IDS: categoryIds.join(",") } : {}),
     },
   };
