@@ -43,7 +43,7 @@
     },
     {
       "path": "/api/cron/catalog-awin-wave1?phase=SHADOW&limit=250",
-      "schedule": "31 8 * * *"
+      "schedule": "10 17 * * *"
     }
   ]
 }
